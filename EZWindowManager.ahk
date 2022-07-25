@@ -35,8 +35,6 @@ WinBackupXs := []
 orgX := 0
 percLeft := 1.0
 edgePercentage := .04
-MoveIn := False
-MoveOut := False
 HoveringWinHwnd := 
 lastWindowPeaked := False
 
@@ -483,7 +481,6 @@ Return
 #If (!WinActive("ahk_exe onenotem.exe") and !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) and !WinActive("ahk_exe Teams.exe")
 !$LButton::
 $LButton::
-    SetTimer, WatchMouse, off
     If ((A_TickCount - LButtonPreviousTick) < DoubleClickTime)
     {
         SetTimer, SendCtrlAdd, -300
@@ -497,8 +494,6 @@ $LButton::
     SetTimer, ButCapture, -1    
     
     LButtonPreviousTick := A_TickCount
-    ; MouseGetPos, , , HoveringWinHwnd
-    SetTimer, WatchMouse, on
     
     sleep 35
     If (GetKeyState("LButton", "P")) 
@@ -515,6 +510,19 @@ $LButton::
         SendEvent {Click}
     }
     
+    MouseGetPos, , , MouseWinHwnd
+    savedWin := False
+    for idx, val in PeaksArray
+    {
+        If (val == ("ahk_id " . MouseWinHwnd))
+        {
+            savedWin := True
+        }
+    }
+    SetTimer, WatchMouse, Off
+    If !savedWin
+        lastWindowPeaked := False
+    SetTimer, WatchMouse, On
 Return 
 #IfWinNotActive
 
