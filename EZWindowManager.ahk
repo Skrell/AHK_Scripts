@@ -55,22 +55,24 @@ WatchMouse:
                 WinGet, winHwnd, ID, ahk_id %MouseWinHwnd%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
                 
-                If (WinX < 0) && (lastWindowPeaked ||  ((mx-mxbkup) < 0)) {
+                If (WinX < 0) && (lastWindowPeaked ||  ((mx-mxbkup) < -3)) {
                     MoveToTargetSpot(winId, 0-offL, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
                     HoveringWinHwnd := MouseWinHwnd
                     lastWindowPeaked := True
                     ; WinMove, %winId%,, 0-offL
+                    WinSet, AlwaysOnTop, On, %winId%
                     Break
                 }
-                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((mx-mxbkup) > 0)) {
+                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((mx-mxbkup) > 3)) {
                     MoveToTargetSpot(winId, A_ScreenWidth-WinW, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
                     HoveringWinHwnd := MouseWinHwnd
                     lastWindowPeaked := True
                     ; WinMove, %winId%,, A_ScreenWidth-WinW
+                    WinSet, AlwaysOnTop, On, %winId%
                     Break
                 }
             }
@@ -481,6 +483,7 @@ Return
 #If (!WinActive("ahk_exe onenotem.exe") and !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) and !WinActive("ahk_exe Teams.exe")
 !$LButton::
 $LButton::
+    global HoveringWinHwnd
     If ((A_TickCount - LButtonPreviousTick) < DoubleClickTime)
     {
         SetTimer, SendCtrlAdd, -300
@@ -495,6 +498,7 @@ $LButton::
     
     LButtonPreviousTick := A_TickCount
     
+    SetTimer, WatchMouse, Off
     sleep 35
     If (GetKeyState("LButton", "P")) 
     {
@@ -510,16 +514,15 @@ $LButton::
         SendEvent {Click}
     }
     
-    MouseGetPos, , , MouseWinHwnd
+    MouseGetPos, , , HoveringWinHwnd
     savedWin := False
     for idx, val in PeaksArray
     {
-        If (val == ("ahk_id " . MouseWinHwnd))
+        If (val == ("ahk_id " . HoveringWinHwnd))
         {
             savedWin := True
         }
     }
-    SetTimer, WatchMouse, Off
     If !savedWin
         lastWindowPeaked := False
     SetTimer, WatchMouse, On
