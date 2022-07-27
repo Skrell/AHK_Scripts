@@ -27,7 +27,7 @@ LookForLeaveWindow := False
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
 SetTimer, EmergencyFail, 1000
-SetTimer, WatchMouse, 250
+SetTimer, WatchMouse, 300
 
 WindowArray := []
 PeaksArray  := []
@@ -109,7 +109,12 @@ WatchMouse:
               FadeToTargetTrans(winId, 200)
               MouseGetPos, , , MouseTest
               If MouseTest != HoveringWinHwnd
+              {
                  LookForLeaveWindow := False
+                 mxbkup := mX
+                 mybkup := my
+                 Gosub,  WatchMouse
+              }
               Break
            }
         }
@@ -495,8 +500,9 @@ Return
 #If (!WinActive("ahk_exe onenotem.exe") and !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) and !WinActive("ahk_exe Teams.exe")
 !$LButton::
 $LButton::
-    global HoveringWinHwnd
-    If ((A_TickCount - LButtonPreviousTick) < DoubleClickTime)
+    global HoveringWinHwnd, LookForLeaveWindow
+    doubleClick := (A_TickCount - LButtonPreviousTick) < DoubleClickTime
+    If (doubleClick)
     {
         SetTimer, SendCtrlAdd, -300
         sleep 35
@@ -511,7 +517,8 @@ $LButton::
     LButtonPreviousTick := A_TickCount
     
     SetTimer, WatchMouse, Off
-    sleep 35
+    If !doubleClick
+        sleep 35
     If (GetKeyState("LButton", "P")) 
     {
       SendEvent {LButton down}
@@ -526,13 +533,14 @@ $LButton::
         SendEvent {Click}
     }
     
-    MouseGetPos, , , HoveringWinHwnd
+    MouseGetPos, , , ClickedWinHwnd
     savedWin := False
     for idx, val in PeaksArray
     {
-        If (val == ("ahk_id " . HoveringWinHwnd))
+        If (val == ("ahk_id " . ClickedWinHwnd))
         {
             savedWin := True
+            HoveringWinHwnd := ClickedWinHwnd
         }
     }
     If !savedWin
