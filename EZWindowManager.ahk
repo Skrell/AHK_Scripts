@@ -102,7 +102,9 @@ WatchMouse:
               MouseGetPos, , , MouseTest
               If MouseTest == HoveringWinHwnd
               {
-                  Break ; last chance to abandon returning window to side
+                  mxbkup := mX
+                  mybkup := my
+                  Return ; last chance to abandon returning window to side
               }
               
               If (percLeft >= edgePercentage) {
@@ -118,7 +120,7 @@ WatchMouse:
                  LookForLeaveWindow := False
                  mxbkup := mX
                  mybkup := my
-                 Gosub,  WatchMouse
+                 Gosub,  WatchMouse ; attempt to detect movement into another peaked window ASAP
               }
               Break
            }
