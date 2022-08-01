@@ -99,6 +99,12 @@ WatchMouse:
            If (k == HoveringWinHwnd)
            {
               sleep 400
+              MouseGetPos, , , MouseTest
+              If MouseTest == HoveringWinHwnd
+              {
+                  Break ; last chance to abandon returning window to side
+              }
+              
               If (percLeft >= edgePercentage) {
                   WinSet, AlwaysOnTop, Off, ahk_id %HoveringWinHwnd%
                   WinSet, Bottom, , ahk_id %HoveringWinHwnd%
@@ -107,7 +113,6 @@ WatchMouse:
               winId = ahk_id %HoveringWinHwnd%
               WinMove, %winId%,, orgX
               FadeToTargetTrans(winId, 200)
-              MouseGetPos, , , MouseTest
               If MouseTest != HoveringWinHwnd
               {
                  LookForLeaveWindow := False
