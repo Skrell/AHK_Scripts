@@ -55,10 +55,10 @@ WatchMouse:
                 WinGet, winHwnd, ID, %winId%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
                 
-                If (WinX < 0) && (lastWindowPeaked ||  ((mx-mxbkup) < -3)) {
+                If (WinX < 0) && (lastWindowPeaked ||  ((mx-mxbkup) < -5)) {
                     WinGet, WindowList, List
                     ; Tooltip,  %WindowList1% : %WindowList2% : %WindowList3% : %WindowList4% : %winHwnd%
-                    while (WindowList4 != winHwnd)
+                    while (WindowList4 != winHwnd  && WindowList5 != winHwnd)
                     {
                         WinSet, AlwaysOnTop, On, %winId%
                         If A_Index > 10
@@ -71,7 +71,7 @@ WatchMouse:
                     lastWindowPeaked := True
                     Break
                 }
-                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((mx-mxbkup) > 3)) {
+                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((mx-mxbkup) > 5)) {
                     while (WindowList4 != winHwnd)
                     {
                         WinSet, AlwaysOnTop, On, %winId%
@@ -98,12 +98,12 @@ WatchMouse:
         for k, v in WinBackupXs {
            If (k == HoveringWinHwnd)
            {
+              sleep 400
               If (percLeft >= edgePercentage) {
                   WinSet, AlwaysOnTop, Off, ahk_id %HoveringWinHwnd%
                   WinSet, Bottom, , ahk_id %HoveringWinHwnd%
               }
               orgX := WinBackupXs[HoveringWinHwnd]
-              
               winId = ahk_id %HoveringWinHwnd%
               WinMove, %winId%,, orgX
               FadeToTargetTrans(winId, 200)
@@ -468,7 +468,7 @@ MoveToTargetSpot(winId, targetX, orgX)
 CheckforTransparent:
     If Wheel_disabled && WinMoved
     {
-        If ((A_TickCount - MButtonPreviousTick) > 500)
+        If ((A_TickCount - MButtonPreviousTick) > 750)
         {
             WinSet, Transparent, Off, %EWD_winId%
             WinMoved := False
@@ -508,7 +508,17 @@ $LButton::
         sleep 35
         If !(GetKeyState("LButton", "P"))
         {
+            MouseGetPos, , , ClickedWinHwnd
             SendEvent {Click}
+            savedWin := False
+            for idx, val in PeaksArray
+            {
+                If (val == ("ahk_id " . ClickedWinHwnd))
+                {
+                    savedWin := True
+                    HoveringWinHwnd := ClickedWinHwnd
+                }
+            }
             Return
         }
     }
