@@ -54,16 +54,12 @@ WatchMouse:
                 
                 WinGet, winHwnd, ID, %winId%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
-                
+               
+                while (A_Index < 10)
+                {
+                    WinSet, AlwaysOnTop, On, %winId%
+                }
                 If (WinX < 0) && (lastWindowPeaked ||  ((mx-mxbkup) < -5)) {
-                    WinGet, WindowList, List
-                    ; Tooltip,  %WindowList1% : %WindowList2% : %WindowList3% : %WindowList4% : %winHwnd%
-                    while (WindowList4 != winHwnd  && WindowList5 != winHwnd)
-                    {
-                        WinSet, AlwaysOnTop, On, %winId%
-                        If A_Index > 10
-                            Break
-                    }
                     MoveToTargetSpot(winId, 0-offL, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
@@ -72,19 +68,12 @@ WatchMouse:
                     Break
                 }
                 Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((mx-mxbkup) > 5)) {
-                    while (WindowList4 != winHwnd)
-                    {
-                        WinSet, AlwaysOnTop, On, %winId%
-                            If A_index > 10
-                                Break
-                    }
                     MoveToTargetSpot(winId, A_ScreenWidth-WinW, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
                     HoveringWinHwnd := MouseWinHwnd
                     lastWindowPeaked := True
                     WinGet, WindowList, List
-                    ; Tooltip,  %WindowList1% : %WindowList2% : %WindowList3% : %WindowList4% : %winHwnd%
                     Break
                 }
             }
