@@ -73,7 +73,6 @@ WatchMouse:
                     LookForLeaveWindow := True
                     HoveringWinHwnd := MouseWinHwnd
                     lastWindowPeaked := True
-                    WinGet, WindowList, List
                     Break
                 }
             }
