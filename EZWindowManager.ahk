@@ -27,7 +27,7 @@ LookForLeaveWindow := False
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
 SetTimer, EmergencyFail, 1000
-SetTimer, WatchMouse, 300
+SetTimer, WatchMouse, 250
 
 WindowArray := []
 PeaksArray  := []
@@ -86,13 +86,11 @@ WatchMouse:
         for k, v in WinBackupXs {
            If (k == HoveringWinHwnd)
            {
-              sleep 400
+              sleep 500
               MouseGetPos, , , MouseTest
               If MouseTest == HoveringWinHwnd
               {
-                  mxbkup := mX
-                  mybkup := my
-                  Return ; last chance to abandon returning window to side
+                  Break
               }
               
               If (percLeft >= edgePercentage) {
@@ -106,9 +104,6 @@ WatchMouse:
               If MouseTest != HoveringWinHwnd
               {
                  LookForLeaveWindow := False
-                 mxbkup := mX
-                 mybkup := my
-                 Gosub,  WatchMouse ; attempt to detect movement into another peaked window ASAP
               }
               Break
            }
