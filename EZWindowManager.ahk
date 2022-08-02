@@ -559,7 +559,7 @@ CheckforTransparent:
     {
         If ((A_TickCount - MButtonPreviousTick) > 750)
         {
-            WinSet, Transparent, Off, %EWD_winId%
+            FadeToTargetTrans(EWD_winId, 255, TransparentValue)
             WinMoved := False
         }
         Else
