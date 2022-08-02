@@ -27,7 +27,7 @@ LookForLeaveWindow := False
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
 SetTimer, EmergencyFail, 1000
-SetTimer, WatchMouse, 250
+SetTimer, WatchMouse, 100
 
 WindowArray := []
 PeaksArray  := []
@@ -41,11 +41,13 @@ lastWindowPeaked := False
 WatchMouse:
     MouseGetPos, mx, my, MouseWinHwnd
     
-    If !LookForLeaveWindow
+    FinishedLoop := True 
+    for idx, val in PeaksArray
     {
-        for idx, val in PeaksArray
+        If (val == ("ahk_id " . MouseWinHwnd))
         {
-            If (val == ("ahk_id " . MouseWinHwnd))
+            FinishedLoop := False
+            If !LookForLeaveWindow
             {
                 winId = ahk_id %MouseWinHwnd%
                 percLeft := CalculateWinScreenPercent(winId)
@@ -76,9 +78,12 @@ WatchMouse:
                     Break
                 }
             }
-            If idx == (PeaksArray.Length()-1)
-                lastWindowPeaked := False
         }
+    }
+    
+    If (FinishedLoop) 
+    {
+        lastWindowPeaked := False
     }
     
     If LookForLeaveWindow && HoveringWinHwnd != MouseWinHwnd
@@ -86,24 +91,29 @@ WatchMouse:
         for k, v in WinBackupXs {
            If (k == HoveringWinHwnd)
            {
-              sleep 500
+              If (!lastWindowPeaked)
+              {
+                 sleep 500
+              }
+                 
               MouseGetPos, , , MouseTest
-              If MouseTest == HoveringWinHwnd
+              If (MouseTest == HoveringWinHwnd)
               {
                   Break
               }
               
-              If (percLeft >= edgePercentage) {
+              If (percLeft >= edgePercentage) 
+              {
                   WinSet, AlwaysOnTop, Off, ahk_id %HoveringWinHwnd%
                   WinSet, Bottom, , ahk_id %HoveringWinHwnd%
               }
               orgX := WinBackupXs[HoveringWinHwnd]
               winId = ahk_id %HoveringWinHwnd%
               WinMove, %winId%,, orgX
-              FadeToTargetTrans(winId, 200)
-              If MouseTest != HoveringWinHwnd
+              If MouseTest != HoveringWinHwnd 
               {
                  LookForLeaveWindow := False
+                 FadeToTargetTrans(winId, 200)
               }
               Break
            }
