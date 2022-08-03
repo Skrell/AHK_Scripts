@@ -93,7 +93,7 @@ WatchMouse:
            {
               If (!lastWindowPeaked)
               {
-                 sleep 500
+                 sleep 400
               }
                  
               MouseGetPos, , , MouseTest
@@ -192,6 +192,7 @@ MButton::
     
     WinMoved := False
     registerRbutton := False
+    TimeSinceStop := A_TickCount
     
     If (EWD_WinState = 1)
     {
@@ -206,10 +207,6 @@ MButton::
     }
     
     WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, offL, OffT, OffR, OffB)
-    ; EWD_OriginalPosX := EWD_WinX
-    ; EWD_OriginalPosY := EWD_WinY
-    ; W := EWD_WinW
-    ; H := EWD_WinH
     
     If (EWD_MouseX < EWD_WinX + (EWD_WinW / 2))
        KDE_WinLeft := 1
@@ -226,6 +223,7 @@ MButton::
     SetTimer, EWD_WatchDrag, 10 ; Track the mouse as the user drags it.
     SetTimer, CheckforTransparent, 50
     SetTimer, WatchMouse, Off
+    Wheel_disabled := true
     
     KeyWait, MButton, U
     If ((MX - EWD_MouseX) = 0 && (MY - EWD_MouseY) = 0)
@@ -240,21 +238,24 @@ Return
 
 EWD_WatchDrag:
         CoordMode, Mouse, Screen
-        Wheel_disabled := true
         
         If (GetKeyState("RButton", "P"))
         {
             registerRbutton := true
         }
-        Else
+        Else If (registerRbutton)
         {
             registerRbutton := false
+            SetTimer, EWD_WatchDrag, off
+            sleep 250
+            EWD_MouseOrgX := EWD_MouseX, EWD_MouseOrgY := EWD_MouseY
+            SetTimer, EWD_WatchDrag, on
         }
         
         If (!(GetKeyState("MButton", "P")) && !(GetKeyState("RButton", "P"))) { 
            SetTimer, CheckforTransparent, Off
            SetTimer, EWD_WatchDrag, Off
-           Wheel_disabled := false
+           SetTimer, WatchMouse, On
            perc := CalculateWinScreenPercent(EWD_winId)
            Tooltip, 
            If (perc < edgePercentage)
@@ -293,13 +294,28 @@ EWD_WatchDrag:
               If WinMoved
                  FadeToTargetTrans(EWD_winId, 255, 200)
            }
-           SetTimer, WatchMouse, On
+           Wheel_disabled := false
+           lastWindowPeaked := False
            Return
         }
            
         MouseGetPos, EWD_MouseX, EWD_MouseY
-        If ((EWD_MouseX != EWD_MouseOrgX) || (EWD_MouseY != EWD_MouseOrgY)) && !registerRbutton
+        If (((EWD_MouseX != EWD_MouseOrgX) || (EWD_MouseY != EWD_MouseOrgY)) && !registerRbutton)
             WinMoved := true
+        
+        If ((EWD_MouseX == EWD_MouseOrgX) && (EWD_MouseY == EWD_MouseOrgY))
+        {
+            If ((A_TickCount - TimeSinceStop) > 2000)
+            {
+                WinSet, AlwaysOnTop, toggle, %EWD_winId%
+                Tooltip, Top State Toggled!
+                TimeSinceStop := A_TickCount
+            }
+        }
+        Else
+        {
+            TimeSinceStop := A_TickCount
+        }
         
         WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, offL, OffT, OffR, OffB)
         EWD_WinXF := EWD_WinX-offL
@@ -374,7 +390,7 @@ EWD_WatchDrag:
             
             If ((EWD_WinX+DiffX) < 0 && (EWD_WinX != 0))
             {
-                WinMove, %EWD_winId%,, 0-offL,
+                WinMove, %EWD_winId%,, 0-offL, , EWD_WinX+EWD_WinW-0+offL+offR, ;original right edge minus distance to 0 + offL to account fo shadow
                 EWD_WinX := 0
             }
             Else If (((EWD_WinX + EWD_WinW + DiffX) > A_ScreenWidth) && ((EWD_WinX + EWD_WinW) != A_ScreenWidth))
@@ -389,9 +405,11 @@ EWD_WatchDrag:
                 WinMove, %EWD_winId%,, , 0
                 EWD_WinY := 0
             }
-            Else If (((EWD_WinB + DiffY) > A_ScreenWidth) && ((EWD_WinB) != A_ScreenWidth))
+            Else If (((EWD_WinB + DiffY) > MonitorWorkAreaBottom) && ((EWD_WinB) != MonitorWorkAreaBottom))
             {
-                WinMove, %EWD_winId%,, , , , EWD_WinY-MonitorWorkAreaBottom+offB
+                ; height := EWD_WinY-MonitorWorkAreaBottom-offB
+                ; Tooltip, %height%
+                WinMove, %EWD_winId%,, , , , MonitorWorkAreaBottom-EWD_WinY+offB, 
                 EWD_WinB := MonitorWorkAreaBottom
             }
 
