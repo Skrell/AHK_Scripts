@@ -39,7 +39,7 @@ HoveringWinHwnd :=
 lastWindowPeaked := False
 
 WatchMouse:
-    MouseGetPos, mx, my, MouseWinHwnd
+    MouseGetPos, MXw, MYw, MouseWinHwnd
     
     FinishedLoop := True 
     for idx, val in PeaksArray
@@ -61,7 +61,7 @@ WatchMouse:
                 {
                     WinSet, AlwaysOnTop, On, %winId%
                 }
-                If (WinX < 0) && (lastWindowPeaked ||  ((mx-mxbkup) < -5)) {
+                If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -5)) {
                     MoveToTargetSpot(winId, 0-offL, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
@@ -69,7 +69,7 @@ WatchMouse:
                     lastWindowPeaked := True
                     Break
                 }
-                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((mx-mxbkup) > 5)) {
+                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > 5)) {
                     MoveToTargetSpot(winId, A_ScreenWidth-WinW, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
@@ -119,8 +119,8 @@ WatchMouse:
            }
         }
     }
-    mxbkup := mX
-    mybkup := my
+    MXw_bkup := MXw
+    MYw_bkup := MYw
 Return
 
 /* ;
@@ -180,9 +180,18 @@ Return
 
 MButton::
     CoordMode, Mouse, Screen
-    MouseGetPos, MX, MY, EWD_MouseWinHwnd ; Get cursor position
-    EWD_MouseX := EWD_MouseOrgX := MX 
-    EWD_MouseY := EWD_MouseOrgY := MY 
+    MX := 0
+    MY := 0
+    EWD_MouseOrgX := 0
+    EWD_MouseOrgY := 0
+    EWD_MouseX := 0
+    EWD_MouseY := 0
+    MouseGetPos, EWD_MouseX, EWD_MouseY, EWD_MouseWinHwnd ; Get cursor position
+    EWD_MouseOrgX := EWD_MouseX 
+    EWD_MouseOrgY := EWD_MouseY 
+    MX := EWD_MouseX
+    MY := EWD_MouseY
+    
     MButtonPreviousTick := A_TickCount
     EWD_winId = ahk_id %EWD_MouseWinHwnd% ; Get the active window's title
     
@@ -226,8 +235,9 @@ MButton::
     Wheel_disabled := true
     
     KeyWait, MButton, U
-    If ((MX - EWD_MouseX) = 0 && (MY - EWD_MouseY) = 0)
+    If ((MX == EWD_MouseX) && (MY == EWD_MouseY))
     {
+        ; Tooltip, here %MX% : %MY% : %EWD_MouseX% : %EWD_MouseY%
         WinSet, Transparent, Off, %EWD_winId%
         SetTimer, EWD_WatchDrag, Off
         SetTimer, CheckforTransparent, Off
@@ -608,7 +618,10 @@ Return
 !$LButton::
 $LButton::
     global HoveringWinHwnd, LookForLeaveWindow
+    MouseGetPos, , , ClickedWinHwnd
+    savedWin := False
     doubleClick := (A_TickCount - LButtonPreviousTick) < DoubleClickTime
+    
     If (doubleClick)
     {
         SetTimer, SendCtrlAdd, -300
@@ -650,8 +663,6 @@ $LButton::
         SendEvent {Click}
     }
     
-    MouseGetPos, , , ClickedWinHwnd
-    savedWin := False
     for idx, val in PeaksArray
     {
         If (val == ("ahk_id " . ClickedWinHwnd))
