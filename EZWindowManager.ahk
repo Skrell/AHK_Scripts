@@ -520,7 +520,7 @@ EWD_WatchDrag:
                                       , ; (EWD_WinH + offB) - KDE_WinUp *DiffY  ; H of resized window
                 ChangedDims := True
             }
-            Else If ((abs(DiffX) < abs(DiffY)) && (EWD_WinY != 0) && (EWD_WinB == MonitorWorkAreaBottom) && (KDE_WinUp == 1))
+            Else If ((abs(DiffX) < abs(DiffY)) && (EWD_WinY != 0) && (EWD_WinB <= MonitorWorkAreaBottom) && (KDE_WinUp == 1))
             {
                 ; Tooltip, 6
                 WinMove, %EWD_winId%, , ;EWD_WinX + (KDE_WinLeft+1)/2*DiffX  ; X of resized window
@@ -529,15 +529,15 @@ EWD_WatchDrag:
                                       , (EWD_WinH + offB) - KDE_WinUp *DiffY  ; H of resized window
                 ChangedDims := True
             }
-            Else If ((abs(DiffX) < abs(DiffY)) && (EWD_WinY != 0) && (EWD_WinB == MonitorWorkAreaBottom) && (KDE_WinUp == -1))
+            Else If ((abs(DiffX) < abs(DiffY)) && (EWD_WinY >= 0) && (EWD_WinB == MonitorWorkAreaBottom) && (KDE_WinUp == -1))
             {
-               
+               ; Tooltip, 6a
             }
-            Else If ((abs(DiffX) < abs(DiffY)) && (EWD_WinY == 0) && (EWD_WinB != MonitorWorkAreaBottom) && (KDE_WinUp == -1))
+            Else If ((abs(DiffX) < abs(DiffY)) && (EWD_WinY >= 0) && (EWD_WinB <= MonitorWorkAreaBottom) && (KDE_WinUp == -1))
             {
                 ; Tooltip, 7
                 WinMove, %EWD_winId%, , ;EWD_WinX + (KDE_WinLeft+1)/2*DiffX  ; X of resized window
-                                      , EWD_WinY +   (KDE_WinUp+1)/2*DiffY  ; Y of resized window
+                                      , ;EWD_WinY +   (KDE_WinUp+1)/2*DiffY  ; Y of resized window
                                       , ;EWD_WinWF -     KDE_WinLeft *DiffX  ; W of resized window
                                       , (EWD_WinH + offB) - KDE_WinUp *DiffY  ; H of resized window
                 ChangedDims := True
