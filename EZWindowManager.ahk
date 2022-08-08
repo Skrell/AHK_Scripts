@@ -70,7 +70,7 @@ WatchMouse:
                     Break
                 }
                 Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > 5)) {
-                    MoveToTargetSpot(winId, A_ScreenWidth-WinW, WinX)
+                    MoveToTargetSpot(winId, A_ScreenWidth-WinW-OffR, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
                     HoveringWinHwnd := MouseWinHwnd
