@@ -202,6 +202,7 @@ MButton::
     WinMoved := False
     registerRbutton := False
     TimeSinceStop := A_TickCount
+    ToggledOnTop  := False
     
     If (EWD_WinState = 1)
     {
@@ -241,7 +242,8 @@ MButton::
         WinSet, Transparent, Off, %EWD_winId%
         SetTimer, EWD_WatchDrag, Off
         SetTimer, CheckforTransparent, Off
-        send, {MButton}
+        If !ToggledOnTop
+            send, {MButton}
         SetTimer, WatchMouse, On
     }
 Return 
@@ -313,13 +315,15 @@ EWD_WatchDrag:
         If (((EWD_MouseX != EWD_MouseOrgX) || (EWD_MouseY != EWD_MouseOrgY)) && !registerRbutton)
             WinMoved := true
         
-        If ((EWD_MouseX == EWD_MouseOrgX) && (EWD_MouseY == EWD_MouseOrgY))
+        If ((EWD_MouseX == MX) && (EWD_MouseY == MY))
         {
-            If ((A_TickCount - TimeSinceStop) > 2000)
+            If ((A_TickCount - TimeSinceStop) > 1250)
             {
                 WinSet, AlwaysOnTop, toggle, %EWD_winId%
                 Tooltip, Top State Toggled!
                 TimeSinceStop := A_TickCount
+                ToggledOnTop := True
+                Return
             }
         }
         Else
