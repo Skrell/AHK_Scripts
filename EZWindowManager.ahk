@@ -87,7 +87,7 @@ WatchMouse:
         lastWindowPeaked := False
     }
     
-    If LookForLeaveWindow && HoveringWinHwnd != MouseWinHwnd
+    If (LookForLeaveWindow && HoveringWinHwnd != MouseWinHwnd)
     {
         for k, v in WinBackupXs {
            If (k == HoveringWinHwnd)
@@ -174,6 +174,11 @@ Return
     RButton & MButton::Return
 #If
 
+#If !(Wheel_disabled)
+    ~RButton::
+        SetTimer, WatchMouse, off
+#If
+
 +WheelUp::
 Send {WheelLeft}
 Return
@@ -251,8 +256,8 @@ MButton::
         SetTimer, CheckforTransparent, Off
         If !ToggledOnTop
             send, {MButton}
-        SetTimer, WatchMouse, On
     }
+    SetTimer, WatchMouse, On
 Return 
 
 EWD_WatchDrag:
@@ -694,7 +699,7 @@ EmergencyFail:
         PreviousTick := A_TickCount
 Return
 
-#If (!WinActive("ahk_exe onenotem.exe") and !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) and !WinActive("ahk_exe Teams.exe")
+#If (!WinActive("ahk_exe onenotem.exe") and !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) ; and !WinActive("ahk_exe Teams.exe")
 !$LButton::
 $LButton::
     global HoveringWinHwnd, LookForLeaveWindow
@@ -719,6 +724,7 @@ $LButton::
                     HoveringWinHwnd := ClickedWinHwnd
                 }
             }
+            SetTimer, WatchMouse, On
             Return
         }
     }
@@ -753,6 +759,7 @@ $LButton::
     }
     If !savedWin
         lastWindowPeaked := False
+        
     SetTimer, WatchMouse, On
 Return 
 #IfWinNotActive
