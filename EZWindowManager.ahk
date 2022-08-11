@@ -506,7 +506,7 @@ EWD_WatchDrag:
                 EWD_WinW := 0
             }
             ;  CORRECTIONS for Y SIZING 
-            If ((EWD_WinY+DiffY) < 0 && (EWD_WinY != 0) && KDE_WinUp == 1)
+            If ((EWD_WinY+DiffY) < 0 && (EWD_WinY != 0) && (KDE_WinUp == 1))
             {
                 WinMove, %EWD_winId%,, , 0, , EWD_WinH+offB+(EWD_WinY-0)
                 EWD_WinY := 0
