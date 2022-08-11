@@ -94,14 +94,23 @@ WatchMouse:
     
     If (LookForLeaveWindow && HoveringWinHwnd != MouseWinHwnd)
     {
+        DoneEarly := False
         for k, v in WinBackupXs {
            If (k == HoveringWinHwnd)
            {
               If (!lastWindowPeaked)
               {
-                 sleep 400
+                 while (A_index <= 40)
+                 {
+                     sleep 10
+                     if (GetKeyState("MButton", "P"))
+                     {
+                        DoneEarly := True
+                        Break
+                     }
+                 }
               }
-                 
+              ; double check that we haven't re-entered the peaked window and hence cancel the re-hide   
               MouseGetPos, , , MouseTest
               If (MouseTest == HoveringWinHwnd)
               {
@@ -110,19 +119,26 @@ WatchMouse:
               
               If (percLeft >= edgePercentage) 
               {
-                 while (A_Index < 10)
-                 {
+                 ; while (A_Index < 10)
+                 ; {
                     WinSet, AlwaysOnTop, Off, ahk_id %HoveringWinHwnd%
                     WinSet, Bottom, , ahk_id %HoveringWinHwnd%
-                 }
+                 ; }
               }
               orgX := WinBackupXs[HoveringWinHwnd]
               winId = ahk_id %HoveringWinHwnd%
               WinMove, %winId%,, orgX
-              If MouseTest != HoveringWinHwnd 
+              If (MouseTest != HoveringWinHwnd) 
               {
                  LookForLeaveWindow := False
-                 FadeToTargetTrans(winId, 200)
+                 If (!DoneEarly)
+                 {
+                    FadeToTargetTrans(winId, 200)
+                 }
+                 Else
+                 {
+                    WinSet, Transparent, 200, %winId%
+                 }
               }
               Break
            }
@@ -745,6 +761,7 @@ Return
         lastWindowPeaked := False
         SetTimer, WatchMouse, On
     }
+    Wheel_disabled :=  False
 Return 
 ; #If
 
@@ -798,8 +815,11 @@ ButCapture:
 {
     global WindowArray, PrintButton, mEl
     CoordMode, Mouse, Screen
-    MouseGetPos, mX, mY, mHwnd, mCtrl
     
+    If (GetKeyState("MButton", "P"))
+        Return 
+        
+    MouseGetPos, mX, mY, mHwnd, mCtrl
     WinGetClass, wClass, ahk_id %mHwnd%
     
     If (mX != mXOld && mY != mYOld)
