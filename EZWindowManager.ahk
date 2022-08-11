@@ -26,9 +26,9 @@ LButtonPreviousTick := A_TickCount
 LookForLeaveWindow := False
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
-SetTimer, EmergencyFail, 1000
-SetTimer, WatchMouse, 100
-SetTimer, ButCapture, 50
+SetTimer, EmergencyFail, 1000, 0
+SetTimer, WatchMouse, 100, 10
+SetTimer, ButCapture, 50, 0
 
 WindowArray := []
 PeaksArray  := []
@@ -196,6 +196,7 @@ Return
 
 MButton::
     SetTimer, ButCapture, Off
+    SetTimer, WatchMouse, Off
     CoordMode, Mouse, Screen
     MX := 0
     MY := 0
@@ -252,7 +253,6 @@ MButton::
     WinActivate, ahk_id %EWD_MouseWinHwnd%
     SetTimer, EWD_WatchDrag, 10 ; Track the mouse as the user drags it.
     SetTimer, CheckforTransparent, 50
-    SetTimer, WatchMouse, Off
     Wheel_disabled := true
     
     KeyWait, MButton, U
@@ -396,7 +396,7 @@ EWD_WatchDrag:
         Else If (registerRbutton)
         {
             registerRbutton := false
-            SetTimer, EWD_WatchDrag, off
+            ; SetTimer, EWD_WatchDrag, off
             ; sleep 250
             ; EWD_MouseOrgX := EWD_MouseX, EWD_MouseOrgY := EWD_MouseY
             SetTimer, EWD_WatchDrag, on
@@ -478,6 +478,21 @@ EWD_WatchDrag:
         }
         Else
         {
+            If (abs(DiffX) > abs(DiffY))
+            {
+                If DiffX < 0
+                    DiffX := DiffX + -1*abs(DiffY)
+                Else
+                    DiffX := DiffX + abs(DiffY)
+            }
+            Else
+            {
+                If DiffY < 0 
+                    DiffY := DiffY + -1*abs(DiffX)
+                Else
+                    DiffY := DiffY + abs(DiffX)
+            }            
+                    
             ; CORRECTIONS FOR X SIZING
             If ((EWD_WinX+DiffX) < 0 && (EWD_WinX != 0) && KDE_WinLeft == 1)
             {
@@ -493,7 +508,7 @@ EWD_WatchDrag:
             ;  CORRECTIONS for Y SIZING 
             If ((EWD_WinY+DiffY) < 0 && (EWD_WinY != 0))
             {
-                WinMove, %EWD_winId%,, , 0, , EWD_WinH+offB
+                WinMove, %EWD_winId%,, , 0, , EWD_WinH+offB+(EWD_WinY-0)
                 EWD_WinY := 0
             }
             Else If (((EWD_WinB + DiffY) > MonitorWorkAreaBottom) && ((EWD_WinB) != MonitorWorkAreaBottom))
@@ -726,8 +741,10 @@ Return
         }
     }
     If !savedWin
+    {
         lastWindowPeaked := False
-    SetTimer, WatchMouse, On
+        SetTimer, WatchMouse, On
+    }
 Return 
 ; #If
 
