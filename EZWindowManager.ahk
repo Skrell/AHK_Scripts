@@ -28,7 +28,7 @@ LookForLeaveWindow := False
 SysGet, MonitorWorkArea, MonitorWorkArea 
 SetTimer, EmergencyFail, 1000, 0
 SetTimer, WatchMouse, 100, 10
-SetTimer, ButCapture, 50, 0
+SetTimer, ButCapture, 40, 0
 
 WindowArray := []
 PeaksArray  := []
@@ -506,7 +506,7 @@ EWD_WatchDrag:
                 EWD_WinW := 0
             }
             ;  CORRECTIONS for Y SIZING 
-            If ((EWD_WinY+DiffY) < 0 && (EWD_WinY != 0))
+            If ((EWD_WinY+DiffY) < 0 && (EWD_WinY != 0) && KDE_WinUp == 1)
             {
                 WinMove, %EWD_winId%,, , 0, , EWD_WinH+offB+(EWD_WinY-0)
                 EWD_WinY := 0
