@@ -143,7 +143,8 @@ WatchMouse:
               Break
            }
         }
-        SetTimer, ButCapture, On
+        If (!DoneEarly)
+            SetTimer, ButCapture, On
     }
     MXw_bkup := MXw
     MYw_bkup := MYw
