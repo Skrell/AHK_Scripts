@@ -27,13 +27,13 @@ LookForLeaveWindow := False
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
 SetTimer, EmergencyFail, 1000, 0
-SetTimer, WatchMouse, 100, 10
+SetTimer, WatchMouse, 100, 0
 SetTimer, ButCapture, 40, 0
 
 WindowArray := []
 PeaksArray  := []
 WinBackupXs := []
-orgX := 0
+; orgX := 0
 percLeft := 1.0
 edgePercentage := .04
 HoveringWinHwnd := 
@@ -46,6 +46,7 @@ WatchMouse:
     MouseGetPos, MXw, MYw, MouseWinHwnd
     
     FinishedLoop := True 
+    
     for idx, val in PeaksArray
     {
         If (val == ("ahk_id " . MouseWinHwnd))
@@ -65,6 +66,7 @@ WatchMouse:
                 {
                     WinSet, AlwaysOnTop, On, %winId%
                 }
+                ; Tooltip, %percLeft%
                 If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -MouseMoveBuffer/2)) {
                     SetTimer, ButCapture, Off
                     MoveToTargetSpot(winId, 0-offL, WinX)
@@ -94,21 +96,13 @@ WatchMouse:
     
     If (LookForLeaveWindow && HoveringWinHwnd != MouseWinHwnd)
     {
-        DoneEarly := False
         for k, v in WinBackupXs {
            If (k == HoveringWinHwnd)
            {
+              ; Tooltip, %percLeft%
               If (!lastWindowPeaked)
               {
-                 while (A_index <= 40)
-                 {
-                     sleep 10
-                     if (GetKeyState("MButton", "P"))
-                     {
-                        DoneEarly := True
-                        Break
-                     }
-                 }
+                 sleep 400
               }
               ; double check that we haven't re-entered the peaked window and hence cancel the re-hide   
               MouseGetPos, , , MouseTest
@@ -117,34 +111,36 @@ WatchMouse:
                   Break
               }
               
-              If (percLeft >= edgePercentage) 
+              winId = ahk_id %HoveringWinHwnd%
+              WinGet, winHwnd, ID, %winId%
+              WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
+              
+              If !(percLeft < edgePercentage) 
               {
                  ; while (A_Index < 10)
                  ; {
-                    WinSet, AlwaysOnTop, Off, ahk_id %HoveringWinHwnd%
-                    WinSet, Bottom, , ahk_id %HoveringWinHwnd%
+                    WinSet, AlwaysOnTop, Off, %winId%
+                    WinSet, Bottom, , %winId%
                  ; }
               }
+              ;fixes added for resizing windows while it's being peaked
               orgX := WinBackupXs[HoveringWinHwnd]
-              winId = ahk_id %HoveringWinHwnd%
-              WinMove, %winId%,, orgX
+              If (orgX < 0)
+                newOrgX := ((percLeft*((WinW*WinH)/WinH))-WinW)
+              Else
+                newOrgX := A_ScreenWidth-(percLeft*(WinW*WinH)/WinH)
+
+              WinBackupXs[HoveringWinHwnd] := newOrgX
+              WinMove, %winId%,, newOrgX-offL
               If (MouseTest != HoveringWinHwnd) 
               {
                  LookForLeaveWindow := False
-                 If (!DoneEarly)
-                 {
-                    FadeToTargetTrans(winId, 200)
-                 }
-                 Else
-                 {
-                    WinSet, Transparent, 200, %winId%
-                 }
+                 FadeToTargetTrans(winId, 200)
               }
               Break
            }
         }
-        If (!DoneEarly)
-            SetTimer, ButCapture, On
+        SetTimer, ButCapture, On
     }
     MXw_bkup := MXw
     MYw_bkup := MYw
@@ -293,16 +289,16 @@ EWD_WatchDrag:
            SetTimer, CheckforTransparent, Off
            SetTimer, EWD_WatchDrag, Off
            SetTimer, WatchMouse, On
-           perc := CalculateWinScreenPercent(EWD_winId)
+           percentageLeft := CalculateWinScreenPercent(EWD_winId)
            Tooltip, 
-           If (perc < edgePercentage)
+           If (percentageLeft < edgePercentage)
            {
               FadeToTargetTrans(EWD_winId, 200)
               WinSet, AlwaysOnTop, On, %EWD_winId% 
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
            }
-           Else If (perc < 0.40)
+           Else If (percentageLeft < 0.40)
            {
               FadeToTargetTrans(EWD_winId, 200)
               PeaksArray.push(EWD_winId)
