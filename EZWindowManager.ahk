@@ -44,20 +44,19 @@ mEl := {}
     
 WatchMouse:
     MouseGetPos, MXw, MYw, MouseWinHwnd
-    
+
     FinishedLoop := True 
     
     for idx, val in PeaksArray
     {
         If (val == ("ahk_id " . MouseWinHwnd))
         {
+            ; tooltip, 1
             FinishedLoop := False
             If !LookForLeaveWindow
             {
                 winId = ahk_id %MouseWinHwnd%
                 percLeft := CalculateWinScreenPercent(winId)
-                ; Tooltip, %percLeft%
-                ; WinSet, AlwaysOnTop, On, %winId%
                 
                 WinGet, winHwnd, ID, %winId%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
@@ -66,7 +65,7 @@ WatchMouse:
                 {
                     WinSet, AlwaysOnTop, On, %winId%
                 }
-                ; Tooltip, %percLeft%
+
                 If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -MouseMoveBuffer/2)) {
                     SetTimer, ButCapture, Off
                     MoveToTargetSpot(winId, 0-offL, WinX)
@@ -91,51 +90,81 @@ WatchMouse:
     
     If (FinishedLoop) 
     {
+        ; tooltip, 2
+        MXwOffset := 0
         lastWindowPeaked := False
+        If (MXw == 0 && MXw_bkup == 0)
+        {
+            MXwOffset := -50
+        }
+        Else If (MXw >= (A_ScreenWidth-2) && MXw_bkup >= (A_ScreenWidth-2))
+        {
+            MXwOffset := 50
+        }
+        If (MXwOffset != 0)
+        {
+            for idx, val in PeaksArray
+            {
+                WinGet, winHwnd, ID, %val%
+                WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
+                If (((MXw+MXwOffset) > WinX) && (MYw > WinY) && (MYw < (WinY+WinH)))
+                {
+                    WinActivate, %val%
+                    WinSet, AlwaysOnTop, On, %val%
+                    WinSet, AlwaysOnTop, off, %val%
+                    lastWindowPeaked := True
+                    break
+                }
+             }
+        }
     }
     
     If (LookForLeaveWindow && HoveringWinHwnd != MouseWinHwnd)
     {
+        ; tooltip, 3
         for k, v in WinBackupXs {
            If (k == HoveringWinHwnd)
            {
-              ; Tooltip, %percLeft%
-              If (!lastWindowPeaked)
-              {
-                 sleep 400
-              }
-              ; double check that we haven't re-entered the peaked window and hence cancel the re-hide   
-              MouseGetPos, , , MouseTest
-              If (MouseTest == HoveringWinHwnd)
-              {
-                  Break
-              }
-              
+              ; tooltip, 4
               winId = ahk_id %HoveringWinHwnd%
               WinGet, winHwnd, ID, %winId%
               WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
-              
-              If !(percLeft < edgePercentage) 
+              ; Make sure we've moved the mouse outside the window we're hovering over
+              If (MXw < WinX || Mxw > (WinX+WinW) || MYw < WinY || MYw > (WinY+WinH))
               {
-                 ; while (A_Index < 10)
-                 ; {
-                    WinSet, AlwaysOnTop, Off, %winId%
-                    WinSet, Bottom, , %winId%
-                 ; }
-              }
-              ;fixes added for resizing windows while it's being peaked
-              orgX := WinBackupXs[HoveringWinHwnd]
-              If (orgX < 0)
-                newOrgX := ((percLeft*((WinW*WinH)/WinH))-WinW)
-              Else
-                newOrgX := A_ScreenWidth-(percLeft*(WinW*WinH)/WinH)
+                  ; Tooltip, %percLeft%
+                  If (!lastWindowPeaked)
+                  {
+                     sleep 350
+                  }
+                  ; double check that we haven't re-entered the peaked window and hence cancel the re-hide   
+                  MouseGetPos, , , MouseTest
+                  If (MouseTest == HoveringWinHwnd)
+                  {
+                      Break
+                  }
+                  
+                  ; If !(percLeft < edgePercentage) 
+                  ; {
+                      ; WinSet, AlwaysOnTop, Off, %winId%
+                      ; sleep 10
+                  ; }
+                  ;fixes added for resizing windows while it's being peaked
+                  orgX := WinBackupXs[HoveringWinHwnd]
+                  If (orgX < 0)
+                    newOrgX := ((percLeft*((WinW*WinH)/WinH))-WinW)
+                  Else
+                    newOrgX := A_ScreenWidth-(percLeft*(WinW*WinH)/WinH)
 
-              WinBackupXs[HoveringWinHwnd] := newOrgX
-              WinMove, %winId%,, newOrgX-offL
-              If (MouseTest != HoveringWinHwnd) 
-              {
-                 LookForLeaveWindow := False
-                 FadeToTargetTrans(winId, 200)
+                  WinBackupXs[HoveringWinHwnd] := newOrgX
+                  ; If (MouseTest != HoveringWinHwnd) 
+                  ; {
+                  WinSet, Bottom, , %winId%
+                  WinMove, %winId%,, newOrgX-offL
+                  FadeToTargetTrans(winId, 200)
+                  LookForLeaveWindow := False
+                  WinSet, Bottom, , %winId%
+                  ; }
               }
               Break
            }
@@ -230,7 +259,7 @@ MButton::
     WinGet, EWD_WinState, MinMax, %EWD_winId% ; Get window state
     WinGetClass, EWD_winClass, %EWD_winId%
     
-    WinMoved := False
+    MouseMoved := False
     registerRbutton := False
     TimeSinceStop := A_TickCount
     ToggledOnTop  := False
@@ -291,20 +320,23 @@ EWD_WatchDrag:
            SetTimer, WatchMouse, On
            percentageLeft := CalculateWinScreenPercent(EWD_winId)
            Tooltip, 
-           If (percentageLeft < edgePercentage)
+           ; If (percentageLeft < edgePercentage)
+           ; {
+              ; FadeToTargetTrans(EWD_winId, 200)
+              ; WinSet, AlwaysOnTop, On, %EWD_winId% 
+              ; PeaksArray.push(EWD_winId)
+              ; WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
+           ; }
+           If (percentageLeft < 0.40)
            {
-              FadeToTargetTrans(EWD_winId, 200)
-              WinSet, AlwaysOnTop, On, %EWD_winId% 
+              FadeToTargetTrans(EWD_winId, 200, TransparentValue)
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
            }
-           Else If (percentageLeft < 0.40)
-           {
-              FadeToTargetTrans(EWD_winId, 200)
-              PeaksArray.push(EWD_winId)
-              WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
-           }
-           Else If (!DualLEdges && !DualREdges)
+           Else If MouseMoved
+              FadeToTargetTrans(EWD_winId, 255, TransparentValue)
+           
+           If (percentageLeft >= 0.40 && !DualLEdges && !DualREdges)
            {
               for idx, val in PeaksArray {
                  If (val == EWD_winId)
@@ -325,8 +357,6 @@ EWD_WatchDrag:
               }
               
            }
-           If WinMoved
-              FadeToTargetTrans(EWD_winId, 255, 200)
            Wheel_disabled := false
            lastWindowPeaked := False
            SetTimer, ButCapture, On
@@ -335,7 +365,7 @@ EWD_WatchDrag:
            
         MouseGetPos, EWD_MouseX, EWD_MouseY
         If (((EWD_MouseX != EWD_MouseOrgX) || (EWD_MouseY != EWD_MouseOrgY)) && !registerRbutton)
-            WinMoved := true
+            MouseMoved := true
         
         If ((EWD_MouseX == MX) && (EWD_MouseY == MY))
         {
@@ -416,7 +446,7 @@ EWD_WatchDrag:
         }
             
         ; MOVE ADJUSTMENTS
-        If !registerRbutton
+        If !registerRbutton && MouseMoved
         {
             If (DualLEdges && (EWD_MouseX - EWD_MouseOrgX) < 0) 
             {
@@ -655,25 +685,28 @@ CalculateWinScreenPercent(winId)
     return abs(visibleWindowArea/totalWindowArea)
 }
 
-FadeToTargetTrans(winId, targetValue := 255, startValue := 0)
+FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
 {
-    transIncrement := 5
+    transIncrement := 10
     If (targetValue != 255)
     {   
-        maxValue := 255
-        loop % ((255 - targetValue)/transIncrement)
+        maxValue := startValue
+        loop % (abs(startValue - targetValue)/transIncrement)
         {   
-            sleep, 4
-            maxValue := maxValue - transIncrement
+            sleep, 1
+            If (startValue > targetValue)
+                maxValue := maxValue - transIncrement
+            Else
+                maxValue := maxValue + transIncrement
             WinSet, Transparent, %maxValue%, %winId%
         }
     }
-    Else
+    Else ;target MUST be 255 opaque
     {
         init := startValue
-        loop % ((255 - startValue)/transIncrement)
+        loop % (abs(255 - startValue)/transIncrement)
         {
-            sleep, 4
+            sleep, 1
             init := init + transIncrement
             WinSet, Transparent, %init%, %winId%
         }
@@ -706,12 +739,12 @@ MoveToTargetSpot(winId, targetX, orgX)
 }
 
 CheckforTransparent:
-    If Wheel_disabled && WinMoved
+    If Wheel_disabled && MouseMoved
     {
         If ((A_TickCount - MButtonPreviousTick) > 1000)
         {
             FadeToTargetTrans(EWD_winId, 255, TransparentValue)
-            WinMoved := False
+            MouseMoved := False
         }
         Else
         {
@@ -737,7 +770,7 @@ EmergencyFail:
         PreviousTick := A_TickCount
 Return
 
-; #If (!WinActive("ahk_exe onenotem.exe") and !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) and !WinActive("ahk_exe Teams.exe")
+#If (!WinActive("ahk_exe notepad++.exe")) ; and !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) and !WinActive("ahk_exe Teams.exe")
 !$LButton::
 ~$LButton::
     global HoveringWinHwnd, PrintButton
@@ -745,22 +778,24 @@ Return
     MouseGetPos, , , ClickedWinHwnd
     PrintButton := True
     
-    for idx, val in PeaksArray
-    {
-        If (val == ("ahk_id " . ClickedWinHwnd))
-        {
+    for idx, val in PeaksArray {
+        If (val == ("ahk_id " . ClickedWinHwnd)) {
             savedWin := True
             HoveringWinHwnd := ClickedWinHwnd
+            LookForLeaveWindow := True
+            break
         }
     }
+    
     If !savedWin
     {
         lastWindowPeaked := False
-        SetTimer, WatchMouse, On
     }
+    
+    SetTimer, WatchMouse, On
     Wheel_disabled :=  False
 Return 
-; #If
+#If
 
 SendCtrlAdd:
     If (MouseIsOver("ahk_class CabinetWClass"))
@@ -817,7 +852,8 @@ ButCapture:
         Return 
         
     MouseGetPos, mX, mY, mHwnd, mCtrl
-    WinGetClass, wClass, ahk_id %mHwnd%
+    mWinID = ahk_id %mHwnd%
+    WinGetClass, wClass, %mWinID%
     
     If (mX != mXOld && mY != mYOld)
     {
@@ -895,13 +931,45 @@ ButCapture:
                     If ((mX >= minimizePos.x) && (mX <= (minimizePos.x+minimizePos.w)) && (mY >= minimizePos.y) && (mY <= (minimizePos.y+minimizePos.h)))
                         ToolTip, minimize!
                     Else If ((mX >= closePos.x) && (mX <= (closePos.x+closePos.w)) && (mY >= closePos.y) && (mY <= (closePos.y+closePos.h)))
+                    {
                         ToolTip, close!
+                        for idx, val in PeaksArray {
+                          If (val == mWinID) {
+                              PeaksArray.remove(idx)
+                              ; PeaksArray.remove(val)
+                              LookForLeaveWindow := False
+                              WinSet, AlwaysOnTop, off, %mWinID%
+                              Break
+                             }
+                          }
+                        for k, v in WinBackupXs {
+                           If (k == mHwnd) {
+                               WinBackupXs.remove(k)
+                               Break
+                           }
+                        }
+                    }
                 }
                 Else
                 {
                     If InStr(mEl.CurrentName, "Close")
                     {
                         Tooltip, %wClass% " close!"
+                        for idx, val in PeaksArray {
+                          If (val == mWinID) {
+                              PeaksArray.remove(idx)
+                              ; PeaksArray.remove(val)
+                              LookForLeaveWindow := False
+                              WinSet, AlwaysOnTop, off, %mWinID%
+                              Break
+                             }
+                          }
+                        for k, v in WinBackupXs {
+                           If (k == mHwnd) {
+                               WinBackupXs.remove(k)
+                               Break
+                           }
+                        }
                     }
                     Else If InStr(mEl.CurrentName, "Maximize")
                     {
