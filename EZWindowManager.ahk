@@ -12,6 +12,7 @@ Process, Priority,, High
 #UseHook On
 SendMode, Input
 SetTitleMatchMode, 2 
+CoordMode, Mouse, Screen
 
 Wheel_disabled := false
 CheckForStuck := false
@@ -61,12 +62,8 @@ WatchMouse:
                 WinGet, winHwnd, ID, %winId%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
                
-                while (A_Index < 10)
-                {
-                    WinSet, AlwaysOnTop, On, %winId%
-                }
-
                 If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -MouseMoveBuffer/2)) {
+                    WinSet, AlwaysOnTop, On, %winId%
                     SetTimer, ButCapture, Off
                     MoveToTargetSpot(winId, 0-offL, WinX)
                     FadeToTargetTrans(winId, 255, 200)
@@ -76,6 +73,7 @@ WatchMouse:
                     Break
                 }
                 Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer/2)) {
+                    WinSet, AlwaysOnTop, On, %winId%
                     SetTimer, ButCapture, Off
                     MoveToTargetSpot(winId, A_ScreenWidth-WinW-OffR, WinX)
                     FadeToTargetTrans(winId, 255, 200)
@@ -222,11 +220,11 @@ Return
     RButton & MButton::Return
 #If
 
-#If !(Wheel_disabled)
-~RButton::
-    SetTimer, WatchMouse, off
-    Return
-#If
+; #If !(Wheel_disabled)
+; ~RButton::
+    ; SetTimer, WatchMouse, off
+    ; Return
+; #If
 
 +WheelUp::
 Send {WheelLeft}
@@ -239,7 +237,6 @@ Return
 MButton::
     SetTimer, ButCapture, Off
     SetTimer, WatchMouse, Off
-    CoordMode, Mouse, Screen
     MX := 0
     MY := 0
     EWD_MouseOrgX := 0
@@ -312,8 +309,6 @@ MButton::
 Return 
 
 EWD_WatchDrag:
-        CoordMode, Mouse, Screen
-        
         If (!(GetKeyState("MButton", "P")) && !(GetKeyState("RButton", "P"))) { 
            SetTimer, CheckforTransparent, Off
            SetTimer, EWD_WatchDrag, Off
@@ -421,15 +416,15 @@ EWD_WatchDrag:
         Else If (((EWD_WinX+EWD_WinW) == A_ScreenWidth)) ;&& EWD_WinY == 0) || ((EWD_WinX+EWD_WinW) == A_ScreenWidth && EWD_WinB == MonitorWorkAreaBottom))
             DualREdges := True
         
-        If (DualLEdges && EWD_WinY < 0)
-        {
-            WinMove, %EWD_winId%,,0,
-            EWD_WinX := 0
-        }
-        Else If (DualREdges && (EWD_WinX+EWD_WinW) > A_ScreenWidth)
-        {
-            WinMove, %EWD_winId%,, A_ScreenWidth-EWD_WinW-offR, ,
-        }
+        ; If (DualLEdges && EWD_WinY < 0)
+        ; {
+            ; WinMove, %EWD_winId%,,0,
+            ; EWD_WinX := 0
+        ; }
+        ; Else If (DualREdges && (EWD_WinX+EWD_WinW) > A_ScreenWidth)
+        ; {
+            ; WinMove, %EWD_winId%,, A_ScreenWidth-EWD_WinW-offR, ,
+        ; }
         
         
         If (GetKeyState("RButton", "P"))
@@ -846,16 +841,18 @@ Return
 ButCapture:
 {
     global WindowArray, PrintButton, mEl
-    CoordMode, Mouse, Screen
     
     If (GetKeyState("MButton", "P"))
+    {
+        Sleep, 100
         Return 
+    }
         
     MouseGetPos, mX, mY, mHwnd, mCtrl
     mWinID = ahk_id %mHwnd%
     WinGetClass, wClass, %mWinID%
     
-    If (mX != mXOld && mY != mYOld)
+    If (mX != mXOld && mY != mYOld && !GetKeyState("LButton"))
     {
         ; mEl := {}
 
@@ -872,7 +869,7 @@ ButCapture:
                     WinGetPos, X, Y, W, H, ahk_id %mHwnd%
                     ; mEl        := UIA.ElementFromHandle(WinExist("ahk_id " . mHwnd), True)
                     If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                        mEl        := UIA.ElementFromPoint(X+9, Y + 2)
+                        mEl        := UIA.ElementFromPoint(X+9, Y + 2, True)
                     Else
                         mEl := WindowArray["ahk_id " . mHwnd]
                     ; paneEl     := mEl.FindFirstByNameAndType("Google Chrome", "Pane")
@@ -901,9 +898,9 @@ ButCapture:
         ; maximizeEl := paneEl.FindFirstByNameAndType("Maximize", "Button")
         ; closeEl    := paneEl.FindFirstByNameAndType("Close", "Button")
 
-        WinGet, cList, ControlList, ahk_id %mHwnd%
-        If InStr(cList, "Chrome_RenderWidgetHostHWND1")
-            SendMessage, WM_GETOBJECT := 0x003D, 0, 1, Chrome_RenderWidgetHostHWND1, ahk_id %mHwnd%
+        ; WinGet, cList, ControlList, ahk_id %mHwnd%
+        ; If InStr(cList, "Chrome_RenderWidgetHostHWND1")
+            ; SendMessage, WM_GETOBJECT := 0x003D, 0, 1, Chrome_RenderWidgetHostHWND1, ahk_id %mHwnd%
     }
     Else
     {
