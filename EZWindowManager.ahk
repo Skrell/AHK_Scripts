@@ -29,20 +29,21 @@ LookForLeaveWindow := False
 SysGet, MonitorWorkArea, MonitorWorkArea 
 SetTimer, EmergencyFail, 1000, 0
 SetTimer, WatchMouse, 100, 0
-SetTimer, ButCapture, 40, 0
+SetTimer, ButCapture, 20, 0
 
 WindowArray := []
 PeaksArray  := []
 WinBackupXs := []
-; orgX := 0
 percLeft := 1.0
 edgePercentage := .04
 HoveringWinHwnd := 
 lastWindowPeaked := False
 MouseMoveBuffer := 10
 PrintButton := False
+PossiblyChangedSize := False
 mEl := {}
-    
+AccentColorHex := GetAccentColor()
+ 
 WatchMouse:
     MouseGetPos, MXw, MYw, MouseWinHwnd
 
@@ -90,22 +91,23 @@ WatchMouse:
     {
         ; tooltip, 2
         MXwOffset := 0
-        lastWindowPeaked := False
-        If (MXw == 0 && MXw_bkup == 0)
+        lastWindowPeaked := False ; clearly the last loop completed and hence we weren't hovering on a peaked window
+        If (MXw == 0 && MXw_bkup == 0 && MYw == MYw_bkup)
         {
-            MXwOffset := -50
+            MXwOffset := -50 ; now create a large offset to see if perhaps the window we're next to offscreen is a peaked one
         }
-        Else If (MXw >= (A_ScreenWidth-2) && MXw_bkup >= (A_ScreenWidth-2))
+        Else If (MXw >= (A_ScreenWidth-2) && MXw_bkup >= (A_ScreenWidth-2) && MYw == MYw_bkup)
         {
-            MXwOffset := 50
+            MXwOffset := 50 ; now create a large offset to see if perhaps the window we're next to offscreen is a peaked one
         }
-        If (MXwOffset != 0)
+        
+        If (MXwOffset != 0) ; so we've decided to check offscreen
         {
             for idx, val in PeaksArray
             {
                 WinGet, winHwnd, ID, %val%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
-                If (((MXw+MXwOffset) > WinX) && (MYw > WinY) && (MYw < (WinY+WinH)))
+                If (((MXw+MXwOffset) > WinX) && (MYw > WinY) && (MYw < (WinY+WinH))) ; turns out there is an offscreen peaked window
                 {
                     WinActivate, %val%
                     WinSet, AlwaysOnTop, On, %val%
@@ -149,12 +151,19 @@ WatchMouse:
                   ; }
                   ;fixes added for resizing windows while it's being peaked
                   orgX := WinBackupXs[HoveringWinHwnd]
-                  If (orgX < 0)
-                    newOrgX := ((percLeft*((WinW*WinH)/WinH))-WinW)
-                  Else
-                    newOrgX := A_ScreenWidth-(percLeft*(WinW*WinH)/WinH)
+                  If PossiblyChangedSize
+                  {
+                      If (orgX < 0)
+                        newOrgX := ((percLeft*((WinW*WinH)/WinH))-WinW)
+                      Else
+                        newOrgX := A_ScreenWidth-(percLeft*(WinW*WinH)/WinH)
 
-                  WinBackupXs[HoveringWinHwnd] := newOrgX
+                      WinBackupXs[HoveringWinHwnd] := newOrgX
+                  }
+                  Else
+                  {
+                    newOrgX := orgX
+                  }
                   ; If (MouseTest != HoveringWinHwnd) 
                   ; {
                   WinSet, Bottom, , %winId%
@@ -315,18 +324,42 @@ EWD_WatchDrag:
            SetTimer, WatchMouse, On
            percentageLeft := CalculateWinScreenPercent(EWD_winId)
            Tooltip, 
-           ; If (percentageLeft < edgePercentage)
-           ; {
-              ; FadeToTargetTrans(EWD_winId, 200)
-              ; WinSet, AlwaysOnTop, On, %EWD_winId% 
-              ; PeaksArray.push(EWD_winId)
-              ; WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
-           ; }
            If (percentageLeft < 0.40)
            {
               FadeToTargetTrans(EWD_winId, 200, TransparentValue)
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
+              tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
+              WinGetTitle, wTitle, %EWD_winId%
+              ; wTitle := """" . wTitle . """"
+              buttonEl := tbEl.FindFirstByNameAndType(wTitle, "Button", 0x4, 2, False)
+              taskButtonElPos := buttonEl.CurrentBoundingRectangle
+              
+              	; Gui, ListView, LVPropertyIds
+                ; try LV_Add("", "LocalizedControlType", buttonEl.CurrentLocalizedControlType)
+                ; try LV_Add("", "Name", buttonEl.CurrentName)
+                ; try LV_Add("", "AutomationId", buttonEl.CurrentAutomationId)
+                ; try LV_Add("", "BoundingRectangle", "l: " taskButtonElPos.l " t: " taskButtonElPos.t " r: " taskButtonElPos.r " b: " taskButtonElPos.b)
+                ; try LV_Add("", "ClassName", buttonEl.CurrentClassName)
+                ; try LV_Add("", "FullDescription", buttonEl.CurrentFullDescription)
+                ; try LV_Add("", "HelpText", buttonEl.CurrentHelpText)
+                ; try LV_Add("", "AccessKey", buttonEl.CurrentAccessKey)
+                ; try LV_Add("", "AcceleratorKey", buttonEl.CurrentAcceleratorKey)
+                ; try LV_Add("", "HasKeyboardFocus", buttonEl.CurrentHasKeyboardFocus)
+                ; try LV_Add("", "IsKeyboardFocusable", buttonEl.CurrentIsKeyboardFocusable)
+                ; try LV_Add("", "ItemType", buttonEl.CurrentItemType)
+                ; try LV_Add("", "ProcessId", buttonEl.CurrentProcessId)
+                ; try LV_Add("", "IsEnabled", buttonEl.CurrentIsEnabled)
+                ; try LV_Add("", "IsPassword", buttonEl.CurrentIsPassword)
+                ; try LV_Add("", "IsOffscreen", buttonEl.CurrentIsOffscreen)
+                ; try LV_Add("", "FrameworkId", buttonEl.CurrentFrameworkId)
+                ; try LV_Add("", "IsRequiredForForm", buttonEl.CurrentIsRequiredForForm)
+                ; try LV_Add("", "ItemStatus", buttonEl.CurrentItemStatus)
+                ; LV_ModifyCol(1, "AutoHdr")
+    
+              ; MsgBox, %wTitle%
+              SetFormat, Integer, D
+              RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, EWD_MouseWinHwnd)
            }
            Else If MouseMoved
               FadeToTargetTrans(EWD_winId, 255, TransparentValue)
@@ -340,6 +373,7 @@ EWD_WatchDrag:
                      ; PeaksArray.remove(val)
                      LookForLeaveWindow := False
                      WinSet, AlwaysOnTop, off, %EWD_winId%
+                     RangeTip(, , , , , , EWD_MouseWinHwnd)
                      Break
                  }
               }
@@ -765,32 +799,34 @@ EmergencyFail:
         PreviousTick := A_TickCount
 Return
 
-#If (!WinActive("ahk_exe notepad++.exe")) ; and !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) and !WinActive("ahk_exe Teams.exe")
+; #If !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) and !WinActive("ahk_exe Teams.exe")
 !$LButton::
 ~$LButton::
     global HoveringWinHwnd, PrintButton
     savedWin := False
     MouseGetPos, , , ClickedWinHwnd
     PrintButton := True
+    PossiblyChangedSize := False
     
     for idx, val in PeaksArray {
         If (val == ("ahk_id " . ClickedWinHwnd)) {
             savedWin := True
             HoveringWinHwnd := ClickedWinHwnd
             LookForLeaveWindow := True
+            PossiblyChangedSize := True
             break
         }
     }
     
-    If !savedWin
+    If !savedWin ; didn't left click on a peaked window
     {
         lastWindowPeaked := False
     }
     
-    SetTimer, WatchMouse, On
-    Wheel_disabled :=  False
+    SetTimer, WatchMouse, On ; catchall in case for some reason timer isn't running
+    Wheel_disabled :=  False ; catchall in case for some reason wheel is still disabled
 Return 
-#If
+; #If
 
 SendCtrlAdd:
     If (MouseIsOver("ahk_class CabinetWClass"))
@@ -851,58 +887,54 @@ ButCapture:
     MouseGetPos, mX, mY, mHwnd, mCtrl
     mWinID = ahk_id %mHwnd%
     WinGetClass, wClass, %mWinID%
+    WinGetPos, X, Y, W, H, ahk_id %mHwnd%
     
-    If (mX != mXOld && mY != mYOld && !GetKeyState("LButton"))
+    If ((mX != mXOld || mY != mYOld) && !GetKeyState("LButton"))
     {
-        ; mEl := {}
-
-        ; If (IsUIAObjSaved("ahk_id " . mHwnd))
-        ; {  
-            ; mEl := WindowArray["ahk_id " . mHwnd]
-        ; }
-        ; Else
-        ; {
-            ; Tooltip, "nope!"
-        try {
-                If (wClass == "Chrome_WidgetWin_1")
-                {
-                    WinGetPos, X, Y, W, H, ahk_id %mHwnd%
-                    ; mEl        := UIA.ElementFromHandle(WinExist("ahk_id " . mHwnd), True)
-                    If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                        mEl        := UIA.ElementFromPoint(X+9, Y + 2, True)
-                    Else
-                        mEl := WindowArray["ahk_id " . mHwnd]
-                    ; paneEl     := mEl.FindFirstByNameAndType("Google Chrome", "Pane")
-                    ; paneEl     := mEl.FindFirstByType("TitleBar")
-                    ; paneEl     := mEl.FindFirstByType("TitleBar")
-                    minimizeEl := mEl.FindFirstByNameAndType("Minimize", "Button")
-                    maximizeEl := mEl.FindFirstByNameAndType("Maximize", "Button")
-                    closeEl    := mEl.FindFirstByNameAndType("Close", "Button")
-                }
-                Else
-                {
-                    If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                        mEl := UIA.ElementFromPoint(mX, mY)
-                    Else
-                        mEl := WindowArray["ahk_id " . mHwnd]
-                }
-
-            } catch e {
-                If InStr(e.Message, "0x80070005")
+      try {
+        If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
+            mEl := UIA.ElementFromPoint(mX, mY)
+        Else
+            mEl := WindowArray["ahk_id " . mHwnd]
+      } catch e {
+            If InStr(e.Message, "0x80070005")
                     Msgbox, "Try running UIAViewer with Admin privileges"
-            }
-        ; }
-        
-        ; paneEl     := mEl.FindFirstByType("TitleBar")
-        ; minimizeEl := paneEl.FindFirstByNameAndType("Minimize", "Button")
-        ; maximizeEl := paneEl.FindFirstByNameAndType("Maximize", "Button")
-        ; closeEl    := paneEl.FindFirstByNameAndType("Close", "Button")
-
-        ; WinGet, cList, ControlList, ahk_id %mHwnd%
-        ; If InStr(cList, "Chrome_RenderWidgetHostHWND1")
-            ; SendMessage, WM_GETOBJECT := 0x003D, 0, 1, Chrome_RenderWidgetHostHWND1, ahk_id %mHwnd%
+      }
     }
-    Else
+    Else If ((mX > X) && (mX < (X+W)) && (mY > Y) && (mY < (Y+32)))
+    {
+        If (!PrintButton)
+        {
+            ; mEl := {}
+
+            ; If (IsUIAObjSaved("ahk_id " . mHwnd))
+            ; {  
+                ; mEl := WindowArray["ahk_id " . mHwnd]
+            ; }
+            try {
+                    If (wClass == "Chrome_WidgetWin_1" || wClass == "Chrome_WidgetWin_0")
+                    {
+                        ; mEl        := UIA.ElementFromHandle(WinExist("ahk_id " . mHwnd), True)
+                        If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
+                            ; mEl        := UIA.ElementFromPoint(X+9, Y + 2, True)
+                            mEl        := UIA.SmallestElementFromPoint(X+9, Y+2, True, UIA.ElementFromHandle(mHwnd))
+                        Else
+                            mEl := WindowArray["ahk_id " . mHwnd]
+                        ; paneEl     := mEl.FindFirstByNameAndType("Google Chrome", "Pane")
+                        ; paneEl     := mEl.FindFirstByType("TitleBar")
+                        ; paneEl     := mEl.FindFirstByType("TitleBar")
+                        minimizeEl := mEl.FindFirstByNameAndType("Minimize", "Button")
+                        maximizeEl := mEl.FindFirstByNameAndType("Maximize", "Button")
+                        closeEl    := mEl.FindFirstByNameAndType("Close", "Button")
+                    }
+           } catch e {
+                    If InStr(e.Message, "0x80070005")
+                        Msgbox, "Try running UIAViewer with Admin privileges"
+           }
+        }
+    }
+    
+    If (PrintButton)
     {
         ; WinGetTitle, wTitle, ahk_id %mHwnd%
         ; WinGetPos, wX, wY, wW, wH, ahk_id %mHwnd%
@@ -918,70 +950,69 @@ ButCapture:
             ;;    SetTimer, SendCtrlAdd, -300
             ;;    Return
             ;;}
-            If (PrintButton)
+            If (wClass == "Chrome_WidgetWin_1" || wClass == "Chrome_WidgetWin_0")
             {
-                ; Tooltip, FAIL
-                If (wClass == "Chrome_WidgetWin_1")
+                minimizePos := minimizeEl.GetCurrentPos()
+                maximizePos := maximizeEl.GetCurrentPos()
+                closePos    := closeEl.GetCurrentPos()
+                If ((mX >= minimizePos.x) && (mX <= (minimizePos.x+minimizePos.w)) && (mY >= minimizePos.y) && (mY <= (minimizePos.y+minimizePos.h)))
+                    ToolTip, minimize!
+                Else If ((mX >= maximizePos.x) && (mX <= (maximizePos.x+maximizePos.w)) && (mY >= maximizePos.y) && (mY <= (maximizePos.y+maximizePos.h)))
+                    ToolTip, maximize!
+                Else If ((mX >= closePos.x) && (mX <= (closePos.x+closePos.w)) && (mY >= closePos.y) && (mY <= (closePos.y+closePos.h)))
                 {
-                    minimizePos := minimizeEl.GetCurrentPos()
-                    closePos    := closeEl.GetCurrentPos()
-                    If ((mX >= minimizePos.x) && (mX <= (minimizePos.x+minimizePos.w)) && (mY >= minimizePos.y) && (mY <= (minimizePos.y+minimizePos.h)))
-                        ToolTip, minimize!
-                    Else If ((mX >= closePos.x) && (mX <= (closePos.x+closePos.w)) && (mY >= closePos.y) && (mY <= (closePos.y+closePos.h)))
-                    {
-                        ToolTip, close!
-                        for idx, val in PeaksArray {
-                          If (val == mWinID) {
-                              PeaksArray.remove(idx)
-                              ; PeaksArray.remove(val)
-                              LookForLeaveWindow := False
-                              WinSet, AlwaysOnTop, off, %mWinID%
-                              Break
-                             }
-                          }
-                        for k, v in WinBackupXs {
-                           If (k == mHwnd) {
-                               WinBackupXs.remove(k)
-                               Break
-                           }
-                        }
+                    ToolTip, close!
+                    for idx, val in PeaksArray {
+                      If (val == mWinID) {
+                          PeaksArray.remove(idx)
+                          ; PeaksArray.remove(val)
+                          LookForLeaveWindow := False
+                          WinSet, AlwaysOnTop, off, %mWinID%
+                          Break
+                         }
+                      }
+                    for k, v in WinBackupXs {
+                       If (k == mHwnd) {
+                           WinBackupXs.remove(k)
+                           Break
+                       }
                     }
                 }
-                Else
-                {
-                    If InStr(mEl.CurrentName, "Close")
-                    {
-                        Tooltip, %wClass% " close!"
-                        for idx, val in PeaksArray {
-                          If (val == mWinID) {
-                              PeaksArray.remove(idx)
-                              ; PeaksArray.remove(val)
-                              LookForLeaveWindow := False
-                              WinSet, AlwaysOnTop, off, %mWinID%
-                              Break
-                             }
-                          }
-                        for k, v in WinBackupXs {
-                           If (k == mHwnd) {
-                               WinBackupXs.remove(k)
-                               Break
-                           }
-                        }
-                    }
-                    Else If InStr(mEl.CurrentName, "Maximize")
-                    {
-                        Tooltip, %wClass% " maximize!"
-                    }
-                    Else If InStr(mEl.CurrentName, "Minimize")
-                    {
-                        Tooltip, %wClass% " minimize!"
-                    }
-                    
-                    If GetKeyState("Alt", "P")
-                        Tooltip, % mEl.CurrentAutomationId " : " mEl.CurrentName " : " mEl.CurrentControlType
-                }
-                PrintButton := False
             }
+            Else
+            {
+                If InStr(mEl.CurrentName, "Close")
+                {
+                    Tooltip, %wClass% " close!"
+                    for idx, val in PeaksArray {
+                      If (val == mWinID) {
+                          PeaksArray.remove(idx)
+                          ; PeaksArray.remove(val)
+                          LookForLeaveWindow := False
+                          WinSet, AlwaysOnTop, off, %mWinID%
+                          Break
+                         }
+                      }
+                    for k, v in WinBackupXs {
+                       If (k == mHwnd) {
+                           WinBackupXs.remove(k)
+                           Break
+                       }
+                    }
+                }
+                Else If InStr(mEl.CurrentName, "Maximize")
+                {
+                    Tooltip, %wClass% " maximize!"
+                }
+                Else If InStr(mEl.CurrentName, "Minimize")
+                {
+                    Tooltip, %wClass% " minimize!"
+                }
+                
+                If GetKeyState("Alt", "P")
+                    Tooltip, % mEl.CurrentAutomationId " : " mEl.CurrentName " : " mEl.CurrentControlType
+            }
+            PrintButton := False
         }
     }    
     mXOld := mX
@@ -999,3 +1030,63 @@ IsUIAObjSaved(idstring := "")
     }
     return False
 }
+
+RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0) ; from the FindText library, credit goes to feiyue
+{
+  static id:=0
+  tooltip, % x+w
+  
+  If (x="")
+  {
+    id:=0
+    Loop 4
+       Gui, Range_%winId%_%A_Index%: Destroy
+    Return
+  }
+  
+  if (!id)
+  {
+    Loop 4
+      Gui, Range_%winId%_%A_Index%: +AlwaysOnTop -Caption +ToolWindow
+        -DPIScale +E0x08000000
+  }
+  x:=Floor(x), y:=Floor(y), w:=Floor(w), h:=Floor(h), d:=Floor(d)
+  Loop 4
+  {
+    i:=A_Index
+    , x1:=(i=2 ? x+w : x-d)
+    , y1:=(i=3 ? y+h : y-d)
+    , w1:=(i=1 or i=3 ? w+2*d : d)
+    , h1:=(i=2 or i=4 ? h+2*d : d)
+    Gui, Range_%winId%_%i%: Color, %color%
+    Gui, Range_%winId%_%i%: Show, NA x%x1% y%y1% w%w1% h%h1%
+  }
+  Return
+}
+
+; MsgBox % GetSysColor(13) . "`n" . GetSysColor(29)
+GetSysColor(n)
+{
+    Local BGR := DllCall("User32.dll\GetSysColor", "Int", n, "UInt")
+        , RGB := (BGR & 255) << 16 | (BGR & 65280) | (BGR >> 16)
+    Return Format("0x{:06X}", RGB)
+} ; https://msdn.microsoft.com/en-us/library/windows/desktop/ms724371(v=vs.85).aspx
+
+HexToDec(hex)
+{
+    VarSetCapacity(dec, 66, 0)
+    , val := DllCall("msvcrt.dll\_wcstoui64", "Str", hex, "UInt", 0, "UInt", 16, "CDECL Int64")
+    , DllCall("msvcrt.dll\_i64tow", "Int64", val, "Str", dec, "UInt", 10, "CDECL")
+    return dec
+}
+
+GetAccentColor()
+{
+    RegRead, CheckReg, HKCU\SOFTWARE\Microsoft\Windows\DWM, ColorizationColor
+    SetFormat, integer, hex
+    CheckReg := Checkreg+10659224
+    StringRight, CheckReg, CheckReg, 6
+    Return CheckReg
+    ; msgbox % CheckReg
+}
+
