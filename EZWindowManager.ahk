@@ -32,7 +32,7 @@ SysGet, MonitorWorkArea, MonitorWorkArea
 SetTimer, EmergencyFail, 1000, 0
 SetTimer, WatchMouse, 100, 0
 SetTimer, ButCapture, 35, 0
-SetTimer, CheckButtonSize, 100, 0
+SetTimer, CheckButtonSize, 150, 0
 
 WindowArray := []
 PeaksArray  := []
@@ -264,6 +264,15 @@ CheckButtonSize:
              taskButtonElPos := buttonEl.CurrentBoundingRectangle
             
              RangeTip(, , , , , , winHwnd)
+          }
+          
+        for winHwnd, v in WinBackupXs {
+             buttonWinId = ahk_id %winHwnd%
+             tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
+             WinGetTitle, wTitle, %buttonWinId%
+             buttonEl := tbEl.FindFirstByNameAndType(wTitle, "Button", 0x4, 2, False)
+             taskButtonElPos := buttonEl.CurrentBoundingRectangle
+            
              SetFormat, Integer, D
              RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, winHwnd)
           }
