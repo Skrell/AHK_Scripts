@@ -32,7 +32,7 @@ SysGet, MonitorWorkArea, MonitorWorkArea
 SetTimer, EmergencyFail, 1000, 0
 SetTimer, WatchMouse, 100, 0
 SetTimer, ButCapture, 35, 0
-SetTimer, CheckButtonSize, 150, 0
+SetTimer, CheckButtonSize, 105, 0
 
 WindowArray := []
 PeaksArray  := []
@@ -50,6 +50,8 @@ maximizeEl := ""
 closeEl    := ""
 
 AccentColorHex := GetAccentColor()
+ 
+tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
  
 WatchMouse:
     global LookForLeaveWindow, lastWindowPeaked, WinBackupXs
@@ -253,22 +255,19 @@ Send {WheelRight}
 Return
 
 CheckButtonSize: 
+    global tbEl
     WinGet, winCount, Count,,,   ;list of windows (exclude the desktop)
+ 
     if (winCountOld != winCount)
     {  
+        loop %winList%
+        {
+            winId := winList%A_Index%
+            Gui, Range_%winId%_3: Destroy 
+        }
+        
         for winHwnd, v in WinBackupXs {
              buttonWinId = ahk_id %winHwnd%
-             tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
-             WinGetTitle, wTitle, %buttonWinId%
-             buttonEl := tbEl.FindFirstByNameAndType(wTitle, "Button", 0x4, 2, False)
-             taskButtonElPos := buttonEl.CurrentBoundingRectangle
-            
-             RangeTip(, , , , , , winHwnd)
-          }
-          
-        for winHwnd, v in WinBackupXs {
-             buttonWinId = ahk_id %winHwnd%
-             tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
              WinGetTitle, wTitle, %buttonWinId%
              buttonEl := tbEl.FindFirstByNameAndType(wTitle, "Button", 0x4, 2, False)
              taskButtonElPos := buttonEl.CurrentBoundingRectangle
@@ -276,6 +275,7 @@ CheckButtonSize:
              SetFormat, Integer, D
              RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, winHwnd)
           }
+          WinGet, winList, List,,,
     }
     winCountOld := winCount    ;always keep up to date
 Return 
@@ -1062,15 +1062,15 @@ RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0) ; from the Fi
   {
     id:=0
     SetFormat, Integer, D
-    Loop 4
-       Gui, Range_%winId%_%A_Index%: Destroy
+    ; Loop 4
+       Gui, Range_%winId%_3: Destroy
     Return
   }
   
   if (!id)
   {
-    Loop 4
-      Gui, Range_%winId%_%A_Index%: +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000
+    ; Loop 4
+      Gui, Range_%winId%_3:New, +AlwaysOnTop -Caption +ToolWindow +HwndLinesId -DPIScale +E0x08000000
   }
   x:=Floor(x), y:=Floor(y), w:=Floor(w), h:=Floor(h), d:=Floor(d)
   ; Loop 4
@@ -1080,10 +1080,12 @@ RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0) ; from the Fi
     , y1:=(i=3 ? y+h : y-d)
     , w1:=(i=1 or i=3 ? w+2*d : d)
     , h1:=(i=2 or i=4 ? h+2*d : d)
-    x1 := x1 + 1
-    w1 := w1 - 3
+    x1s := x1 + 2
+    w1s := w1 - 4
     Gui, Range_%winId%_%i%: Color, %color%
-    Gui, Range_%winId%_%i%: Show, NA x%x1% y%y1% w%w1% h%h1%
+    Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1% w%w1s% h%h1%
+    
+    WinSet, AlwaysOnTop, on, ahk_id %LinesId%
   ; }
   Return
 }
