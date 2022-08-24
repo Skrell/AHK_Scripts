@@ -929,9 +929,11 @@ ButCapture:
             try {
                     If (wClass == "Chrome_WidgetWin_1" || wClass == "Chrome_WidgetWin_0")
                     {
+                        tooltip, asdf
                         ; mEl        := UIA.ElementFromHandle(WinExist("ahk_id " . mHwnd), True)
                         If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                            mEl        := UIA.SmallestElementFromPoint(X+9, Y+2, True, "")
+                            ; mEl        := UIA.SmallestElementFromPoint(X+12, Y+1, True, "")
+                            mEl        := UIA.SmallestElementFromPoint(mX, mW, True, UIA.ElementFromHandle(mHwnd))
                         Else
                             mEl := WindowArray["ahk_id " . mHwnd]
 
@@ -978,37 +980,6 @@ ButCapture:
             ;;    SetTimer, SendCtrlAdd, -300
             ;;    Return
             ;;}
-            If (wClass == "Chrome_WidgetWin_1" || wClass == "Chrome_WidgetWin_0")
-            {
-                minimizePos := minimizeEl.GetCurrentPos()
-                maximizePos := maximizeEl.GetCurrentPos()
-                closePos    := closeEl.GetCurrentPos()
-                If ((mX >= minimizePos.x) && (mX <= (minimizePos.x+minimizePos.w)) && (mY >= minimizePos.y) && (mY <= (minimizePos.y+minimizePos.h)))
-                    ToolTip, minimize!
-                Else If ((mX >= maximizePos.x) && (mX <= (maximizePos.x+maximizePos.w)) && (mY >= maximizePos.y) && (mY <= (maximizePos.y+maximizePos.h)))
-                    ToolTip, maximize!
-                Else If ((mX >= closePos.x) && (mX <= (closePos.x+closePos.w)) && (mY >= closePos.y) && (mY <= (closePos.y+closePos.h)))
-                {
-                    ToolTip, close!
-                    for idx, val in PeaksArray {
-                      If (val == mWinID) {
-                          PeaksArray.remove(idx)
-                          ; PeaksArray.remove(val)
-                          LookForLeaveWindow := False
-                          WinSet, AlwaysOnTop, off, %mWinID%
-                          Break
-                         }
-                      }
-                    for k, v in WinBackupXs {
-                       If (k == mHwnd) {
-                           WinBackupXs.remove(k)
-                           RangeTip(, , , , , , k)
-                           Break
-                       }
-                    }
-                }
-            }
-            Else
             {
                 If InStr(mEl.CurrentName, "Close")
                 {
@@ -1042,6 +1013,8 @@ ButCapture:
                 If GetKeyState("Alt", "P")
                     Tooltip, % mEl.CurrentAutomationId " : " mEl.CurrentName " : " mEl.CurrentControlType
             }
+        } catch e {
+        
         }
         PrintButton := False
         SetTimer, CheckButtonSize, On
@@ -1124,4 +1097,3 @@ GetAccentColor()
     ; msgbox % CheckReg
     Return CheckReg
 }
-
