@@ -153,17 +153,11 @@ WatchMouse:
                      sleep 350
                   }
                   ; double check that we haven't re-entered the peaked window and hence cancel the re-hide   
-                  MouseGetPos, , , MouseTest
-                  If (MouseTest == HoveringWinHwnd)
+                  MouseGetPos, MXw2, MYw2,
+                  If (MXw2 >= WinX && MXw2 <= (WinX+WinW) && MYw2 >= WinY && MYw2 <= (WinY+WinH))
                   {
-                      Break
+                     Return
                   }
-                  
-                  ; If !(percLeft < edgePercentage) 
-                  ; {
-                      ; WinSet, AlwaysOnTop, Off, %winId%
-                      ; sleep 10
-                  ; }
                   ;fixes added for resizing windows while it's being peaked
                   orgX := WinBackupXs[HoveringWinHwnd]
                   newOrgX := orgX
@@ -829,7 +823,7 @@ Return
 ; #If !WinActive("ahk_exe onenote.exe") and !WinActive("ahk_exe OUTLOOK.EXE")) and !WinActive("ahk_exe Teams.exe")
 !$LButton::
 ~$LButton::
-    global HoveringWinHwnd, PrintButton, PeaksArray, lastWindowPeaked, PossiblyChangedSize
+    global HoveringWinHwnd, PrintButton, PeaksArray, lastWindowPeaked, PossiblyChangedSize, Wheel_disabled
     savedWin := False
     MouseGetPos, , , ClickedWinHwnd
     PrintButton := True
@@ -1096,7 +1090,7 @@ RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0) ; from the Fi
     , w1:=(i=1 or i=3 ? w+2*d : d)
     , h1:=(i=2 or i=4 ? h+2*d : d)
     x1s := x1 + 2
-    w1s := w1 - 4
+    w1s := w1 - 5
     Gui, Range_%winId%_%i%: Color, %color%
     Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1% w%w1s% h%h1%
     
