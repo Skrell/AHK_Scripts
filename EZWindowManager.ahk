@@ -344,6 +344,9 @@ MButton::
     }
     SetTimer, WatchMouse, On
     SetTimer, ButCapture, On
+    Wheel_disabled := false
+    SetTimer, ButCapture, On
+    SetTimer, CheckButtonSize, On
 Return 
 
 EWD_WatchDrag:
@@ -367,6 +370,7 @@ EWD_WatchDrag:
               
               SetFormat, Integer, D
               RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, EWD_MouseWinHwnd)
+              Return
            }
            
             ; CORRECTIONS FOR LEFT AND RIGHT EDGES OF WINDOW
@@ -401,15 +405,13 @@ EWD_WatchDrag:
                      Break
                  }
               }
-              If MouseMoved
-                FadeToTargetTrans(EWD_winId, 255, TransparentValue)
            }
            Else If ((percentageLeft >= 0.40) && (WinLEdge || WinREdge))
            {
               for k, v in WinBackupXs {
                  If (k == EWD_MouseWinHwnd)
                  {
-                     tooltip, window edging!
+                     ; tooltip, window edging!
                      LookForLeaveWindow := True
                      HoveringWinHwnd := EWD_MouseWinHwnd
                      PossiblyChangedSize := True
@@ -418,12 +420,12 @@ EWD_WatchDrag:
               }
            }
            
+           If MouseMoved
+              FadeToTargetTrans(EWD_winId, 255, TransparentValue)
+   
            If removePeakedWin
               lastWindowPeaked := False
            
-           Wheel_disabled := false
-           SetTimer, ButCapture, On
-           SetTimer, CheckButtonSize, On
            Return
         }
            
@@ -924,12 +926,11 @@ ButCapture:
                         ; Msgbox, "Try running UIAViewer with Admin privileges"
           }
         }
-        Else If ((mX != mXOld || mY != mYOld) && (mX > (X+W-215)) && (mX < (X+W)) && (mY > Y) && (mY < (Y+32)))
+        Else If ((mX > (X+W-215)) && (mX < (X+W)) && (mY > Y) && (mY < (Y+32)))
         {
             try {
                     If (wClass == "Chrome_WidgetWin_1" || wClass == "Chrome_WidgetWin_0")
                     {
-                        tooltip, asdf
                         ; mEl        := UIA.ElementFromHandle(WinExist("ahk_id " . mHwnd), True)
                         If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
                             ; mEl        := UIA.SmallestElementFromPoint(X+12, Y+1, True, "")
@@ -980,39 +981,37 @@ ButCapture:
             ;;    SetTimer, SendCtrlAdd, -300
             ;;    Return
             ;;}
+            If InStr(mEl.CurrentName, "Close")
             {
-                If InStr(mEl.CurrentName, "Close")
-                {
-                    Tooltip, %wClass% " close!"
-                    for idx, val in PeaksArray {
-                      If (val == mWinID) {
-                          PeaksArray.remove(idx)
-                          ; PeaksArray.remove(val)
-                          LookForLeaveWindow := False
-                          WinSet, AlwaysOnTop, off, %mWinID%
-                          Break
-                         }
-                      }
-                    for k, v in WinBackupXs {
-                       If (k == mHwnd) {
-                           WinBackupXs.remove(k)
-                           RangeTip(, , , , , , k)
-                           Break
-                       }
-                    }
+                Tooltip, %wClass% " close!"
+                for idx, val in PeaksArray {
+                  If (val == mWinID) {
+                      PeaksArray.remove(idx)
+                      ; PeaksArray.remove(val)
+                      LookForLeaveWindow := False
+                      WinSet, AlwaysOnTop, off, %mWinID%
+                      Break
+                     }
+                  }
+                for k, v in WinBackupXs {
+                   If (k == mHwnd) {
+                       WinBackupXs.remove(k)
+                       RangeTip(, , , , , , k)
+                       Break
+                   }
                 }
-                Else If InStr(mEl.CurrentName, "Maximize")
-                {
-                    Tooltip, %wClass% " maximize!"
-                }
-                Else If InStr(mEl.CurrentName, "Minimize")
-                {
-                    Tooltip, %wClass% " minimize!"
-                }
-                
-                If GetKeyState("Alt", "P")
-                    Tooltip, % mEl.CurrentAutomationId " : " mEl.CurrentName " : " mEl.CurrentControlType
             }
+            Else If InStr(mEl.CurrentName, "Maximize")
+            {
+                Tooltip, %wClass% " maximize!"
+            }
+            Else If InStr(mEl.CurrentName, "Minimize")
+            {
+                Tooltip, %wClass% " minimize!"
+            }
+            
+            If GetKeyState("Alt", "P")
+                Tooltip, % mEl.CurrentAutomationId " : " mEl.CurrentName " : " mEl.CurrentControlType
         } catch e {
         
         }
