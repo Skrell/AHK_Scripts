@@ -166,6 +166,8 @@ WatchMouse:
                   ; }
                   ;fixes added for resizing windows while it's being peaked
                   orgX := WinBackupXs[HoveringWinHwnd]
+                  newOrgX := orgX
+                  
                   If PossiblyChangedSize
                   {
                       If (orgX < 0)
@@ -176,18 +178,12 @@ WatchMouse:
                       WinBackupXs[HoveringWinHwnd] := newOrgX
                       PossiblyChangedSize := False
                   }
-                  Else
-                  {
-                    newOrgX := orgX
-                  }
-                  ; If (MouseTest != HoveringWinHwnd) 
-                  ; {
+
                   WinSet, Bottom, , %winId%
                   WinMove, %winId%,, newOrgX-offL
                   FadeToTargetTrans(winId, 200)
                   LookForLeaveWindow := False
                   WinSet, Bottom, , %winId%
-                  ; }
               }
               Break
            }
