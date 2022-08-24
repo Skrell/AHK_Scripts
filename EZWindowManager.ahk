@@ -32,7 +32,7 @@ SysGet, MonitorWorkArea, MonitorWorkArea
 SetTimer, EmergencyFail, 1000, 0
 SetTimer, WatchMouse, 100, 0
 SetTimer, ButCapture, 35, 0
-SetTimer, CheckButtonSize, 105, 0
+SetTimer, CheckButtonSize, 75, 0
 
 WindowArray := []
 PeaksArray  := []
@@ -46,10 +46,13 @@ lastWindowPeaked := False
 MouseMoveBuffer := 10
 PrintButton := False
 PossiblyChangedSize := False
+ForceButtonUpdate := False
+
 mEl := {}
 minimizeEl := ""
 maximizeEl := ""
 closeEl    := ""
+LastRemovedWinId := 0x0
 
 AccentColorHex := GetAccentColor()
 WinGet, winList, List,,,
@@ -244,17 +247,17 @@ Send {WheelRight}
 Return
 
 CheckButtonSize: 
-    global tbEl
-    SetFormat, Integer, D
-    WinGet, winCount, Count,,,   ;list of windows (exclude the desktop)
+    global tbEl, ForceButtonUpdate, LastRemovedWinId, winCount, winCountOld
+    
+     WinGet, winCount, Count,,,   ;list of windows (exclude the desktop)
+    ; WinGet, winList, List,,,
     ; tooltip, %winCount%
-    if (winCountOld != winCount)
+    if ((HexToDec(winCountOld) != HexToDec(winCount)) || ForceButtonUpdate)
     {  
-        loop %winList%
-        {
-            winId := winList%A_Index%
-            Gui, Range_%winId%_3: Destroy 
-        }
+        ; tooltip, % HexToDec(winCountOld) "-" HexToDec(winCount) "-" ForceButtonUpdate
+        ForceButtonUpdate := False
+
+        RangeTip( , , , , , , LastRemovedWinId)
         
         for winHwnd, v in WinBackupXs {
              buttonWinId = ahk_id %winHwnd%
@@ -262,16 +265,19 @@ CheckButtonSize:
              buttonEl := tbEl.FindFirstByNameAndType(wTitle, "Button", 0x4, 2, False)
              taskButtonElPos := buttonEl.CurrentBoundingRectangle
             
+             RangeTip( , , , , , , winHwnd)
+             sleep 1000
              SetFormat, Integer, D
              RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, winHwnd)
-          }
-          WinGet, winList, List,,,
+             sleep 1000
+        }
+        WinGet, winCount, Count,,,
     }
     winCountOld := winCount    ;always keep up to date
 Return 
 
 MButton::
-    global WinBackupXs, PeaksArray
+    global WinBackupXs, PeaksArray, ForceButtonUpdate, LastRemovedWinId
     
     SetTimer, ButCapture, Off
     SetTimer, WatchMouse, Off
@@ -356,20 +362,16 @@ EWD_WatchDrag:
            SetTimer, EWD_WatchDrag, Off
            percentageLeft := CalculateWinScreenPercent(EWD_winId)
            
-           Tooltip, 
-           
            If (percentageLeft < 0.40)
            {
               FadeToTargetTrans(EWD_winId, 200, TransparentValue)
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
-              WinGetTitle, wTitle, %EWD_winId%
+              ; WinGetTitle, wTitle, %EWD_winId%
               ; wTitle := """" . wTitle . """"
-              buttonEl := tbEl.FindFirstByNameAndType(wTitle, "Button", 0x4, 2, False)
-              taskButtonElPos := buttonEl.CurrentBoundingRectangle
-              
-              SetFormat, Integer, D
-              RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, EWD_MouseWinHwnd)
+              ; buttonEl := tbEl.FindFirstByNameAndType(wTitle, "Button", 0x4, 2, False)
+              ; taskButtonElPos := buttonEl.CurrentBoundingRectangle
+              ForceButtonUpdate := True
               Return
            }
            
@@ -384,27 +386,29 @@ EWD_WatchDrag:
 
            If ((percentageLeft >= 0.40) && !WinLEdge && !WinREdge)
            {
-              
+              removeId := False
+              removeIdx := 0
+                
               for idx, val in PeaksArray {
                  If (val == EWD_winId)
                  {
-                     PeaksArray.remove(idx)
-                     ; PeaksArray.remove(val)
-                     LookForLeaveWindow := False
                      WinSet, AlwaysOnTop, off, %EWD_winId%
-                     removePeakedWin := True
+                     removeIdx := idx
+                     removeId := True
                      Break
                  }
               }
-              for k, v in WinBackupXs {
-                 If (k == EWD_MouseWinHwnd)
-                 {
-                     WinBackupXs.remove(k)
-                     RangeTip(, , , , , , k)
-                     removePeakedWin := True
-                     Break
-                 }
+              
+              If removeId
+              {
+                 ForceButtonUpdate := True
+                 removePeakedWin := True
+                 LookForLeaveWindow := False
+                 PeaksArray.remove(removeIdx)
+                 WinBackupXs.remove(EWD_MouseWinHwnd)
+                 LastRemovedWinId := EWD_MouseWinHwnd
               }
+              
            }
            Else If ((percentageLeft >= 0.40) && (WinLEdge || WinREdge))
            {
@@ -415,6 +419,7 @@ EWD_WatchDrag:
                      LookForLeaveWindow := True
                      HoveringWinHwnd := EWD_MouseWinHwnd
                      PossiblyChangedSize := True
+                     ForceButtonUpdate := True
                      Break
                  }
               }
@@ -899,7 +904,7 @@ Return
 
 ButCapture:
 {
-    global WindowArray, PrintButton, mEl, WinBackupXs, PeaksArray
+    global WindowArray, PrintButton, mEl, WinBackupXs, PeaksArray, LastRemovedWinId
     
     If (GetKeyState("MButton", "P"))
     {
@@ -910,7 +915,7 @@ ButCapture:
     MouseGetPos, mX, mY, mHwnd, mCtrl
     mWinID = ahk_id %mHwnd%
     WinGetClass, wClass, %mWinID%
-    WinGetPos, X, Y, W, H, ahk_id %mHwnd%
+    WinGetPos, X, Y, W, H, %mWinID%
     
     If (!PrintButton)
     {
@@ -983,23 +988,26 @@ ButCapture:
             ;;}
             If InStr(mEl.CurrentName, "Close")
             {
-                Tooltip, %wClass% " close!"
+                removeId := False
+                removeIdx := 0
+                LastRemovedWinId := mHwnd
+
                 for idx, val in PeaksArray {
                   If (val == mWinID) {
-                      PeaksArray.remove(idx)
-                      ; PeaksArray.remove(val)
                       LookForLeaveWindow := False
                       WinSet, AlwaysOnTop, off, %mWinID%
+                      removeId := True
+                      removeIdx := idx
                       Break
                      }
                   }
-                for k, v in WinBackupXs {
-                   If (k == mHwnd) {
-                       WinBackupXs.remove(k)
-                       RangeTip(, , , , , , k)
-                       Break
-                   }
+                  
+                If removeId
+                {
+                    PeaksArray.remove(idx)
+                    WinBackupXs.remove(mHwnd)
                 }
+                Tooltip, %wClass% " closed! " %LastRemovedWinId%
             }
             Else If InStr(mEl.CurrentName, "Maximize")
             {
@@ -1016,6 +1024,7 @@ ButCapture:
         
         }
         PrintButton := False
+        ForceButtonUpdate := True
         SetTimer, CheckButtonSize, On
     }    
     mXOld := mX
@@ -1034,17 +1043,15 @@ IsUIAObjSaved(idstring := "")
     return False
 }
 
-RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0) ; from the FindText library, credit goes to feiyue
+RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0x0) ; from the FindText library, credit goes to feiyue
 {
   static id:=0
-  ; tooltip, % winId
   
-  If (x="")
+  If (x == "")
   {
     id:=0
-    SetFormat, Integer, D
-    ; Loop 4
-       Gui, Range_%winId%_3: Destroy
+    ; tooltip, % "deleted " winId
+    Gui, Range_%winId%_3: Destroy
     Return
   }
   
@@ -1095,4 +1102,12 @@ GetAccentColor()
     StringRight, CheckReg, CheckReg, 6
     ; msgbox % CheckReg
     Return CheckReg
+}
+
+join( strArray )
+{
+  s := ""
+  for i,v in strArray
+    s .= ", " i . ":" . HexToDec(v)
+  return substr(s, 3)
 }
