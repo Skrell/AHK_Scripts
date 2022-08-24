@@ -378,8 +378,6 @@ EWD_WatchDrag:
               SetFormat, Integer, D
               RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, EWD_MouseWinHwnd)
            }
-           Else If MouseMoved
-              FadeToTargetTrans(EWD_winId, 255, TransparentValue)
            
             ; CORRECTIONS FOR LEFT AND RIGHT EDGES OF WINDOW
             WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, offL, OffT, OffR, OffB)
@@ -390,7 +388,7 @@ EWD_WatchDrag:
             
            removePeakedWin := False
 
-           If (percentageLeft >= 0.40 && !WinLEdge && !WinREdge)
+           If ((percentageLeft >= 0.40) && !WinLEdge && !WinREdge)
            {
               
               for idx, val in PeaksArray {
@@ -413,14 +411,18 @@ EWD_WatchDrag:
                      Break
                  }
               }
+              If MouseMoved
+                FadeToTargetTrans(EWD_winId, 255, TransparentValue)
            }
            Else If ((percentageLeft >= 0.40) && (WinLEdge || WinREdge))
            {
               for k, v in WinBackupXs {
                  If (k == EWD_MouseWinHwnd)
                  {
+                     tooltip, window edging!
                      LookForLeaveWindow := True
                      HoveringWinHwnd := EWD_MouseWinHwnd
+                     PossiblyChangedSize := True
                      Break
                  }
               }
