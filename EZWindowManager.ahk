@@ -37,6 +37,8 @@ SetTimer, CheckButtonSize, 105, 0
 WindowArray := []
 PeaksArray  := []
 WinBackupXs := []
+winList     := []
+
 percLeft := 1.0
 edgePercentage := .04
 HoveringWinHwnd := 
@@ -50,6 +52,9 @@ maximizeEl := ""
 closeEl    := ""
 
 AccentColorHex := GetAccentColor()
+WinGet, winList, List,,,
+WinGet, winCount, Count,,,
+winCountOld := winCount
  
 tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
  
@@ -240,12 +245,6 @@ Return
     RButton & MButton::Return
 #If
 
-; #If !(Wheel_disabled)
-; ~RButton::
-    ; SetTimer, WatchMouse, off
-    ; Return
-; #If
-
 +WheelUp::
 Send {WheelLeft}
 Return
@@ -256,8 +255,9 @@ Return
 
 CheckButtonSize: 
     global tbEl
+    SetFormat, Integer, D
     WinGet, winCount, Count,,,   ;list of windows (exclude the desktop)
- 
+    ; tooltip, %winCount%
     if (winCountOld != winCount)
     {  
         loop %winList%
@@ -370,7 +370,6 @@ EWD_WatchDrag:
               FadeToTargetTrans(EWD_winId, 200, TransparentValue)
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
-              tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
               WinGetTitle, wTitle, %EWD_winId%
               ; wTitle := """" . wTitle . """"
               buttonEl := tbEl.FindFirstByNameAndType(wTitle, "Button", 0x4, 2, False)
@@ -389,8 +388,11 @@ EWD_WatchDrag:
             Else If (((EWD_WinX+EWD_WinW) == A_ScreenWidth)) ;&& EWD_WinY == 0) || ((EWD_WinX+EWD_WinW) == A_ScreenWidth && EWD_WinB == MonitorWorkAreaBottom))
                 WinREdge := True
             
+           removePeakedWin := False
+
            If (percentageLeft >= 0.40 && !WinLEdge && !WinREdge)
            {
+              
               for idx, val in PeaksArray {
                  If (val == EWD_winId)
                  {
@@ -398,6 +400,7 @@ EWD_WatchDrag:
                      ; PeaksArray.remove(val)
                      LookForLeaveWindow := False
                      WinSet, AlwaysOnTop, off, %EWD_winId%
+                     removePeakedWin := True
                      Break
                  }
               }
@@ -406,13 +409,27 @@ EWD_WatchDrag:
                  {
                      WinBackupXs.remove(k)
                      RangeTip(, , , , , , k)
+                     removePeakedWin := True
                      Break
                  }
               }
-              
            }
+           Else If ((percentageLeft >= 0.40) && (WinLEdge || WinREdge))
+           {
+              for k, v in WinBackupXs {
+                 If (k == EWD_MouseWinHwnd)
+                 {
+                     LookForLeaveWindow := True
+                     HoveringWinHwnd := EWD_MouseWinHwnd
+                     Break
+                 }
+              }
+           }
+           
+           If removePeakedWin
+              lastWindowPeaked := False
+           
            Wheel_disabled := false
-           lastWindowPeaked := False
            SetTimer, ButCapture, On
            SetTimer, CheckButtonSize, On
            Return
