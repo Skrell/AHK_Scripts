@@ -37,7 +37,6 @@ SetTimer, CheckButtonSize, 75, 0
 WindowArray := []
 PeaksArray  := []
 WinBackupXs := []
-winList     := []
 
 percLeft := 1.0
 edgePercentage := .04
@@ -249,8 +248,14 @@ Return
 CheckButtonSize: 
     global tbEl, ForceButtonUpdate, LastRemovedWinId, winCount, winCountOld
     
-     WinGet, winCount, Count,,,   ;list of windows (exclude the desktop)
-    ; WinGet, winList, List,,,
+    MouseGetPos, , , OverExceptionId
+    WinGetClass, ExceptionClass, ahk_id %OverExceptionId%
+    If (ExceptionClass == "Shell_TrayWnd")
+    {
+        Return
+    }
+    WinGet, winCount, Count,,,   ;list of windows (exclude the desktop)
+    WinGet, winList, List,,,
     ; tooltip, %winCount%
     if ((HexToDec(winCountOld) != HexToDec(winCount)) || ForceButtonUpdate)
     {  
@@ -258,6 +263,14 @@ CheckButtonSize:
         ForceButtonUpdate := False
 
         RangeTip( , , , , , , LastRemovedWinId)
+        If (winCount < winCountOld)
+        {
+            loop %winList%
+            {
+                actualId := winList%A_Index%
+                RangeTip( , , , , , , actualId)
+            }
+        }
         
         for winHwnd, v in WinBackupXs {
              buttonWinId = ahk_id %winHwnd%
@@ -266,10 +279,11 @@ CheckButtonSize:
              taskButtonElPos := buttonEl.CurrentBoundingRectangle
             
              RangeTip( , , , , , , winHwnd)
-             sleep 1000
-             SetFormat, Integer, D
-             RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, winHwnd)
-             sleep 1000
+             If (taskButtonElPos.l != 0)
+             {
+                 SetFormat, Integer, D
+                 RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, winHwnd)
+             }
         }
         WinGet, winCount, Count,,,
     }
@@ -946,8 +960,8 @@ ButCapture:
                         minimizeEl := mEl.FindFirstByNameAndType("Minimize", "Button")
                         maximizeEl := mEl.FindFirstByNameAndType("Maximize", "Button")
                         closeEl    := mEl.FindFirstByNameAndType("Close", "Button")
-                        If (minimizeEl || maximizeEl || closeEl)
-                            sleep 50
+                        ; If (minimizeEl || maximizeEl || closeEl)
+                            ; sleep 50
                     }
                     Else 
                     {
@@ -960,8 +974,8 @@ ButCapture:
                         minimizeEl := mEl.FindFirstByNameAndType("Minimize", "Button")
                         maximizeEl := mEl.FindFirstByNameAndType("Maximize", "Button")
                         closeEl    := mEl.FindFirstByNameAndType("Close", "Button")
-                        If (minimizeEl || maximizeEl || closeEl)
-                            sleep 50
+                        ; If (minimizeEl || maximizeEl || closeEl)
+                            ; sleep 50
                     }
            } catch e {
                     ; If InStr(e.Message, "0x80070005")
@@ -1017,15 +1031,16 @@ ButCapture:
             {
                 Tooltip, %wClass% " minimize!"
             }
-            
+            PrintButton := False
+            ForceButtonUpdate := True
+            SetTimer, CheckButtonSize, On
+            sleep 1000
+            Tooltip, 
             If GetKeyState("Alt", "P")
                 Tooltip, % mEl.CurrentAutomationId " : " mEl.CurrentName " : " mEl.CurrentControlType
         } catch e {
         
         }
-        PrintButton := False
-        ForceButtonUpdate := True
-        SetTimer, CheckButtonSize, On
     }    
     mXOld := mX
     mYOld := mY
@@ -1070,8 +1085,9 @@ RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0x0) ; from the 
     , h1:=(i=2 or i=4 ? h+2*d : d)
     x1s := x1 + 2
     w1s := w1 - 5
+    y1s := y1 - 4
     Gui, Range_%winId%_%i%: Color, %color%
-    Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1% w%w1s% h%h1%
+    Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1s% w%w1s% h%h1%
     
     WinSet, AlwaysOnTop, on, ahk_id %LinesId%
   ; }
