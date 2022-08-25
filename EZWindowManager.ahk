@@ -1073,7 +1073,7 @@ RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0x0) ; from the 
   if (!id)
   {
     ; Loop 4
-      Gui, Range_%winId%_3:New, +AlwaysOnTop -Caption +ToolWindow +HwndLinesId -DPIScale +E0x08000000
+      Gui, Range_%winId%_3:New, +AlwaysOnTop -Caption +ToolWindow +HwndLinesHwnd -DPIScale +E0x08000000
   }
   x:=Floor(x), y:=Floor(y), w:=Floor(w), h:=Floor(h), d:=Floor(d)
   ; Loop 4
@@ -1088,8 +1088,10 @@ RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0x0) ; from the 
     y1s := y1 - 4
     Gui, Range_%winId%_%i%: Color, %color%
     Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1s% w%w1s% h%h1%
-    
-    WinSet, AlwaysOnTop, on, ahk_id %LinesId%
+    ; LinesId = ahk_id %LinesHwnd%
+    ; WinSet, Transparent, 50, %LinesId%
+    ; FadeToTargetTrans(LinesId, 255, 50)
+    WinSet, AlwaysOnTop, on, %LinesId%
   ; }
   Return
 }
