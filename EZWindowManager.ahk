@@ -259,7 +259,7 @@ CheckButtonSize:
     ; tooltip, %winCount%
     if ((HexToDec(winCountOld) != HexToDec(winCount)) || ForceButtonUpdate)
     {  
-        ; tooltip, % HexToDec(winCountOld) "-" HexToDec(winCount) "-" ForceButtonUpdate
+        ; tooltip, % HexToDec(winCountOld) "-" HexToDec(winCount) "-" ForceButtonUpdate "-" LastRemovedWinId
         ForceButtonUpdate := False
 
         RangeTip( , , , , , , LastRemovedWinId)
@@ -433,7 +433,6 @@ EWD_WatchDrag:
                      LookForLeaveWindow := True
                      HoveringWinHwnd := EWD_MouseWinHwnd
                      PossiblyChangedSize := True
-                     ForceButtonUpdate := True
                      Break
                  }
               }
@@ -777,7 +776,7 @@ FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
     Else ;target MUST be 255 opaque
     {
         init := startValue
-        loop % (abs(255 - startValue)/transIncrement)
+        loop % (ceil((255 - startValue)/transIncrement))
         {
             sleep, 1
             init := init + transIncrement
@@ -1004,7 +1003,6 @@ ButCapture:
             {
                 removeId := False
                 removeIdx := 0
-                LastRemovedWinId := mHwnd
 
                 for idx, val in PeaksArray {
                   If (val == mWinID) {
@@ -1031,6 +1029,7 @@ ButCapture:
             {
                 Tooltip, %wClass% " minimize!"
             }
+            LastRemovedWinId := mHwnd
             PrintButton := False
             ForceButtonUpdate := True
             SetTimer, CheckButtonSize, On
@@ -1088,10 +1087,10 @@ RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2, winId:=0x0) ; from the 
     y1s := y1 - 4
     Gui, Range_%winId%_%i%: Color, %color%
     Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1s% w%w1s% h%h1%
-    ; LinesId = ahk_id %LinesHwnd%
-    ; WinSet, Transparent, 50, %LinesId%
-    ; FadeToTargetTrans(LinesId, 255, 50)
+    LinesId = ahk_id %LinesHwnd%
+    WinSet, Transparent, 50, %LinesId%
     WinSet, AlwaysOnTop, on, %LinesId%
+    FadeToTargetTrans(LinesId, 255, 50)
   ; }
   Return
 }
