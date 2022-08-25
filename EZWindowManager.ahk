@@ -82,7 +82,7 @@ WatchMouse:
                
                 If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -MouseMoveBuffer/2)) {
                     WinSet, AlwaysOnTop, On, %winId%
-                    SetTimer, ButCapture, Off
+                    ; SetTimer, ButCapture, Off
                     MoveToTargetSpot(winId, 0-offL, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
@@ -92,7 +92,7 @@ WatchMouse:
                 }
                 Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer/2)) {
                     WinSet, AlwaysOnTop, On, %winId%
-                    SetTimer, ButCapture, Off
+                    ; SetTimer, ButCapture, Off
                     MoveToTargetSpot(winId, A_ScreenWidth-WinW-OffR, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
@@ -184,7 +184,7 @@ WatchMouse:
               Break
            }
         }
-        SetTimer, ButCapture, On
+        ; SetTimer, ButCapture, On
     }
     MXw_bkup := MXw
     MYw_bkup := MYw
