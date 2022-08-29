@@ -1,9 +1,8 @@
-﻿#Include %A_ScriptDir%\UIA_Interface.ahk 
-#Include %A_ScriptDir%\WinGetPosEx_pacobyte.ahk 
-#Include %A_ScriptDir%\RunAsAdmin.ahk
-#NoEnv 
-#Persistent 
-#SingleInstance force 
+#Include %A_ScriptDir%\UIA_Interface.ahk
+#Include %A_ScriptDir%\WinGetPosEx.ahk
+#NoEnv
+#Persistent
+#SingleInstance force
 SetBatchLines, -1
 SetWinDelay, -1   ; Makes the below move faster/smoother.
 Thread, interrupt, 0  ; Make all threads always-interruptible.
@@ -12,39 +11,33 @@ Process, Priority,, High
 #InstallMouseHook
 ; #UseHook On
 SendMode, Input
-SetTitleMatchMode, 2
+SetTitleMatchMode, 2 
 CoordMode, Mouse, Screen
 
 Wheel_disabled := false
 CheckForStuck := false
 TransparentValue := 120
-KDE_WinUp    :=
-KDE_WinLeft  :=
-EWD_winId    :=
+KDE_WinUp    := 
+KDE_WinLeft  := 
+EWD_winId    := 
 MonitorWorkArea :=
 MButtonPreviousTick :=
-DoubleClickTime := DllCall("GetDoubleClickTime") 
-LButtonPreviousTick := A_TickCount 
+DoubleClickTime := DllCall("GetDoubleClickTime")
+LButtonPreviousTick := A_TickCount
 LookForLeaveWindow := False
 winCount := 0
 winCountOld := 0
 fifteenMinutes := 1000*60*15
-
 SysGet, MonitorWorkArea, MonitorWorkArea 
-SetTimer, EmergencyFail, 1000 
+SetTimer, EmergencyFail, 1000
 SetTimer, WatchMouse, 100
-SetTimer, LookForExplorerSpawn, 100
 SetTimer, ButCapture, 35
 SetTimer, CheckButtonSize, 75
 SetTimer, ReDetectAccentColor, %fifteenMinutes%
-
-UIA := UIA_Interface()
-
 WindowArray := []
 PeaksArray  := []
 WinBackupXs := []
 GuisCreated := []
-
 percLeft := 1.0
 edgePercentage := .04
 HoveringWinHwnd := 
@@ -59,25 +52,22 @@ minimizeEl := ""
 maximizeEl := ""
 closeEl    := ""
 LastRemovedWinId := 
-
 AccentColorHex := GetAccentColor()
 WinGet, winList, List,,,
-WinGet, winCount, Count,,,
-winCountOld := winCount
+loop %winList%
+{
+    hwnd := winList%A_Index%
+    WinGet, winStyle, Style, ahk_id %hwnd%
+    if (winStyle & 0xC00000)
+        winCount += 1
+}
 
+winCountOld := winCount
+ 
 tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
 
 ReDetectAccentColor:
     AccentColorHex := GetAccentColor()
-Return
-
-LookForExplorerSpawn:
-    SetTimer, LookForExplorerSpawn, off
-    Winwait, ahk_class CabinetWClass
-    sleep, 300
-    Gosub, SendCtrlAdd
-    WinWaitClose, ahk_class CabinetWClass
-    SetTimer, LookForExplorerSpawn, on
 Return
 
 WatchMouse:
@@ -189,11 +179,9 @@ WatchMouse:
                         newOrgX := ((percLeft*((WinW*WinH)/WinH))-WinW)
                       Else
                         newOrgX := A_ScreenWidth-(percLeft*(WinW*WinH)/WinH)
-
                       WinBackupXs[HoveringWinHwnd] := newOrgX
                       PossiblyChangedSize := False
                   }
-
                   WinSet, Bottom, , %winId%
                   WinMove, %winId%,, newOrgX-offL
                   FadeToTargetTrans(winId, 200)
@@ -214,7 +202,6 @@ Return
 ***** UTILITY FUNCTIONS *****
 *****************************
 */
-
 ExtractAppTitle(FullTitle)
 {   
     AppTitle := SubStr(FullTitle, InStr(FullTitle, " ", false, -1) + 1)
@@ -226,7 +213,6 @@ ExtractAppTitle(FullTitle)
 ***** SHORTCUTS CONFIGURATION *****
 ***********************************
 */
-
 ; Alt + ` -  Activate NEXT Window of same type (title checking) of the current APP
 !`::
 WinGet, ActiveProcess, ProcessName, A
@@ -249,54 +235,89 @@ Else
 Return
 
 #If (Wheel_disabled)
-    WheelUp::Return
+    WheelUp::Return 
     WheelDown::Return
     *RButton::Return
     MButton & RButton::Return
     RButton & MButton::Return
 #If
 
-CheckButtonSize: 
-    global tbEl, ForceButtonUpdate, LastRemovedWinId, winCount, winCountOld
++WheelUp::
+Send {WheelLeft}
+Return
 
-    WinGet, winCount, Count,,,   ;list of windows (exclude the desktop)
-    WinGet, winList, List,,,
++WheelDown::
+Send {WheelRight}
+Return
+
+CheckButtonSize: 
+    global tbEl, ForceButtonUpdate, LastRemovedWinId, winCount, winCountOld, WinBackupXs, GuisCreated
     
+    for idx, guihwnd in GuisCreated
+    {
+       WinSet, AlwaysOnTop, on, %guihwnd%
+    }
+    
+    ; MouseGetPos, , , OverExceptionId
+    ; WinGetClass, ExceptionClass, ahk_id %OverExceptionId%
+    ; If (ExceptionClass == "Shell_TrayWnd" && mxo != mx && myo != my)
+    ; {
+        ; ForceButtonUpdate := True
+    ; }
+    ; WinGet, winCount, Count,,,   ;list of windows (exclude the desktop)
+    winCount := 0
+    WinGet, winList, List,,,
+    loop %winList%
+    {
+        hwnd := winList%A_Index%
+        WinGet, winStyle, Style, ahk_id %hwnd%
+        if (winStyle & 0xC00000)
+            winCount += 1
+    }
+    ; c := UIA.CreateCondition("Name==running AND ControlType==Button",,2)
+    ; resultAr := (tbEl.FindAll(c, 0x4))
+    ; winCount := resultAr.MaxIndex()
+    
+    ; tooltip % winCountOld "," winCount "," ForceButtonUpdate
     if ((winCountOld != winCount) || ForceButtonUpdate)
     {  
-        ; tooltip % winCountOld "," winCount "," ForceButtonUpdate
         If ForceButtonUpdate
         {
-            RangeTip( , , , , , , LastRemovedWinId, True)
+            RangeTip( , , , , , , LastRemovedWinId, False)
             ForceButtonUpdate := False
         }
         
-        loop %winList%
-        {
-            actualId := winList%A_Index%
-            If actualId
-                RangeTip( , , , , , , actualId)
-        }
+        ; loop %winList%
+        ; {
+            ; actualId := winList%A_Index%
+            ; If actualId
+                ; RangeTip( , , , , , , actualId, True)
+        ; }
         
-        ; FoundStray := False
+        FoundStray := False
         ; tooltip, % join(WinBackupXs)
         for winHwnd, v in WinBackupXs {
              If (!WinExist("ahk_id " . winHwnd))
              {
                 FoundStray := True
-                msgbox, deleted 
              }
         }
         If FoundStray
            WinBackupXs.remove(winHwnd)
         
-        for winHwnd, v in WinBackupXs {
+        ; arr := join(WinBackupXs)
+        ; FileAppend, %arr%`n, C:\Users\vbonaven\Desktop\log.txt
+        
+        for winHwnd in WinBackupXs {
+             ; FileAppend, %winHwnd%`n, C:\Users\vbonaven\Desktop\log.txt
              buttonWinId = ahk_id %winHwnd%
              WinGet, wProcess, ProcessName, %buttonWinId%
              WinGetTitle, wTitle, %buttonWinId%
              regexTitle := wTitle . ".*running"
-             tooltip, %regexTitle%
+             wtf := int2hex(winHwnd)
+             ; FileAppend, %wtf%`n, C:\Users\vbonaven\Desktop\log.txt
              buttonEl := tbEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
+             
              If (!buttonEl)
              {
                 for index, subtitle in StrSplit(wTitle, " - ")
@@ -322,12 +343,11 @@ CheckButtonSize:
                  RangeTip( , , , , , , winHwnd)
                  If (taskButtonElPos.l != 0)
                  {
-                     ; msgbox, % taskButtonElPos.l "," taskButtonElPos.l
-                     RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, winHwnd, True)
+                     RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, wtf, False)
                  }
              }
         }
-        WinGet, winCount, Count,,,
+        ; WinGet, winCount, Count,,,
     }
     winCountOld := winCount    ;always keep up to date
 Return 
@@ -349,6 +369,7 @@ MButton::
     WinGet, EWD_winHwnd, ID, %EWD_winId% ; Get the title's text
     WinGet, EWD_WinState, MinMax, %EWD_winId% ; Get window state
     WinGetClass, EWD_winClass, %EWD_winId%
+    
     EWD_MouseOrgX := EWD_MouseX 
     EWD_MouseOrgY := EWD_MouseY 
     MX := EWD_MouseX
@@ -423,6 +444,7 @@ EWD_WatchDrag:
               FadeToTargetTrans(EWD_winId, 200, TransparentValue)
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
+              ; FileAppend, %EWD_MouseWinHwnd%`n, C:\Users\vbonaven\Desktop\log.txt
               ForceButtonUpdate := True
               Return
            }
@@ -457,10 +479,8 @@ EWD_WatchDrag:
                  removePeakedWin := True
                  LookForLeaveWindow := False
                  LastRemovedWinId := EWD_MouseWinHwnd
-                 ; msgbox, % join(WinBackupXs)
                  PeaksArray.remove(removeIdx)
                  WinBackupXs.remove(EWD_MouseWinHwnd)
-                 ; msgbox, % join(WinBackupXs)
               }
               
            }
@@ -529,7 +549,6 @@ EWD_WatchDrag:
             WinMove, %EWD_winId%,, , 0 , , MonitorWorkAreaBottom+offB
             EWD_WinB := MonitorWorkAreaBottom
         }
-
         Else If ((EWD_WinY+DiffY) < 0)
         {
             WinMove, %EWD_winId%,,,0
@@ -778,7 +797,6 @@ EWD_WatchDrag:
             }
             ; Tooltip, 
         }
-
         EWD_MouseOrgX := EWD_MouseX, EWD_MouseOrgY := EWD_MouseY ; Update for the next timer-call to this subroutine.
 Return
 
@@ -874,7 +892,7 @@ CheckforTransparent:
 Return
 
 EmergencyFail:
-    If (CheckForStuck) {
+    If (CheckForStuck) { 
         If ((A_TickCount - PreviousTick) >= 6000) {
             WinGet, win, list
             Loop % win
@@ -898,7 +916,6 @@ Return
     PrintButton := True
     PossiblyChangedSize := False
     doubleClick := ((A_TickCount - LButtonPreviousTick) < DoubleClickTime)
-
     If (doubleClick)
     {
         SetTimer, SendCtrlAdd, -300
@@ -932,6 +949,24 @@ SendCtrlAdd:
         KeyWait, NumpadAdd, U
     }
 Return
+
+#If MouseIsOver("ahk_class CabinetWClass")  ; only in File Explorer's windows
+$WheelDown::
+$WheelUp:: ; Scroll left in File Explorer
+    If (A_PriorKey = A_ThisHotkey && (A_TickCount - %A_ThisHotkey%PreviousTick) < 100)
+    {
+        Send {%A_ThisHotkey%}
+    }
+    Else
+    {
+        ControlFocus DirectUIHWND2, ahk_class CabinetWClass     
+        ; ControlSend  ToolbarWindow321, ^{NumpadAdd}, ahk_class CabinetWClass      
+        Send ^{NumpadAdd}
+        %A_ThisHotkey%previousTick := A_TickCount
+        Send {%A_ThisHotkey%}
+    }
+Return
+#IfWinActive
 
 MouseIsOver(WinTitle) {
     MouseGetPos, , , Win
@@ -970,9 +1005,7 @@ ButCapture:
     WinGet, winHwnd, ID, %mWinID%
     WinGet, winExe, ProcessName, %mWinID%
     WinGetTitle, winTitle, %mWinID%
-
     WinGetPosEx(winHwnd, X, Y, W, H, offL, OffT, OffR, OffB)
-
     If (!PrintButton)
     {
         If ((mX > ((X+W)-215)) && (mX < (X+W)) && (mY > Y) && (mY < (Y+32)))
@@ -1023,7 +1056,6 @@ ButCapture:
                        minimizeEl := mEl.FindFirstByNameAndType("Minimize", "Button")
                        maximizeEl := mEl.FindFirstByNameAndType("Maximize", "Button")
                        closeEl    := mEl.FindFirstByNameAndType("Close", "Button")
-
                        If (minimizeEl && maximizeEl && closeEl)
                            sleep 50
                        Else
@@ -1045,15 +1077,15 @@ ButCapture:
         }
         Else If ((mX != mXOld || mY != mYOld) && winExe != "notepad++.exe" && wClass != "WorkerW")
         {
-         try{
+          try {
             If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
                 mEl := UIA.ElementFromPoint(mX, mY)
             Else
                 mEl := WindowArray["ahk_id " . mHwnd]
-            } catch e {
-                    ; If InStr(e.Message, "0x80070005")
-                       ; Tooltip, "Try running UIAViewer with Admin privileges"
-            }
+          } catch e {
+                ; If InStr(e.Message, "0x80070005")
+                        ; Msgbox, "Try running UIAViewer with Admin privileges"
+          }
         }
     }
     Else
@@ -1091,8 +1123,9 @@ ButCapture:
                 {
                     PeaksArray.remove(removeIdx)
                     WinBackupXs.remove(mHwnd)
+                    LastRemovedWinId :=mHwnd
+                    ForceButtonUpdate := True
                 }
-                
                 Tooltip, %wClass% " closed! " %LastRemovedWinId%
                 sleep 1000
                 Tooltip, 
@@ -1115,10 +1148,7 @@ ButCapture:
         } catch e {
         
         }
-
-        ; LastRemovedWinId := mHwnd
         PrintButton := False
-        ; ForceButtonUpdate := True
         SetTimer, CheckButtonSize, On
     }    
     mXOld := mX
@@ -1137,30 +1167,27 @@ IsUIAObjSaved(idstring := "")
     return False
 }
 
-RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0x0, print:=false) ; from the FindText library, credit goes to feiyue
+RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0, print:=false) ; from the FindText library, credit goes to feiyue
 {
   static id:=0
-  ; winIddec := HexToDec(winId)
   ; xd:=HexToDec(x), yd:=HexToDec(y), wd:=HexToDec(w), hd:=HexToDec(h), dd:=HexToDec(d)
   
   If (x == "")
   {
     id:=0
     If print
-        tooltip, deleting Range_%winId%_3
+        FileAppend, deleting Range_%winId%_3`n, C:\Users\vbonaven\Desktop\log.txt
+
     Gui, Range_%winId%_3: Destroy
-    for idx, guihwnd in GuisCreated
-    {
-        WinClose, %guihwnd%
-    }
     Return
   }
   Else
   {
-      ; msgbox, %winId%
       If print
-         tooltip, creating Range_%winId%_3
+         FileAppend, creating Range_%winId%_3`n, C:\Users\vbonaven\Desktop\log.txt
+         
       Gui, Range_%winId%_3:New, +AlwaysOnTop -Caption +ToolWindow +HwndLinesHwnd -DPIScale +E0x08000000
+      
       i:=3
       , x1:=(i=2 ? x+w : x-d)
       , y1:=(i=3 ? y+h : y-d)
@@ -1173,12 +1200,10 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0x0, print:=false)
       ; Tooltip, % xd "," yd "," wd "," hd "," dd "," x1 "," y1 "," w1 "," h1 "," x1s "," w1s "," y1s
       Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1s% w%w1s% h%h1%
       LinesId = ahk_id %LinesHwnd%
-      WinSet, Transparent, 50, %LinesId%
-      WinSet, AlwaysOnTop, on, %LinesId%
+      
       GuisCreated.push(LinesId)
       FadeToTargetTrans(LinesId, 255, 50)
   }
-  
   Return
 }
 
@@ -1215,7 +1240,7 @@ join( strArray )
 {
   s := ""
   for i,v in strArray
-    s .= ", " i . ":" . HexToDec(v)
+    s .= ", "  int2hex(i) . ":" . v
   return substr(s, 3)
 }
 
@@ -1226,8 +1251,7 @@ int2hex(int)
     {
         n := (int >> (HEX_INT * 4)) & 0xf
         h .= n > 9 ? chr(0x37 + n) : n
-        if (HEX_INT == 0 && HEX_INT//2 == 0)
-            h .= " "
     }
+    h := substr(h, 3)
     return "0x" h
 }
