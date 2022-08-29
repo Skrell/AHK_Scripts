@@ -1090,7 +1090,7 @@ ButCapture:
     }
     Else
     {
-        ; SetTimer, CheckButtonSize, Off
+        SetTimer, CheckButtonSize, Off
         ; WinGetTitle, wTitle, ahk_id %mHwnd%
         ; WinGetPos, wX, wY, wW, wH, ahk_id %mHwnd%
         ; WinGetText, wText, ahk_id %mHwnd%
@@ -1149,7 +1149,7 @@ ButCapture:
         
         }
         PrintButton := False
-        ; SetTimer, CheckButtonSize, On
+        SetTimer, CheckButtonSize, On
     }    
     mXOld := mX
     mYOld := mY
