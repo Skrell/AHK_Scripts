@@ -287,12 +287,12 @@ CheckButtonSize:
             ForceButtonUpdate := False
         }
         
-        ; loop %winList%
-        ; {
-            ; actualId := winList%A_Index%
-            ; If actualId
-                ; RangeTip( , , , , , , actualId, True)
-        ; }
+        loop %winList%
+        {
+            actualId := winList%A_Index%
+            If actualId
+                RangeTip( , , , , , , actualId, True)
+        }
         
         FoundStray := False
         ; tooltip, % join(WinBackupXs)
