@@ -280,15 +280,15 @@ CheckButtonSize:
         
         ; FoundStray := False
         ; tooltip, % join(WinBackupXs)
-        ; for winHwnd, v in WinBackupXs {
-             ; If (!WinExist("ahk_id " . winHwnd))
-             ; {
-                ; FoundStray := True
-                ; msgbox, deleted 
-             ; }
-        ; }
-        ; If FoundStray
-           ; WinBackupXs.remove(winHwnd)
+        for winHwnd, v in WinBackupXs {
+             If (!WinExist("ahk_id " . winHwnd))
+             {
+                FoundStray := True
+                msgbox, deleted 
+             }
+        }
+        If FoundStray
+           WinBackupXs.remove(winHwnd)
         
         for winHwnd, v in WinBackupXs {
              buttonWinId = ahk_id %winHwnd%
@@ -392,7 +392,7 @@ MButton::
     SetTimer, CheckforTransparent, 50
     Wheel_disabled := true
     
-    KeyWait, MButton, U
+    KeyWait, MButton, T30
     If ((MX == EWD_MouseX) && (MY == EWD_MouseY))
     {
         ; Tooltip, here %MX% : %MY% : %EWD_MouseX% : %EWD_MouseY%
@@ -408,14 +408,12 @@ MButton::
     }
     Wheel_disabled := false
     SetTimer, ButCapture, On
-    sleep 500
+    sleep 300
     SetTimer, WatchMouse, On
-    ; SetTimer, CheckButtonSize, On
 Return 
 
 EWD_WatchDrag:
         If (!(GetKeyState("MButton", "P")) && !(GetKeyState("RButton", "P"))) { 
-           ; SetTimer, CheckButtonSize, Off
            SetTimer, CheckforTransparent, Off
            SetTimer, EWD_WatchDrag, Off
            percentageLeft := CalculateWinScreenPercent(EWD_winId)
@@ -426,7 +424,6 @@ EWD_WatchDrag:
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
               ForceButtonUpdate := True
-              ; SetTimer, CheckButtonSize, On
               Return
            }
            
@@ -1059,8 +1056,7 @@ ButCapture:
             }
         }
     }
-    
-    If (PrintButton)
+    Else
     {
         SetTimer, CheckButtonSize, Off
         ; WinGetTitle, wTitle, ahk_id %mHwnd%
