@@ -1170,6 +1170,7 @@ IsUIAObjSaved(idstring := "")
 RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0, print:=false) ; from the FindText library, credit goes to feiyue
 {
   static id:=0
+  global GuisCreated
   ; xd:=HexToDec(x), yd:=HexToDec(y), wd:=HexToDec(w), hd:=HexToDec(h), dd:=HexToDec(d)
   
   If (x == "")
