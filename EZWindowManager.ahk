@@ -291,7 +291,7 @@ CheckButtonSize:
         {
             actualId := winList%A_Index%
             If actualId
-                RangeTip( , , , , , , actualId, True)
+                RangeTip( , , , , , , actualId, False)
         }
         
         FoundStray := False
