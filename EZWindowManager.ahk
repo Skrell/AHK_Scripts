@@ -9,7 +9,6 @@ Thread, interrupt, 0  ; Make all threads always-interruptible.
 Process, Priority,, High
 #InstallKeybdHook
 #InstallMouseHook
-; #UseHook On
 SendMode, Input
 SetTitleMatchMode, 2 
 CoordMode, Mouse, Screen
@@ -52,22 +51,11 @@ minimizeEl := ""
 maximizeEl := ""
 closeEl    := ""
 LastRemovedWinId := 
-AccentColorHex := GetAccentColor()
-WinGet, winList, List,,,
-loop %winList%
-{
-    hwnd := winList%A_Index%
-    WinGet, winStyle, Style, ahk_id %hwnd%
-    if (winStyle & 0xC00000)
-        winCount += 1
-}
-
-winCountOld := winCount
  
 tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
 
 ReDetectAccentColor:
-    AccentColorHex := GetAccentColor()
+    AccentColorHex := SampleAccentColor()
 Return
 
 WatchMouse:
@@ -338,7 +326,6 @@ CheckButtonSize:
                  }
              }
         }
-        ; WinGet, winCount, Count,,,
     }
     winCountOld := winCount    ;always keep up to date
 Return 
@@ -738,7 +725,7 @@ EWD_WatchDrag:
                                       ,  EWD_WinY  ;+   (KDE_WinUp+1)/2*DiffY  ; Y of resized window
                                       , ;EWD_WinWF -     KDE_WinLeft *DiffX  ; W of resized window
                                       , ;(EWD_WinH + offB) - KDE_WinUp *DiffY  ; H of resized window
-                ChangedDims := 
+                ChangedDims := False
             }
             Else If ((abs(DiffX) < abs(DiffY)) && (EWD_WinY >= 0) && (EWD_WinB <= MonitorWorkAreaBottom) && (KDE_WinUp == -1))
             {
@@ -1211,6 +1198,25 @@ HexToDec(hex)
     return dec
 }
 
+SampleAccentColor()
+{
+    OutputVar := 
+    regexTitle := ".*running"
+    buttonEl := tbEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
+    If buttonEl
+    {
+        taskButtonElPos := buttonEl.CurrentBoundingRectangle
+        x_coord := taskButtonElPos.l+10
+        y_coord := taskButtonElPos.t+(taskButtonElPos.b-taskButtonElPos.t)-1
+        PixelGetColor, OutputVar, %x_coord%, %y_coord%,  RGB
+    }
+    Else
+    {
+        OutputVar := GetAccentColor()
+    }
+    Return OutputVar
+}
+
 GetAccentColor()
 {
     ; RegRead, CheckReg, HKCU\SOFTWARE\Microsoft\Windows\DWM, ColorizationColor
@@ -1228,7 +1234,7 @@ join( strArray )
 {
   s := ""
   for i,v in strArray
-    s .= ", "  int2hex(i) . ":" . v
+     s .= ", "  int2hex(i) . ":" . v
   return substr(s, 3)
 }
 
