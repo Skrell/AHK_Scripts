@@ -258,26 +258,17 @@ CheckButtonSize:
        WinSet, AlwaysOnTop, on, %guihwnd%
     }
     
-    ; MouseGetPos, , , OverExceptionId
-    ; WinGetClass, ExceptionClass, ahk_id %OverExceptionId%
-    ; If (ExceptionClass == "Shell_TrayWnd" && mxo != mx && myo != my)
-    ; {
-        ; ForceButtonUpdate := True
-    ; }
-    ; WinGet, winCount, Count,,,   ;list of windows (exclude the desktop)
-    winCount := 0
-    WinGet, winList, List,,,
-    loop %winList%
-    {
-        hwnd := winList%A_Index%
-        WinGet, winStyle, Style, ahk_id %hwnd%
-        if (winStyle & 0xC00000)
-            winCount += 1
-    }
-    ; c := UIA.CreateCondition("Name==running AND ControlType==Button",,2)
-    ; resultAr := (tbEl.FindAll(c, 0x4))
-    ; winCount := resultAr.MaxIndex()
+    toolbarEl := tbEl.FindFirstBy("ClassName=MSTaskListWClass AND ControlType=Toolbar")
+    windowEls := toolbarEl ? toolbarEl.FindAllBy("Name=running", 0x4, 2, True) : tbEl.FindAllBy("ClassName=Taskbar.TaskListButtonAutomationPeer")
+    winCount := windowEls.MaxIndex()
     
+    ;---------- For Easy Printing of Results----------------
+    ; result := "Found " windowEls.MaxIndex() " buttons`n`n"
+    ; for i, el in windowEls
+        ; result .= i ": " el.Dump() "`n"
+    ; MsgBox, % result
+    ;-------------------------------------------------------
+
     ; tooltip % winCountOld "," winCount "," ForceButtonUpdate
     if ((winCountOld != winCount) || ForceButtonUpdate)
     {  
@@ -1127,20 +1118,14 @@ ButCapture:
                     ForceButtonUpdate := True
                 }
                 Tooltip, %wClass% " closed! " %LastRemovedWinId%
-                sleep 1000
-                Tooltip, 
             }
             Else If InStr(mEl.CurrentName, "Maximize")
             {
                 Tooltip, %wClass% " maximize!"
-                sleep 1000
-                Tooltip, 
             }
             Else If InStr(mEl.CurrentName, "Minimize")
             {
                 Tooltip, %wClass% " minimize!"
-                sleep 1000
-                Tooltip, 
             }
             
             If GetKeyState("Alt", "P")
@@ -1150,6 +1135,8 @@ ButCapture:
         }
         PrintButton := False
         SetTimer, CheckButtonSize, On
+        sleep 1000
+        Tooltip, 
     }    
     mXOld := mX
     mYOld := mY
