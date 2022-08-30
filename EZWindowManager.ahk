@@ -970,16 +970,16 @@ Return
 ButCapture:
 {
     global WindowArray, PrintButton, mEl, WinBackupXs, PeaksArray, LastRemovedWinId
+    MouseGetPos, mX, mY, mHwnd, mCtrl
+    mWinID = ahk_id %mHwnd%
+    WinGetClass, wClass, %mWinID%
     
-    If (GetKeyState("MButton", "P"))
+    If (GetKeyState("MButton", "P") || (wClass == "WorkerW"))
     {
         Sleep, 100
         Return 
     }
         
-    MouseGetPos, mX, mY, mHwnd, mCtrl
-    mWinID = ahk_id %mHwnd%
-    WinGetClass, wClass, %mWinID%
     WinGet, winHwnd, ID, %mWinID%
     WinGet, winExe, ProcessName, %mWinID%
     WinGetTitle, winTitle, %mWinID%
@@ -1053,7 +1053,7 @@ ButCapture:
                             ; Tooltip, "Try running UIAViewer with Admin privileges"
                 }
         }
-        Else If ((mX != mXOld || mY != mYOld) && winExe != "notepad++.exe" && wClass != "WorkerW")
+        Else If ((mX != mXOld || mY != mYOld) && winExe != "notepad++.exe")
         {
           try {
             If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
