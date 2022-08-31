@@ -31,7 +31,7 @@ SetTimer, EmergencyFail, 1000
 SetTimer, WatchMouse, 100
 SetTimer, ButCapture, 35
 SetTimer, CheckButtonSize, 75
-SetTimer, KeepOnTop, 20
+SetTimer, KeepOnTop, 10
 SetTimer, ReDetectAccentColor, %fifteenMinutes%
 WindowArray := []
 PeaksArray  := []
@@ -620,7 +620,7 @@ EWD_WatchDrag:
             }
             Else If (WinLEdge && (EWD_MouseX - EWD_MouseOrgX) > 0)
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) > MouseMoveBuffer)
+                If ((EWD_MouseX - EWD_MouseOrgX) > MouseMoveBuffer/2)
                 {
                     ; Tooltip, "3"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -630,7 +630,7 @@ EWD_WatchDrag:
             }
             Else If (WinREdge && (EWD_MouseX - EWD_MouseOrgX) < 0) 
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) < -1*MouseMoveBuffer)
+                If ((EWD_MouseX - EWD_MouseOrgX) < -1*MouseMoveBuffer/2)
                 {
                     ; Tooltip, "4"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
