@@ -1,9 +1,8 @@
-#Include %A_ScriptDir%\UIA_Interface.ahk 
-#Include %A_ScriptDir%\WinGetPosEx_pacobyte.ahk 
-#Include %A_ScriptDir%\RunAsAdmin.ahk
-#NoEnv 
-#Persistent 
-#SingleInstance force 
+#Include %A_ScriptDir%\UIA_Interface.ahk
+#Include %A_ScriptDir%\WinGetPosEx.ahk
+#NoEnv
+#Persistent
+#SingleInstance force
 SetBatchLines, -1
 SetWinDelay, -1   ; Makes the below move faster/smoother.
 Thread, interrupt, 0  ; Make all threads always-interruptible.
@@ -11,42 +10,39 @@ Process, Priority,, High
 #InstallKeybdHook
 #InstallMouseHook
 SendMode, Input
-SetTitleMatchMode, 2
+SetTitleMatchMode, 2 
 CoordMode, Mouse, Screen
 
 Wheel_disabled := false
 CheckForStuck := false
 TransparentValue := 120
-KDE_WinUp    :=
-KDE_WinLeft  :=
-EWD_winId    :=
+KDE_WinUp    := 
+KDE_WinLeft  := 
+EWD_winId    := 
 MonitorWorkArea :=
 MButtonPreviousTick :=
-DoubleClickTime := DllCall("GetDoubleClickTime") 
-LButtonPreviousTick := A_TickCount 
+DoubleClickTime := DllCall("GetDoubleClickTime")
+LButtonPreviousTick := A_TickCount
 LookForLeaveWindow := False
 winCount := 0
 fifteenMinutes := 1000*60*15
-
 SysGet, MonitorWorkArea, MonitorWorkArea 
-SetTimer, EmergencyFail, 1000 
+SetTimer, EmergencyFail, 1000
 SetTimer, WatchMouse, 100
-SetTimer, LookForExplorerSpawn, 100
 SetTimer, ButCapture, 35
 SetTimer, CheckButtonSize, 75
+SetTimer, KeepOnTop, 20
 SetTimer, ReDetectAccentColor, %fifteenMinutes%
-
 WindowArray := []
 PeaksArray  := []
 WinBackupXs := []
 GuisCreated := []
 windowEls := []
-
 percLeft := 1.0
 edgePercentage := .04
 HoveringWinHwnd := 
 lastWindowPeaked := False
-MouseMoveBuffer := 10
+MouseMoveBuffer := 50
 PrintButton := False
 PossiblyChangedSize := False
 ForceButtonUpdate := False
@@ -56,7 +52,7 @@ mEl := {}
 minimizeEl := ""
 maximizeEl := ""
 closeEl    := ""
-LastRemovedWinId := 0x0
+LastRemovedWinId := 
 firstButtonPosXOld := 0
 winCountOld := 0
 
@@ -65,33 +61,20 @@ tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
 toolbarEl := tbEl.FindFirstBy("ClassName=MSTaskListWClass AND ControlType=Toolbar")
 ; windowEls := toolbarEl ? toolbarEl.FindAllBy("Name=running", 0x4, 2, True) : tbEl.FindAllBy("ClassName=Taskbar.TaskListButtonAutomationPeer")
 
-    
-; msgbox, Getting Windows10 Accent Color!
-
 ReDetectAccentColor:
     AccentColorHex := SampleAccentColor()
-Return
-
-LookForExplorerSpawn:
-    SetTimer, LookForExplorerSpawn, off
-    Winwait, ahk_class CabinetWClass
-    sleep, 300
-    Gosub, SendCtrlAdd
-    WinWaitClose, ahk_class CabinetWClass
-    SetTimer, LookForExplorerSpawn, on
+    msgbox, New Color is %AccentColorHex%
 Return
 
 WatchMouse:
     global LookForLeaveWindow, lastWindowPeaked, WinBackupXs
     MouseGetPos, MXw, MYw, MouseWinHwnd
-    
     If ResetMousePosBkup
     {
         MXw_bkup := MXw
         MYw_bkup := MYw
         ResetMousePosBkup := False
     }
-    
     FinishedLoop := True 
     
     for idx, val in PeaksArray
@@ -108,7 +91,7 @@ WatchMouse:
                 WinGet, winHwnd, ID, %winId%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
                
-                If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -MouseMoveBuffer/2)) {
+                If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -1*MouseMoveBuffer)) {
                     WinSet, AlwaysOnTop, On, %winId%
                     ; SetTimer, ButCapture, Off
                     MoveToTargetSpot(winId, 0-offL, WinX)
@@ -118,7 +101,7 @@ WatchMouse:
                     lastWindowPeaked := True
                     Break
                 }
-                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer/2)) {
+                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer)) {
                     WinSet, AlwaysOnTop, On, %winId%
                     ; SetTimer, ButCapture, Off
                     MoveToTargetSpot(winId, A_ScreenWidth-WinW-OffR, WinX)
@@ -198,11 +181,9 @@ WatchMouse:
                         newOrgX := ((percLeft*((WinW*WinH)/WinH))-WinW)
                       Else
                         newOrgX := A_ScreenWidth-(percLeft*(WinW*WinH)/WinH)
-
                       WinBackupXs[HoveringWinHwnd] := newOrgX
                       PossiblyChangedSize := False
                   }
-
                   WinSet, Bottom, , %winId%
                   WinMove, %winId%,, newOrgX-offL
                   FadeToTargetTrans(winId, 200)
@@ -223,7 +204,6 @@ Return
 ***** UTILITY FUNCTIONS *****
 *****************************
 */
-
 ExtractAppTitle(FullTitle)
 {   
     AppTitle := SubStr(FullTitle, InStr(FullTitle, " ", false, -1) + 1)
@@ -235,7 +215,6 @@ ExtractAppTitle(FullTitle)
 ***** SHORTCUTS CONFIGURATION *****
 ***********************************
 */
-
 ; Alt + ` -  Activate NEXT Window of same type (title checking) of the current APP
 !`::
 WinGet, ActiveProcess, ProcessName, A
@@ -258,22 +237,42 @@ Else
 Return
 
 #If (Wheel_disabled)
-    WheelUp::Return
+    WheelUp::Return 
     WheelDown::Return
     *RButton::Return
     MButton & RButton::Return
     RButton & MButton::Return
 #If
 
-CheckButtonSize:
-    global tbEl, ForceButtonUpdate, LastRemovedWinId, winCount, winCountOld, WinBackupXs, GuisCreated, toolbarEl
++WheelUp::
+Send {WheelLeft}
+Return
+
++WheelDown::
+Send {WheelRight}
+Return
+
+KeepOnTop:
+    global GuisCreated
+    MouseGetPos, mX, mY, mHwnd, mCtrl
+    mWinID = ahk_id %mHwnd%
+    WinGetClass, wClass, %mWinID%
+    
+    If (wClass == "Shell_TrayWnd")
+    {
+        for idx, guihwnd in GuisCreated
+        {
+        ; FileAppend, %guihwnd%`n, C:\Users\vbonaven\Desktop\log.txt
+        WinSet, AlwaysOnTop, on, %guihwnd%
+        }
+    }
+Return
+
+CheckButtonSize: 
+    global tbEl, ForceButtonUpdate, LastRemovedWinId, winCount, winCountOld, WinBackupXs, toolbarEl
     firstButtonPosX := 0
     
-    for idx, guihwnd in GuisCreated
-    {
-        WinSet, AlwaysOnTop, on, %guihwnd%
-    }
-    
+    toolbarEl := tbEl.FindFirstBy("ClassName=MSTaskListWClass AND ControlType=Toolbar")
     windowEls := toolbarEl ? toolbarEl.FindAllBy("Name=running", 0x4, 2, True) : tbEl.FindAllBy("ClassName=Taskbar.TaskListButtonAutomationPeer")
     button1El := toolbarEl.FindFirstByType("Button")
     If button1El
@@ -281,7 +280,7 @@ CheckButtonSize:
         taskButton1ElPos := button1El.CurrentBoundingRectangle
         firstButtonPosX := taskButton1ElPos.l
     }
-    winCount  := windowEls.MaxIndex()
+    winCount := windowEls.MaxIndex()
     
     ; tooltip % winCountOld "," winCount "," ForceButtonUpdate "," firstButtonPosX
     ;---------- For Easy Printing of Results----------------
@@ -317,25 +316,26 @@ CheckButtonSize:
         If FoundStray
         {
            WinBackupXs.remove(winHwnd)
-           RangeTip( , , , , , , winHwnd, False)
+           RangeTip( , , , , , , int2hex(winHwnd), False)
         }
         
-        ; arr := join(WinBackupXs)
-        ; FileAppend, %arr%`n, C:\Users\vmb11\Desktop\log.txt
+        arr := join(WinBackupXs)
+        FileAppend, %arr%`n, C:\Users\vbonaven\Desktop\log.txt
         
         for winHwnd in WinBackupXs {
-             ; FileAppend, %winHwnd%`n, C:\Users\vmb11\Desktop\log.txt
+             winHwndX := int2hex(winHwnd)
+             FileAppend, %winHwndX%`n, C:\Users\vbonaven\Desktop\log.txt
              buttonWinId = ahk_id %winHwnd%
              WinGet, wProcess, ProcessName, %buttonWinId%
              WinGetTitle, wTitle, %buttonWinId%
              regexTitle := wTitle . ".*running"
              wtf := int2hex(winHwnd)
-             ; FileAppend, %wtf%`n, C:\Users\vmb11\Desktop\log.txt
+             ; FileAppend, %wtf%`n, C:\Users\vbonaven\Desktop\log.txt
              buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
              
              If (!buttonEl)
              {
-                for index, subtitle in StrSplit(wTitle, " - ")
+                for index, subtitle in StrSplit(wTitle, [" - ", " | "])
                 {
                     regexSub := subtitle . ".*running"
                     buttonEl := toolbarEl.FindFirstByNameAndType(regexSub, "Button", 0x4, "RegEx", False)
@@ -434,7 +434,7 @@ MButton::
         WinSet, Transparent, Off, %EWD_winId%
         SetTimer, EWD_WatchDrag, Off
         SetTimer, CheckforTransparent, Off
-        If (IsOverTitleBar(MX, MY, EWD_MouseWinHwnd)=1) {
+        If (IsOverTitleBar(MX, MY, EWD_MouseWinHwnd)=1 && !ToggledOnTop) {
             Send !{F4}
         }
         Else If !ToggledOnTop {
@@ -457,7 +457,7 @@ EWD_WatchDrag:
               FadeToTargetTrans(EWD_winId, 200, TransparentValue)
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
-              ; FileAppend, %EWD_MouseWinHwnd%`n, C:\Users\vmb11\Desktop\log.txt
+              FileAppend, %EWD_MouseWinHwnd%`n, C:\Users\vbonaven\Desktop\log.txt
               ForceButtonUpdate := True
               ResetMousePosBkup := True
               Return
@@ -563,7 +563,6 @@ EWD_WatchDrag:
             WinMove, %EWD_winId%,, , 0 , , MonitorWorkAreaBottom+offB
             EWD_WinB := MonitorWorkAreaBottom
         }
-
         Else If ((EWD_WinY+DiffY) < 0)
         {
             WinMove, %EWD_winId%,,,0
@@ -639,7 +638,7 @@ EWD_WatchDrag:
                 }
                 MButtonPreviousTick := A_TickCount
             }
-            Else If (EWD_WinY = 0 && EWD_WinH >= (MonitorWorkAreaBottom-MouseMoveBuffer) && (EWD_MouseX != EWD_MouseOrgX)) ; moving window that's height of screen
+            Else If (EWD_WinY = 0 && EWD_WinH >= (MonitorWorkAreaBottom-10) && (EWD_MouseX != EWD_MouseOrgX)) ; moving window that's height of screen
             {
                 ; Tooltip, "5"
                 WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), , , MonitorWorkAreaBottom+OffB
@@ -812,7 +811,6 @@ EWD_WatchDrag:
             }
             ; Tooltip, 
         }
-
         EWD_MouseOrgX := EWD_MouseX, EWD_MouseOrgY := EWD_MouseY ; Update for the next timer-call to this subroutine.
 Return
 
@@ -908,7 +906,7 @@ CheckforTransparent:
 Return
 
 EmergencyFail:
-    If (CheckForStuck) {
+    If (CheckForStuck) { 
         If ((A_TickCount - PreviousTick) >= 6000) {
             WinGet, win, list
             Loop % win
@@ -932,7 +930,6 @@ Return
     PrintButton := True
     PossiblyChangedSize := False
     doubleClick := ((A_TickCount - LButtonPreviousTick) < DoubleClickTime)
-
     If (doubleClick)
     {
         SetTimer, SendCtrlAdd, -300
@@ -966,6 +963,24 @@ SendCtrlAdd:
         KeyWait, NumpadAdd, U
     }
 Return
+
+#If MouseIsOver("ahk_class CabinetWClass")  ; only in File Explorer's windows
+$WheelDown::
+$WheelUp:: ; Scroll left in File Explorer
+    If (A_PriorKey = A_ThisHotkey && (A_TickCount - %A_ThisHotkey%PreviousTick) < 100)
+    {
+        Send {%A_ThisHotkey%}
+    }
+    Else
+    {
+        ControlFocus DirectUIHWND2, ahk_class CabinetWClass     
+        ; ControlSend  ToolbarWindow321, ^{NumpadAdd}, ahk_class CabinetWClass      
+        Send ^{NumpadAdd}
+        %A_ThisHotkey%previousTick := A_TickCount
+        Send {%A_ThisHotkey%}
+    }
+Return
+#IfWinActive
 
 MouseIsOver(WinTitle) {
     MouseGetPos, , , Win
@@ -1004,9 +1019,7 @@ ButCapture:
     WinGet, winHwnd, ID, %mWinID%
     WinGet, winExe, ProcessName, %mWinID%
     WinGetTitle, winTitle, %mWinID%
-
     WinGetPosEx(winHwnd, X, Y, W, H, offL, OffT, OffR, OffB)
-
     If (!PrintButton)
     {
         If ((mX > ((X+W)-215)) && (mX < (X+W)) && (mY > Y) && (mY < (Y+32)))
@@ -1057,7 +1070,6 @@ ButCapture:
                        minimizeEl := mEl.FindFirstByNameAndType("Minimize", "Button")
                        maximizeEl := mEl.FindFirstByNameAndType("Maximize", "Button")
                        closeEl    := mEl.FindFirstByNameAndType("Close", "Button")
-
                        If (minimizeEl && maximizeEl && closeEl)
                            sleep 50
                        Else
@@ -1079,15 +1091,15 @@ ButCapture:
         }
         Else If ((mX != mXOld || mY != mYOld) && winExe != "notepad++.exe")
         {
-         try{
+          try {
             If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
                 mEl := UIA.ElementFromPoint(mX, mY)
             Else
                 mEl := WindowArray["ahk_id " . mHwnd]
-            } catch e {
-                    ; If InStr(e.Message, "0x80070005")
-                       ; Tooltip, "Try running UIAViewer with Admin privileges"
-            }
+          } catch e {
+                ; If InStr(e.Message, "0x80070005")
+                        ; Msgbox, "Try running UIAViewer with Admin privileges"
+          }
         }
     }
     Else
@@ -1175,14 +1187,15 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0, print:=false) ;
   {
     id:=0
     If print
-        FileAppend, deleting Range_%winId%_3`n, C:\Users\vmb11\Desktop\log.txt
+        FileAppend, deleting Range_%winId%_3`n, C:\Users\vbonaven\Desktop\log.txt
+
     Gui, Range_%winId%_3: Destroy
     Return
   }
   Else
   {
       If print
-         FileAppend, creating Range_%winId%_3`n, C:\Users\vmb11\Desktop\log.txt
+         FileAppend, creating Range_%winId%_3`n, C:\Users\vbonaven\Desktop\log.txt
          
       Gui, Range_%winId%_3:New, +AlwaysOnTop -Caption +ToolWindow +HwndLinesHwnd -DPIScale +E0x08000000
       
@@ -1196,11 +1209,13 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0, print:=false) ;
       y1s := y1 - 4
       Gui, Range_%winId%_%i%: Color, %color%
       ; Tooltip, % xd "," yd "," wd "," hd "," dd "," x1 "," y1 "," w1 "," h1 "," x1s "," w1s "," y1s
-      Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1s% w%w1s% h%h1%
       LinesId = ahk_id %LinesHwnd%
+      WinSet, Transparent, 100, %LinesId%
+      Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1s% w%w1s% h%h1%
       
       GuisCreated.push(LinesId)
-      ; FadeToTargetTrans(LinesId, 255, 50)
+      FadeToTargetTrans(LinesId, 255, 100)
+      WinSet, AlwaysOnTop, on, %LinesId%
   }
   Return
 }
