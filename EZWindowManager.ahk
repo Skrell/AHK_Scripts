@@ -24,7 +24,7 @@ DoubleClickTime := DllCall("GetDoubleClickTime")
 LButtonPreviousTick := A_TickCount
 LookForLeaveWindow := False
 winCount := 0
-fifteenMinutes := 1000*60*15
+fifteenMinutes := 1000*60
 SysGet, MonitorWorkArea, MonitorWorkArea 
 SetTimer, WatchMouse, 100
 SetTimer, ButCapture, 35
@@ -59,11 +59,18 @@ tbEl := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
 toolbarEl := tbEl.FindFirstBy("ClassName=MSTaskListWClass AND ControlType=Toolbar")
 ; windowEls := toolbarEl ? toolbarEl.FindAllBy("Name=running", 0x4, 2, True) : tbEl.FindAllBy("ClassName=Taskbar.TaskListButtonAutomationPeer")
 
-Msgbox, 0, EzWindowManager, Detecting Theme Accent Color..., 3
-ReDetectAccentColor:
-    AccentColorHex := SampleAccentColor()
-    ; msgbox, New Color is %AccentColorHex%
+AccentColorHex := SampleAccentColor()
+Msgbox, 0, EzWindowManager, Detecting Theme Accent Color...%AccentColorHex%, 3
 Return
+
+ReDetectAccentColor:
+    If !SessionIsLocked()
+    {
+        AccentColorHex := SampleAccentColor()
+        ForceButtonUpdate := True
+    }
+Return
+
 
 WatchMouse:
     MouseGetPos, MXw, MYw, MouseWinHwnd
@@ -133,7 +140,7 @@ WatchMouse:
             {
                 WinGet, winHwnd, ID, %val%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, offL, OffT, OffR, OffB)
-                If (((MXw+MXwOffset) > WinX) && (MYw > WinY) && (MYw < (WinY+WinH))) ; turns out there is an offscreen peaked window
+                If (((MXw+MXwOffset) > WinX) && ((MXw+MXwOffset) < (WinX+WinW)) && (MYw > WinY) && (MYw < (WinY+WinH))) ; turns out there is an offscreen peaked window
                 {
                     WinActivate, %val%
                     WinSet, AlwaysOnTop, On, %val%
@@ -251,11 +258,11 @@ Send {WheelRight}
 Return
 
 KeepOnTop:
-    MouseGetPos, , , mHwnd, mCtrl
-    mWinID = ahk_id %mHwnd%
-    WinGetClass, wClass, %mWinID%
+    MouseGetPos, , , mHwndkt, mCtrl
+    mWinIDkt = ahk_id %mHwndkt%
+    WinGetClass, wClasskt, %mWinIDkt%
     
-    If (wClass == "Shell_TrayWnd")
+    If ((wClasskt == "Shell_TrayWnd") || (wClasskt == "TaskListThumbnailWnd"))
     {
         for idx, guihwnd in GuisCreated
         {
@@ -449,13 +456,14 @@ EWD_WatchDrag:
         
         If (percentageLeft < 0.40)
         {
-           FadeToTargetTrans(EWD_winId, 200, TransparentValue)
-           PeaksArray.push(EWD_winId)
-           WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
-           FileAppend, %EWD_MouseWinHwnd%`n, C:\Users\vbonaven\Desktop\log.txt
-           ForceButtonUpdate := True
-           ResetMousePosBkup := True
-           Return
+            FadeToTargetTrans(EWD_winId, 200, TransparentValue)
+            PeaksArray.push(EWD_winId)
+            WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
+            FileAppend, %EWD_MouseWinHwnd%`n, C:\Users\vbonaven\Desktop\log.txt
+            ForceButtonUpdate := True
+            ResetMousePosBkup := True
+            WinSet, Bottom, , %EWD_winId%
+            Return
         }
         
          ; CORRECTIONS FOR LEFT AND RIGHT EDGES OF WINDOW
@@ -904,6 +912,7 @@ Return
 
 !$LButton::
 ~$LButton::
+    SetTimer, WatchMouse, Off
     savedWin := False
     MouseGetPos, , , ClickedWinHwnd
     PrintButton := True
@@ -983,7 +992,7 @@ Return
 
 ButCapture:
 {
-    MouseGetPos, mX, mY, mHwnd, mCtrl
+    MouseGetPos, mXbc, mYbc, mHwnd, mCtrl
     mWinID = ahk_id %mHwnd%
     WinGetClass, wClass, %mWinID%
     
@@ -999,14 +1008,14 @@ ButCapture:
     WinGetPosEx(winHwnd, X, Y, W, H, offL, OffT, OffR, OffB)
     If (!PrintButton)
     {
-        If ((mX > ((X+W)-215)) && (mX < (X+W)) && (mY > Y) && (mY < (Y+32)))
+        If ((mXbc > ((X+W)-215)) && (mXbc < (X+W)) && (mYbc > Y) && (mYbc < (Y+32)))
         {
             try {
                    If (wClass == "Chrome_WidgetWin_1" && winTitle != "Messages for web")
                    {
                       ; tooltip, 0
                        If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                           mEl := UIA.SmallestElementFromPoint(mX, mY, True, UIA.ElementFromHandle(mHwnd))
+                           mEl := UIA.SmallestElementFromPoint(mXbc, mYbc, True, UIA.ElementFromHandle(mHwnd))
                        Else
                            mEl := WindowArray["ahk_id " . mHwnd]
                        
@@ -1019,7 +1028,7 @@ ButCapture:
                    {
                       ; tooltip, 0
                        If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                           mEl := UIA.SmallestElementFromPoint(mX, mY, True, "")
+                           mEl := UIA.SmallestElementFromPoint(mXbc, mYbc, True, "")
                        Else
                            mEl := WindowArray["ahk_id " . mHwnd]
                        
@@ -1032,7 +1041,7 @@ ButCapture:
                    Else If (winExe == "notepad++.exe")
                    {
                        If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                           mEl := UIA.ElementFromPoint(mX, mY)
+                           mEl := UIA.ElementFromPoint(mXbc, mYbc)
                        Else
                            mEl := WindowArray["ahk_id " . mHwnd]
                    }
@@ -1040,7 +1049,7 @@ ButCapture:
                    {
                        ; tooltip, 2
                        If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                          mEl := UIA.ElementFromPoint(mX, mY)
+                          mEl := UIA.ElementFromPoint(mXbc, mYbc)
                        Else
                           mEl := WindowArray["ahk_id " . mHwnd]
                           
@@ -1052,7 +1061,7 @@ ButCapture:
                        Else
                        {
                            If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                              mEl := UIA.SmallestElementFromPoint(mX, mY, False, "")
+                              mEl := UIA.SmallestElementFromPoint(mXbc, mYbc, False, "")
                            Else
                               mEl := WindowArray["ahk_id " . mHwnd]
                               
@@ -1066,11 +1075,11 @@ ButCapture:
                             ; Tooltip, "Try running UIAViewer with Admin privileges"
                 }
         }
-        Else If ((mX != mXOld || mY != mYOld) && winExe != "notepad++.exe")
+        Else If ((mXbc != mXbcOld || mYbc != mYbcOld) && winExe != "notepad++.exe")
         {
           try {
             If (IsUIAObjSaved("ahk_id " . mHwnd) == False)
-                mEl := UIA.ElementFromPoint(mX, mY)
+                mEl := UIA.ElementFromPoint(mXbc, mYbc)
             Else
                 mEl := WindowArray["ahk_id " . mHwnd]
           } catch e {
@@ -1132,8 +1141,8 @@ ButCapture:
         sleep 1000
         Tooltip, 
     }    
-    mXOld := mX
-    mYOld := mY
+    mXbcOld := mXbc
+    mYbcOld := mYbc
 Return
 }
 
@@ -1248,6 +1257,20 @@ join( strArray )
   for i,v in strArray
      s .= ", "  Format("{:#x}", i) . ":" . v
   return substr(s, 3)
+}
+
+SessionIsLocked()
+{
+	static WTS_CURRENT_SERVER_HANDLE := 0, WTSSessionInfoEx := 25, WTS_SESSIONSTATE_LOCK := 0x00000000, WTS_SESSIONSTATE_UNLOCK := 0x00000001 ;, WTS_SESSIONSTATE_UNKNOWN := 0xFFFFFFFF
+	ret := False
+	if (DllCall("ProcessIdToSessionId", "UInt", DllCall("GetCurrentProcessId", "UInt"), "UInt*", sessionId)
+	 && DllCall("wtsapi32\WTSQuerySessionInformation", "Ptr", WTS_CURRENT_SERVER_HANDLE, "UInt", sessionId, "UInt", WTSSessionInfoEx, "Ptr*", sesInfo, "Ptr*", BytesReturned)) {
+		SessionFlags := NumGet(sesInfo+0, 16, "Int")
+		; "Windows Server 2008 R2 and Windows 7: Due to a code defect, the usage of the WTS_SESSIONSTATE_LOCK and WTS_SESSIONSTATE_UNLOCK flags is reversed."
+		ret := A_OSVersion != "WIN_7" ? SessionFlags == WTS_SESSIONSTATE_LOCK : SessionFlags == WTS_SESSIONSTATE_UNLOCK
+		DllCall("wtsapi32\WTSFreeMemory", "Ptr", sesInfo)
+	}
+	return ret
 }
 
 ; int2hex(int)
