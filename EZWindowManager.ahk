@@ -835,9 +835,9 @@ CalculateWinScreenPercent(winId)
     Else If ((EWD_WinX+EWD_WinW) > A_ScreenWidth)
         visibleWindowArea := (EWD_WinX-A_ScreenWidth) * EWD_WinH
     Else
-        return 1.0
+        Return 1.0
         
-    return abs(visibleWindowArea/totalWindowArea)
+    Return abs(visibleWindowArea/totalWindowArea)
 }
 
 FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
@@ -866,7 +866,7 @@ FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
             WinSet, Transparent, %init%, %winId%
         }
     }
-   return
+   Return
 }
 
 MoveToTargetSpot(winId, targetX, orgX)
@@ -888,7 +888,7 @@ MoveToTargetSpot(winId, targetX, orgX)
        }
        WinMove, %winId%,, targetX
    }
-   return
+   Return
 }
 
 CheckforTransparent:
@@ -939,9 +939,13 @@ Return
     {
         lastWindowPeaked := False
     }
+    Else
+    {
+        sleep 500
+    }
     
-    SetTimer, WatchMouse, On ; catchall in case for some reason timer isn't running
     Wheel_disabled :=  False ; catchall in case for some reason wheel is still disabled
+    SetTimer, WatchMouse, On ; catchall in case for some reason timer isn't running
 Return 
 
 SendCtrlAdd:
@@ -1152,9 +1156,9 @@ IsUIAObjSaved(idstring := "")
     ; Tooltip, % WindowArray.Length()
     for k, v in WindowArray {
           If (k == idstring)
-            return True
+            Return True
     }
-    return False
+    Return False
 }
 
 RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0, print:=false) ; from the FindText library, credit goes to feiyue
@@ -1213,7 +1217,7 @@ HexToDec(hex)
     VarSetCapacity(dec, 66, 0)
     , val := DllCall("msvcrt.dll\_wcstoui64", "Str", hex, "UInt", 0, "UInt", 16, "CDECL Int64")
     , DllCall("msvcrt.dll\_i64tow", "Int64", val, "Str", dec, "UInt", 10, "CDECL")
-    return dec
+    Return dec
 }
 
 SampleAccentColor()
@@ -1256,7 +1260,7 @@ join( strArray )
   s := ""
   for i,v in strArray
      s .= ", "  Format("{:#x}", i) . ":" . v
-  return substr(s, 3)
+  Return substr(s, 3)
 }
 
 SessionIsLocked()
@@ -1270,7 +1274,7 @@ SessionIsLocked()
 		ret := A_OSVersion != "WIN_7" ? SessionFlags == WTS_SESSIONSTATE_LOCK : SessionFlags == WTS_SESSIONSTATE_UNLOCK
 		DllCall("wtsapi32\WTSFreeMemory", "Ptr", sesInfo)
 	}
-	return ret
+	Return ret
 }
 
 ; int2hex(int)
@@ -1282,5 +1286,5 @@ SessionIsLocked()
         ; h .= n > 9 ? chr(0x37 + n) : n
     ; }
     ; h := substr(h, 3)
-    ; return "0x" h
+    ; Return "0x" h
 ; }
