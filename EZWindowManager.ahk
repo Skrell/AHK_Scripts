@@ -222,12 +222,12 @@ ExtractAppTitle(FullTitle)
 */
 ; Alt + ` -  Activate NEXT Window of same type (title checking) of the current APP
 !`::
-WinGet, ActiveProcess, ProcessName, A
-WinGet, OpenWindowsAmount, Count, ahk_exe %ActiveProcess%
-If OpenWindowsAmount = 1  ; If only one Window exist, do nothing
-    Return
-    
-Else
+    WinGet, ActiveProcess, ProcessName, A
+    WinGet, OpenWindowsAmount, Count, ahk_exe %ActiveProcess%
+    If OpenWindowsAmount = 1  ; If only one Window exist, do nothing
+        Return
+        
+    Else
     {
         WinGetTitle, FullTitle, A
         AppTitle := ExtractAppTitle(FullTitle)
@@ -250,26 +250,26 @@ Return
 #If
 
 +WheelUp::
-Send {WheelLeft}
+    Send {WheelLeft}
 Return
 
 +WheelDown::
-Send {WheelRight}
+    Send {WheelRight}
 Return
 
 KeepOnTop:
-    MouseGetPos, , , mHwndkt, mCtrl
-    mWinIDkt = ahk_id %mHwndkt%
-    WinGetClass, wClasskt, %mWinIDkt%
+    ; MouseGetPos, , , mHwndkt, mCtrl
+    ; mWinIDkt = ahk_id %mHwndkt%
+    ; WinGetClass, wClasskt, %mWinIDkt%
     
-    If ((wClasskt == "Shell_TrayWnd") || (wClasskt == "TaskListThumbnailWnd"))
+    ; If ((wClasskt == "Shell_TrayWnd") || (wClasskt == "TaskListThumbnailWnd"))
+    ; {
+    for idx, guihwnd in GuisCreated
     {
-        for idx, guihwnd in GuisCreated
-        {
-        ; FileAppend, %guihwnd%`n, C:\Users\vbonaven\Desktop\log.txt
-            WinSet, AlwaysOnTop, on, %guihwnd%
-        }
+    ; FileAppend, %guihwnd%`n, C:\Users\vbonaven\Desktop\log.txt
+        WinSet, AlwaysOnTop, on, %guihwnd%
     }
+    ; }
 Return
 
 CheckButtonSize: 
