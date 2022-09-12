@@ -1,4 +1,4 @@
-﻿#NoEnv 
+#NoEnv 
 #SingleInstance force 
 #Persistent 
 #InstallKeybdHook
@@ -12,8 +12,8 @@ SetTitleMatchMode, 2
 CoordMode, Mouse, Screen
 CoordMode, Pixel, Screen
 
-#Include %A_ScriptDir%\WinGetPosEx_pacobyte.ahk 
-#Include %A_ScriptDir%\RunAsAdmin.ahk
+#Include %A_ScriptDir%\WinGetPosEx.ahk 
+; #Include %A_ScriptDir%\RunAsAdmin.ahk
 #Include %A_ScriptDir%\UIA_Interface.ahk 
 
 Wheel_disabled := false
@@ -37,16 +37,17 @@ WinBackupXs := []
 GuisCreated := []
 windowEls   := []
 
-percLeft := 1.0
-edgePercentage := .04
-HoveringWinHwnd := 
-lastWindowPeaked := False
-MouseMoveBuffer := 50
-PrintButton := False
+percLeft            := 1.0
+edgePercentage      := .04
+HoveringWinHwnd     := 
+lastWindowPeaked    := False
+MouseMoveBuffer     := 50
+PrintButton         := False
 PossiblyChangedSize := False
-ForceButtonUpdate := False
-ResetMousePosBkup := False
-ExplorerSpawned := False
+ForceButtonUpdate   := False
+ResetMousePosBkup   := False
+ExplorerSpawned     := False
+TaskbarPeak         := False
 
 mEl := {}
 minimizeEl := ""
@@ -89,12 +90,6 @@ MasterTimer:
         GoSub, ButCapture
         t_ButCapture := A_TickCount
     }
-    Else If ((A_TickCount-t_KeepOnTop) >= 25)
-    {
-        ; tooltip, 1
-        GoSub, KeepOnTop
-        t_KeepOnTop := A_TickCount
-    }
     Else If ((A_TickCount-t_WatchMouse) >= 100)
     {
         ; tooltip, 2
@@ -118,6 +113,12 @@ MasterTimer:
         ; tooltip, 3
         GoSub, ReDetectAccentColor
         t_RedetectColor := A_TickCount
+    }
+    Else If ((A_TickCount-t_KeepOnTop) >= 5)
+    {
+        ; tooltip, 1
+        GoSub, KeepOnTop
+        t_KeepOnTop := A_TickCount
     }
 Return
 
@@ -160,7 +161,7 @@ WatchMouse:
                 
                 WinGet, winHwnd, ID, %winId%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
-               
+                
                 If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -1*MouseMoveBuffer)) {
                     WinSet, AlwaysOnTop, On, %winId%
                     MoveToTargetSpot(winId, 0-offL, WinX)
@@ -203,7 +204,7 @@ WatchMouse:
             {
                 WinGet, winHwnd, ID, %val%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
-                If (((MXw+MXwOffset) > WinX) && (MYw > WinY) && (MYw < (WinY+WinH))) ; turns out there is an offscreen peaked window
+                If (((MXw+MXwOffset) > WinX) && ((MXw+MXwOffset) < (WinX+WinW)) && (MYw > WinY) && (MYw < (WinY+WinH))) ; turns out there is an offscreen peaked window
                 {
                     WinActivate, %val%
                     WinSet, AlwaysOnTop, On, %val%
@@ -218,7 +219,8 @@ WatchMouse:
     If (LookForLeaveWindow && HoveringWinHwnd != MouseWinHwnd)
     {
         ; tooltip, 3
-        for k, v in WinBackupXs {
+        for k, v in WinBackupXs 
+        {
            If (k == HoveringWinHwnd)
            {
               ; tooltip, 4
@@ -258,6 +260,7 @@ WatchMouse:
                   WinGet, except, ProcessName, %winId%
                   If (except == "Signal.exe")
                      OffR := 0
+                  
                   WinMove, %winId%,, newOrgX-OffR
                   FadeToTargetTrans(winId, 200)
                   LookForLeaveWindow := False
@@ -269,6 +272,31 @@ WatchMouse:
     }
     MXw_bkup := MXw
     MYw_bkup := MYw
+Return
+
+ResetPeakedWindows: 
+    If (TaskbarPeak)
+    {
+        TaskbarPeak := False
+        for k, v in WinBackupXs 
+        {
+            WinGetPosEx(k, , , , , OffL, OffT, OffR, OffB)
+            winId = ahk_id %k%
+            orgX := WinBackupXs[k]
+            newOrgX := orgX
+            
+            WinSet, Bottom, , %winId%
+            WinGet, except, ProcessName, %winId%
+            If (except == "Signal.exe")
+               OffR := 0
+            
+            WinMove, %winId%,, newOrgX-OffR
+            FadeToTargetTrans(winId, 200)
+            WinSet, Bottom, , %winId%
+            sleep 200
+         }
+         LookForLeaveWindow := False
+    }
 Return
 
 /* ;
@@ -319,18 +347,11 @@ Return
 #If
 
 KeepOnTop:
-    ; MouseGetPos, , , mHwndkt, mCtrl
-    ; mWinIDkt = ahk_id %mHwndkt%
-    ; WinGetClass, wClasskt, %mWinIDkt%
-    
-    ; If ((wClasskt == "Shell_TrayWnd") || (wClasskt == "TaskListThumbnailWnd"))
-    ; {
-    for idx, guihwnd in GuisCreated
+    for guiHwnd, winHwnd in GuisCreated
     {
         ; FileAppend, %guihwnd%`n, C:\Users\vbonaven\Desktop\log.txt
-        WinSet, AlwaysOnTop, on, %guihwnd%
+        WinSet, AlwaysOnTop, on, ahk_id %guiHwnd%
     }
-    ; }
 Return
 
 CheckButtonSize: 
@@ -362,9 +383,9 @@ CheckButtonSize:
             ForceButtonUpdate := False
         }
         
-        for idx, aGui in GuisCreated
+        for guiHwnd, winHwnd in GuisCreated
         {
-            WinClose, %aGui%
+            WinClose, ahk_id %guiHwnd%
         }
         
         FoundStray := False
@@ -380,8 +401,8 @@ CheckButtonSize:
         If FoundStray
         {
            arr := join(WinBackupXs)
-           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %arr%`n, C:\Users\vmb11\Desktop\log.txt
-           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Stray %winHwndX%`n, C:\Users\vmb11\Desktop\log.txt
+           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Array: %arr%`n, C:\Users\vbonaven\Desktop\log.txt
+           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Stray %winHwndX%`n, C:\Users\vbonaven\Desktop\log.txt
            WinBackupXs.remove(winHwndX)
            RangeTip( , , , , , , Format("{:#x}", winHwndX), False)
         }
@@ -389,18 +410,18 @@ CheckButtonSize:
         If (WinBackupXs.MaxIndex() > 0)
         {
             arr := join(WinBackupXs)
-            FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %arr%`n, C:\Users\vmb11\Desktop\log.txt
+            FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Array: %arr%`n, C:\Users\vbonaven\Desktop\log.txt
         }
         
         for winHwnd, winXpos in WinBackupXs {
              winHwndX := Format("{:#x}", winHwnd)
-             FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %winHwndX%`n, C:\Users\vmb11\Desktop\log.txt
+             FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %winHwndX%`n, C:\Users\vbonaven\Desktop\log.txt
              buttonWinId = ahk_id %winHwnd%
              WinGet, wProcess, ProcessName, %buttonWinId%
              WinGetTitle, wTitle, %buttonWinId%
              regexTitle := wTitle . ".*running"
              wtf := Format("{:#x}", winHwnd)
-             FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Hex: %wtf%`n, C:\Users\vmb11\Desktop\log.txt
+             FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Hex: %wtf%`n, C:\Users\vbonaven\Desktop\log.txt
              buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
              
              If (!buttonEl)
@@ -526,7 +547,7 @@ EWD_WatchDrag:
               FadeToTargetTrans(EWD_winId, 200, TransparentValue)
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
-              FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %EWD_MouseWinHwnd% : %EWD_WinX%`n, C:\Users\vmb11\Desktop\log.txt
+              FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Make %EWD_MouseWinHwnd%:%EWD_WinX%`n, C:\Users\vbonaven\Desktop\log.txt
               ForceButtonUpdate := True
               ResetMousePosBkup := True
               WinSet, Bottom, , %EWD_winId%
@@ -990,7 +1011,7 @@ Return
         Gosub, SendCtrlAdd
     }
 
-    MouseGetPos, , , ClickedWinHwnd
+    MouseGetPos, lmx, lmy, ClickedWinHwnd
     for idx, val in PeaksArray {
         If (val == ("ahk_id " . ClickedWinHwnd)) {
             savedWin := True
@@ -1004,6 +1025,52 @@ Return
     If !savedWin ; didn't left click on a peaked window
     {
         lastWindowPeaked := False
+        
+        WinGetClass, class, ahk_id %ClickedWinHwnd%
+        If (class == "Shell_TrayWnd")
+        {
+            ; j := join(GuisCreated, True)
+            ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %j%`n, C:\Users\vbonaven\Desktop\log.txt
+            
+            for guiHwnd, winHwnd in GuisCreated
+            {
+                winHwndx := Format("{:#x}", winHwnd)
+                
+                winHwndx_ID = ahk_id %winHwndx%
+                WinGetPos, gx, gy, gw, gh, ahk_id %guiHwnd%
+                WinGet, state, MinMax, %winHwndx_ID%
+                
+                If (lmx > gx && lmx < (gx+gw) && state == 0)
+                {
+                    WinGetPosEx(winHwndx, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
+                    
+                    If (WinX < 0) {
+                        WinSet, AlwaysOnTop, On, %winHwndx_ID%
+                        MoveToTargetSpot(winHwndx_ID, 0-offL, WinX)
+                        FadeToTargetTrans(winHwndx_ID, 255, 200)
+                        LookForLeaveWindow := True
+                        HoveringWinHwnd := ClickedWinHwnd
+                        lastWindowPeaked := True
+                        TaskbarPeak := True
+                        Break
+                    }
+                    Else If (WinX+WinH > A_ScreenWidth) {
+                        WinSet, AlwaysOnTop, On, %winHwndx_ID%
+                        MoveToTargetSpot(winHwndx_ID, A_ScreenWidth-WinW-OffR, WinX)
+                        FadeToTargetTrans(winHwndx_ID, 255, 200)
+                        LookForLeaveWindow := True
+                        HoveringWinHwnd := ClickedWinHwnd
+                        lastWindowPeaked := True
+                        TaskbarPeak := True
+                        Break
+                    }
+                }
+            }
+        }
+        Else If TaskbarPeak
+        {
+            Gosub, ResetPeakedWindows
+        }
     }
     
     PrintButton := True
@@ -1221,7 +1288,7 @@ IsUIAObjSaved(idstring := "")
     Return False
 }
 
-RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0, print:=false) ; from the FindText library, credit goes to feiyue
+RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winHwnd:=0, print:=false) ; from the FindText library, credit goes to feiyue
 {
     ;I guess since ALL subroutines can see all other subroutines variables it was resetting mX and mY?? 
     ;As I said at the beginning, the global declarations have no purpose without functions. Only functions have local variables. Variables do not belong to subroutines.
@@ -1232,7 +1299,7 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0, print:=false) ;
     global GuisCreated
     static id:=0
     
-    If (winId == 0)
+    If (winHwnd == 0)
     {
         Return
     }
@@ -1240,16 +1307,16 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0, print:=false) ;
     {
       id:=0
       If print
-          FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - deleting Range_%winId%_3`n, C:\Users\vmb11\Desktop\log.txt
-      Gui, Range_%winId%_3: Destroy
+          FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - deleting Range_%winHwnd%_3`n, C:\Users\vbonaven\Desktop\log.txt
+      Gui, Range_%winHwnd%_3: Destroy
       Return
     }
     Else
     {
         If print
-           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - creating Range_%winId%_3`n, C:\Users\vmb11\Desktop\log.txt
+           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - creating Range_%winHwnd%_3`n, C:\Users\vbonaven\Desktop\log.txt
            
-        Gui, Range_%winId%_3:New, +AlwaysOnTop -Caption +ToolWindow +HwndLinesHwnd -DPIScale +E0x08000000
+        Gui, Range_%winHwnd%_3:New, +AlwaysOnTop -Caption +ToolWindow +HwndLinesHwnd -DPIScale +E0x08000000
         
         i:=3
         , x1:=(i=2 ? x+w : x-d)
@@ -1259,13 +1326,14 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winId:=0, print:=false) ;
         x1s := x1 + 2
         w1s := w1 - 5
         y1s := y1 - 4
-        Gui, Range_%winId%_%i%: Color, %color%
-        ; Tooltip, % xd "," yd "," wd "," hd "," dd "," x1 "," y1 "," w1 "," h1 "," x1s "," w1s "," y1s
+        Gui, Range_%winHwnd%_%i%: Color, %color%
+        
         LinesId = ahk_id %LinesHwnd%
         WinSet, Transparent, 100, %LinesId%
-        Gui, Range_%winId%_%i%: Show, NA x%x1s% y%y1s% w%w1s% h%h1%
+        Gui, Range_%winHwnd%_%i%: Show, NA x%x1s% y%y1s% w%w1s% h%h1%
         
-        GuisCreated.push(LinesId)
+        GuisCreated[LinesHwnd] := winHwnd
+        
         FadeToTargetTrans(LinesId, 255, 100)
         WinSet, AlwaysOnTop, on, %LinesId%
     }
@@ -1295,7 +1363,7 @@ SampleAccentColor()
     OutputVar  :=
     ; regexTitle := "Name=.*running"
     ; toolbarEl := tbEl.FindFirstBy("ClassName=MSTaskListWClass AND ControlType=Toolbar")
-    buttonEl := toolbarEl.FindFirstBy("Name=running AND (ControlType=Button OR ControlType=MenuItem)", 0x4, 2, False)
+    buttonEl := toolbarEl.FindFirstBy("Name=running AND NOT Name=complete AND (ControlType=Button OR ControlType=MenuItem)", 0x4, 2, False)
     If buttonEl
     {
         taskButtonElPos := buttonEl.CurrentBoundingRectangle
@@ -1325,11 +1393,15 @@ GetAccentColor()
     Return CheckRegHex
 }
 
-join( strArray )
+join( strArray, allHex := False )
 {
     s := ""
     for i,v in strArray
-       s .= ", "  Format("{:#x}", i) . ":" . v
+    {   If allHex
+            s .= ", "  Format("{:#x}", i) . ":" . Format("{:#x}", v)
+        Else    
+            s .= ", "  Format("{:#x}", i) . ":" . v
+    }
     Return substr(s, 3)
 }
 
@@ -1346,15 +1418,3 @@ SessionIsLocked()
     }
     Return ret
 }
-
-; int2hex(int)
-; {
-    ; HEX_INT := 8
-    ; while (HEX_INT--)
-    ; {
-        ; n := (int >> (HEX_INT * 4)) & 0xf
-        ; h .= n > 9 ? chr(0x37 + n) : n
-    ; }
-    ; h := substr(h, 3)
-    ; Return "0x" h
-; }
