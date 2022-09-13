@@ -1040,7 +1040,7 @@ Return
                 WinGetPos, gx, gy, gw, gh, ahk_id %guiHwnd%
                 WinGet, state, MinMax, %winHwndx_ID%
                 
-                If (lmx > gx && lmx < (gx+gw) && state == 0)
+                If (lmx > gx && lmx < (gx+gw) && state == 0 && !WinActive(winHwndx_ID))
                 {
                     WinGetPosEx(winHwndx, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
                     
@@ -1050,7 +1050,7 @@ Return
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
                         LookForLeaveWindow := True
                         HoveringWinHwnd := ClickedWinHwnd
-                        lastWindowPeaked := True
+                        ; lastWindowPeaked := True
                         TaskbarPeak := True
                         Break
                     }
@@ -1060,7 +1060,7 @@ Return
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
                         LookForLeaveWindow := True
                         HoveringWinHwnd := ClickedWinHwnd
-                        lastWindowPeaked := True
+                        ; lastWindowPeaked := True
                         TaskbarPeak := True
                         Break
                     }
