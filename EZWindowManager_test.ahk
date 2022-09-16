@@ -31,11 +31,12 @@ fifteenMinutes := 1000*60*5
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
 
-WindowArray := []
-PeaksArray  := []
-WinBackupXs := []
-GuisCreated := []
-windowEls   := []
+WindowArray  := []
+PeaksArray   := []
+WinBackupXs  := []
+GuisCreated  := []
+windowEls    := []
+scannedHwnds := []
 
 percLeft            := 1.0
 edgePercentage      := .04
@@ -48,11 +49,13 @@ ForceButtonUpdate   := False
 ResetMousePosBkup   := False
 ExplorerSpawned     := False
 TaskbarPeak         := False
+PossiblyMoved       := False
 
 mEl := {}
-minimizeEl := ""
-maximizeEl := ""
-closeEl    := ""
+npEl := {}
+minimizeEl := {}
+maximizeEl := {}
+closeEl    := {}
 previousClass := "WorkerW"
 LastRemovedWinId := 
 firstButtonPosXOld := 0
@@ -80,62 +83,79 @@ Tooltip,
 ; SetTimer, CheckButtonSize,      100,             
 
 t_KeepOnTop := t_WatchMouse := t_CheckButtonSize := t_ButCapture := t_RedetectColor := A_TickCount
-; SetTimer, MasterTimer, 1, -1
-SetTimer, MasterTimer2, 250
+SetTimer, MasterTimer, 50, -1
 Return
 
-MasterTimer2:
-    CoordMode, Mouse, Screen
+
+MasterTimer:
     MouseGetPos, , , mHwnd, mCtrl
     mWinID = ahk_id %mHwnd%
     WinGetClass, currentClass, %mWinID%
+    WinGet, currentProc, ID, %mWinID%
     
-    If (previousClass != "tooltips_class32" && currentClass != "tooltips_class32" && previousClass != "WorkerW" && currentClass != "WorkerW" && previousClass != currentClass)
+    If (previousClass == currentClass && previousProc != currentProc)
+        previousClass := "na"
+    
+    If (PossiblyMoved)
     {
+        PossiblyMoved := False
+        previousClass := "na"
+    }
+    
+    If (currentClass != "tooltips_class32" 
+        &&  currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" 
+        &&  currentClass != "MultitaskingViewFrame" 
+        &&  currentClass != "#32770" 
+        &&  currentClass != "#32770" 
+        &&  currentClass != "Notepad++" 
+        &&  currentClass != "Shell_TrayWnd" 
+        &&  currentClass != "WorkerW" 
+        && previousClass != currentClass)
+    {
+        lastGoodCapture := currentClass
         GoSub, ButCaptureCached
         t_ButCapture := A_TickCount
     }
     previousClass := currentClass
-Return
-
-MasterTimer:
-    If ((A_TickCount-t_WatchMouse) >= 100)
-    {
-        ; tooltip, 2
-        GoSub, WatchMouse
-        t_WatchMouse := A_TickCount
-    }
-    ; Else  If ((A_TickCount-t_ButCapture) >= 50)
+    previousProc  := currentProc
+    
+    ; If ((A_TickCount-t_WatchMouse) >= 100)
     ; {
-        ; ; tooltip, 4
-        ; GoSub, ButCaptureCached
-        ; t_ButCapture := A_TickCount
+        ; ; tooltip, 2
+        ; GoSub, WatchMouse
+        ; t_WatchMouse := A_TickCount
     ; }
-    Else If ((A_TickCount-t_CheckButtonSize) >= 200)
-    {
-        ; tooltip, 3
-        GoSub, CheckButtonSize
-        t_CheckButtonSize := A_TickCount
-    }
-    Else If ((A_TickCount-t_RedetectColor) >= fifteenMinutes)
-    {
-        ; tooltip, 3
-        GoSub, ReDetectAccentColor
-        t_RedetectColor := A_TickCount
-    }
-    Else If ((A_TickCount-t_KeepOnTop) >= 5)
-    {
-        ; tooltip, 1
-        GoSub, KeepOnTop
-        t_KeepOnTop := A_TickCount
-    }
+    ; ; Else  If ((A_TickCount-t_ButCapture) >= 50)
+    ; ; {
+        ; ; ; tooltip, 4
+        ; ; GoSub, ButCaptureCached
+        ; ; t_ButCapture := A_TickCount
+    ; ; }
+    ; Else If ((A_TickCount-t_CheckButtonSize) >= 200)
+    ; {
+        ; ; tooltip, 3
+        ; GoSub, CheckButtonSize
+        ; t_CheckButtonSize := A_TickCount
+    ; }
+    ; Else If ((A_TickCount-t_RedetectColor) >= fifteenMinutes)
+    ; {
+        ; ; tooltip, 3
+        ; GoSub, ReDetectAccentColor
+        ; t_RedetectColor := A_TickCount
+    ; }
+    ; Else If ((A_TickCount-t_KeepOnTop) >= 5)
+    ; {
+        ; ; tooltip, 1
+        ; GoSub, KeepOnTop
+        ; t_KeepOnTop := A_TickCount
+    ; }
 Return
 
 ReDetectAccentColor:
     If !SessionIsLocked()
     {
         AccentColorHex := SampleAccentColor()
-            ForceButtonUpdate := True
+        ForceButtonUpdate := True
     }
 Return    
     
@@ -1011,14 +1031,15 @@ Return
 
 !LButton::
 ~LButton::
+    SetTimer, MasterTimer, Off
     savedWin := False
     PossiblyChangedSize := False
     
-    doubleClick := ((A_TickCount - LButtonPreviousTick) < DoubleClickTime)
-    If (doubleClick)
-    {
-        Gosub, SendCtrlAdd
-    }
+    ; doubleClick := ((A_TickCount - LButtonPreviousTick) < DoubleClickTime)
+    ; If (doubleClick)
+    ; {
+        ; Gosub, SendCtrlAdd
+    ; }
 
     MouseGetPos, lmx, lmy, ClickedWinHwnd
     for idx, val in PeaksArray {
@@ -1032,7 +1053,8 @@ Return
     }
     
     WinGetClass, class, ahk_id %ClickedWinHwnd%
-    currentClass := class 
+    WinGetPos, lb_x, lb_y, , , ahk_id %ClickedWinHwnd%
+    previousClass := class 
 
     If !savedWin ; didn't left click on a peaked window
     {
@@ -1083,12 +1105,21 @@ Return
             Gosub, ResetPeakedWindows
         }
     }
-    
-    PrintButton := True
+    KeyWait, LButton, T30
+    WinGetPos, lb_x2, lb_y2, , , ahk_id %ClickedWinHwnd%
+    If (lb_x != lb_x2 || lb_y != lb_y2)
+    {
+        PossiblyMoved := True
+        tooltip, moved!
+    }
+    Else If ((A_TickCount - LButtonPreviousTick) > 1000)
+    {
+        PrintButton := True
+        Gosub, ButCaptureCached
+    }
     Wheel_disabled :=  False ; catchall in case for some reason wheel is still disabled
     LButtonPreviousTick := A_TickCount
-    If ((A_TickCount - LButtonPreviousTick) > 1000 && (class != "Shell_TrayWnd") && (class != "WorkerW"))
-        Gosub, ButCaptureCached
+    SetTimer, MasterTimer, On
 Return 
 
 SendCtrlAdd:
@@ -1121,7 +1152,6 @@ MouseIsOver(WinTitle) {
 Return
 
 ButCapture:
-{
     MouseGetPos, mXbc, mYbc, mHwnd, mCtrl
     mWinID = ahk_id %mHwnd%
     WinGetClass, wClass, %mWinID%
@@ -1286,73 +1316,146 @@ ButCapture:
     mXbc_bkup := mXbc
     mYbc_bkup := mYbc
 Return
-}
 
 ButCaptureCached:
-{
-    ; tooltip, % previousClass "->" currentClass
+    CoordMode, Mouse, Screen
+    MouseGetPos, mXbc2, mYbc2, mWinbc2
+    mWinIdbc2 = ahk_id %mWinbc2%
 
-    If (!PrintButton)
+    If !PrintButton
     {
+        tooltip, here
+        ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - START ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
         try {
-            tooltip, %previousClass% - %currentClass%
+            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %previousClass% - %lastGoodCapture%`n, C:\Users\vbonaven\Desktop\log2.txt 
             
-            cacheRequest := UIA.CreateCacheRequest()
-            cacheRequest.TreeScope := 5 ; Set TreeScope to include the starting element and all descendants as well
-            cacheRequest.AddProperty("ControlType") ; Add all the necessary properties that DumpAll uses: ControlType, LocalizedControlType, AutomationId, Name, Value, ClassName, AcceleratorKey
-            cacheRequest.AddProperty("Name")
-            cacheRequest.AddProperty("AutomationId")
-           
-            If (currentClass == "Chrome_WidgetWin_1")
+            prevCached := False
+            for idx, shwnds in scannedHwnds
             {
-                WinGetPos, wX, wY, wW, wH, %mWinID% 
-                npEl := UIA.ElementFromPointBuildCache(wX+9, wY+2, cacheRequest)
+                If (mWinHwndbc2 == shwnds)
+                {
+                    prevCached := True
+                    break
+                }
+            }
+            
+            If !prevCached
+            {
+                cacheRequest := UIA.CreateCacheRequest()
+                cacheRequest.TreeScope := 5 ; Set TreeScope to include the starting element and all descendants as well
+                cacheRequest.AddProperty("ControlType") ; Add all the necessary properties that DumpAll uses: ControlType, LocalizedControlType, AutomationId, Name, Value, ClassName, AcceleratorKey
+                cacheRequest.AddProperty("Name")
+                cacheRequest.AddProperty("AutomationId")
+            }
+           
+            WinGet, mWinHwndbc2, ID, %mWinIdbc2%
+            WinGetPos, wX, wY, , , %mWinIdbc2%
+            If (lastGoodCapture == "Chrome_WidgetWin_1")
+            {
+                If !prevCached
+                    npEl := UIA.ElementFromPointBuildCache(wX+9, wY+1, cacheRequest)
+                Else
+                    npEl.BuildUpdatedCache(cacheRequest)
+                    
+                regexMin := "Name=Minimize AND ControlType=button"
+                regexMax := "Name=Maximize AND ControlType=button"
+                regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem)"
+                minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
+                maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
+                closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
             }
             Else
             {
-                npEl:= UIA.ElementFromHandleBuildCache(mWinID, cacheRequest) ; Get element and also build the cache
+                If !prevCached
+                    npEl := UIA.ElementFromHandleBuildCache(mWinbc2, cacheRequest) ; Get element and also build the cache
+                Else
+                    npEl.BuildUpdatedCache(cacheRequest)
+                
+                regexMin := "Name=Minimize AND ControlType=button AND ClassName=NetUIAppFrameHelper)"
+                regexMax := "Name=Maximize AND ControlType=button AND ClassName=NetUIAppFrameHelper)"
+                regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem) AND ClassName=NetUIAppFrameHelper"
+                minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
+                maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
+                closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
             }
             
             
-            ; menuEl := npEl.FindFirstBy("ControlType=MenuBar", 0x4, 2, False, cacheRequest)
+            If (!minimizeEl && !maximizeEl && !closeEl)
+            {
+                regexMin := "Name=Minimize AND ControlType=button AND AutomationId=Minimize)"
+                regexMax := "Name=Maximize AND ControlType=button AND AutomationId=Maximize)"
+                regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem) AND AutomationId=Close"
+                minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
+                maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
+                closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
+            }
             
-            minimizeEl := npEl.FindFirstBy("Name=Minimize AND ControlType=button AND (AutomationId=Minimize OR AutomationId=)", 0x4, 2, False, cacheRequest)
-            maximizeEl := npEl.FindFirstBy("Name=Maximize AND ControlType=button AND (AutomationId=Maximize OR AutomationId=)", 0x4, 2, False, cacheRequest)
-            closeEl    := npEl.FindFirstBy("Name=Close AND (ControlType=button OR ControlType=ListItem) AND (AutomationId=Close OR AutomationId=)", 0x4, 2, False, cacheRequest)
+            If (!minimizeEl && !maximizeEl && !closeEl)
+            {
+                regexMin := "Name=Minimize AND ControlType=button AND AutomationId=)"
+                regexMax := "Name=Maximize AND ControlType=button AND AutomationId=)"
+                regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem) AND AutomationId="
+                minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
+                maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
+                closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
+            }
             
             minimizePos := minimizeEl.GetCurrentPos()
             maximizePos := maximizeEl.GetCurrentPos()
             closePos    := closeEl.GetCurrentPos()
             
-            FileAppend, ====================== %currentClass% ============================ `n, C:\Users\vbonaven\Desktop\log2.txt 
-            FileAppend, % npEl.DumpAll() "`n", C:\Users\vbonaven\Desktop\log2.txt 
+            minX := minimizePos.x
+            minXW := minimizePos.x+minimizePos.w
+            minY := minimizePos.y
+            minYH := minimizePos.y+minimizePos.h
+            
+            ; FileAppend, % npEl.DumpAll() "`n", C:\Users\vbonaven\Desktop\log2.txt 
+            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %lastGoodCapture% %mXbc2%x%mYbc2% minx = %minX%->%minXW% : %minY%->%minYH%`n, C:\Users\vbonaven\Desktop\log2.txt 
+            scannedHwnds.push(mWinIdbc2)
+            tooltip, done!
+        } catch e {
+        
         }
     }
     Else
     {
-       MouseGetPos, mXbc, mYbc, mHwnd, mCtrl 
-       try {     
+       try {   
+            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - BUTTON ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
             
             minX := minimizePos.x
+            minXW := minimizePos.x+minimizePos.w
+            minY := minimizePos.y
+            minYH := minimizePos.y+minimizePos.h
             
-            FileAppend, ====================== %minX% ============================ `n, C:\Users\vbonaven\Desktop\log2.txt 
+            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %lastGoodCapture% %mXbc2%x%mYbc2% minx = %minX%->%minXW% : %minY%->%minYH%`n, C:\Users\vbonaven\Desktop\log2.txt 
             
-            If ((mXbc >= minimizePos.x) && (mXbc <= (minimizePos.x+minimizePos.w)) && (mYbc >= minimizePos.y) && (mYbc <= (minimizePos.y+minimizePos.h)))
+            If ((mXbc2 >= minimizePos.x) && (mXbc2 <= (minimizePos.x+minimizePos.w)) && (mYbc2 >= minimizePos.y) && (mYbc2 <= (minimizePos.y+minimizePos.h)))
+            {
                 ToolTip, minimize!
-            Else If ((mXbc >= maximizePos.x) && (mXbc <= (maximizePos.x+maximizePos.w)) && (mYbc >= maximizePos.y) && (mYbc <= (maximizePos.y+maximizePos.h)))
+                ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - MINIMIZE`n, C:\Users\vbonaven\Desktop\log2.txt 
+            }    
+            Else If ((mXbc2 >= maximizePos.x) && (mXbc2 <= (maximizePos.x+maximizePos.w)) && (mYbc2 >= maximizePos.y) && (mYbc2 <= (maximizePos.y+maximizePos.h)))
+            {
                 ToolTip, maximize!
-            Else If ((mXbc >= closePos.x) && (mXbc <= (closePos.x+closePos.w)) && (mYbc >= closePos.y) && (mYbc <= (closePos.y+closePos.h)))
+                ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - MAXIMIZE`n, C:\Users\vbonaven\Desktop\log2.txt 
+            }            
+            Else If ((mXbc2 >= closePos.x) && (mXbc2 <= (closePos.x+closePos.w)) && (mYbc2 >= closePos.y) && (mYbc2 <= (closePos.y+closePos.h)))
+            {
                 ToolTip, close!
+                ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CLOSE`n, C:\Users\vbonaven\Desktop\log2.txt 
+            }
+            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - DONE1 ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
+                
         } catch e {
         
         }
         PrintButton := False
         sleep 1000
         Tooltip, 
+        ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - DONE2 ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
     }    
     ; previousClass := currentClass
 Return
-}
 
 IsUIAObjSaved(idstring := "")
 {
