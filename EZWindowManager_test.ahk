@@ -1353,7 +1353,7 @@ Return
 
 ButCaptureCached:
     
-    If !PrintButton
+    If !PrintButton && lastGoodExe && lastGoodCapture
     {
         tooltip, here %lastGoodExe% %lastGoodCapture%
         ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - START ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
