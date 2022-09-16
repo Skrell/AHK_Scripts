@@ -105,7 +105,7 @@ MasterTimer:
     If (currentClass != "tooltips_class32" 
         &&  currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" 
         &&  currentClass != "MultitaskingViewFrame" 
-        &&  currentClass != "#32770" 
+        &&  currentClass != "#32768" 
         &&  currentClass != "#32770" 
         &&  currentClass != "Notepad++" 
         &&  currentClass != "Shell_TrayWnd" 
@@ -1107,7 +1107,7 @@ Return
     }
     KeyWait, LButton, T30
     WinGetPos, lb_x2, lb_y2, , , ahk_id %ClickedWinHwnd%
-    If (lb_x != lb_x2 || lb_y != lb_y2)
+    If (abs(lb_x - lb_x2) > 5 || abs(lb_y - lb_y2) > 5)
     {
         PossiblyMoved := True
         tooltip, moved!
