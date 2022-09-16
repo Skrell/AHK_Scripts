@@ -1399,6 +1399,7 @@ ButCaptureCached:
                 minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
                 maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
                 closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
+                tooltip, done0!
             }
             Else
             {
@@ -1413,6 +1414,7 @@ ButCaptureCached:
                 minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
                 maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
                 closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
+                tooltip, done1!
             }
             
             
@@ -1424,6 +1426,7 @@ ButCaptureCached:
                 minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
                 maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
                 closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
+                tooltip, done2!
             }
             
             If (!minimizeEl && !maximizeEl && !closeEl)
@@ -1434,6 +1437,7 @@ ButCaptureCached:
                 minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
                 maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
                 closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
+                tooltip, done3!
             }
             
             minimizePos := minimizeEl.GetCurrentPos()
@@ -1448,7 +1452,6 @@ ButCaptureCached:
             ; FileAppend, % npEl.DumpAll() "`n", C:\Users\vbonaven\Desktop\log2.txt 
             ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %lastGoodCapture% %mXbc2%x%mYbc2% minx = %minX%->%minXW% : %minY%->%minYH%`n, C:\Users\vbonaven\Desktop\log2.txt 
             scannedHwnds[mWinIdbc2] := cacheRequest
-            tooltip, done!
         } catch e {
         
         }
