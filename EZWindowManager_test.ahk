@@ -50,6 +50,7 @@ ResetMousePosBkup   := False
 ExplorerSpawned     := False
 TaskbarPeak         := False
 PossiblyMoved       := False
+NewID :=
 
 mEl := {}
 npEl := {}
@@ -83,17 +84,49 @@ Tooltip,
 ; SetTimer, CheckButtonSize,      100,             
 
 t_KeepOnTop := t_WatchMouse := t_CheckButtonSize := t_ButCapture := t_RedetectColor := A_TickCount
-SetTimer, MasterTimer, 50, -1
+SetTimer, MasterTimer, 100, -1
+
+; Gui +LastFound
+; hWnd := WinExist()
+; DllCall( "RegisterShellHookWindow", UInt,hWnd )
+; MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
+; OnMessage( MsgNum, "ShellMessage" )
+
 Return
 
+ShellMessage( wParam,lParam ) {
+  Local k
+  If ( wParam = 1 ) ;  HSHELL_WINDOWCREATED := 1
+     {
+       NewID := lParam
+       WinGetClass, currentClass, ahk_id %NewID%
+       WinGetTitle, currentTitle, ahk_id %NewID%
+       
+       If ( (currentClass != "tooltips_class32")
+        &&  (currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" )
+        &&  (currentClass != "MultitaskingViewFrame"         )
+        &&  (currentClass != "#32768"                        )
+        &&  (currentClass != "#32770"                        )
+        &&  (currentClass != "Shell_TrayWnd")
+        &&  (currentClass != "WorkerW"      ))
+        {
+            lastGoodCapture := currentClass
+            SetTimer, MasterTimer, off
+            GoSub, ButCaptureCached
+            SetTimer, MasterTimer, on
+        }
+    }
+}
 
 MasterTimer:
-    MouseGetPos, , , mHwnd, mCtrl
-    mWinID = ahk_id %mHwnd%
+    MouseGetPos, , , NewID, 
+    mWinID = ahk_id %NewID%
     WinGetClass, currentClass, %mWinID%
-    WinGet, currentProc, ID, %mWinID%
+    WinGetTitle, currentTitle, %mWinID%
+    WinGet, currentHwnd, ID, %mWinID%
+    WinGet, currentExe, ProcessName, %mWinID%
     
-    If (previousClass == currentClass && previousProc != currentProc)
+    If (previousClass == currentClass && previousProc != currentHwnd)
         previousClass := "na"
     
     If (PossiblyMoved)
@@ -102,22 +135,23 @@ MasterTimer:
         previousClass := "na"
     }
     
-    If (currentClass != "tooltips_class32" 
-        &&  currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" 
-        &&  currentClass != "MultitaskingViewFrame" 
-        &&  currentClass != "#32768" 
-        &&  currentClass != "#32770" 
-        &&  currentClass != "Notepad++" 
-        &&  currentClass != "Shell_TrayWnd" 
-        &&  currentClass != "WorkerW" 
+    If (    (currentClass != "tooltips_class32")
+        &&  (currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" )
+        &&  (currentClass != "MultitaskingViewFrame"         )
+        &&  (currentClass != "#32768"                        )
+        &&  (currentClass != "#32770"                        )
+        &&  (currentClass != "Shell_TrayWnd")
+        &&  (currentClass != "WorkerW"      )
         && previousClass != currentClass)
     {
+        lastGoodHwnd    := currentHwnd
         lastGoodCapture := currentClass
+        lastGoodExe     := currentExe
         GoSub, ButCaptureCached
         t_ButCapture := A_TickCount
     }
     previousClass := currentClass
-    previousProc  := currentProc
+    previousProc  := currentHwnd
     
     ; If ((A_TickCount-t_WatchMouse) >= 100)
     ; {
@@ -1032,8 +1066,13 @@ Return
 !LButton::
 ~LButton::
     SetTimer, MasterTimer, Off
+    LButtonPreviousTick1 := A_TickCount
     savedWin := False
     PossiblyChangedSize := False
+    MouseGetPos, lmx, lmy, ClickedWinHwnd
+    WinGetClass, class, ahk_id %ClickedWinHwnd%
+    WinGetPos, lb_x, lb_y, , , ahk_id %ClickedWinHwnd%
+    previousClass := class 
     
     ; doubleClick := ((A_TickCount - LButtonPreviousTick) < DoubleClickTime)
     ; If (doubleClick)
@@ -1041,7 +1080,6 @@ Return
         ; Gosub, SendCtrlAdd
     ; }
 
-    MouseGetPos, lmx, lmy, ClickedWinHwnd
     for idx, val in PeaksArray {
         If (val == ("ahk_id " . ClickedWinHwnd)) {
             savedWin := True
@@ -1051,10 +1089,6 @@ Return
             break
         }
     }
-    
-    WinGetClass, class, ahk_id %ClickedWinHwnd%
-    WinGetPos, lb_x, lb_y, , , ahk_id %ClickedWinHwnd%
-    previousClass := class 
 
     If !savedWin ; didn't left click on a peaked window
     {
@@ -1106,19 +1140,19 @@ Return
         }
     }
     KeyWait, LButton, T30
+    LButtonPreviousTick2 := A_TickCount
     WinGetPos, lb_x2, lb_y2, , , ahk_id %ClickedWinHwnd%
-    If (abs(lb_x - lb_x2) > 5 || abs(lb_y - lb_y2) > 5)
+    If ((abs(lb_x - lb_x2) > 30 || abs(lb_y - lb_y2) > 30) && (LButtonPreviousTick2-LButtonPreviousTick1) > 250)
     {
         PossiblyMoved := True
         tooltip, moved!
     }
-    Else If ((A_TickCount - LButtonPreviousTick) > 1000)
+    Else ; If ((A_TickCount - LButtonPreviousTick) > 1000)
     {
         PrintButton := True
         Gosub, ButCaptureCached
     }
     Wheel_disabled :=  False ; catchall in case for some reason wheel is still disabled
-    LButtonPreviousTick := A_TickCount
     SetTimer, MasterTimer, On
 Return 
 
@@ -1318,23 +1352,24 @@ ButCapture:
 Return
 
 ButCaptureCached:
-    CoordMode, Mouse, Screen
-    MouseGetPos, mXbc2, mYbc2, mWinbc2
-    mWinIdbc2 = ahk_id %mWinbc2%
-
+    
     If !PrintButton
     {
-        tooltip, here
+        tooltip, here %lastGoodExe% %lastGoodCapture%
         ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - START ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
         try {
             ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %previousClass% - %lastGoodCapture%`n, C:\Users\vbonaven\Desktop\log2.txt 
             
             prevCached := False
-            for idx, shwnds in scannedHwnds
+            ; WinGet, mWinHwndbc2, ID, ahk_id %NewID%
+            mWinIdbc2 = ahk_id %lastGoodHwnd%
+            
+            for shwnds, c in scannedHwnds
             {
-                If (mWinHwndbc2 == shwnds)
+                If (mWinIdbc2 == shwnds)
                 {
                     prevCached := True
+                    ; tooltip, cached!
                     break
                 }
             }
@@ -1347,11 +1382,12 @@ ButCaptureCached:
                 cacheRequest.AddProperty("Name")
                 cacheRequest.AddProperty("AutomationId")
             }
+            Else
+                cacheRequest := c
            
-            WinGet, mWinHwndbc2, ID, %mWinIdbc2%
-            WinGetPos, wX, wY, , , %mWinIdbc2%
-            If (lastGoodCapture == "Chrome_WidgetWin_1")
+            If (lastGoodCapture == "Chrome_WidgetWin_1" && lastGoodExe == "chrome.exe")
             {
+                WinGetPos, wX, wY, , , %mWinIdbc2%
                 If !prevCached
                     npEl := UIA.ElementFromPointBuildCache(wX+9, wY+1, cacheRequest)
                 Else
@@ -1367,7 +1403,7 @@ ButCaptureCached:
             Else
             {
                 If !prevCached
-                    npEl := UIA.ElementFromHandleBuildCache(mWinbc2, cacheRequest) ; Get element and also build the cache
+                    npEl := UIA.ElementFromHandleBuildCache(mWinIdbc2, cacheRequest) ; Get element and also build the cache
                 Else
                     npEl.BuildUpdatedCache(cacheRequest)
                 
@@ -1411,7 +1447,7 @@ ButCaptureCached:
             
             ; FileAppend, % npEl.DumpAll() "`n", C:\Users\vbonaven\Desktop\log2.txt 
             ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %lastGoodCapture% %mXbc2%x%mYbc2% minx = %minX%->%minXW% : %minY%->%minYH%`n, C:\Users\vbonaven\Desktop\log2.txt 
-            scannedHwnds.push(mWinIdbc2)
+            scannedHwnds[mWinIdbc2] := cacheRequest
             tooltip, done!
         } catch e {
         
@@ -1419,6 +1455,9 @@ ButCaptureCached:
     }
     Else
     {
+        CoordMode, Mouse, Screen
+        MouseGetPos, mXbc2, mYbc2, 
+        
        try {   
             ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - BUTTON ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
             
