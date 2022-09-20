@@ -16,7 +16,7 @@ CoordMode, Pixel, Screen
 ; #Include %A_ScriptDir%\RunAsAdmin.ahk
 #Include %A_ScriptDir%\UIA_Interface.ahk 
 
-Wheel_disabled := false
+Wheel_disabled := False
 TransparentValue := 120
 KDE_WinUp    :=
 KDE_WinLeft  :=
@@ -60,13 +60,12 @@ minimizeEl     := {}
 maximizeEl     := {}
 closeEl        := {}
 windowEls      := {}
-previousClass := "WorkerW"
 LastRemovedWinId := 
 firstButtonPosXOld := 0
 winCountOld := 0
 
 BlockInput, On
-global UIA := UIA_Interface()
+global UIA       := UIA_Interface()
 global tbEl      := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
 global toolbarEl := tbEl.FindFirstBy("ClassName=MSTaskListWClass AND ControlType=Toolbar")
 ; windowEls := toolbarEl ? toolbarEl.FindAllBy("Name=running", 0x4, 2, True) : tbEl.FindAllBy("ClassName=Taskbar.TaskListButtonAutomationPeer")
@@ -110,6 +109,8 @@ ShellMessage( wParam, lParam ) {
            WinGet, currentExe, ProcessName, A
            If ( WinExist(ahk_id %lParam%) 
                 &&  (currentClass != "tooltips_class32")
+                &&  (currentClass != "Windows.UI.Core.CoreWindow" )
+                &&  (currentClass != "TaskListThumbnailWnd" )
                 &&  (currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" )
                 &&  (currentClass != "MultitaskingViewFrame"         )
                 &&  (currentClass != "#32768"                        )
@@ -169,6 +170,7 @@ Return
 
 WatchMouse:
     MouseGetPos, MXw, MYw, MouseWinHwnd
+    WinGetClass, wmClass, ahk_id %MouseWinHwnd%
     
     If ResetMousePosBkup
     {
@@ -178,6 +180,19 @@ WatchMouse:
     }
     
     FinishedLoop := True 
+    
+    If ((wmClass == "TaskListThumbnailWnd" || wmClass == "Windows.UI.Core.CoreWindow"))
+    {
+        mEl         := UIA.ElementFromPoint(MXw,MYw)
+        minimizeEl  := mEl.FindFirstByNameAndType("Minimize", "Button", 2, False)
+        maximizeEl  := mEl.FindFirstByNameAndType("Maximize", "Button", 2, False)
+        closeEl     := mEl.FindFirstByNameAndType("Close", "Button", 2, False)
+        overSpecial := True
+    }
+    Else
+    {
+        overSpecial := False
+    }
     
     for idx, val in PeaksArray
     {
@@ -338,7 +353,7 @@ Return
 
 ExtractAppTitle(FullTitle)
 {   
-    AppTitle := SubStr(FullTitle, InStr(FullTitle, " ", false, -1) + 1)
+    AppTitle := SubStr(FullTitle, InStr(FullTitle, " ", False, -1) + 1)
     Return AppTitle
 }
 
@@ -388,7 +403,6 @@ Return
 CheckButtonSize: 
     firstButtonPosX := 0
     
-    ; toolbarEl := tbEl.FindFirstBy("ClassName=MSTaskListWClass AND ControlType=Toolbar")
     windowEls := toolbarEl ? toolbarEl.FindAllBy("Name=running", 0x4, 2, True) : tbEl.FindAllBy("ClassName=Taskbar.TaskListButtonAutomationPeer")
     button1El := toolbarEl.FindFirstByType("Button")
     If button1El
@@ -529,8 +543,10 @@ $MButton::
         Return
     }
     
-    Wheel_disabled := true
+    Wheel_disabled := True
     WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, EWD_OffL, EWD_OffT, EWD_OffR, EWD_OffB)
+    EWD_WinXorg := EWD_WinX
+    EWD_WinYorg := EWD_WinY
     
     If (MX < (EWD_WinX + (EWD_WinW / 2)))
        KDE_WinLeft := 1
@@ -566,17 +582,20 @@ $MButton::
        
        If currentTitle
        {
-           WinGetClass, currentClass, A
+           ; WinGetClass, currentClass, A
            WinGet, currentHwnd, ID, A
-           WinGet, currentExe, ProcessName, A
+           ahkid = ahk_id %currentHwnd% 
+           AdjustWinDims(ahkid, EWD_WinX-EWD_WinXorg, EWD_WinY-EWD_WinYorg)
            
-           lastGoodHwnd    := currentHwnd
-           lastGoodCapture := currentClass
-           lastGoodExe     := currentExe
-           GoSub, ButCaptureCached
+           ; WinGet, currentExe, ProcessName, A
+           
+           ; lastGoodHwnd    := currentHwnd
+           ; lastGoodCapture := currentClass
+           ; lastGoodExe     := currentExe
+           ; GoSub, ButCaptureCached
        }
     }
-    Wheel_disabled := false
+    Wheel_disabled := False
 Return 
 
 EWD_WatchDrag:
@@ -658,7 +677,7 @@ EWD_WatchDrag:
            
         MouseGetPos, EWD_MouseX, EWD_MouseY
         If (((EWD_MouseX != EWD_MouseOrgX) || (EWD_MouseY != EWD_MouseOrgY)) && !registerRbutton)
-            MouseMoved := true
+            MouseMoved := True
         
         If ((EWD_MouseX == MX) && (EWD_MouseY == MY))
         {
@@ -716,11 +735,11 @@ EWD_WatchDrag:
         
         If (GetKeyState("RButton", "P"))
         {
-            registerRbutton := true
+            registerRbutton := True
         }
         Else If (registerRbutton)
         {
-            registerRbutton := false
+            registerRbutton := False
             SetTimer, EWD_WatchDrag, on
         }
             
@@ -1126,6 +1145,8 @@ Return
         WinGet, currentExe, ProcessName, %mWinID%
         
         If ((currentClass != "tooltips_class32")
+        &&  (currentClass != "Windows.UI.Core.CoreWindow" )
+        &&  (currentClass != "TaskListThumbnailWnd" )        
         &&  (currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" )
         &&  (currentClass != "MultitaskingViewFrame"         )
         &&  (currentClass != "#32768"                        )
@@ -1346,13 +1367,13 @@ Return
 
 ButCaptureCached:
     Critical
+    
     If !PrintButton && lastGoodExe && lastGoodCapture
     {
-        ; tooltip, here %lastGoodExe% %lastGoodCapture%
+        sleep 250
         ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - START ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
         try {
             ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %previousClass% - %lastGoodCapture%`n, C:\Users\vbonaven\Desktop\log2.txt 
-            
             prevCached := False
             mWinIdbc2 = ahk_id %lastGoodHwnd%
             
@@ -1374,7 +1395,9 @@ ButCaptureCached:
                 cacheRequest.AddProperty("AutomationId")
             }
             Else
-                cacheRequest := c
+            {
+                Return
+            }
            
             If (lastGoodCapture == "Chrome_WidgetWin_1" && lastGoodExe == "chrome.exe")
             {
@@ -1433,36 +1456,44 @@ ButCaptureCached:
             If (!minimizeEl && !maximizeEl && !closeEl)
             {
                 tooltip, dammit! %lastGoodCapture%
+                scannedAhkIds.remove(mWinIdbc2)
             }
-                        
-            minimizePos := minimizeEl.GetCurrentPos()
-            maximizePos := maximizeEl.GetCurrentPos()
-            closePos    := closeEl.GetCurrentPos()
-            
-            minX        := minimizePos.x
-            minXW       := minimizePos.x+minimizePos.w
-            minY        := minimizePos.y
-            minYH       := minimizePos.y+minimizePos.h
-            
-            maxX        := maximizeEl.x
-            maxXW       := maximizeEl.x+maximizeEl.w
-            maxY        := maximizeEl.y
-            maxYH       := maximizeEl.y+maximizeEl.h
-            
-            closeX      := closeEl.x
-            closeXW     := closeEl.x+closeEl.w
-            closeY      := closeEl.y
-            closeYH     := closeEl.y+closeEl.h
-            
-            ; FileAppend, % npEl.DumpAll() "`n", C:\Users\vbonaven\Desktop\log2.txt 
-            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %lastGoodCapture% %mXbc2%x%mYbc2% minx = %minX%->%minXW% : %minY%->%minYH%`n, C:\Users\vbonaven\Desktop\log2.txt 
-            scannedAhkIds[mWinIdbc2] := cacheRequest
-            Array := {"X": minX, "XW": minXW, "Y": minY, "YH": minYH}
-            minDimsAhkId[mWinIdbc2] := %Array%
-            Array := {"X": maxX, "XW": maxXW, "Y": maxY, "YH": maxYH}
-            maxDimsAhkId[mWinIdbc2] := Array
-            Array := {"X": closeX, "XW": closeXW, "Y": closeY, "YH": closeYH}
-            closeDimsAhkId[mWinIdbc2] := Array
+            Else
+            {
+                minimizePos := minimizeEl.GetCurrentPos()
+                maximizePos := maximizeEl.GetCurrentPos()
+                closePos    := closeEl.GetCurrentPos()
+                
+                minX        := minimizePos.x
+                minXW       := minimizePos.x+minimizePos.w
+                minY        := minimizePos.y
+                minYH       := minimizePos.y+minimizePos.h
+                
+                maxX        := maximizePos.x
+                maxXW       := maximizePos.x+maximizePos.w
+                maxY        := maximizePos.y
+                maxYH       := maximizePos.y+maximizePos.h
+                
+                closeX      := closePos.x
+                closeXW     := closePos.x+closePos.w
+                closeY      := closePos.y
+                closeYH     := closePos.y+closePos.h
+                
+                ; FileAppend, % npEl.DumpAll() "`n", C:\Users\vbonaven\Desktop\log2.txt 
+                tooltip, % minX "-" minXW "-" minY "-" minYH 
+                scannedAhkIds[mWinIdbc2] := cacheRequest
+                
+                Array := {"X": minX, "XW": minXW, "Y": minY, "YH": minYH}
+                minDimsAhkId[mWinIdbc2] := Array
+                Array := {"X": maxX, "XW": maxXW, "Y": maxY, "YH": maxYH}
+                maxDimsAhkId[mWinIdbc2] := Array
+                Array := {"X": closeX, "XW": closeXW, "Y": closeY, "YH": closeYH}
+                closeDimsAhkId[mWinIdbc2] := Array
+                
+                minimizeEl   := {}
+                maximizeEl   := {}
+                closeEl      := {}
+            }
             
         } catch e {
         
@@ -1470,51 +1501,90 @@ ButCaptureCached:
     }
     Else
     {
-        CoordMode, Mouse, Screen
-        MouseGetPos, mXbc2, mYbc2, 
         try {   
-            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - BUTTON ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
-            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %lastGoodCapture% %mXbc2%x%mYbc2% minx = %minX%->%minXW% : %minY%->%minYH%`n, C:\Users\vbonaven\Desktop\log2.txt 
-            
-            for id, dims in minDimsAhkId
+            If (overSpecial)
             {
-                string := % id dims[X] dims[XW] dims[Y] dims[YH]
-                FileAppend, %string%`n, C:\Users\vbonaven\Desktop\log2.txt 
-                If ((mXbc2 >= dims.X) && (mXbc2 <= dims.XW) && (mYbc2 >= dims.Y) && (mYbc2 <= dims.YH))
+                tooltip, here 2
+                If InStr(mEl.CurrentName, "Close")
                 {
-                    ToolTip, minimize!
-                    PrintButton := False
-                    sleep 1000
-                    Tooltip, 
-                    Return
-                }    
-            }
-            
-            for id, dims in maxDimsAhkId
-            {
-                If ((mXbc2 >= dims["X"]) && (mXbc2 <= dims["XW"]) && (mYbc2 >= dims["Y"]) && (mYbc2 <= dims["YH"]))
-                {
-                    ToolTip, maximize!
-                    ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - MAXIMIZE`n, C:\Users\vbonaven\Desktop\log2.txt 
-                    PrintButton := False
-                    sleep 1000
-                    Tooltip, 
-                    Return
-                }            
-            }
-                
-            for id, dims in closeDimsAhkId
-            {
-                If ((mXbc2 >= dims["X"]) && (mXbc2 <= dims["XW"]) && (mYbc2 >= dims["Y"]) && (mYbc2 <= dims["YH"]))
-                {
-                    ToolTip, close!
-                    ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CLOSE`n, C:\Users\vbonaven\Desktop\log2.txt 
-                    PrintButton := False
-                    sleep 1000
-                    Tooltip, 
-                    Return
+                    removeId := False
+                    removeIdx := 0
+
+                    for idx, val in PeaksArray {
+                      If (val == mWinID) {
+                          LookForLeaveWindow := False
+                          WinSet, AlwaysOnTop, off, %mWinID%
+                          removeId := True
+                          removeIdx := idx
+                          Break
+                         }
+                      }
+                      
+                    If removeId
+                    {
+                        PeaksArray.remove(removeIdx)
+                        WinBackupXs.remove(mHwnd)
+                        LastRemovedWinId :=mHwnd
+                        ForceButtonUpdate := True
+                    }
+                    Tooltip, %wClass% " closed! " %LastRemovedWinId%
+                    mEl := {}
                 }
-            }   
+                Else If InStr(mEl.CurrentName, "Maximize")
+                {
+                    Tooltip, %wClass% " maximize!"
+                    mEl := {}
+                }
+                Else If InStr(mEl.CurrentName, "Minimize")
+                {
+                    Tooltip, %wClass% " minimize!"
+                    mEl := {}
+                }
+            }
+            Else
+            {
+                CoordMode, Mouse, Screen
+                MouseGetPos, mXbc2, mYbc2, 
+                
+                for element in minDimsAhkId
+                {
+                    ; tooltip, % minDimsAhkId[element].X " " minDimsAhkId[element].Y " " minDimsAhkId[element].XW " " minDimsAhkId[element].YH "|" mXbc2 " " mYbc2
+                    If ((mXbc2 >= minDimsAhkId[element].X) && (mXbc2 <= minDimsAhkId[element].XW) && (mYbc2 >= minDimsAhkId[element].Y) && (mYbc2 <= minDimsAhkId[element].YH))
+                    {
+                        ToolTip, minimize!
+                        PrintButton := False
+                        sleep 1000
+                        Tooltip, 
+                        Return
+                    }    
+                }
+                
+                for element in maxDimsAhkId
+                {
+                    If ((mXbc2 >= maxDimsAhkId[element].X) && (mXbc2 <= maxDimsAhkId[element].XW) && (mYbc2 >= maxDimsAhkId[element].Y) && (mYbc2 <= maxDimsAhkId[element].YH))
+                    {
+                        ToolTip, maximize!
+                        ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - MAXIMIZE`n, C:\Users\vbonaven\Desktop\log2.txt 
+                        PrintButton := False
+                        sleep 1000
+                        Tooltip, 
+                        Return
+                    }            
+                }
+                    
+                for element in closeDimsAhkId
+                {
+                    If ((mXbc2 >= closeDimsAhkId[element].X) && (mXbc2 <= closeDimsAhkId[element].XW) && (mYbc2 >= closeDimsAhkId[element].Y) && (mYbc2 <= closeDimsAhkId[element].YH))
+                    {
+                        ToolTip, % "close! " closeDimsAhkId[element].X " " closeDimsAhkId[element].XW " " closeDimsAhkId[element].Y " " closeDimsAhkId[element].YH
+                        ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CLOSE`n, C:\Users\vbonaven\Desktop\log2.txt 
+                        PrintButton := False
+                        sleep 1000
+                        Tooltip, 
+                        Return
+                    }
+                }   
+            }
             PrintButton := False
          ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - DONE1 ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
         } catch e {
@@ -1534,7 +1604,7 @@ IsUIAObjSaved(idstring := "")
     Return False
 }
 
-RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winHwnd:=0, print:=false) ; from the FindText library, credit goes to feiyue
+RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winHwnd:=0, print:=False) ; from the FindText library, credit goes to feiyue
 {
     ;I guess since ALL subroutines can see all other subroutines variables it was resetting mX and mY?? 
     ;As I said at the beginning, the global declarations have no purpose without functions. Only functions have local variables. Variables do not belong to subroutines.
@@ -1582,6 +1652,49 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winHwnd:=0, print:=false)
         
         FadeToTargetTrans(LinesId, 255, 100)
         WinSet, AlwaysOnTop, on, %LinesId%
+    }
+    Return
+}
+
+AdjustWinDims(ahkId := "", x_delta := 0, y_delta := 0)
+{
+    global minDimsAhkId, maxDimsAhkId, closeDimsAhkId
+        
+    for element in minDimsAhkId
+    {
+        If (ahkId == element)
+        {  
+        
+            minDimsAhkId[element].X   :=   minDimsAhkId[element].X   + x_delta
+            minDimsAhkId[element].XW  :=   minDimsAhkId[element].XW  + x_delta
+            minDimsAhkId[element].Y   :=   minDimsAhkId[element].Y   + y_delta
+            minDimsAhkId[element].YH  :=   minDimsAhkId[element].YH  + y_delta
+            break
+        }
+    }
+    
+    for element in maxDimsAhkId
+    {
+        If (ahkId == element)
+        {  
+            maxDimsAhkId[element].X   :=   maxDimsAhkId[element].X   + x_delta
+            maxDimsAhkId[element].XW  :=   maxDimsAhkId[element].XW  + x_delta
+            maxDimsAhkId[element].Y   :=   maxDimsAhkId[element].Y   + y_delta
+            maxDimsAhkId[element].YH  :=   maxDimsAhkId[element].YH  + y_delta
+            break
+        }
+    }
+            
+    for element in closeDimsAhkId
+    {
+        If (ahkId == element)
+        {         
+            closeDimsAhkId[element].X  := closeDimsAhkId[element].X   + x_delta
+            closeDimsAhkId[element].XW := closeDimsAhkId[element].XW  + x_delta
+            closeDimsAhkId[element].Y  := closeDimsAhkId[element].Y   + y_delta
+            closeDimsAhkId[element].YH := closeDimsAhkId[element].YH  + y_delta
+            break
+        }
     }
     Return
 }
