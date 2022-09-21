@@ -39,6 +39,7 @@ scannedAhkIds  := []
 minDimsAhkId   := {}
 maxDimsAhkId   := {}
 closeDimsAhkId := {}
+cacheRequest   := {}
 
 percLeft            := 1.0
 edgePercentage      := .04
@@ -110,6 +111,7 @@ ShellMessage( wParam, lParam ) {
            If ( WinExist(ahk_id %lParam%) 
                 &&  (currentClass != "tooltips_class32")
                 &&  (currentClass != "Windows.UI.Core.CoreWindow" )
+                &&  (currentClass != "ApplicationManager_DesktopShellWindow" )
                 &&  (currentClass != "TaskListThumbnailWnd" )
                 &&  (currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" )
                 &&  (currentClass != "MultitaskingViewFrame"         )
@@ -1136,9 +1138,9 @@ Return
     If ((abs(lb_xw - lb_xw2) > 5 || abs(lb_y - lb_y2) > 5) && (LButtonPreviousTick2-LButtonPreviousTick1) > 250)
     {
         foundClickedId := False
-        for element in scannedAhkIds
+        for shwnds, c in scannedAhkIds
         {
-            If (element == mWinClickedID)
+            If (shwnds == mWinClickedID)
             {
                 foundClickedId := True
                 break
@@ -1153,7 +1155,6 @@ Return
             If currentTitle
             {
                 WinGet, currentExe, ProcessName, %mWinClickedID%
-                
                 If ( WinExist(mWinClickedID) 
                      &&  (class != "tooltips_class32")
                      &&  (class != "Windows.UI.Core.CoreWindow" )
@@ -1171,7 +1172,6 @@ Return
                      GoSub, ButCaptureCached
                  }
             }
-            Gosub, ButCaptureCached
         }
     }
     Else 
@@ -1381,7 +1381,7 @@ Return
 ButCaptureCached:
     Critical
     
-    If !PrintButton && lastGoodExe && lastGoodCapture
+    If (!PrintButton && lastGoodExe && lastGoodCapture)
     {
         sleep 500
         mWinIdbc2 = ahk_id %lastGoodHwnd%
@@ -1398,7 +1398,7 @@ ButCaptureCached:
                     break
                 }
             }
-            
+            ; tooltip, 00
             If !prevCached
             {
                 cacheRequest := UIA.CreateCacheRequest()
@@ -1407,16 +1407,17 @@ ButCaptureCached:
                 cacheRequest.AddProperty("Name")
                 cacheRequest.AddProperty("AutomationId")
             }
-            Else
-            {
-                Return
-            }
-           
-            If (lastGoodCapture == "Chrome_WidgetWin_1" && lastGoodExe == "chrome.exe")
+           ; tooltip, 0
+            If (lastGoodCapture == "Chrome_WidgetWin_1" && (lastGoodExe == "chrome.exe" || lastGoodExe == "msedge.exe"))
             {
                 WinGetPos, wX, wY, , , %mWinIdbc2%
+                If (lastGoodExe == "msedge.exe")
+                    offsetX := 4
+                Else
+                    offsetX := 9
+                
                 If !prevCached
-                    npEl := UIA.ElementFromPointBuildCache(wX+9, wY+1, cacheRequest)
+                    npEl := UIA.ElementFromPointBuildCache(wX+offsetX, wY+1, cacheRequest)
                 Else
                     npEl.BuildUpdatedCache(cacheRequest)
                     
@@ -1443,7 +1444,7 @@ ButCaptureCached:
                 closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
                 tooltip, done1!
             }
-            
+            ; tooltip, 1
             
             If (!minimizeEl && !maximizeEl && !closeEl)
             {
@@ -1457,18 +1458,19 @@ ButCaptureCached:
             }
             Else If (!minimizeEl && !maximizeEl && !closeEl)
             {
-                regexMin := "Name=Minimize AND ControlType=button AND AutomationId=)"
-                regexMax := "Name=Maximize AND ControlType=button AND AutomationId=)"
-                regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem) AND AutomationId="
+                regexMin := "Name=Minimize AND ControlType=button"
+                regexMax := "Name=Maximize AND ControlType=button"
+                regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem)"
                 minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
                 maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
                 closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
                 tooltip, done3!
             }
-            
+            ; tooltip, 2
             If (!minimizeEl && !maximizeEl && !closeEl)
             {
                 tooltip, dammit! %lastGoodCapture%
+                FileAppend, % npEl.DumpAll() "`n", C:\Users\vbonaven\Desktop\log2.txt 
                 scannedAhkIds.remove(mWinIdbc2)
             }
             Else
@@ -1492,7 +1494,6 @@ ButCaptureCached:
                 closeY      := closePos.y
                 closeYH     := closePos.y+closePos.h
                 
-                ; FileAppend, % npEl.DumpAll() "`n", C:\Users\vbonaven\Desktop\log2.txt 
                 tooltip, % minX "-" minXW "-" minY "-" minYH 
                 scannedAhkIds[mWinIdbc2] := cacheRequest
                 
@@ -1506,6 +1507,7 @@ ButCaptureCached:
                 minimizeEl   := {}
                 maximizeEl   := {}
                 closeEl      := {}
+                tooltip, stored!
             }
             
         } catch e {
