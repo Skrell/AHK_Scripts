@@ -1517,7 +1517,6 @@ ButCaptureCached:
         try {   
             If (overSpecial)
             {
-                tooltip, here 2
                 If InStr(mEl.CurrentName, "Close")
                 {
                     Tooltip, %wClass% " closed! " %LastRemovedWinHwnd%
