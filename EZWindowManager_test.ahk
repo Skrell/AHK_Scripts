@@ -60,7 +60,7 @@ minimizeEl     := {}
 maximizeEl     := {}
 closeEl        := {}
 windowEls      := {}
-LastRemovedWinId := 
+LastRemovedWinHwnd := 
 firstButtonPosXOld := 0
 winCountOld := 0
 
@@ -424,7 +424,7 @@ CheckButtonSize:
     {  
         If ForceButtonUpdate
         {
-            RangeTip( , , , , , , Format("{:#x}", LastRemovedWinId), True)
+            RangeTip( , , , , , , Format("{:#x}", LastRemovedWinHwnd), True)
             ForceButtonUpdate := False
         }
         
@@ -558,7 +558,7 @@ $MButton::
     Else
        KDE_WinUp := -1
 
-    WinActivate, ahk_id %EWD_MouseWinHwnd%
+    WinActivate, %EWD_winId%
     SetTimer, EWD_WatchDrag, 10 ; Track the mouse as the user drags it.
     SetTimer, CheckforTransparent, 50
     
@@ -571,6 +571,7 @@ $MButton::
         SetTimer, CheckforTransparent, Off
         If (IsOverTitleBar(MX, MY, EWD_MouseWinHwnd)==1 && !ToggledOnTop) {
             Send !{F4}
+            CleanUpStoredWindows(EWD_winId, EWD_MouseWinHwnd)
         }
         Else If (!ToggledOnTop) {
             Send, {MButton}
@@ -582,17 +583,9 @@ $MButton::
        
        If currentTitle
        {
-           ; WinGetClass, currentClass, A
            WinGet, currentHwnd, ID, A
            ahkid = ahk_id %currentHwnd% 
            AdjustWinDims(ahkid, EWD_WinX-EWD_WinXorg, EWD_WinY-EWD_WinYorg)
-           
-           ; WinGet, currentExe, ProcessName, A
-           
-           ; lastGoodHwnd    := currentHwnd
-           ; lastGoodCapture := currentClass
-           ; lastGoodExe     := currentExe
-           ; GoSub, ButCaptureCached
        }
     }
     Wheel_disabled := False
@@ -643,7 +636,7 @@ EWD_WatchDrag:
               
               If removeId
               {
-                 LastRemovedWinId := EWD_MouseWinHwnd
+                 LastRemovedWinHwnd := EWD_MouseWinHwnd
                  ForceButtonUpdate := True
                  removePeakedWin := True
                  LookForLeaveWindow := False
@@ -1065,12 +1058,14 @@ Return
 
 !LButton::
 ~LButton::
-    LButtonPreviousTick1 := A_TickCount
     savedWin := False
     PossiblyChangedSize := False
     MouseGetPos, lmx, lmy, ClickedWinHwnd
     WinGetClass, class, ahk_id %ClickedWinHwnd%
-    WinGetPos, lb_x, lb_y, , , ahk_id %ClickedWinHwnd%
+    mWinClickedID = ahk_id %ClickedWinHwnd%
+    WinGet, mWinClickeHwnd, ID, %mWinClickedID%
+    LButtonPreviousTick1 := A_TickCount
+    WinGetPos, lb_x, lb_y, lb_w, lb_h, %mWinClickedID%
     
     for idx, val in PeaksArray {
         If (val == ("ahk_id " . ClickedWinHwnd)) {
@@ -1135,30 +1130,48 @@ Return
     KeyWait, LButton, T30
     
     LButtonPreviousTick2 := A_TickCount
-    WinGetPos, lb_x2, lb_y2, , , ahk_id %ClickedWinHwnd%
-    If ((abs(lb_x - lb_x2) > 5 || abs(lb_y - lb_y2) > 5) && (LButtonPreviousTick2-LButtonPreviousTick1) > 250)
+    WinGetPos, lb_x2, lb_y2, lb_w2, lb_h2, %mWinClickedID%
+    lb_xw  := lb_x + lb_w
+    lb_xw2 := lb_x2 + lb_w2
+    If ((abs(lb_xw - lb_xw2) > 5 || abs(lb_y - lb_y2) > 5) && (LButtonPreviousTick2-LButtonPreviousTick1) > 250)
     {
-        ; MouseGetPos, , , NewID, 
-        mWinID = ahk_id %ClickedWinHwnd%
-        currentClass := class
-        WinGet, currentHwnd, ID, %mWinID%
-        WinGet, currentExe, ProcessName, %mWinID%
-        
-        If ((currentClass != "tooltips_class32")
-        &&  (currentClass != "Windows.UI.Core.CoreWindow" )
-        &&  (currentClass != "TaskListThumbnailWnd" )        
-        &&  (currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" )
-        &&  (currentClass != "MultitaskingViewFrame"         )
-        &&  (currentClass != "#32768"                        )
-        &&  (currentClass != "#32770"                        )
-        &&  (currentClass != "Shell_TrayWnd")
-        &&  (currentClass != "WorkerW"      ))
+        foundClickedId := False
+        for element in scannedAhkIds
         {
-            tooltip, moved!
-            lastGoodHwnd    := currentHwnd
-            lastGoodCapture := currentClass
-            lastGoodExe     := currentExe
-            GoSub, ButCaptureCached
+            If (element == mWinClickedID)
+            {
+                foundClickedId := True
+                break
+            }
+        }
+        
+        If foundClickedId
+            AdjustWinDims(mWinClickedID, lb_xw2-lb_xw, lb_y2-lb_y)
+        Else
+        {
+            WinGetTitle, currentTitle, %mWinClickedID%
+            If currentTitle
+            {
+                WinGet, currentExe, ProcessName, %mWinClickedID%
+                
+                If ( WinExist(mWinClickedID) 
+                     &&  (class != "tooltips_class32")
+                     &&  (class != "Windows.UI.Core.CoreWindow" )
+                     &&  (class != "TaskListThumbnailWnd" )
+                     &&  (class != "MSO_BORDEREFFECT_WINDOW_CLASS" )
+                     &&  (class != "MultitaskingViewFrame"         )
+                     &&  (class != "#32768"                        )
+                     &&  (class != "#32770"                        )
+                     &&  (class != "Shell_TrayWnd")
+                     &&  (class != "WorkerW"      ))
+                 {
+                     lastGoodHwnd    := mWinClickeHwnd
+                     lastGoodCapture := class
+                     lastGoodExe     := currentExe
+                     GoSub, ButCaptureCached
+                 }
+            }
+            Gosub, ButCaptureCached
         }
     }
     Else 
@@ -1335,10 +1348,10 @@ ButCapture:
                 {
                     PeaksArray.remove(removeIdx)
                     WinBackupXs.remove(mHwnd)
-                    LastRemovedWinId :=mHwnd
+                    LastRemovedWinHwnd :=mHwnd
                     ForceButtonUpdate := True
                 }
-                Tooltip, %wClass% " closed! " %LastRemovedWinId%
+                Tooltip, %wClass% " closed! " %LastRemovedWinHwnd%
                 mEl := {}
             }
             Else If InStr(mEl.CurrentName, "Maximize")
@@ -1370,12 +1383,12 @@ ButCaptureCached:
     
     If !PrintButton && lastGoodExe && lastGoodCapture
     {
-        sleep 250
+        sleep 500
+        mWinIdbc2 = ahk_id %lastGoodHwnd%
         ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - START ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
         try {
             ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %previousClass% - %lastGoodCapture%`n, C:\Users\vbonaven\Desktop\log2.txt 
             prevCached := False
-            mWinIdbc2 = ahk_id %lastGoodHwnd%
             
             for shwnds, c in scannedAhkIds
             {
@@ -1507,27 +1520,7 @@ ButCaptureCached:
                 tooltip, here 2
                 If InStr(mEl.CurrentName, "Close")
                 {
-                    removeId := False
-                    removeIdx := 0
-
-                    for idx, val in PeaksArray {
-                      If (val == mWinID) {
-                          LookForLeaveWindow := False
-                          WinSet, AlwaysOnTop, off, %mWinID%
-                          removeId := True
-                          removeIdx := idx
-                          Break
-                         }
-                      }
-                      
-                    If removeId
-                    {
-                        PeaksArray.remove(removeIdx)
-                        WinBackupXs.remove(mHwnd)
-                        LastRemovedWinId :=mHwnd
-                        ForceButtonUpdate := True
-                    }
-                    Tooltip, %wClass% " closed! " %LastRemovedWinId%
+                    Tooltip, %wClass% " closed! " %LastRemovedWinHwnd%
                     mEl := {}
                 }
                 Else If InStr(mEl.CurrentName, "Maximize")
@@ -1548,40 +1541,50 @@ ButCaptureCached:
                 
                 for element in minDimsAhkId
                 {
-                    ; tooltip, % minDimsAhkId[element].X " " minDimsAhkId[element].Y " " minDimsAhkId[element].XW " " minDimsAhkId[element].YH "|" mXbc2 " " mYbc2
-                    If ((mXbc2 >= minDimsAhkId[element].X) && (mXbc2 <= minDimsAhkId[element].XW) && (mYbc2 >= minDimsAhkId[element].Y) && (mYbc2 <= minDimsAhkId[element].YH))
+                    If (mWinClickedID == element)
                     {
-                        ToolTip, minimize!
-                        PrintButton := False
-                        sleep 1000
-                        Tooltip, 
-                        Return
-                    }    
+                        ; tooltip, % minDimsAhkId[element].X " " minDimsAhkId[element].Y " " minDimsAhkId[element].XW " " minDimsAhkId[element].YH "|" mXbc2 " " mYbc2
+                        If ((mXbc2 >= minDimsAhkId[element].X) && (mXbc2 <= minDimsAhkId[element].XW) && (mYbc2 >= minDimsAhkId[element].Y) && (mYbc2 <= minDimsAhkId[element].YH))
+                        {
+                            ToolTip, minimize!
+                            PrintButton := False
+                            sleep 1000
+                            Tooltip, 
+                            Return
+                        }    
+                    }
                 }
                 
                 for element in maxDimsAhkId
                 {
-                    If ((mXbc2 >= maxDimsAhkId[element].X) && (mXbc2 <= maxDimsAhkId[element].XW) && (mYbc2 >= maxDimsAhkId[element].Y) && (mYbc2 <= maxDimsAhkId[element].YH))
+                    If (mWinClickedID == element)
                     {
-                        ToolTip, maximize!
-                        ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - MAXIMIZE`n, C:\Users\vbonaven\Desktop\log2.txt 
-                        PrintButton := False
-                        sleep 1000
-                        Tooltip, 
-                        Return
-                    }            
+                        If ((mXbc2 >= maxDimsAhkId[element].X) && (mXbc2 <= maxDimsAhkId[element].XW) && (mYbc2 >= maxDimsAhkId[element].Y) && (mYbc2 <= maxDimsAhkId[element].YH))
+                        {
+                            ToolTip, maximize!
+                            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - MAXIMIZE`n, C:\Users\vbonaven\Desktop\log2.txt 
+                            PrintButton := False
+                            sleep 1000
+                            Tooltip, 
+                            Return
+                        }            
+                    }
                 }
                     
                 for element in closeDimsAhkId
                 {
-                    If ((mXbc2 >= closeDimsAhkId[element].X) && (mXbc2 <= closeDimsAhkId[element].XW) && (mYbc2 >= closeDimsAhkId[element].Y) && (mYbc2 <= closeDimsAhkId[element].YH))
+                    If (mWinClickedID == element)
                     {
-                        ToolTip, % "close! " closeDimsAhkId[element].X " " closeDimsAhkId[element].XW " " closeDimsAhkId[element].Y " " closeDimsAhkId[element].YH
-                        ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CLOSE`n, C:\Users\vbonaven\Desktop\log2.txt 
-                        PrintButton := False
-                        sleep 1000
-                        Tooltip, 
-                        Return
+                        If ((mXbc2 >= closeDimsAhkId[element].X) && (mXbc2 <= closeDimsAhkId[element].XW) && (mYbc2 >= closeDimsAhkId[element].Y) && (mYbc2 <= closeDimsAhkId[element].YH))
+                        {
+                            ToolTip, % "close! " closeDimsAhkId[element].X " " closeDimsAhkId[element].XW " " closeDimsAhkId[element].Y " " closeDimsAhkId[element].YH
+                            ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CLOSE`n, C:\Users\vbonaven\Desktop\log2.txt 
+                            PrintButton := False
+                            CleanUpStoredWindows(mWinClickedID, lastGoodHwnd)
+                            sleep 1000
+                            Tooltip, 
+                            Return
+                        }
                     }
                 }   
             }
@@ -1592,6 +1595,33 @@ ButCaptureCached:
         }
     }    
 Return
+
+CleanUpStoredWindows(ahkId := "", hwnd := "")
+{
+    global ForceButtonUpdate, LastRemovedWinHwnd, PeaksArray, WinBackupXs
+    
+    removeId := False
+    removeIdx := 0
+
+    for idx, val in PeaksArray {
+      If (val == ahkId) {
+          LookForLeaveWindow := False
+          WinSet, AlwaysOnTop, off, %ahkId%
+          removeId := True
+          removeIdx := idx
+          Break
+         }
+      }
+      
+    If removeId
+    {
+        PeaksArray.remove(removeIdx)
+        WinBackupXs.remove(hwnd)
+        LastRemovedWinHwnd := hwnd
+        ForceButtonUpdate := True
+    }
+    Return
+}
 
 IsUIAObjSaved(idstring := "")
 {
