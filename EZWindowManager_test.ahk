@@ -215,8 +215,10 @@ WatchMouse:
                     MoveToTargetSpot(winId, 0-offL, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
-                    HoveringWinHwnd := MouseWinHwnd
-                    lastWindowPeaked := True
+                    HoveringWinHwnd    := MouseWinHwnd
+                    lastWindowPeaked   := True
+                    WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
+                    AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
                     Break
                 }
                 Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer)) {
@@ -224,8 +226,10 @@ WatchMouse:
                     MoveToTargetSpot(winId, A_ScreenWidth-WinW-OffR, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
-                    HoveringWinHwnd := MouseWinHwnd
-                    lastWindowPeaked := True
+                    HoveringWinHwnd    := MouseWinHwnd
+                    lastWindowPeaked   := True
+                    WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
+                    AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
                     Break
                 }
             }
@@ -573,7 +577,7 @@ $MButton::
         SetTimer, CheckforTransparent, Off
         If (IsOverTitleBar(MX, MY, EWD_MouseWinHwnd)==1 && !ToggledOnTop) {
             Send !{F4}
-            CleanUpStoredWindows(EWD_winId, EWD_MouseWinHwnd)
+            CleanUpStoredWindow(EWD_winId, EWD_MouseWinHwnd)
         }
         Else If (!ToggledOnTop) {
             Send, {MButton}
@@ -639,8 +643,8 @@ EWD_WatchDrag:
               If removeId
               {
                  LastRemovedWinHwnd := EWD_MouseWinHwnd
-                 ForceButtonUpdate := True
-                 removePeakedWin := True
+                 ForceButtonUpdate  := True
+                 removePeakedWin    := True
                  LookForLeaveWindow := False
                  PeaksArray.remove(removeIdx)
                  WinBackupXs.remove(EWD_MouseWinHwnd)
@@ -653,8 +657,8 @@ EWD_WatchDrag:
                  If (k == EWD_MouseWinHwnd)
                  {
                      ; tooltip, window edging!
-                     LookForLeaveWindow := True
-                     HoveringWinHwnd := EWD_MouseWinHwnd
+                     LookForLeaveWindow  := True
+                     HoveringWinHwnd     := EWD_MouseWinHwnd
                      PossiblyChangedSize := True
                      Break
                  }
@@ -1331,15 +1335,15 @@ ButCapture:
             
             If InStr(mEl.CurrentName, "Close")
             {
-                removeId := False
+                removeId  := False
                 removeIdx := 0
 
                 for idx, val in PeaksArray {
                   If (val == mWinID) {
-                      LookForLeaveWindow := False
                       WinSet, AlwaysOnTop, off, %mWinID%
-                      removeId := True
-                      removeIdx := idx
+                      LookForLeaveWindow := False
+                      removeId           := True
+                      removeIdx          := idx
                       Break
                      }
                   }
@@ -1349,7 +1353,7 @@ ButCapture:
                     PeaksArray.remove(removeIdx)
                     WinBackupXs.remove(mHwnd)
                     LastRemovedWinHwnd :=mHwnd
-                    ForceButtonUpdate := True
+                    ForceButtonUpdate  := True
                 }
                 Tooltip, %wClass% " closed! " %LastRemovedWinHwnd%
                 mEl := {}
@@ -1406,6 +1410,10 @@ ButCaptureCached:
                 cacheRequest.AddProperty("ControlType") ; Add all the necessary properties that DumpAll uses: ControlType, LocalizedControlType, AutomationId, Name, Value, ClassName, AcceleratorKey
                 cacheRequest.AddProperty("Name")
                 cacheRequest.AddProperty("AutomationId")
+            }
+            Else
+            {
+                Return
             }
            ; tooltip, 0
             If (lastGoodCapture == "Chrome_WidgetWin_1" && (lastGoodExe == "chrome.exe" || lastGoodExe == "msedge.exe"))
@@ -1469,7 +1477,7 @@ ButCaptureCached:
             ; tooltip, 2
             If (!minimizeEl && !maximizeEl && !closeEl)
             {
-                tooltip, dammit! %lastGoodCapture%
+                tooltip, dammit! %lastGoodCapture% %lastGoodExe%
                 FileAppend, % npEl.DumpAll() "`n", C:\Users\vbonaven\Desktop\log2.txt 
                 scannedAhkIds.remove(mWinIdbc2)
             }
@@ -1581,7 +1589,7 @@ ButCaptureCached:
                             ToolTip, % "close! " closeDimsAhkId[element].X " " closeDimsAhkId[element].XW " " closeDimsAhkId[element].Y " " closeDimsAhkId[element].YH
                             ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CLOSE`n, C:\Users\vbonaven\Desktop\log2.txt 
                             PrintButton := False
-                            CleanUpStoredWindows(mWinClickedID, lastGoodHwnd)
+                            CleanUpStoredWindow(mWinClickedID, lastGoodHwnd)
                             sleep 1000
                             Tooltip, 
                             Return
@@ -1597,7 +1605,7 @@ ButCaptureCached:
     }    
 Return
 
-CleanUpStoredWindows(ahkId := "", hwnd := "")
+CleanUpStoredWindow(ahkId := "", hwnd := "")
 {
     global ForceButtonUpdate, LastRemovedWinHwnd, PeaksArray, WinBackupXs
     
@@ -1606,9 +1614,8 @@ CleanUpStoredWindows(ahkId := "", hwnd := "")
 
     for idx, val in PeaksArray {
       If (val == ahkId) {
-          LookForLeaveWindow := False
           WinSet, AlwaysOnTop, off, %ahkId%
-          removeId := True
+          removeId  := True
           removeIdx := idx
           Break
          }
@@ -1619,7 +1626,8 @@ CleanUpStoredWindows(ahkId := "", hwnd := "")
         PeaksArray.remove(removeIdx)
         WinBackupXs.remove(hwnd)
         LastRemovedWinHwnd := hwnd
-        ForceButtonUpdate := True
+        LookForLeaveWindow := False
+        ForceButtonUpdate  := True
     }
     Return
 }
