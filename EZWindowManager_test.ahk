@@ -183,13 +183,17 @@ WatchMouse:
     
     FinishedLoop := True 
     
-    If ((wmClass == "TaskListThumbnailWnd" || wmClass == "Windows.UI.Core.CoreWindow"))
+    If ((wmClass == "TaskListThumbnailWnd" || wmClass == "Windows.UI.Core.CoreWindow" || wmClass == "Notepad++" || wmClass == "#32770"))
     {
+        try {
         mEl         := UIA.ElementFromPoint(MXw,MYw)
         minimizeEl  := mEl.FindFirstByNameAndType("Minimize", "Button", 2, False)
         maximizeEl  := mEl.FindFirstByNameAndType("Maximize", "Button", 2, False)
-        closeEl     := mEl.FindFirstByNameAndType("Close", "Button", 2, False)
+        closeEl     := mEl.FindFirstByNameAndType("Close",    "Button", 2, False)
         overSpecial := True
+        }
+        catch e {
+        }
     }
     Else
     {
@@ -215,6 +219,7 @@ WatchMouse:
                     MoveToTargetSpot(winId, 0-offL, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
+                    FileAppend, WatchMouse - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                     HoveringWinHwnd    := MouseWinHwnd
                     lastWindowPeaked   := True
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
@@ -226,6 +231,7 @@ WatchMouse:
                     MoveToTargetSpot(winId, A_ScreenWidth-WinW-OffR, WinX)
                     FadeToTargetTrans(winId, 255, 200)
                     LookForLeaveWindow := True
+                    FileAppend, WatchMouse1 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                     HoveringWinHwnd    := MouseWinHwnd
                     lastWindowPeaked   := True
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
@@ -270,11 +276,14 @@ WatchMouse:
     
     If (LookForLeaveWindow && HoveringWinHwnd != MouseWinHwnd)
     {
-        ; tooltip, 3
+        WinGetTitle, title, ahk_id %MouseWinHwnd%
+        FileAppend, Hovering over %title%`n, C:\Users\vbonaven\Desktop\log.txt
         for k, v in WinBackupXs 
         {
            If (k == HoveringWinHwnd)
            {
+              WinGetTitle, title, ahk_id %HoveringWinHwnd%
+              FileAppend, Found Hovered %title%`n, C:\Users\vbonaven\Desktop\log.txt
               ; tooltip, 4
               winId = ahk_id %HoveringWinHwnd%
               WinGet, winHwnd, ID, %winId%
@@ -316,6 +325,7 @@ WatchMouse:
                   WinMove, %winId%,, newOrgX-OffR
                   FadeToTargetTrans(winId, 200)
                   LookForLeaveWindow := False
+                  FileAppend, WatchMouse2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                   WinSet, Bottom, , %winId%
               }
               Break
@@ -348,6 +358,7 @@ ResetPeakedWindows:
             sleep 200
          }
          LookForLeaveWindow := False
+         FileAppend, ResetPeakedWindows - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
     }
 Return
 
@@ -510,7 +521,7 @@ Return
 
 $MButton::
     ; SetTimer, ButCapture, Off
-    ; SetTimer, WatchMouse, Off
+    SetTimer, MasterTimer, Off
     EWD_MouseOrgX := 0
     EWD_MouseOrgY := 0
     EWD_MouseX := 0
@@ -552,7 +563,9 @@ $MButton::
     Wheel_disabled := True
     WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, EWD_OffL, EWD_OffT, EWD_OffR, EWD_OffB)
     EWD_WinXorg := EWD_WinX
+    EWD_WinWorg := EWD_WinW
     EWD_WinYorg := EWD_WinY
+    EWD_WinHorg := EWD_WinH
     
     If (MX < (EWD_WinX + (EWD_WinW / 2)))
        KDE_WinLeft := 1
@@ -586,15 +599,16 @@ $MButton::
     Else
     {
        WinGetTitle, currentTitle, A
-       
+       WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, EWD_OffL, EWD_OffT, EWD_OffR, EWD_OffB)
        If currentTitle
        {
            WinGet, currentHwnd, ID, A
            ahkid = ahk_id %currentHwnd% 
-           AdjustWinDims(ahkid, EWD_WinX-EWD_WinXorg, EWD_WinY-EWD_WinYorg)
+           AdjustWinDims(ahkid, (EWD_WinX+EWD_WinW)-(EWD_WinXorg+EWD_WinWorg), EWD_WinY-EWD_WinYorg)
        }
     }
     Wheel_disabled := False
+    SetTimer, MasterTimer, On
 Return 
 
 EWD_WatchDrag:
@@ -646,6 +660,7 @@ EWD_WatchDrag:
                  ForceButtonUpdate  := True
                  removePeakedWin    := True
                  LookForLeaveWindow := False
+                 FileAppend, EWD_WatchDrag - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                  PeaksArray.remove(removeIdx)
                  WinBackupXs.remove(EWD_MouseWinHwnd)
               }
@@ -658,6 +673,7 @@ EWD_WatchDrag:
                  {
                      ; tooltip, window edging!
                      LookForLeaveWindow  := True
+                     FileAppend, EWD_WatchDrag2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                      HoveringWinHwnd     := EWD_MouseWinHwnd
                      PossiblyChangedSize := True
                      Break
@@ -771,9 +787,9 @@ EWD_WatchDrag:
                 }
                 MButtonPreviousTick := A_TickCount
             }
-            Else If (WinLEdge && (EWD_MouseX - EWD_MouseOrgX) > 0)
+            Else If (WinLEdge) ; && (EWD_MouseX - EWD_MouseOrgX) > 0)
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) > MouseMoveBuffer/2)
+                If ((EWD_MouseX - EWD_MouseOrgX) > (MouseMoveBuffer/2))
                 {
                     ; Tooltip, "3"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -781,9 +797,9 @@ EWD_WatchDrag:
                 }
                 MButtonPreviousTick := A_TickCount
             }
-            Else If (WinREdge && (EWD_MouseX - EWD_MouseOrgX) < 0) 
+            Else If (WinREdge) ; && (EWD_MouseX - EWD_MouseOrgX) < 0) 
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) < -1*MouseMoveBuffer/2)
+                If ((EWD_MouseX - EWD_MouseOrgX) < (-1*MouseMoveBuffer/2))
                 {
                     ; Tooltip, "4"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -1064,6 +1080,7 @@ Return
 
 !LButton::
 ~LButton::
+    SetTimer, MasterTimer, Off
     savedWin := False
     PossiblyChangedSize := False
     MouseGetPos, lmx, lmy, ClickedWinHwnd
@@ -1078,6 +1095,7 @@ Return
             savedWin := True
             HoveringWinHwnd := ClickedWinHwnd
             LookForLeaveWindow := True
+            FileAppend, LButton1 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
             PossiblyChangedSize := True
             break
         }
@@ -1109,8 +1127,8 @@ Return
                         MoveToTargetSpot(winHwndx_ID, 0-offL, WinX)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
                         LookForLeaveWindow := True
+                        FileAppend, LButton2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                         HoveringWinHwnd := ClickedWinHwnd
-                        ; lastWindowPeaked := True
                         TaskbarPeak := True
                         Break
                     }
@@ -1119,8 +1137,8 @@ Return
                         MoveToTargetSpot(winHwndx_ID, A_ScreenWidth-WinW-OffR, WinX)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
                         LookForLeaveWindow := True
+                        FileAppend, LButton2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                         HoveringWinHwnd := ClickedWinHwnd
-                        ; lastWindowPeaked := True
                         TaskbarPeak := True
                         Break
                     }
@@ -1184,7 +1202,7 @@ Return
         Gosub, ButCaptureCached
     }
     Wheel_disabled :=  False ; catchall in case for some reason wheel is still disabled
-    ; SetTimer, MasterTimer, On
+    SetTimer, MasterTimer, On
 Return 
 
 SendCtrlAdd:
@@ -1342,6 +1360,7 @@ ButCapture:
                   If (val == mWinID) {
                       WinSet, AlwaysOnTop, off, %mWinID%
                       LookForLeaveWindow := False
+                      FileAppend, ButCapture - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                       removeId           := True
                       removeIdx          := idx
                       Break
@@ -1432,9 +1451,34 @@ ButCaptureCached:
                 regexMin := "Name=Minimize AND ControlType=button"
                 regexMax := "Name=Maximize AND ControlType=button"
                 regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem)"
-                minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
-                maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
-                closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
+                minimizeElAr := npEl.FindAllBy(regexMin, 0x4, 2, False, cacheRequest)
+                maximizeElAr := npEl.FindAllBy(regexMax, 0x4, 2, False, cacheRequest)
+                closeElAr    := npEl.FindAllBy(regexClo, 0x4, 2, False, cacheRequest)
+                
+                for idx, result in minimizeElAr
+                {
+                    If (minimizeElAr[idx].GetCurrentPos("screen").w > 32)
+                    {
+                        minimizeEl := result
+                        break
+                    }
+                }
+                for idx, result in maximizeElAr
+                {
+                    If (maximizeElAr[idx].GetCurrentPos("screen").w > 32)
+                    {
+                        maximizeEl := result
+                        break
+                    }
+                }
+                for idx, result in closeElAr
+                {
+                    If (closeElAr[idx].GetCurrentPos("screen").w > 32)
+                    {
+                        closeEl := result
+                        break
+                    }
+                }
                 tooltip, done0!
             }
             Else
@@ -1447,33 +1491,111 @@ ButCaptureCached:
                 regexMin := "Name=Minimize AND ControlType=button AND ClassName=NetUIAppFrameHelper)"
                 regexMax := "Name=Maximize AND ControlType=button AND ClassName=NetUIAppFrameHelper)"
                 regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem) AND ClassName=NetUIAppFrameHelper"
-                minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
-                maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
-                closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
-                tooltip, done1!
+                minimizeElAr := npEl.FindAllBy(regexMin, 0x4, 2, False, cacheRequest)
+                maximizeElAr := npEl.FindAllBy(regexMax, 0x4, 2, False, cacheRequest)
+                closeElAr    := npEl.FindAllBy(regexClo, 0x4, 2, False, cacheRequest)
+                
+                If (minimizeElAr.length() > 0)
+                {
+                    for idx, result in minimizeElAr
+                    {
+                        If (minimizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        {
+                            minimizeEl := result
+                            break
+                        }
+                    }
+                    for idx, result in maximizeElAr
+                    {
+                        If (maximizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        {
+                            maximizeEl := result
+                            break
+                        }
+                    }
+                    for idx, result in closeElAr
+                    {
+                        If (closeElAr[idx].GetCurrentPos("screen").w > 32)
+                        {
+                            closeEl := result
+                            break
+                        }
+                    }
+                }
+                ; tooltip, % "done1! " minimizeElAr.length() "-" minimizeEl.GetCurrentPos("screen").x "-" minimizeEl.GetCurrentPos("screen").w "-" minimizeEl.GetCurrentPos("screen").y "-" minimizeEl.GetCurrentPos("screen").h 
+                Else If (minimizeElAr.length() == 0)
+                {
+                    regexMin := "Name=Minimize AND ControlType=button AND (AutomationId=Minimize OR AutomationId=view_2)"
+                    regexMax := "Name=Maximize AND ControlType=button AND (AutomationId=Maximize OR AutomationId=view_2)"
+                    regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem) AND (AutomationId=Close OR AutomationId=view_2)"
+                    minimizeElAr := npEl.FindAllBy(regexMin, 0x4, 2, False, cacheRequest)
+                    maximizeElAr := npEl.FindAllBy(regexMax, 0x4, 2, False, cacheRequest)
+                    closeElAr    := npEl.FindAllBy(regexClo, 0x4, 2, False, cacheRequest)
+                    
+                    for idx, result in minimizeElAr
+                    {
+                        If (minimizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        {
+                            minimizeEl := result
+                            break
+                        }
+                    }
+                    for idx, result in maximizeElAr
+                    {
+                        If (maximizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        {
+                            maximizeEl := result
+                            break
+                        }
+                    }
+                    for idx, result in closeElAr
+                    {
+                        If (closeElAr[idx].GetCurrentPos("screen").w > 32)
+                        {
+                            closeEl := result
+                            break
+                        }
+                    }
+                    tooltip, done2!
+                }
+                Else If (minimizeElAr.length() == 0)
+                {
+                    regexMin := "Name=Minimize AND ControlType=button"
+                    regexMax := "Name=Maximize AND ControlType=button"
+                    regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem)"
+                    minimizeElAr := npEl.FindAllBy(regexMin, 0x4, 2, False, cacheRequest)
+                    maximizeElAr := npEl.FindAllBy(regexMax, 0x4, 2, False, cacheRequest)
+                    closeElAr    := npEl.FindAllBy(regexClo, 0x4, 2, False, cacheRequest)
+                    
+                    for idx, result in minimizeElAr
+                    {
+                        If (minimizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        {
+                            minimizeEl := result
+                            break
+                        }
+                    }
+                    for idx, result in maximizeElAr
+                    {
+                        If (maximizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        {
+                            maximizeEl := result
+                            break
+                        }
+                    }
+                    for idx, result in closeElAr
+                    {
+                        If (closeElAr[idx].GetCurrentPos("screen").w > 32)
+                        {
+                            closeEl := result
+                            break
+                        }
+                    }
+                    tooltip, done3!
+                }
             }
             ; tooltip, 1
             
-            If (!minimizeEl && !maximizeEl && !closeEl)
-            {
-                regexMin := "Name=Minimize AND ControlType=button AND (AutomationId=Minimize OR AutomationId=view_2)"
-                regexMax := "Name=Maximize AND ControlType=button AND (AutomationId=Maximize OR AutomationId=view_2)"
-                regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem) AND (AutomationId=Close OR AutomationId=view_2)"
-                minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
-                maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
-                closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
-                tooltip, done2!
-            }
-            Else If (!minimizeEl && !maximizeEl && !closeEl)
-            {
-                regexMin := "Name=Minimize AND ControlType=button"
-                regexMax := "Name=Maximize AND ControlType=button"
-                regexClo := "Name=Close AND (ControlType=button OR ControlType=ListItem)"
-                minimizeEl := npEl.FindFirstBy(regexMin, 0x4, 2, False, cacheRequest)
-                maximizeEl := npEl.FindFirstBy(regexMax, 0x4, 2, False, cacheRequest)
-                closeEl    := npEl.FindFirstBy(regexClo, 0x4, 2, False, cacheRequest)
-                tooltip, done3!
-            }
             ; tooltip, 2
             If (!minimizeEl && !maximizeEl && !closeEl)
             {
@@ -1483,26 +1605,26 @@ ButCaptureCached:
             }
             Else
             {
-                minimizePos := minimizeEl.GetCurrentPos()
-                maximizePos := maximizeEl.GetCurrentPos()
-                closePos    := closeEl.GetCurrentPos()
+                ; minimizePos := minimizeEl.GetCurrentPos("screen")
+                ; maximizePos := maximizeEl.GetCurrentPos("screen")
+                ; closePos    := closeEl.GetCurrentPos("screen")
                 
-                minX        := minimizePos.x
-                minXW       := minimizePos.x+minimizePos.w
-                minY        := minimizePos.y
-                minYH       := minimizePos.y+minimizePos.h
+                minX        := minimizeEl.GetCurrentPos("screen").x
+                minXW       := minimizeEl.GetCurrentPos("screen").x+minimizeEl.GetCurrentPos("screen").w
+                minY        := minimizeEl.GetCurrentPos("screen").y
+                minYH       := minimizeEl.GetCurrentPos("screen").y+minimizeEl.GetCurrentPos("screen").h
                 
-                maxX        := maximizePos.x
-                maxXW       := maximizePos.x+maximizePos.w
-                maxY        := maximizePos.y
-                maxYH       := maximizePos.y+maximizePos.h
+                maxX        := maximizeEl.GetCurrentPos("screen").x
+                maxXW       := maximizeEl.GetCurrentPos("screen").x+maximizeEl.GetCurrentPos("screen").w
+                maxY        := maximizeEl.GetCurrentPos("screen").y
+                maxYH       := maximizeEl.GetCurrentPos("screen").y+maximizeEl.GetCurrentPos("screen").h
                 
-                closeX      := closePos.x
-                closeXW     := closePos.x+closePos.w
-                closeY      := closePos.y
-                closeYH     := closePos.y+closePos.h
+                closeX      := closeEl.GetCurrentPos("screen").x
+                closeXW     := closeEl.GetCurrentPos("screen").x+closeEl.GetCurrentPos("screen").w
+                closeY      := closeEl.GetCurrentPos("screen").y
+                closeYH     := closeEl.GetCurrentPos("screen").y+closeEl.GetCurrentPos("screen").h
                 
-                tooltip, % minX "-" minXW "-" minY "-" minYH 
+                ; tooltip, % minX "-" minXW "-" minY "-" minYH 
                 scannedAhkIds[mWinIdbc2] := cacheRequest
                 
                 Array := {"X": minX, "XW": minXW, "Y": minY, "YH": minYH}
@@ -1515,7 +1637,7 @@ ButCaptureCached:
                 minimizeEl   := {}
                 maximizeEl   := {}
                 closeEl      := {}
-                tooltip, stored!
+                ; tooltip, stored!
             }
             
         } catch e {
@@ -1557,7 +1679,7 @@ ButCaptureCached:
                         {
                             ToolTip, minimize!
                             PrintButton := False
-                            sleep 1000
+                            sleep 750
                             Tooltip, 
                             Return
                         }    
@@ -1573,7 +1695,7 @@ ButCaptureCached:
                             ToolTip, maximize!
                             ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - MAXIMIZE`n, C:\Users\vbonaven\Desktop\log2.txt 
                             PrintButton := False
-                            sleep 1000
+                            sleep 750
                             Tooltip, 
                             Return
                         }            
@@ -1590,7 +1712,7 @@ ButCaptureCached:
                             ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CLOSE`n, C:\Users\vbonaven\Desktop\log2.txt 
                             PrintButton := False
                             CleanUpStoredWindow(mWinClickedID, lastGoodHwnd)
-                            sleep 1000
+                            sleep 750
                             Tooltip, 
                             Return
                         }
@@ -1627,6 +1749,7 @@ CleanUpStoredWindow(ahkId := "", hwnd := "")
         WinBackupXs.remove(hwnd)
         LastRemovedWinHwnd := hwnd
         LookForLeaveWindow := False
+        FileAppend, CleanUpStoredWindow - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
         ForceButtonUpdate  := True
     }
     Return
