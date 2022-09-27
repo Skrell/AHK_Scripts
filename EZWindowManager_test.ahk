@@ -48,7 +48,7 @@ lastWindowPeaked    := False
 MouseMoveBuffer     := 50
 PrintButton         := False
 PossiblyChangedSize := False
-ForceButtonUpdate   := False
+ForceButtonRemove   := False
 ResetMousePosBkup   := False
 ExplorerSpawned     := False
 TaskbarPeak         := False
@@ -160,7 +160,7 @@ ReDetectAccentColor:
     If !SessionIsLocked()
     {
         AccentColorHex := SampleAccentColor()
-        ForceButtonUpdate := True
+        ForceButtonRemove := True
     }
 Return    
     
@@ -421,15 +421,15 @@ CheckButtonSize:
     firstButtonPosX := 0
     
     windowEls := toolbarEl ? toolbarEl.FindAllBy("Name=running", 0x4, 2, True) : tbEl.FindAllBy("ClassName=Taskbar.TaskListButtonAutomationPeer")
-    button1El := toolbarEl.FindFirstByType("Button")
-    If button1El
+    buttonsElAr := toolbarEl.FindAllBy("ControlType=Button")
+    If (buttonsElAr.length() > 0)
     {
-        taskButton1ElPos := button1El.CurrentBoundingRectangle
+        taskButton1ElPos := buttonsElAr[buttonsElAr.MaxIndex()].CurrentBoundingRectangle
         firstButtonPosX := taskButton1ElPos.l
     }
     winCount := windowEls.MaxIndex()
     
-    ; tooltip % winCountOld "," winCount "," ForceButtonUpdate "," firstButtonPosX
+    ; tooltip % winCountOld "," winCount "," ForceButtonRemove "," firstButtonPosX
     ;---------- For Easy Printing of Results----------------
     ; result := "Found " windowEls.MaxIndex() " buttons`n`n"
     ; for i, el in windowEls
@@ -437,12 +437,12 @@ CheckButtonSize:
     ; MsgBox, % result
     ;-------------------------------------------------------
 
-    If ((winCountOld != winCount) || (firstButtonPosXOld != firstButtonPosX) || ForceButtonUpdate)
+    If ((winCountOld != winCount) || (firstButtonPosXOld != firstButtonPosX) || ForceButtonRemove)
     {  
-        If ForceButtonUpdate
+        If ForceButtonRemove
         {
             RangeTip( , , , , , , Format("{:#x}", LastRemovedWinHwnd), True)
-            ForceButtonUpdate := False
+            ForceButtonRemove := False
         }
         
         for guiHwnd, winHwnd in GuisCreated
@@ -624,7 +624,7 @@ EWD_WatchDrag:
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
               FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Make %EWD_MouseWinHwnd%:%EWD_WinX%`n, C:\Users\vbonaven\Desktop\log.txt
-              ForceButtonUpdate := True
+              ForceButtonRemove := True
               ResetMousePosBkup := True
               WinSet, Bottom, , %EWD_winId%
               Return
@@ -657,7 +657,7 @@ EWD_WatchDrag:
               If removeId
               {
                  LastRemovedWinHwnd := EWD_MouseWinHwnd
-                 ForceButtonUpdate  := True
+                 ForceButtonRemove  := True
                  removePeakedWin    := True
                  LookForLeaveWindow := False
                  FileAppend, EWD_WatchDrag - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
@@ -761,7 +761,7 @@ EWD_WatchDrag:
         ; MOVE ADJUSTMENTS
         If !registerRbutton && MouseMoved
         {
-            If (WinLEdge && (EWD_MouseX - EWD_MouseOrgX) < 0) 
+            If (WinLEdge && (EWD_MouseX - EWD_MouseOrgX) <= 0) 
             {
                 ; Tooltip, "1"
                 If (EWD_WinY >= 0 && EWD_WinB < MonitorWorkAreaBottom && (EWD_MouseY - EWD_MouseOrgY) > 0)
@@ -774,7 +774,7 @@ EWD_WatchDrag:
                 }
                 MButtonPreviousTick := A_TickCount
             }
-            Else If (WinREdge && (EWD_MouseX - EWD_MouseOrgX) > 0) 
+            Else If (WinREdge && (EWD_MouseX - EWD_MouseOrgX) >= 0) 
             {
                 ; Tooltip, "2"
                 If (EWD_WinY >= 0 && EWD_WinB < MonitorWorkAreaBottom && (EWD_MouseY - EWD_MouseOrgY) > 0)
@@ -789,7 +789,7 @@ EWD_WatchDrag:
             }
             Else If (WinLEdge) ; && (EWD_MouseX - EWD_MouseOrgX) > 0)
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) > (MouseMoveBuffer/2))
+                If ((EWD_MouseX - EWD_MouseOrgX) > floor(MouseMoveBuffer/3))
                 {
                     ; Tooltip, "3"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -799,7 +799,7 @@ EWD_WatchDrag:
             }
             Else If (WinREdge) ; && (EWD_MouseX - EWD_MouseOrgX) < 0) 
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) < (-1*MouseMoveBuffer/2))
+                If ((EWD_MouseX - EWD_MouseOrgX) < ceil(-1*MouseMoveBuffer/3))
                 {
                     ; Tooltip, "4"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -1234,6 +1234,22 @@ MouseIsOver(WinTitle) {
     }
 Return
 
+;===========================================================================================================
+;ElementFromPoint is the original Microsoft implementation, but it has the drawback of sometimes not 
+; returning the actual smallest element at the point. For example it might return a container element 
+; (Pane, Group etc) instead, while there might be a CheckBox or Button under the point (which are 
+; contained in the container element). The same issue is described here: 
+; https://arstechnica.com/civis/viewtopic.php?f=20&t=1467202.
+;
+;SmallestElementFromPoint is a workaround for this issue: it first uses ElementFromPoint, and then drills 
+; down until it finds the actual smallest element at that point. This is what UIAViewer uses internally.
+;
+;SmallestElementFromPoint also has the windowEl argument, which if provided checks the whole window for 
+; elements other than ElementFromPoint element that contain the point. This is what UIAViewer uses if the
+; "Deep search (slower)" checkbox is checked. To see why this is needed, try to inspect Chrome's 
+; min-max buttons: without "Deep search" you cannot find them (because ElementFromPoint returns an element 
+; that doesn't contain those buttons...), but with "Deep search" they are found.
+;===========================================================================================================
 ButCapture:
     MouseGetPos, mXbc, mYbc, mHwnd, mCtrl
     mWinID = ahk_id %mHwnd%
@@ -1372,7 +1388,7 @@ ButCapture:
                     PeaksArray.remove(removeIdx)
                     WinBackupXs.remove(mHwnd)
                     LastRemovedWinHwnd :=mHwnd
-                    ForceButtonUpdate  := True
+                    ForceButtonRemove  := True
                 }
                 Tooltip, %wClass% " closed! " %LastRemovedWinHwnd%
                 mEl := {}
@@ -1624,7 +1640,7 @@ ButCaptureCached:
                 closeY      := closeEl.GetCurrentPos("screen").y
                 closeYH     := closeEl.GetCurrentPos("screen").y+closeEl.GetCurrentPos("screen").h
                 
-                ; tooltip, % minX "-" minXW "-" minY "-" minYH 
+                tooltip, % minX "-" minXW "-" minY "-" minYH 
                 scannedAhkIds[mWinIdbc2] := cacheRequest
                 
                 Array := {"X": minX, "XW": minXW, "Y": minY, "YH": minYH}
@@ -1729,7 +1745,7 @@ Return
 
 CleanUpStoredWindow(ahkId := "", hwnd := "")
 {
-    global ForceButtonUpdate, LastRemovedWinHwnd, PeaksArray, WinBackupXs
+    global ForceButtonRemove, LastRemovedWinHwnd, PeaksArray, WinBackupXs
     
     removeId := False
     removeIdx := 0
@@ -1750,7 +1766,7 @@ CleanUpStoredWindow(ahkId := "", hwnd := "")
         LastRemovedWinHwnd := hwnd
         LookForLeaveWindow := False
         FileAppend, CleanUpStoredWindow - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-        ForceButtonUpdate  := True
+        ForceButtonRemove  := True
     }
     Return
 }
@@ -1877,7 +1893,7 @@ HexToDec(hex)
     Return dec
 }
 
-SampleAccentColor()
+SampleAccentColor(startingX := 0)
 {
     global AccentColorHex, toolbarEl
     
@@ -1888,7 +1904,10 @@ SampleAccentColor()
     If buttonEl
     {
         taskButtonElPos := buttonEl.CurrentBoundingRectangle
-        x_coord := taskButtonElPos.l+10
+        If (startingX > 0)
+            x_coord := startingX+10
+        Else
+            x_coord := taskButtonElPos.l+10
         y_coord := taskButtonElPos.b-1
         PixelGetColor, OutputVar, %x_coord%, %y_coord%, RGB
         ; Tooltip, %OutputVar% found at %x_coord% %y_coord%
