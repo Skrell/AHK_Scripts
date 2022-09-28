@@ -67,6 +67,8 @@ minimizeEl     := {}
 maximizeEl     := {}
 closeEl        := {}
 windowEls      := {}
+
+lastActiveWinhwnd  := 
 LastRemovedWinHwnd := 
 firstButtonPosXOld := 0
 winCountOld := 0
@@ -190,6 +192,11 @@ WatchMouse:
     }
     
     FinishedLoop := True 
+    
+    If (wmClass != "Shell_TrayWnd" && WinActive("ahk_class " wmClass))
+    {
+        WinGet, lastActiveWinhwnd, ID, ahk_class %wmClass%
+    }
     
     If ((wmClass == "TaskListThumbnailWnd" || wmClass == "Windows.UI.Core.CoreWindow" || wmClass == "Notepad++" || wmClass == "#32770"))
     {
@@ -567,7 +574,7 @@ CheckButtonColor:
              If (taskButtonElPos.l != 0)
              {
                  targetColor := SampleAccentColor(taskButtonElPos.l)
-                 If (targetColor != AccentColorHex || targetColor != WinColorBkup[winHwnd])
+                 If (targetColor != AccentColorHex && targetColor != WinColorBkup[winHwnd])
                  {
                     WinColorBkup[winHwnd] := targetColor
                     RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, wtf, True, False)
@@ -1179,7 +1186,7 @@ Return
                 WinGetPos, gx, gy, gw, gh, ahk_id %guiHwnd%
                 WinGet, state, MinMax, %winHwndx_ID%
                 
-                If (lmx > gx && lmx < (gx+gw) && state == 0 && !WinActive(winHwndx_ID))
+                If (lmx > gx && lmx < (gx+gw) && state == 0 && winHwnd != lastActiveWinhwnd)
                 {
                     WinGetPosEx(winHwndx, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
                     
