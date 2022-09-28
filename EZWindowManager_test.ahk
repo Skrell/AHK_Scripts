@@ -36,25 +36,31 @@ PeaksArray     := []
 WinBackupXs    := []
 GuisCreated    := []
 scannedAhkIds  := []
+WinColorBkup   := []
+
+minButtonWidth       := 32
+percLeft             := 1.0
+edgePercentage       := .04
+HoveringWinHwnd      := 
+lastWindowPeaked     := False
+MouseMoveBuffer      := 50
+PrintButton          := False
+PossiblyChangedSize  := False
+ForceButtonRemove    := False
+ResetMousePosBkup    := False
+ExplorerSpawned      := False
+TaskbarPeak          := False
+PossiblyMoved        := False
+SkipKeepOnTop        := False
+SkipRedetectColor    := False
+SkipCheckButtonSize  := False
+SkipCheckButtonColor := False
+SkipWatchmouse       := False
+
 minDimsAhkId   := {}
 maxDimsAhkId   := {}
 closeDimsAhkId := {}
 cacheRequest   := {}
-
-percLeft            := 1.0
-edgePercentage      := .04
-HoveringWinHwnd     := 
-lastWindowPeaked    := False
-MouseMoveBuffer     := 50
-PrintButton         := False
-PossiblyChangedSize := False
-ForceButtonRemove   := False
-ResetMousePosBkup   := False
-ExplorerSpawned     := False
-TaskbarPeak         := False
-PossiblyMoved       := False
-NewID :=
-
 mEl            := {}
 npEl           := {}
 minimizeEl     := {}
@@ -86,7 +92,7 @@ Tooltip,
 ; SetTimer, WatchMouse,           100,             
 ; SetTimer, CheckButtonSize,      100,             
 
-t_KeepOnTop := t_WatchMouse := t_CheckButtonSize := t_ButCapture := t_RedetectColor := A_TickCount
+t_KeepOnTop := t_WatchMouse := t_CheckButtonSize := t_ButCapture := t_RedetectColor := t_CheckButtonColor := A_TickCount 
 SetTimer, MasterTimer, 5, -1
 
 Gui +LastFound
@@ -123,6 +129,7 @@ ShellMessage( wParam, lParam ) {
                 lastGoodHwnd    := currentHwnd
                 lastGoodCapture := currentClass
                 lastGoodExe     := currentExe
+                GoSub, CheckButtonSize
                 GoSub, ButCaptureCached
             }
        }
@@ -130,27 +137,28 @@ ShellMessage( wParam, lParam ) {
 }
 
 MasterTimer:
-    If ((A_TickCount-t_WatchMouse) >= 100)
+    If ((A_TickCount-t_WatchMouse) >= 100 && !SkipWatchmouse)
     {
-        ; tooltip, 2
         GoSub, WatchMouse
         t_WatchMouse := A_TickCount
     }
-    Else If ((A_TickCount-t_CheckButtonSize) >= 200)
+    Else If (((A_TickCount-t_CheckButtonSize) >= 200) && !SkipCheckButtonSize)
     {
-        ; tooltip, 3
         GoSub, CheckButtonSize
         t_CheckButtonSize := A_TickCount
     }
-    Else If ((A_TickCount-t_RedetectColor) >= fifteenMinutes)
+    Else If (((A_TickCount-t_CheckButtonColor) >= 200) && !SkipCheckButtonColor)
     {
-        ; tooltip, 3
+        GoSub, CheckButtonColor
+        t_CheckButtonColor := A_TickCount
+    }
+    Else If (((A_TickCount-t_RedetectColor) >= fifteenMinutes) && !SkipRedetectColor)
+    {
         GoSub, ReDetectAccentColor
         t_RedetectColor := A_TickCount
     }
-    Else If ((A_TickCount-t_KeepOnTop) >= 5)
+    Else If ((A_TickCount-t_KeepOnTop) >= 5 && !SkipKeepOnTop)
     {
-        ; tooltip, 1
         GoSub, KeepOnTop
         t_KeepOnTop := A_TickCount
     }
@@ -274,62 +282,68 @@ WatchMouse:
         }
     }
     
-    If (LookForLeaveWindow && HoveringWinHwnd != MouseWinHwnd)
+    If (LookForLeaveWindow && MouseWinHwnd && HoveringWinHwnd) 
     {
-        WinGetTitle, title, ahk_id %MouseWinHwnd%
-        FileAppend, Hovering over %title%`n, C:\Users\vbonaven\Desktop\log.txt
-        for k, v in WinBackupXs 
+        If (HoveringWinHwnd != MouseWinHwnd)
         {
-           If (k == HoveringWinHwnd)
-           {
-              WinGetTitle, title, ahk_id %HoveringWinHwnd%
-              FileAppend, Found Hovered %title%`n, C:\Users\vbonaven\Desktop\log.txt
-              ; tooltip, 4
-              winId = ahk_id %HoveringWinHwnd%
-              WinGet, winHwnd, ID, %winId%
-              WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
-              ; Make sure we've moved the mouse outside the window we're hovering over
-              If (MXw < WinX || Mxw > (WinX+WinW) || MYw < WinY || MYw > (WinY+WinH))
-              {
-                  ; Tooltip, %percLeft%
-                  If (!lastWindowPeaked)
+            WinGetTitle, title, ahk_id %MouseWinHwnd%
+            FileAppend, Hovering over %title%`n, C:\Users\vbonaven\Desktop\log.txt
+            for k, v in WinBackupXs 
+            {
+               If (k == HoveringWinHwnd)
+               {
+                  WinGetTitle, title, ahk_id %HoveringWinHwnd%
+                  FileAppend, Found Hovered %title%`n, C:\Users\vbonaven\Desktop\log.txt
+                  ; tooltip, 4
+                  winId = ahk_id %HoveringWinHwnd%
+                  WinGet, winHwnd, ID, %winId%
+                  WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
+                  ; Make sure we've moved the mouse outside the window we're hovering over
+                  If (MXw < WinX || Mxw > (WinX+WinW) || MYw < WinY || MYw > (WinY+WinH))
                   {
-                     sleep 350
-                  }
-                  ; double check that we haven't re-entered the peaked window and hence cancel the re-hide   
-                  MouseGetPos, MXw2, MYw2,
-                  If (MXw2 >= WinX && MXw2 <= (WinX+WinW) && MYw2 >= WinY && MYw2 <= (WinY+WinH))
-                  {
-                     Return
-                  }
-                  ;fixes added for resizing windows while it's being peaked
-                  orgX := WinBackupXs[HoveringWinHwnd]
-                  newOrgX := orgX
-                  
-                  If PossiblyChangedSize
-                  {
-                      If (orgX < 0)
-                        newOrgX := ceil((percLeft*((WinW*WinH)/WinH))-WinW)
+                      ; Tooltip, %percLeft%
+                      If (!lastWindowPeaked)
+                      {
+                         sleep 350
+                      }
+                      ; double check that we haven't re-entered the peaked window and hence cancel the re-hide   
+                      MouseGetPos, MXw2, MYw2,
+                      If (MXw2 >= WinX && MXw2 <= (WinX+WinW) && MYw2 >= WinY && MYw2 <= (WinY+WinH))
+                      {
+                         Return
+                      }
+                      ;fixes added for resizing windows while it's being peaked
+                      orgX := WinBackupXs[HoveringWinHwnd]
+                      newOrgX := orgX
+                      
+                      If PossiblyChangedSize
+                      {
+                          If (orgX < 0)
+                            newOrgX := ceil((percLeft*((WinW*WinH)/WinH))-WinW)
+                          Else
+                            newOrgX := A_ScreenWidth-ceil(percLeft*(WinW*WinH)/WinH)
+
+                          WinBackupXs[HoveringWinHwnd] := newOrgX
+                          PossiblyChangedSize := False
+                      }
+
+                      WinSet, Bottom, , %winId%
+                      WinGet, except, ProcessName, %winId%
+                      If (except == "Signal.exe")
+                         OffR := 0
+                      
+                      WinMove, %winId%,, newOrgX-OffR
+                      If (percLeft < 0.10)
+                        FadeToTargetTrans(winId, 100)
                       Else
-                        newOrgX := A_ScreenWidth-ceil(percLeft*(WinW*WinH)/WinH)
-
-                      WinBackupXs[HoveringWinHwnd] := newOrgX
-                      PossiblyChangedSize := False
+                        FadeToTargetTrans(winId, 200)
+                      LookForLeaveWindow := False
+                      FileAppend, WatchMouse2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
+                      WinSet, Bottom, , %winId%
                   }
-
-                  WinSet, Bottom, , %winId%
-                  WinGet, except, ProcessName, %winId%
-                  If (except == "Signal.exe")
-                     OffR := 0
-                  
-                  WinMove, %winId%,, newOrgX-OffR
-                  FadeToTargetTrans(winId, 200)
-                  LookForLeaveWindow := False
-                  FileAppend, WatchMouse2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-                  WinSet, Bottom, , %winId%
-              }
-              Break
-           }
+                  Break
+               }
+            }
         }
     }
     MXw_bkup := MXw
@@ -501,7 +515,6 @@ CheckButtonSize:
              {
                 procNameArray := StrSplit(wProcess, ".")
                 regexTitle := "i).*" . procNameArray[1] . ".*running"
-                ; tooltip, %regexTitle%
                 buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
              }
              
@@ -510,7 +523,8 @@ CheckButtonSize:
                  taskButtonElPos := buttonEl.CurrentBoundingRectangle
                  If (taskButtonElPos.l != 0)
                  {
-                     RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, AccentColorHex, 2, wtf, True)
+                     targetColor := SampleAccentColor(taskButtonElPos.l)
+                     RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, wtf, True)
                  }
              }
         }
@@ -518,6 +532,50 @@ CheckButtonSize:
     winCountOld := winCount    ;always keep up to date
     firstButtonPosXOld := firstButtonPosX
 Return 
+
+CheckButtonColor:
+    for winHwnd, winXpos in WinBackupXs {
+         winHwndX := Format("{:#x}", winHwnd)
+         buttonWinId = ahk_id %winHwnd%
+         WinGet, wProcess, ProcessName, %buttonWinId%
+         WinGetTitle, wTitle, %buttonWinId%
+         regexTitle := wTitle . ".*running"
+         wtf := Format("{:#x}", winHwnd)
+         buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
+         
+         If (!buttonEl)
+         {
+            for index, subtitle in StrSplit(wTitle, [" - ", " | ", " "])
+            {
+                regexSub := subtitle . ".*running"
+                buttonEl := toolbarEl.FindFirstByNameAndType(regexSub, "Button", 0x4, "RegEx", False)
+                If (buttonEl != "")
+                    break
+            }
+         }
+         
+         If (!buttonEl)
+         {
+            procNameArray := StrSplit(wProcess, ".")
+            regexTitle := "i).*" . procNameArray[1] . ".*running"
+            buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
+         }
+         
+         If (buttonEl)
+         {
+             taskButtonElPos := buttonEl.CurrentBoundingRectangle
+             If (taskButtonElPos.l != 0)
+             {
+                 targetColor := SampleAccentColor(taskButtonElPos.l)
+                 If (targetColor != AccentColorHex || targetColor != WinColorBkup[winHwnd])
+                 {
+                    WinColorBkup[winHwnd] := targetColor
+                    RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, wtf, True, False)
+                 }
+             }
+         }
+    }
+Return
 
 $MButton::
     ; SetTimer, ButCapture, Off
@@ -620,7 +678,10 @@ EWD_WatchDrag:
            
            If (percentageLeft < 0.40)
            {
-              FadeToTargetTrans(EWD_winId, 200, TransparentValue)
+              If (percentageLeft < 0.10)
+                FadeToTargetTrans(EWD_winId, 100, TransparentValue)
+              Else
+                FadeToTargetTrans(EWD_winId, 200, TransparentValue)
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
               FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Make %EWD_MouseWinHwnd%:%EWD_WinX%`n, C:\Users\vbonaven\Desktop\log.txt
@@ -1126,9 +1187,9 @@ Return
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
                         MoveToTargetSpot(winHwndx_ID, 0-offL, WinX)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
-                        LookForLeaveWindow := True
-                        FileAppend, LButton2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-                        HoveringWinHwnd := ClickedWinHwnd
+                        ; LookForLeaveWindow := True
+                        ; FileAppend, LButton2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
+                        ; HoveringWinHwnd := ClickedWinHwnd
                         TaskbarPeak := True
                         Break
                     }
@@ -1136,9 +1197,9 @@ Return
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
                         MoveToTargetSpot(winHwndx_ID, A_ScreenWidth-WinW-OffR, WinX)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
-                        LookForLeaveWindow := True
-                        FileAppend, LButton2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-                        HoveringWinHwnd := ClickedWinHwnd
+                        ; LookForLeaveWindow := True
+                        ; FileAppend, LButton2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
+                        ; HoveringWinHwnd := ClickedWinHwnd
                         TaskbarPeak := True
                         Break
                     }
@@ -1473,7 +1534,7 @@ ButCaptureCached:
                 
                 for idx, result in minimizeElAr
                 {
-                    If (minimizeElAr[idx].GetCurrentPos("screen").w > 32)
+                    If (minimizeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                     {
                         minimizeEl := result
                         break
@@ -1481,7 +1542,7 @@ ButCaptureCached:
                 }
                 for idx, result in maximizeElAr
                 {
-                    If (maximizeElAr[idx].GetCurrentPos("screen").w > 32)
+                    If (maximizeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                     {
                         maximizeEl := result
                         break
@@ -1489,7 +1550,7 @@ ButCaptureCached:
                 }
                 for idx, result in closeElAr
                 {
-                    If (closeElAr[idx].GetCurrentPos("screen").w > 32)
+                    If (closeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                     {
                         closeEl := result
                         break
@@ -1515,7 +1576,7 @@ ButCaptureCached:
                 {
                     for idx, result in minimizeElAr
                     {
-                        If (minimizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        If (minimizeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                         {
                             minimizeEl := result
                             break
@@ -1523,7 +1584,7 @@ ButCaptureCached:
                     }
                     for idx, result in maximizeElAr
                     {
-                        If (maximizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        If (maximizeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                         {
                             maximizeEl := result
                             break
@@ -1531,7 +1592,7 @@ ButCaptureCached:
                     }
                     for idx, result in closeElAr
                     {
-                        If (closeElAr[idx].GetCurrentPos("screen").w > 32)
+                        If (closeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                         {
                             closeEl := result
                             break
@@ -1550,7 +1611,7 @@ ButCaptureCached:
                     
                     for idx, result in minimizeElAr
                     {
-                        If (minimizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        If (minimizeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                         {
                             minimizeEl := result
                             break
@@ -1558,7 +1619,7 @@ ButCaptureCached:
                     }
                     for idx, result in maximizeElAr
                     {
-                        If (maximizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        If (maximizeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                         {
                             maximizeEl := result
                             break
@@ -1566,7 +1627,7 @@ ButCaptureCached:
                     }
                     for idx, result in closeElAr
                     {
-                        If (closeElAr[idx].GetCurrentPos("screen").w > 32)
+                        If (closeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                         {
                             closeEl := result
                             break
@@ -1585,7 +1646,7 @@ ButCaptureCached:
                     
                     for idx, result in minimizeElAr
                     {
-                        If (minimizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        If (minimizeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                         {
                             minimizeEl := result
                             break
@@ -1593,7 +1654,7 @@ ButCaptureCached:
                     }
                     for idx, result in maximizeElAr
                     {
-                        If (maximizeElAr[idx].GetCurrentPos("screen").w > 32)
+                        If (maximizeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                         {
                             maximizeEl := result
                             break
@@ -1601,7 +1662,7 @@ ButCaptureCached:
                     }
                     for idx, result in closeElAr
                     {
-                        If (closeElAr[idx].GetCurrentPos("screen").w > 32)
+                        If (closeElAr[idx].GetCurrentPos("screen").w > minButtonWidth)
                         {
                             closeEl := result
                             break
@@ -1763,9 +1824,10 @@ CleanUpStoredWindow(ahkId := "", hwnd := "")
     {
         PeaksArray.remove(removeIdx)
         WinBackupXs.remove(hwnd)
+        WinColorBkup.remove(hwnd)
         LastRemovedWinHwnd := hwnd
         LookForLeaveWindow := False
-        FileAppend, CleanUpStoredWindow - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
+        FileAppend, CleanUpStoredWindow - %LookForLeaveWindow% - %ahkId% - %hwnd%`n, C:\Users\vbonaven\Desktop\log.txt
         ForceButtonRemove  := True
     }
     Return
@@ -1782,7 +1844,7 @@ IsUIAObjSaved(idstring := "")
     Return False
 }
 
-RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winHwnd:=0, print:=False) ; from the FindText library, credit goes to feiyue
+RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winHwnd:=0, print:=False, fadeTrans:=True) ; from the FindText library, credit goes to feiyue
 {
     ;I guess since ALL subroutines can see all other subroutines variables it was resetting mX and mY?? 
     ;As I said at the beginning, the global declarations have no purpose without functions. Only functions have local variables. Variables do not belong to subroutines.
@@ -1823,12 +1885,14 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winHwnd:=0, print:=False)
         Gui, Range_%winHwnd%_%i%: Color, %color%
         
         LinesId = ahk_id %LinesHwnd%
-        WinSet, Transparent, 100, %LinesId%
+        If fadeTrans
+            WinSet, Transparent, 100, %LinesId%
+            
         Gui, Range_%winHwnd%_%i%: Show, NA x%x1s% y%y1s% w%w1s% h%h1%
         
         GuisCreated[LinesHwnd] := winHwnd
-        
-        FadeToTargetTrans(LinesId, 255, 100)
+        If fadeTrans
+            FadeToTargetTrans(LinesId, 255, 100)
         WinSet, AlwaysOnTop, on, %LinesId%
     }
     Return
@@ -1877,13 +1941,14 @@ AdjustWinDims(ahkId := "", x_delta := 0, y_delta := 0)
     Return
 }
 
+; https://msdn.microsoft.com/en-us/library/windows/desktop/ms724371(v=vs.85).aspx
 ; MsgBox % GetSysColor(13) . "`n" . GetSysColor(29)
 GetSysColor(n)
 {
     Local BGR := DllCall("User32.dll\GetSysColor", "Int", n, "UInt")
         , RGB := (BGR & 255) << 16 | (BGR & 65280) | (BGR >> 16)
     Return Format("0x{:06X}", RGB)
-} ; https://msdn.microsoft.com/en-us/library/windows/desktop/ms724371(v=vs.85).aspx
+} 
 
 HexToDec(hex)
 {
@@ -1897,9 +1962,7 @@ SampleAccentColor(startingX := 0)
 {
     global AccentColorHex, toolbarEl
     
-    OutputVar  :=
-    ; regexTitle := "Name=.*running"
-    ; toolbarEl := tbEl.FindFirstBy("ClassName=MSTaskListWClass AND ControlType=Toolbar")
+    HexColor  :=
     buttonEl := toolbarEl.FindFirstBy("Name=running AND NOT Name=complete AND (ControlType=Button OR ControlType=MenuItem)", 0x4, 2, False)
     If buttonEl
     {
@@ -1909,15 +1972,13 @@ SampleAccentColor(startingX := 0)
         Else
             x_coord := taskButtonElPos.l+10
         y_coord := taskButtonElPos.b-1
-        PixelGetColor, OutputVar, %x_coord%, %y_coord%, RGB
-        ; Tooltip, %OutputVar% found at %x_coord% %y_coord%
-        ; MouseMove, %x_coord%, %y_coord%
+        PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
     }
     Else
     {
-        OutputVar := AccentColorHex
+        HexColor := AccentColorHex
     }
-    Return OutputVar
+    Return HexColor
 }
 
 GetAccentColor()
