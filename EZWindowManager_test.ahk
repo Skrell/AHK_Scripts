@@ -87,15 +87,8 @@ Tooltip, %AccentColorHex%
 sleep 2000
 Tooltip, 
 
-; SetTimer, ButCapture,           50,              
-; SetTimer, LookForExplorerSpawn, 100,         
-; SetTimer, ReDetectAccentColor,  %fifteenMinutes%,
-; SetTimer, KeepOnTop,            5,               
-; SetTimer, WatchMouse,           100,             
-; SetTimer, CheckButtonSize,      100,             
-
 t_KeepOnTop := t_WatchMouse := t_CheckButtonSize := t_ButCapture := t_RedetectColor := t_CheckButtonColor := A_TickCount 
-SetTimer, MasterTimer, 5, -1
+SetTimer, MasterTimer, 20, -1
 
 Gui +LastFound
 hWnd := WinExist()
@@ -127,18 +120,21 @@ ShellMessage( wParam, lParam ) {
                 &&  (currentClass != "#32770"                        )
                 &&  (currentClass != "Shell_TrayWnd")
                 &&  (currentClass != "WorkerW"      ))
-            {
-                lastGoodHwnd    := currentHwnd
-                lastGoodCapture := currentClass
-                lastGoodExe     := currentExe
-                GoSub, CheckButtonSize
-                GoSub, ButCaptureCached
-            }
+           {
+               lastGoodHwnd    := currentHwnd
+               lastGoodCapture := currentClass
+               lastGoodExe     := currentExe
+               GoSub, CheckButtonSize
+               GoSub, ButCaptureCached
+           }
        }
     }
 }
 
 MasterTimer:
+    MouseGetPos, MXw, MYw, MouseWinHwnd
+    WinGetClass, wmClass, ahk_id %MouseWinHwnd%
+    
     If ((A_TickCount-t_WatchMouse) >= 100 && !SkipWatchmouse)
     {
         GoSub, WatchMouse
@@ -181,8 +177,6 @@ LookForExplorerSpawn:
 Return
 
 WatchMouse:
-    MouseGetPos, MXw, MYw, MouseWinHwnd
-    WinGetClass, wmClass, ahk_id %MouseWinHwnd%
     
     If ResetMousePosBkup
     {
@@ -192,20 +186,15 @@ WatchMouse:
     }
     
     FinishedLoop := True 
-    
-    If (wmClass != "Shell_TrayWnd" && WinActive("ahk_class " wmClass))
-    {
-        WinGet, lastActiveWinhwnd, ID, ahk_class %wmClass%
-    }
-    
+   
     If ((wmClass == "TaskListThumbnailWnd" || wmClass == "Windows.UI.Core.CoreWindow" || wmClass == "Notepad++" || wmClass == "#32770"))
     {
         try {
-        mEl         := UIA.ElementFromPoint(MXw,MYw)
-        minimizeEl  := mEl.FindFirstByNameAndType("Minimize", "Button", 2, False)
-        maximizeEl  := mEl.FindFirstByNameAndType("Maximize", "Button", 2, False)
-        closeEl     := mEl.FindFirstByNameAndType("Close",    "Button", 2, False)
-        overSpecial := True
+            mEl         := UIA.ElementFromPoint(MXw,MYw)
+            minimizeEl  := mEl.FindFirstByNameAndType("Minimize", "Button", 2, False)
+            maximizeEl  := mEl.FindFirstByNameAndType("Maximize", "Button", 2, False)
+            closeEl     := mEl.FindFirstByNameAndType("Close",    "Button", 2, False)
+            overSpecial := True
         }
         catch e {
         }
@@ -231,11 +220,11 @@ WatchMouse:
                 
                 If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -1*MouseMoveBuffer)) {
                     WinSet, AlwaysOnTop, On, %winId%
+                    LookForLeaveWindow := True
+                    HoveringWinHwnd    := MouseWinHwnd
                     MoveToTargetSpot(winId, 0-offL, WinX)
                     FadeToTargetTrans(winId, 255, 200)
-                    LookForLeaveWindow := True
                     FileAppend, WatchMouse - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-                    HoveringWinHwnd    := MouseWinHwnd
                     lastWindowPeaked   := True
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
                     AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
@@ -243,13 +232,13 @@ WatchMouse:
                 }
                 Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer)) {
                     WinSet, AlwaysOnTop, On, %winId%
+                    LookForLeaveWindow := True
+                    HoveringWinHwnd    := MouseWinHwnd
                     MoveToTargetSpot(winId, A_ScreenWidth-WinW-OffR, WinX)
                     FadeToTargetTrans(winId, 255, 200)
-                    LookForLeaveWindow := True
                     FileAppend, WatchMouse1 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-                    HoveringWinHwnd    := MouseWinHwnd
-                    lastWindowPeaked   := True
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
+                    lastWindowPeaked   := True
                     AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
                     Break
                 }
@@ -643,6 +632,10 @@ $MButton::
        KDE_WinUp := -1
 
     WinActivate, %EWD_winId%
+    If (WinActive("ahk_class " EWD_winClass) && EWD_winClass != "Shell_TrayWnd")
+    {
+        WinGet, lastActiveWinhwnd, ID, ahk_class %EWD_winClass%
+    }
     SetTimer, EWD_WatchDrag, 10 ; Track the mouse as the user drags it.
     SetTimer, CheckforTransparent, 50
     
@@ -1078,6 +1071,7 @@ CalculateWinScreenPercent(winId)
 
 FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
 {
+    Critical On
     transIncrement := 10
     If (targetValue != 255)
     {   
@@ -1102,11 +1096,13 @@ FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
             WinSet, Transparent, %init%, %winId%
         }
     }
+    Critical Off
    Return
 }
 
 MoveToTargetSpot(winId, targetX, orgX)
 {
+   Critical On
    If (targetX > orgX)
       moveIncrement := 120
    Else
@@ -1124,6 +1120,7 @@ MoveToTargetSpot(winId, targetX, orgX)
        }
        WinMove, %winId%,, targetX
    }
+   Critical Off
    Return
 }
 
@@ -1151,6 +1148,7 @@ Return
     SetTimer, MasterTimer, Off
     savedWin := False
     PossiblyChangedSize := False
+    savedIdx := -1
     MouseGetPos, lmx, lmy, ClickedWinHwnd
     WinGetClass, class, ahk_id %ClickedWinHwnd%
     mWinClickedID = ahk_id %ClickedWinHwnd%
@@ -1158,13 +1156,15 @@ Return
     LButtonPreviousTick1 := A_TickCount
     WinGetPos, lb_x, lb_y, lb_w, lb_h, %mWinClickedID%
     
+    If (WinActive("ahk_class " class) && class != "Shell_TrayWnd")
+    {
+        WinGet, lastActiveWinhwnd, ID, ahk_class %class%
+    }
+    
     for idx, val in PeaksArray {
         If (val == ("ahk_id " . ClickedWinHwnd)) {
             savedWin := True
-            HoveringWinHwnd := ClickedWinHwnd
-            LookForLeaveWindow := True
-            FileAppend, LButton1 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-            PossiblyChangedSize := True
+            savedIdx := idx
             break
         }
     }
@@ -1186,8 +1186,9 @@ Return
                 WinGetPos, gx, gy, gw, gh, ahk_id %guiHwnd%
                 WinGet, state, MinMax, %winHwndx_ID%
                 
-                If (lmx > gx && lmx < (gx+gw) && state == 0 && winHwnd != lastActiveWinhwnd)
+                If (lmx > gx && lmx < (gx+gw) && state == 0 && winHwndx != lastActiveWinhwnd)
                 {
+                    tooltip, % winHwndx "-" lastActiveWinhwnd
                     WinGetPosEx(winHwndx, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
                     
                     If (WinX < 0) {
@@ -1223,6 +1224,14 @@ Return
     
     LButtonPreviousTick2 := A_TickCount
     WinGetPos, lb_x2, lb_y2, lb_w2, lb_h2, %mWinClickedID%
+    
+    If (savedWin && (lb_w != lb_w2 || lb_h != lb_h2))
+    {
+        PossiblyChangedSize := True
+        LookForLeaveWindow := True
+        HoveringWinHwnd := ClickedWinHwnd
+    }
+    
     lb_xw  := lb_x + lb_w
     lb_xw2 := lb_x2 + lb_w2
     If ((abs(lb_xw - lb_xw2) > 5 || abs(lb_y - lb_y2) > 5) && (LButtonPreviousTick2-LButtonPreviousTick1) > 250)
