@@ -1148,7 +1148,6 @@ Return
     SetTimer, MasterTimer, Off
     savedWin := False
     PossiblyChangedSize := False
-    savedIdx := -1
     MouseGetPos, lmx, lmy, ClickedWinHwnd
     WinGetClass, class, ahk_id %ClickedWinHwnd%
     mWinClickedID = ahk_id %ClickedWinHwnd%
@@ -1164,7 +1163,6 @@ Return
     for idx, val in PeaksArray {
         If (val == ("ahk_id " . ClickedWinHwnd)) {
             savedWin := True
-            savedIdx := idx
             break
         }
     }
