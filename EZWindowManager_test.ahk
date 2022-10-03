@@ -31,12 +31,12 @@ fifteenMinutes := 1000*60*5
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
 
-WindowArray    := []
-PeaksArray     := []
-WinBackupXs    := []
-GuisCreated    := []
-scannedAhkIds  := []
-WinColorBkup   := []
+WindowArray     := []
+PeaksArray      := []
+WinBackupXs     := []
+GuisCreated     := []
+scannedAhkIds   := []
+WinBackupColors := []
 
 minButtonWidth       := 32
 percLeft             := 1.0
@@ -437,17 +437,8 @@ CheckButtonSize:
         taskButton1ElPos := buttonsElAr[buttonsElAr.MaxIndex()].CurrentBoundingRectangle
         firstButtonPosX := taskButton1ElPos.l
     }
-    winCount := windowEls.MaxIndex()
     
-    ; tooltip % winCountOld "," winCount "," ForceButtonRemove "," firstButtonPosX
-    ;---------- For Easy Printing of Results----------------
-    ; result := "Found " windowEls.MaxIndex() " buttons`n`n"
-    ; for i, el in windowEls
-        ; result .= i ": " el.Dump() "`n"
-    ; MsgBox, % result
-    ;-------------------------------------------------------
-
-    If ((winCountOld != winCount) || (firstButtonPosXOld != firstButtonPosX) || ForceButtonRemove)
+    If ((firstButtonPosXOld != firstButtonPosX) || ForceButtonRemove)
     {  
         If ForceButtonRemove
         {
@@ -525,7 +516,6 @@ CheckButtonSize:
              }
         }
     }
-    winCountOld := winCount    ;always keep up to date
     firstButtonPosXOld := firstButtonPosX
 Return 
 
@@ -563,9 +553,9 @@ CheckButtonColor:
              If (taskButtonElPos.l != 0)
              {
                  targetColor := SampleAccentColor(taskButtonElPos.l)
-                 If (targetColor != AccentColorHex && targetColor != WinColorBkup[winHwnd])
+                 If (targetColor != AccentColorHex && targetColor != WinBackupColors[winHwnd])
                  {
-                    WinColorBkup[winHwnd] := targetColor
+                    WinBackupColors[winHwnd] := targetColor
                     RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, wtf, True, False)
                  }
              }
@@ -1168,7 +1158,7 @@ Return
     }
 
     If !savedWin ; didn't left click on a peaked window
-    {
+    { 
         lastWindowPeaked := False
         
         If (class == "Shell_TrayWnd")
@@ -1193,9 +1183,6 @@ Return
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
                         MoveToTargetSpot(winHwndx_ID, 0-offL, WinX)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
-                        ; LookForLeaveWindow := True
-                        ; FileAppend, LButton2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-                        ; HoveringWinHwnd := ClickedWinHwnd
                         TaskbarPeak := True
                         Break
                     }
@@ -1203,9 +1190,6 @@ Return
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
                         MoveToTargetSpot(winHwndx_ID, A_ScreenWidth-WinW-OffR, WinX)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
-                        ; LookForLeaveWindow := True
-                        ; FileAppend, LButton2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-                        ; HoveringWinHwnd := ClickedWinHwnd
                         TaskbarPeak := True
                         Break
                     }
@@ -1221,6 +1205,10 @@ Return
     KeyWait, LButton, T30
     
     LButtonPreviousTick2 := A_TickCount
+    
+    If ((LButtonPreviousTick2 - LButtonPreviousTick2_old) < DoubleClickTime)
+        Gosub, SendCtrlAdd
+    
     WinGetPos, lb_x2, lb_y2, lb_w2, lb_h2, %mWinClickedID%
     
     If (savedWin && (lb_w != lb_w2 || lb_h != lb_h2))
@@ -1276,6 +1264,7 @@ Return
         PrintButton := True
         Gosub, ButCaptureCached
     }
+    LButtonPreviousTick2_old := LButtonPreviousTick2
     Wheel_disabled :=  False ; catchall in case for some reason wheel is still disabled
     SetTimer, MasterTimer, On
 Return 
@@ -1838,7 +1827,7 @@ CleanUpStoredWindow(ahkId := "", hwnd := "")
     {
         PeaksArray.remove(removeIdx)
         WinBackupXs.remove(hwnd)
-        WinColorBkup.remove(hwnd)
+        WinBackupColors.remove(hwnd)
         LastRemovedWinHwnd := hwnd
         LookForLeaveWindow := False
         FileAppend, CleanUpStoredWindow - %LookForLeaveWindow% - %ahkId% - %hwnd%`n, C:\Users\vbonaven\Desktop\log.txt
