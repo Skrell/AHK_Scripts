@@ -135,27 +135,27 @@ MasterTimer:
     MouseGetPos, MXw, MYw, MouseWinHwnd
     WinGetClass, wmClass, ahk_id %MouseWinHwnd%
     
-    If ((A_TickCount-t_WatchMouse) >= 100 && !SkipWatchmouse)
+    If ((A_TickCount-t_WatchMouse) >= 100)
     {
         GoSub, WatchMouse
         t_WatchMouse := A_TickCount
     }
-    Else If (((A_TickCount-t_CheckButtonSize) >= 200) && !SkipCheckButtonSize)
+    Else If (((A_TickCount-t_CheckButtonSize) >= 200))
     {
         GoSub, CheckButtonSize
         t_CheckButtonSize := A_TickCount
     }
-    Else If (((A_TickCount-t_CheckButtonColor) >= 200) && !SkipCheckButtonColor)
+    Else If (((A_TickCount-t_CheckButtonColor) >= 100))
     {
         GoSub, CheckButtonColor
         t_CheckButtonColor := A_TickCount
     }
-    Else If (((A_TickCount-t_RedetectColor) >= fifteenMinutes) && !SkipRedetectColor)
+    Else If (((A_TickCount-t_RedetectColor) >= fifteenMinutes))
     {
         GoSub, ReDetectAccentColor
         t_RedetectColor := A_TickCount
     }
-    Else If ((A_TickCount-t_KeepOnTop) >= 5 && !SkipKeepOnTop)
+    Else If ((A_TickCount-t_KeepOnTop) >= 5)
     {
         GoSub, KeepOnTop
         t_KeepOnTop := A_TickCount
@@ -478,21 +478,26 @@ CheckButtonSize:
         
         for winHwnd, winXpos in WinBackupXs {
              winHwndX := Format("{:#x}", winHwnd)
-             FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %winHwndX%`n, C:\Users\vbonaven\Desktop\log.txt
+             ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %winHwndX%`n, C:\Users\vbonaven\Desktop\log.txt
              buttonWinId = ahk_id %winHwnd%
              WinGet, wProcess, ProcessName, %buttonWinId%
              WinGetTitle, wTitle, %buttonWinId%
-             regexTitle := wTitle . ".*running"
+             preparedTitle1 := StrReplace(wTitle, "\", "\\")
+             preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
+             regexTitle := preparedTitle2 . ".*running"
              wtf := Format("{:#x}", winHwnd)
-             FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Hex: %wtf%`n, C:\Users\vbonaven\Desktop\log.txt
              buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
+             ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %regexTitle%`n, C:\Users\vbonaven\Desktop\log.txt
              
              If (!buttonEl)
              {
                 for index, subtitle in StrSplit(wTitle, [" - ", " | ", " "])
                 {
-                    regexSub := subtitle . ".*running"
+                    preparedTitle1 := StrReplace(subtitle, "\", "\\")
+                    preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
+                    regexSub := preparedTitle2 . ".*running"
                     buttonEl := toolbarEl.FindFirstByNameAndType(regexSub, "Button", 0x4, "RegEx", False)
+                    ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %regexSub%`n, C:\Users\vbonaven\Desktop\log.txt
                     If (buttonEl != "")
                         break
                 }
@@ -501,8 +506,11 @@ CheckButtonSize:
              If (!buttonEl)
              {
                 procNameArray := StrSplit(wProcess, ".")
-                regexTitle := "i).*" . procNameArray[1] . ".*running"
+                preparedTitle1 := StrReplace(procNameArray[1], "\", "\\")
+                preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
+                regexTitle := "i).*" . preparedTitle2 . ".*running"
                 buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
+                ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %regexTitle%`n, C:\Users\vbonaven\Desktop\log.txt
              }
              
              If (buttonEl)
@@ -521,11 +529,12 @@ Return
 
 CheckButtonColor:
     for winHwnd, winXpos in WinBackupXs {
-         winHwndX := Format("{:#x}", winHwnd)
          buttonWinId = ahk_id %winHwnd%
          WinGet, wProcess, ProcessName, %buttonWinId%
          WinGetTitle, wTitle, %buttonWinId%
-         regexTitle := wTitle . ".*running"
+         preparedTitle1 := StrReplace(wTitle, "\", "\\")
+         preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
+         regexTitle := preparedTitle2 . ".*running"
          wtf := Format("{:#x}", winHwnd)
          buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
          
@@ -533,7 +542,9 @@ CheckButtonColor:
          {
             for index, subtitle in StrSplit(wTitle, [" - ", " | ", " "])
             {
-                regexSub := subtitle . ".*running"
+                preparedTitle1 := StrReplace(subtitle, "\", "\\")
+                preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
+                regexSub := preparedTitle2 . ".*running"
                 buttonEl := toolbarEl.FindFirstByNameAndType(regexSub, "Button", 0x4, "RegEx", False)
                 If (buttonEl != "")
                     break
@@ -543,7 +554,9 @@ CheckButtonColor:
          If (!buttonEl)
          {
             procNameArray := StrSplit(wProcess, ".")
-            regexTitle := "i).*" . procNameArray[1] . ".*running"
+            preparedTitle1 := StrReplace(procNameArray[1], "\", "\\")
+            preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
+            regexTitle := "i).*" . preparedTitle2 . ".*running"
             buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
          }
          
