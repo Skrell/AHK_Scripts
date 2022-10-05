@@ -34,9 +34,9 @@ SysGet, MonitorWorkArea, MonitorWorkArea
 WindowArray     := []
 PeaksArray      := []
 WinBackupXs     := []
+WinBackupColors := []
 GuisCreated     := []
 scannedAhkIds   := []
-WinBackupColors := []
 
 minButtonWidth       := 32
 percLeft             := 1.0
@@ -56,6 +56,7 @@ SkipRedetectColor    := False
 SkipCheckButtonSize  := False
 SkipCheckButtonColor := False
 SkipWatchmouse       := False
+ForceButtonCheck     := False
 
 minDimsAhkId   := {}
 maxDimsAhkId   := {}
@@ -84,6 +85,8 @@ global AccentColorHex := SampleAccentColor()
 
 BlockInput, Off
 Tooltip, %AccentColorHex%
+WinGet, procName, ProcessName, "7-Zip File Manager"
+Tooltip, %procName%
 sleep 2000
 Tooltip, 
 
@@ -155,10 +158,10 @@ MasterTimer:
         GoSub, ReDetectAccentColor
         t_RedetectColor := A_TickCount
     }
-    Else If ((A_TickCount-t_KeepOnTop) >= 5)
+    Else ;  If ((A_TickCount-t_KeepOnTop) >= 5)
     {
         GoSub, KeepOnTop
-        t_KeepOnTop := A_TickCount
+        ; t_KeepOnTop := A_TickCount
     }
 Return
 
@@ -479,13 +482,14 @@ CheckButtonSize:
         for winHwnd, winXpos in WinBackupXs {
              winHwndX := Format("{:#x}", winHwnd)
              ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %winHwndX%`n, C:\Users\vbonaven\Desktop\log.txt
+             buttonMargin := 0
              buttonWinId = ahk_id %winHwnd%
              WinGet, wProcess, ProcessName, %buttonWinId%
+
              WinGetTitle, wTitle, %buttonWinId%
              preparedTitle1 := StrReplace(wTitle, "\", "\\")
              preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
              regexTitle := preparedTitle2 . ".*running"
-             wtf := Format("{:#x}", winHwnd)
              buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
              ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %regexTitle%`n, C:\Users\vbonaven\Desktop\log.txt
              
@@ -497,29 +501,56 @@ CheckButtonSize:
                     preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
                     regexSub := preparedTitle2 . ".*running"
                     buttonEl := toolbarEl.FindFirstByNameAndType(regexSub, "Button", 0x4, "RegEx", False)
-                    ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %regexSub%`n, C:\Users\vbonaven\Desktop\log.txt
-                    If (buttonEl != "")
+                    If (!buttonEl)
+                        buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "MenuItem", 0x4, "RegEx", False)
+                    Else If (buttonEl != "")
+                    {
+                        ; If !InStr(buttonEl.CurrentName, "1 running")
+                            ; groupedWindows := True
                         break
+                    }
                 }
              }
              
              If (!buttonEl)
              {
-                procNameArray := StrSplit(wProcess, ".")
+                procNameArray  := StrSplit(wProcess, ".")
                 preparedTitle1 := StrReplace(procNameArray[1], "\", "\\")
                 preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
                 regexTitle := "i).*" . preparedTitle2 . ".*running"
                 buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
-                ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %regexTitle%`n, C:\Users\vbonaven\Desktop\log.txt
+                
+                If (!buttonEl)
+                    buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "MenuItem", 0x4, "RegEx", False)
              }
+             ; Else
+             ; {
+                ; If !InStr(buttonEl.CurrentName, "1 running")
+                    ; groupedWindows := True
+             ; }
+             
+             If (!buttonEl)
+             {
+                typeString := % "AutomationId=" wProcess " OR Automation=" procNameArray[1]
+                buttonEl := toolbarEl.FindFirstBy(typeString, 0x4, 2, False)
+             }
+             ; Else
+             ; {
+                ; If !InStr(buttonEl.CurrentName, "1 running")
+                    ; groupedWindows := True
+             ; }
              
              If (buttonEl)
              {
                  taskButtonElPos := buttonEl.CurrentBoundingRectangle
                  If (taskButtonElPos.l != 0)
                  {
+                      ; If (groupedWindows && WinActive("ahk_exe " wProcess))
+                         ; buttonMargin := 4
+                      ; Else If groupedWindows
+                         ; buttonMargin := 13
                      targetColor := SampleAccentColor(taskButtonElPos.l)
-                     RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, wtf, True)
+                     RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l-buttonMargin, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, winHwndX, True)
                  }
              }
         }
@@ -529,13 +560,15 @@ Return
 
 CheckButtonColor:
     for winHwnd, winXpos in WinBackupXs {
+         groupedWindows := False
+         buttonMargin := 0
          buttonWinId = ahk_id %winHwnd%
          WinGet, wProcess, ProcessName, %buttonWinId%
          WinGetTitle, wTitle, %buttonWinId%
          preparedTitle1 := StrReplace(wTitle, "\", "\\")
          preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
          regexTitle := preparedTitle2 . ".*running"
-         wtf := Format("{:#x}", winHwnd)
+         winHwndX := Format("{:#x}", winHwnd)
          buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
          
          If (!buttonEl)
@@ -546,33 +579,78 @@ CheckButtonColor:
                 preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
                 regexSub := preparedTitle2 . ".*running"
                 buttonEl := toolbarEl.FindFirstByNameAndType(regexSub, "Button", 0x4, "RegEx", False)
-                If (buttonEl != "")
+                If (!buttonEl)
+                    buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "MenuItem", 0x4, "RegEx", False)
+                Else If (buttonEl != "")
+                {
+                    ; If !InStr(buttonEl.CurrentName, "1 running")
+                        ; groupedWindows := True
                     break
+                }
             }
          }
          
          If (!buttonEl)
          {
-            procNameArray := StrSplit(wProcess, ".")
+            procNameArray  := StrSplit(wProcess, ".")
             preparedTitle1 := StrReplace(procNameArray[1], "\", "\\")
             preparedTitle2 := StrReplace(preparedTitle1, ".", "\.")
             regexTitle := "i).*" . preparedTitle2 . ".*running"
             buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "Button", 0x4, "RegEx", False)
+            
+            If (!buttonEl)
+                buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "MenuItem", 0x4, "RegEx", False)
          }
+         ; Else
+         ; {
+            ; If !InStr(buttonEl.CurrentName, "1 running")
+                ; groupedWindows := True
+         ; }
          
+         If (!buttonEl)
+         {
+            typeString := % "AutomationId=" wProcess " OR Automation=" procNameArray[1]
+            buttonEl := toolbarEl.FindFirstBy(typeString, 0x4, 2, False)
+         }
+         ; Else
+         ; {
+            ; If !InStr(buttonEl.CurrentName, "1 running")
+                ; groupedWindows := True
+         ; }
+             
          If (buttonEl)
          {
              taskButtonElPos := buttonEl.CurrentBoundingRectangle
              If (taskButtonElPos.l != 0)
              {
                  targetColor := SampleAccentColor(taskButtonElPos.l)
-                 If (targetColor != AccentColorHex && targetColor != WinBackupColors[winHwnd])
+
+                 If !(HasKey(WinBackupColors, winHwnd))
                  {
+                    ; tooltip, % "1)"targetColor "-" AccentColorHex "-" bla
                     WinBackupColors[winHwnd] := targetColor
-                    RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, wtf, True, False)
                  }
+                 Else
+                 {
+                     storedColor := WinBackupColors[winHwnd]
+
+                     If (targetColor != storedColor)
+                     {
+                        ; If (groupedWindows && WinActive("ahk_exe " wProcess))
+                            ; buttonMargin := 4
+                        ; Else If groupedWindows
+                            ; buttonMargin := 13
+                        WinBackupColors[winHwnd] := targetColor
+                        RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l-buttonMargin, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, wtf, True, False)
+                     }
+                 }
+                 
              }
          }
+    }
+    If ForceButtonCheck
+    {
+        ForceButtonCheck := False
     }
 Return
 
@@ -1279,6 +1357,7 @@ Return
     }
     LButtonPreviousTick2_old := LButtonPreviousTick2
     Wheel_disabled :=  False ; catchall in case for some reason wheel is still disabled
+    ForceButtonCheck := True
     SetTimer, MasterTimer, On
 Return 
 
@@ -2034,4 +2113,20 @@ SessionIsLocked()
         DllCall("wtsapi32\WTSFreeMemory", "Ptr", sesInfo)
     }
     Return ret
+}
+HasVal(haystack, needle) {
+    for index, value in haystack
+        if (value == needle)
+            return True
+    if !(IsObject(haystack))
+        throw Exception("Bad haystack!", -1, haystack)
+    return False
+}
+HasKey(haystack, needle) {
+    for index, value in haystack
+        if (index == needle)
+            return True
+    if !(IsObject(haystack))
+        throw Exception("Bad haystack!", -1, haystack)
+    return False
 }
