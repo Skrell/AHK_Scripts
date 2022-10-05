@@ -481,6 +481,8 @@ CheckButtonSize:
         
         for winHwnd, winXpos in WinBackupXs {
              winHwndX := Format("{:#x}", winHwnd)
+             If !winHwndX
+                continue 
              ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %winHwndX%`n, C:\Users\vbonaven\Desktop\log.txt
              buttonMargin := 0
              buttonWinId = ahk_id %winHwnd%
