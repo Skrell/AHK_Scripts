@@ -15,6 +15,16 @@ CoordMode, Pixel, Screen
 #Include %A_ScriptDir%\WinGetPosEx.ahk 
 ; #Include %A_ScriptDir%\RunAsAdmin.ahk
 #Include %A_ScriptDir%\UIA_Interface.ahk 
+; #Include %A_ScriptDir%\Gdip_All.ahk
+
+; ; Start gdi+
+; If !pToken := Gdip_Startup()
+; {
+	; MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
+	; ExitApp
+; }
+
+; OnExit, Exit
 
 Wheel_disabled := False
 TransparentValue := 120
@@ -138,30 +148,36 @@ MasterTimer:
     MouseGetPos, MXw, MYw, MouseWinHwnd
     WinGetClass, wmClass, ahk_id %MouseWinHwnd%
     
-    If ((A_TickCount-t_WatchMouse) >= 100)
+    If (wmClass == "Shell_TrayWnd")
     {
-        GoSub, WatchMouse
-        t_WatchMouse := A_TickCount
-    }
-    Else If (((A_TickCount-t_CheckButtonSize) >= 200))
-    {
-        GoSub, CheckButtonSize
-        t_CheckButtonSize := A_TickCount
-    }
-    Else If (((A_TickCount-t_CheckButtonColor) >= 100))
-    {
-        GoSub, CheckButtonColor
-        t_CheckButtonColor := A_TickCount
-    }
-    Else If (((A_TickCount-t_RedetectColor) >= fifteenMinutes))
-    {
-        GoSub, ReDetectAccentColor
-        t_RedetectColor := A_TickCount
-    }
-    Else ;  If ((A_TickCount-t_KeepOnTop) >= 5)
-    {
+        SetTimer, MasterTimer, 1, -1
         GoSub, KeepOnTop
-        ; t_KeepOnTop := A_TickCount
+        GoSub, WatchMouse
+    }
+    Else
+    {
+        SetTimer, MasterTimer, 20, -1
+        If ((A_TickCount-t_WatchMouse) >= 100)
+        {
+            GoSub, WatchMouse
+            t_WatchMouse := A_TickCount
+        }
+        Else If (((A_TickCount-t_CheckButtonSize) >= 200))
+        {
+            GoSub, CheckButtonSize
+            t_CheckButtonSize := A_TickCount
+        }
+        Else If (((A_TickCount-t_CheckButtonColor) >= 100))
+        {
+            GoSub, CheckButtonColor
+            t_CheckButtonColor := A_TickCount
+        }
+        Else If (((A_TickCount-t_RedetectColor) >= fifteenMinutes))
+        {
+            GoSub, ReDetectAccentColor
+            t_RedetectColor := A_TickCount
+        }
+        GoSub, KeepOnTop
     }
 Return
 
@@ -643,7 +659,7 @@ CheckButtonColor:
                         ; Else If groupedWindows
                             ; buttonMargin := 13
                         WinBackupColors[winHwnd] := targetColor
-                        RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l-buttonMargin, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, wtf, True, False)
+                        RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l-buttonMargin, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, winHwndX, True, False)
                      }
                  }
                  
@@ -1969,7 +1985,7 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winHwnd:=0, print:=False,
         If print
            FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - creating Range_%winHwnd%_3`n, C:\Users\vbonaven\Desktop\log.txt
            
-        Gui, Range_%winHwnd%_3:New, +AlwaysOnTop -Caption +ToolWindow +HwndLinesHwnd -DPIScale +E0x08000000
+        Gui, Range_%winHwnd%_3:New, +AlwaysOnTop -Caption +ToolWindow +HwndLinesHwnd -DPIScale +E0x08000000 +E0x20 -Caption +Owner +LastFound
         
         i:=3
         , x1:=(i=2 ? x+w : x-d)
@@ -2132,3 +2148,10 @@ HasKey(haystack, needle) {
         throw Exception("Bad haystack!", -1, haystack)
     return False
 }
+
+;#######################################################################
+; Exit:
+; ; gdi+ may now be shutdown on exiting the program
+; Gdip_Shutdown(pToken)
+; ExitApp
+; Return
