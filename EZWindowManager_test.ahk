@@ -157,7 +157,7 @@ MasterTimer:
     Else
     {
         SetTimer, MasterTimer, 20, -1
-        If ((A_TickCount-t_WatchMouse) >= 100)
+        If ((A_TickCount-t_WatchMouse) >= 80)
         {
             GoSub, WatchMouse
             t_WatchMouse := A_TickCount
@@ -301,8 +301,9 @@ WatchMouse:
     {
         If (HoveringWinHwnd != MouseWinHwnd)
         {
-            WinGetTitle, title, ahk_id %MouseWinHwnd%
-            FileAppend, Hovering over %title%`n, C:\Users\vbonaven\Desktop\log.txt
+            WinGetTitle, ti, ahk_id %MouseWinHwnd%
+            WinGetClass, cl, ahk_id %MouseWinHwnd%  
+            FileAppend, % "Hovering over " ti "-" cl "- size: " GetSize(WinBackupXs) "`n", C:\Users\vbonaven\Desktop\log.txt
             for k, v in WinBackupXs 
             {
                If (k == HoveringWinHwnd)
@@ -339,6 +340,8 @@ WatchMouse:
                             newOrgX := A_ScreenWidth-ceil(percLeft*(WinW*WinH)/WinH)
 
                           WinBackupXs[HoveringWinHwnd] := newOrgX
+                          xsize := GetSize(WinBackupXs)
+                          FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - size: %xsize%`n, C:\Users\vbonaven\Desktop\log.txt
                           PossiblyChangedSize := False
                       }
 
@@ -461,6 +464,7 @@ CheckButtonSize:
     {  
         If ForceButtonRemove
         {
+            FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - ForceButtonRemove`n, C:\Users\vbonaven\Desktop\log.txt
             RangeTip( , , , , , , Format("{:#x}", LastRemovedWinHwnd), True)
             ForceButtonRemove := False
         }
@@ -483,16 +487,17 @@ CheckButtonSize:
         If FoundStray
         {
            arr := join(WinBackupXs)
-           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Array: %arr%`n, C:\Users\vbonaven\Desktop\log.txt
+           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - XArray: %arr%`n, C:\Users\vbonaven\Desktop\log.txt
            FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Stray %winHwndX%`n, C:\Users\vbonaven\Desktop\log.txt
            WinBackupXs.remove(winHwndX)
+           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - FoundStray`n, C:\Users\vbonaven\Desktop\log.txt
            RangeTip( , , , , , , Format("{:#x}", winHwndX), False)
         }
         
         If (WinBackupXs.MaxIndex() > 0)
         {
             arr := join(WinBackupXs)
-            FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Array: %arr%`n, C:\Users\vbonaven\Desktop\log.txt
+            FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - XArray: %arr%`n, C:\Users\vbonaven\Desktop\log.txt
         }
         
         for winHwnd, winXpos in WinBackupXs {
@@ -563,10 +568,7 @@ CheckButtonSize:
                  taskButtonElPos := buttonEl.CurrentBoundingRectangle
                  If (taskButtonElPos.l != 0)
                  {
-                      ; If (groupedWindows && WinActive("ahk_exe " wProcess))
-                         ; buttonMargin := 4
-                      ; Else If groupedWindows
-                         ; buttonMargin := 13
+                     FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Normal`n, C:\Users\vbonaven\Desktop\log.txt
                      targetColor := SampleAccentColor(taskButtonElPos.l)
                      RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l-buttonMargin, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, winHwndX, True)
                  }
@@ -654,10 +656,7 @@ CheckButtonColor:
 
                      If (targetColor != storedColor)
                      {
-                        ; If (groupedWindows && WinActive("ahk_exe " wProcess))
-                            ; buttonMargin := 4
-                        ; Else If groupedWindows
-                            ; buttonMargin := 13
+                        FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CheckButtonColor`n, C:\Users\vbonaven\Desktop\log.txt
                         WinBackupColors[winHwnd] := targetColor
                         RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l-buttonMargin, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, winHwndX, True, False)
                      }
@@ -783,7 +782,8 @@ EWD_WatchDrag:
                 FadeToTargetTrans(EWD_winId, 200, TransparentValue)
               PeaksArray.push(EWD_winId)
               WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
-              FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Make %EWD_MouseWinHwnd%:%EWD_WinX%`n, C:\Users\vbonaven\Desktop\log.txt
+              xsize := GetSize(WinBackupXs)
+              FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Make %EWD_MouseWinHwnd%:%EWD_WinX% size: %xsize%`n, C:\Users\vbonaven\Desktop\log.txt
               ForceButtonRemove := True
               ResetMousePosBkup := True
               WinSet, Bottom, , %EWD_winId%
@@ -823,6 +823,8 @@ EWD_WatchDrag:
                  FileAppend, EWD_WatchDrag - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                  PeaksArray.remove(removeIdx)
                  WinBackupXs.remove(EWD_MouseWinHwnd)
+                 xsize := GetSize(WinBackupXs)
+                 FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - size: %xsize%`n, C:\Users\vbonaven\Desktop\log.txt
               }
               
            }
@@ -1561,6 +1563,8 @@ ButCapture:
                 {
                     PeaksArray.remove(removeIdx)
                     WinBackupXs.remove(mHwnd)
+                    xsize := GetSize(WinBackupXs)
+                    FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - size: %xsize%`n, C:\Users\vbonaven\Desktop\log.txt
                     LastRemovedWinHwnd :=mHwnd
                     ForceButtonRemove  := True
                 }
@@ -1584,7 +1588,7 @@ ButCapture:
         
         }
         PrintButton := False
-        sleep 1000
+        sleep 750
         Tooltip, 
     }    
     mXbc_bkup := mXbc
@@ -1910,6 +1914,8 @@ ButCaptureCached:
                 }   
             }
             PrintButton := False
+            sleep 750 
+            Tooltip, 
          ; FileAppend,  %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - DONE1 ========================================`n, C:\Users\vbonaven\Desktop\log2.txt 
         } catch e {
         
@@ -2132,6 +2138,7 @@ SessionIsLocked()
     }
     Return ret
 }
+
 HasVal(haystack, needle) {
     for index, value in haystack
         if (value == needle)
@@ -2149,6 +2156,13 @@ HasKey(haystack, needle) {
     return False
 }
 
+GetSize(haystack)
+{
+    size := 0
+    for index, value in haystack
+        size += 1
+    return size
+}
 ;#######################################################################
 ; Exit:
 ; ; gdi+ may now be shutdown on exiting the program
