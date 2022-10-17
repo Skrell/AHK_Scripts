@@ -1348,10 +1348,15 @@ Return
     
     LButtonPreviousTick2 := A_TickCount
     
-    If (class == "WorkerW")
+    MouseGetPos, , , ClickedWinHwndU
+    WinGetClass, classU, ahk_id %ClickedWinHwndU%
+    
+    If (classU == "WorkerW")
         showDesktopU := True
     
     If showDesktopD && showDesktopU
+        DesktopIcons(True)
+    Else If (!showDesktopD && showDesktopU)
         DesktopIcons(True)
     Else
     {
