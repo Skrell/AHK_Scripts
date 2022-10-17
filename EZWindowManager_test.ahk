@@ -15,16 +15,6 @@ CoordMode, Pixel, Screen
 #Include %A_ScriptDir%\WinGetPosEx.ahk 
 ; #Include %A_ScriptDir%\RunAsAdmin.ahk
 #Include %A_ScriptDir%\UIA_Interface.ahk 
-; #Include %A_ScriptDir%\Gdip_All.ahk
-
-; ; Start gdi+
-; If !pToken := Gdip_Startup()
-; {
-	; MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
-	; ExitApp
-; }
-
-; OnExit, Exit
 
 Wheel_disabled := False
 TransparentValue := 120
@@ -47,13 +37,14 @@ WinBackupXs     := []
 WinBackupColors := []
 GuisCreated     := []
 scannedAhkIds   := []
+CmenuArrayIds   := []
 
 minButtonWidth       := 32
 percLeft             := 1.0
 edgePercentage       := .04
 HoveringWinHwnd      := 
 lastWindowPeaked     := False
-MouseMoveBuffer      := 50
+MouseMoveBuffer      := 100
 PrintButton          := False
 PossiblyChangedSize  := False
 ForceButtonRemove    := False
@@ -102,6 +93,7 @@ Tooltip,
 
 t_KeepOnTop := t_WatchMouse := t_CheckButtonSize := t_ButCapture := t_RedetectColor := t_CheckButtonColor := A_TickCount 
 SetTimer, MasterTimer, 20, -1
+SetTimer, OtherTimer, 500
 
 Gui +LastFound
 hWnd := WinExist()
@@ -144,9 +136,43 @@ ShellMessage( wParam, lParam ) {
     }
 }
 
+OtherTimer:
+    MouseGetPos, , , otherMouseWinHwnd
+    WinGetClass, otherClass, ahk_id %otherMouseWinHwnd%
+    If (lButtonDrag && otherClass == "WorkerW")
+    {
+        DesktopIcons(True)
+    }
+Return
+
 MasterTimer:
+    If (GetKeyState("MButton", "P"))
+    {
+        sleep 1000
+        Return
+    }
+    
     MouseGetPos, MXw, MYw, MouseWinHwnd
     WinGetClass, wmClass, ahk_id %MouseWinHwnd%
+
+    If WinExist("ahk_class #32768")
+    {
+        WinGet, chwnd, ID, ahk_class #32768
+        If !(HasVal(CmenuArrayIds, chwnd))
+        {
+            CmenuArrayIds.push(chwnd)
+            for idx, chwnd in CmenuArrayIds
+            {
+                If WinExist("ahk_id " . chwnd)
+                    WinSet, AlwaysOnTop, On, ahk_id %chwnd%
+            }
+        }
+        ; tooltip, % join(CmenuArrayIds)
+    }
+    Else
+    {
+        CmenuArrayIds := []
+    }
     
     If (wmClass == "Shell_TrayWnd")
     {
@@ -196,7 +222,6 @@ LookForExplorerSpawn:
 Return
 
 WatchMouse:
-    
     If ResetMousePosBkup
     {
         MXw_bkup := MXw
@@ -237,7 +262,7 @@ WatchMouse:
                 WinGet, winHwnd, ID, %winId%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
                 
-                If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < -1*MouseMoveBuffer)) {
+                If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < (-1*MouseMoveBuffer)) || (MXw == 0 &&  MXw_bkup == 0)) {
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
@@ -249,7 +274,7 @@ WatchMouse:
                     AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
                     Break
                 }
-                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer)) {
+                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer) || (MXw == A_ScreenWidth && MXw_bkup == A_ScreenWidth)) {
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
@@ -656,7 +681,7 @@ CheckButtonColor:
 
                      If (targetColor != storedColor)
                      {
-                        FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CheckButtonColor`n, C:\Users\vbonaven\Desktop\log.txt
+                        FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - CheckButtonColor - %targetColor% vs %storedColor%`n, C:\Users\vbonaven\Desktop\log.txt
                         WinBackupColors[winHwnd] := targetColor
                         RangeTip(taskButtonElPos.l, taskButtonElPos.t, taskButtonElPos.r-taskButtonElPos.l-buttonMargin, taskButtonElPos.b-taskButtonElPos.t, targetColor, 2, winHwndX, True, False)
                      }
@@ -951,7 +976,7 @@ EWD_WatchDrag:
             }
             Else If (WinLEdge) ; && (EWD_MouseX - EWD_MouseOrgX) > 0)
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) > floor(MouseMoveBuffer/3))
+                If ((EWD_MouseX - EWD_MouseOrgX) > floor(MouseMoveBuffer/4))
                 {
                     ; Tooltip, "3"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -961,7 +986,7 @@ EWD_WatchDrag:
             }
             Else If (WinREdge) ; && (EWD_MouseX - EWD_MouseOrgX) < 0) 
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) < ceil(-1*MouseMoveBuffer/3))
+                If ((EWD_MouseX - EWD_MouseOrgX) < ceil(-1*MouseMoveBuffer/4))
                 {
                     ; Tooltip, "4"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -1247,6 +1272,9 @@ Return
 !LButton::
 ~LButton::
     SetTimer, MasterTimer, Off
+    lButtonDrag := True
+    showDesktopD := False
+    showDesktopU := False
     savedWin := False
     PossiblyChangedSize := False
     MouseGetPos, lmx, lmy, ClickedWinHwnd
@@ -1255,6 +1283,9 @@ Return
     WinGet, mWinClickeHwnd, ID, %mWinClickedID%
     LButtonPreviousTick1 := A_TickCount
     WinGetPos, lb_x, lb_y, lb_w, lb_h, %mWinClickedID%
+    
+    If (class == "WorkerW")
+        showDesktopD := True
     
     If (WinActive("ahk_class " class) && class != "Shell_TrayWnd")
     {
@@ -1317,64 +1348,76 @@ Return
     
     LButtonPreviousTick2 := A_TickCount
     
-    If ((LButtonPreviousTick2 - LButtonPreviousTick2_old) < DoubleClickTime)
-        Gosub, SendCtrlAdd
+    If (class == "WorkerW")
+        showDesktopU := True
     
-    WinGetPos, lb_x2, lb_y2, lb_w2, lb_h2, %mWinClickedID%
-    
-    If (savedWin && (lb_w != lb_w2 || lb_h != lb_h2))
+    If showDesktopD && showDesktopU
+        DesktopIcons(True)
+    Else
     {
-        PossiblyChangedSize := True
-        LookForLeaveWindow := True
-        HoveringWinHwnd := ClickedWinHwnd
-    }
-    
-    lb_xw  := lb_x + lb_w
-    lb_xw2 := lb_x2 + lb_w2
-    If ((abs(lb_xw - lb_xw2) > 5 || abs(lb_y - lb_y2) > 5) && (LButtonPreviousTick2-LButtonPreviousTick1) > 250)
-    {
-        foundClickedId := False
-        for shwnds, c in scannedAhkIds
+        DesktopIcons(False)
+
+        If ((LButtonPreviousTick2 - LButtonPreviousTick2_old) < DoubleClickTime)
+            Gosub, SendCtrlAdd
+        
+        WinGetPos, lb_x2, lb_y2, lb_w2, lb_h2, %mWinClickedID%
+        
+        If (savedWin && (lb_w != lb_w2 || lb_h != lb_h2))
         {
-            If (shwnds == mWinClickedID)
-            {
-                foundClickedId := True
-                break
-            }
+            PossiblyChangedSize := True
+            LookForLeaveWindow := True
+            HoveringWinHwnd := ClickedWinHwnd
         }
         
-        If foundClickedId
-            AdjustWinDims(mWinClickedID, lb_xw2-lb_xw, lb_y2-lb_y)
-        Else
+        lb_xw  := lb_x + lb_w
+        lb_xw2 := lb_x2 + lb_w2
+        If ((abs(lb_xw - lb_xw2) > 5 || abs(lb_y - lb_y2) > 5) && (LButtonPreviousTick2-LButtonPreviousTick1) > 250)
         {
-            WinGetTitle, currentTitle, %mWinClickedID%
-            If currentTitle
+            foundClickedId := False
+            for shwnds, c in scannedAhkIds
             {
-                WinGet, currentExe, ProcessName, %mWinClickedID%
-                If ( WinExist(mWinClickedID) 
-                     &&  (class != "tooltips_class32")
-                     &&  (class != "Windows.UI.Core.CoreWindow" )
-                     &&  (class != "TaskListThumbnailWnd" )
-                     &&  (class != "MSO_BORDEREFFECT_WINDOW_CLASS" )
-                     &&  (class != "MultitaskingViewFrame"         )
-                     &&  (class != "#32768"                        )
-                     &&  (class != "#32770"                        )
-                     &&  (class != "Shell_TrayWnd")
-                     &&  (class != "WorkerW"      ))
-                 {
-                     lastGoodHwnd    := mWinClickeHwnd
-                     lastGoodCapture := class
-                     lastGoodExe     := currentExe
-                     GoSub, ButCaptureCached
-                 }
+                If (shwnds == mWinClickedID)
+                {
+                    foundClickedId := True
+                    break
+                }
+            }
+            
+            If foundClickedId
+                AdjustWinDims(mWinClickedID, lb_xw2-lb_xw, lb_y2-lb_y)
+            Else
+            {
+                WinGetTitle, currentTitle, %mWinClickedID%
+                If currentTitle
+                {
+                    WinGet, currentExe, ProcessName, %mWinClickedID%
+                    If ( WinExist(mWinClickedID) 
+                         &&  (class != "tooltips_class32")
+                         &&  (class != "Windows.UI.Core.CoreWindow" )
+                         &&  (class != "TaskListThumbnailWnd" )
+                         &&  (class != "MSO_BORDEREFFECT_WINDOW_CLASS" )
+                         &&  (class != "MultitaskingViewFrame"         )
+                         &&  (class != "#32768"                        )
+                         &&  (class != "#32770"                        )
+                         &&  (class != "Shell_TrayWnd")
+                         &&  (class != "WorkerW"      ))
+                     {
+                         lastGoodHwnd    := mWinClickeHwnd
+                         lastGoodCapture := class
+                         lastGoodExe     := currentExe
+                         GoSub, ButCaptureCached
+                     }
+                }
             }
         }
-    }
-    Else 
-    {
-        PrintButton := True
-        Gosub, ButCaptureCached
-    }
+        Else 
+        {
+            PrintButton := True
+            Gosub, ButCaptureCached
+        }
+    }    
+        
+    lButtonDrag := False
     LButtonPreviousTick2_old := LButtonPreviousTick2
     Wheel_disabled :=  False ; catchall in case for some reason wheel is still disabled
     ForceButtonCheck := True
@@ -2163,9 +2206,13 @@ GetSize(haystack)
         size += 1
     return size
 }
-;#######################################################################
-; Exit:
-; ; gdi+ may now be shutdown on exiting the program
-; Gdip_Shutdown(pToken)
-; ExitApp
-; Return
+
+DesktopIcons( Show:=-1 )                  ; By SKAN for ahk/ah2 on D35D/D495 @ tiny.cc/desktopicons
+{
+    Local hProgman := WinExist("ahk_class WorkerW", "FolderView") ? WinExist()
+                   :  WinExist("ahk_class Progman", "FolderView")
+    Local hShellDefView := DllCall("user32.dll\GetWindow", "ptr",hProgman,      "int",5, "ptr")
+    Local hSysListView  := DllCall("user32.dll\GetWindow", "ptr",hShellDefView, "int",5, "ptr")
+    If ( DllCall("user32.dll\IsWindowVisible", "ptr",hSysListView) != Show )
+         DllCall("user32.dll\SendMessage", "ptr",hShellDefView, "ptr",0x111, "ptr",0x7402, "ptr",0)
+}
