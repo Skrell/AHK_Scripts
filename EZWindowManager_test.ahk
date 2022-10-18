@@ -262,7 +262,8 @@ WatchMouse:
                 WinGet, winHwnd, ID, %winId%
                 WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
                 
-                If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < (-1*MouseMoveBuffer)) || (MXw == 0 &&  MXw_bkup == 0)) {
+                If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < (-1*MouseMoveBuffer)) || (MXw == 0 &&  MXw_bkup == 0)) 
+                {
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
@@ -274,7 +275,8 @@ WatchMouse:
                     AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
                     Break
                 }
-                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer) || (MXw == A_ScreenWidth && MXw_bkup == A_ScreenWidth)) {
+                Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer) || (MXw >= (A_ScreenWidth-2) && MXw_bkup >= (A_ScreenWidth-2))) 
+                {
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
@@ -1348,7 +1350,7 @@ Return
     
     LButtonPreviousTick2 := A_TickCount
     
-    MouseGetPos, , , ClickedWinHwndU
+    MouseGetPos, lmx2, lmy2, ClickedWinHwndU
     WinGetClass, classU, ahk_id %ClickedWinHwndU%
     
     If (classU == "WorkerW")
@@ -1356,7 +1358,7 @@ Return
     
     If showDesktopD && showDesktopU
         DesktopIcons(True)
-    Else If (!showDesktopD && showDesktopU)
+    Else If (!showDesktopD && showDesktopU && (lmx != lmx2 || lmy != lmy2))
         DesktopIcons(True)
     Else
     {
@@ -1636,7 +1638,7 @@ ButCapture:
         
         }
         PrintButton := False
-        sleep 750
+        sleep 500
         Tooltip, 
     }    
     mXbc_bkup := mXbc
