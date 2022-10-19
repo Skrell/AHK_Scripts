@@ -978,7 +978,7 @@ EWD_WatchDrag:
             }
             Else If (WinLEdge) ; && (EWD_MouseX - EWD_MouseOrgX) > 0)
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) > floor(MouseMoveBuffer/4))
+                If ((EWD_MouseX - EWD_MouseOrgX) > floor(MouseMoveBuffer/5))
                 {
                     ; Tooltip, "3"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -988,7 +988,7 @@ EWD_WatchDrag:
             }
             Else If (WinREdge) ; && (EWD_MouseX - EWD_MouseOrgX) < 0) 
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) < ceil(-1*MouseMoveBuffer/4))
+                If ((EWD_MouseX - EWD_MouseOrgX) < ceil(-1*MouseMoveBuffer/5))
                 {
                     ; Tooltip, "4"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
