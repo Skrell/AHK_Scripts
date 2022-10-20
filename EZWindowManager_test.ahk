@@ -914,28 +914,6 @@ EWD_WatchDrag:
 
         DiffX :=  EWD_MouseX - EWD_MouseOrgX ; Obtain an offset from the initial mouse position.
         DiffY :=  EWD_MouseY - EWD_MouseOrgY
-        ; CORRECTIONS FOR TOP AND BOTTOM OF WINDOW
-        If (EWD_WinH > MonitorWorkAreaBottom) ; fix too tall window
-        {
-            WinMove, %EWD_winId%,, , 0 , , MonitorWorkAreaBottom+EWD_OffB
-            EWD_WinB := MonitorWorkAreaBottom
-        }
-
-        Else If ((EWD_WinY+DiffY) < 0)
-        {
-            WinMove, %EWD_winId%,,,0
-            EWD_WinY := 0
-        }
-        Else If ((EWD_WinB+DiffY) > MonitorWorkAreaBottom)
-        {
-            WinMove, %EWD_winId%,,,(MonitorWorkAreaBottom-EWD_WinH)
-            EWD_WinB := MonitorWorkAreaBottom
-        }
-        ; CORRECTIONS FOR LEFT AND RIGHT EDGES OF WINDOW
-        If ((EWD_WinX == 0)) ; && EWD_WinY == 0) || (EWD_WinX == 0 && EWD_WinB == MonitorWorkAreaBottom))
-            WinLEdge := True
-        Else If (((EWD_WinX+EWD_WinW) == A_ScreenWidth)) ;&& EWD_WinY == 0) || ((EWD_WinX+EWD_WinW) == A_ScreenWidth && EWD_WinB == MonitorWorkAreaBottom))
-            WinREdge := True
         
         If (GetKeyState("RButton", "P"))
         {
@@ -946,6 +924,28 @@ EWD_WatchDrag:
             registerRbutton := False
             SetTimer, EWD_WatchDrag, on
         }
+        ; CORRECTIONS FOR TOP AND BOTTOM OF WINDOW
+        If (EWD_WinH > MonitorWorkAreaBottom && !registerRbutton) ; fix too tall window
+        {
+            WinMove, %EWD_winId%,, , 0 , , MonitorWorkAreaBottom+EWD_OffB
+            EWD_WinB := MonitorWorkAreaBottom
+        }
+        Else If ((EWD_WinY+DiffY) < 0 && !registerRbutton)
+        {
+            WinMove, %EWD_winId%,,,0
+            EWD_WinY := 0
+        }
+        Else If ((EWD_WinB+DiffY) > MonitorWorkAreaBottom && !registerRbutton)
+        {
+            WinMove, %EWD_winId%,,,(MonitorWorkAreaBottom-EWD_WinH)
+            EWD_WinB := MonitorWorkAreaBottom
+        }
+        ; CORRECTIONS FOR LEFT AND RIGHT EDGES OF WINDOW
+        If ((EWD_WinX == 0)) ; && EWD_WinY == 0) || (EWD_WinX == 0 && EWD_WinB == MonitorWorkAreaBottom))
+            WinLEdge := True
+        Else If (((EWD_WinX+EWD_WinW) == A_ScreenWidth)) ;&& EWD_WinY == 0) || ((EWD_WinX+EWD_WinW) == A_ScreenWidth && EWD_WinB == MonitorWorkAreaBottom))
+            WinREdge := True
+        
             
         ; MOVE ADJUSTMENTS
         If !registerRbutton && MouseMoved
@@ -1125,14 +1125,14 @@ EWD_WatchDrag:
             {
                 ; Tooltip, 7
                 WinMove, %EWD_winId%, , ;EWD_WinX + (KDE_WinLeft+1)/2*DiffX  ; X of resized window
-                                      ,  EWD_WinY  +   (KDE_WinUp+1)/2*DiffY  ; Y of resized window
+                                      , ;EWD_WinY  +   (KDE_WinUp+1)/2*DiffY  ; Y of resized window
                                       , ;EWD_WinWF -     KDE_WinLeft *DiffX  ; W of resized window
                                       , (EWD_WinH + EWD_OffB) - KDE_WinUp *DiffY  ; H of resized window
                 ChangedDims := True
             }
             Else If ((abs(DiffX) > abs(DiffY)) && (EWD_WinX != 0) && (EWD_WinX + EWD_WinW) != A_ScreenWidth)
             {
-                ; Tooltip, 5
+                Tooltip, 5
                 WinMove, %EWD_winId%, , EWD_WinXF + (KDE_WinLeft+1)/2*DiffX  ; X of resized window
                                       , ; EWD_WinY +   (KDE_WinUp+1)/2*DiffY  ; Y of resized window
                                       , EWD_WinWF -     KDE_WinLeft *DiffX  ; W of resized window
@@ -1141,7 +1141,7 @@ EWD_WatchDrag:
             }
             Else If ((abs(DiffX) < abs(DiffY)) && (EWD_WinY > 0) && (EWD_WinB < MonitorWorkAreaBottom))
             {
-                ; Tooltip, 8
+                Tooltip, 8
                 WinMove, %EWD_winId%, , ;EWD_WinX + (KDE_WinLeft+1)/2*DiffX  ; X of resized window
                                       , EWD_WinY +   (KDE_WinUp+1)/2*DiffY  ; Y of resized window
                                       , ;EWD_WinWF -     KDE_WinLeft *DiffX  ; W of resized window
@@ -1288,6 +1288,8 @@ Return
     
     If (class == "WorkerW")
         showDesktopD := True
+    Else If (class == "#32768" || class == "#32770")
+        return
     
     If (WinActive("ahk_class " class) && class != "Shell_TrayWnd")
     {
