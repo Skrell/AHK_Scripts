@@ -147,3 +147,23 @@ FrameShadow(handle) {
         DllCall("dwmapi\DwmExtendFrameIntoClientArea", "Ptr", handle, "Ptr", &_MARGINS)
     }
 }
+
+If !pToken := Gdip_Startup()
+{
+    MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
+    ExitApp
+}
+
+;frameNum1 := Gdip_CreateBitmapFromFile("6.png") 
+;Gui, 2: -Caption +E0x80000 +LastFound +OwnDialogs +Owner +AlwaysOnTop
+;Gui, 2: Show, NA
+;hwnd1 := WinExist()
+;Width := Gdip_GetImageWidth(frameNum1), Height := Gdip_GetImageHeight(frameNum1)
+;hbm := CreateDIBSection(Width, Height)
+;hdc := CreateCompatibleDC()
+;obm := SelectObject(hdc, hbm)
+;G := Gdip_GraphicsFromHDC(hdc)
+;Gdip_SetInterpolationMode(G, 7)
+;trans := 1
+;Gdip_DrawImage(G, frameNum1 , 0, 0, Width, Height, 0, 0, Width, Height, trans)
+;UpdateLayeredWindow(hwnd1, hdc, 200, 600, Width, Height)
