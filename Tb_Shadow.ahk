@@ -165,5 +165,6 @@ If !pToken := Gdip_Startup()
 ;G := Gdip_GraphicsFromHDC(hdc)
 ;Gdip_SetInterpolationMode(G, 7)
 ;trans := 1
-;Gdip_DrawImage(G, frameNum1 , 0, 0, Width, Height, 0, 0, Width, Height, trans)
+;....................................scaleX, scaleY, 0, 0, totalX, totalY, trans
+;Gdip_DrawImage(G, frameNum1 , 0, 0, Width,  Height, 0, 0, Width,  Height,  trans)
 ;UpdateLayeredWindow(hwnd1, hdc, 200, 600, Width, Height)
