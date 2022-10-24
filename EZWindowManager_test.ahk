@@ -468,6 +468,18 @@ Return
     RButton & MButton::Return
 #If
 
+!WheelUp::
+    MouseGetPos, , , wheelhwnd
+    WinActivate, ahk_id %wheelhwnd%
+    Send, {PgUp}
+return
+
+!WheelDown::
+    MouseGetPos, , , wheelhwnd
+    WinActivate, ahk_id %wheelhwnd%
+    Send, {PgDn}
+return
+
 KeepOnTop:
     for guiHwnd, winHwnd in GuisCreated
     {
@@ -1286,7 +1298,7 @@ Return
     LButtonPreviousTick1 := A_TickCount
     WinGetPos, lb_x, lb_y, lb_w, lb_h, %mWinClickedID%
     
-    If (class == "WorkerW")
+    If (class == "WorkerW" || class == "Progman")
         showDesktopD := True
     Else If (class == "#32768" || class == "#32770")
         return
@@ -1355,7 +1367,7 @@ Return
     MouseGetPos, lmx2, lmy2, ClickedWinHwndU
     WinGetClass, classU, ahk_id %ClickedWinHwndU%
     
-    If (classU == "WorkerW")
+    If (classU == "WorkerW" || classU == "Progman")
         showDesktopU := True
     
     If showDesktopD && showDesktopU
