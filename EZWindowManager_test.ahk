@@ -146,12 +146,6 @@ OtherTimer:
 Return
 
 MasterTimer:
-    If (GetKeyState("MButton", "P"))
-    {
-        sleep 1000
-        Return
-    }
-    
     MouseGetPos, MXw, MYw, MouseWinHwnd
     WinGetClass, wmClass, ahk_id %MouseWinHwnd%
 
@@ -172,6 +166,14 @@ MasterTimer:
     Else
     {
         CmenuArrayIds := []
+    }
+    
+    fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
+    fileOpHwnd2 := WinExist("ahk_class #32770", "Type of file")
+    If (fileOpHwnd1 || fileOpHwnd2)
+    {
+        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd1%
+        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd2%
     }
     
     If (wmClass == "Shell_TrayWnd")
@@ -826,6 +828,7 @@ EWD_WatchDrag:
               ForceButtonRemove := True
               ResetMousePosBkup := True
               WinSet, Bottom, , %EWD_winId%
+              sleep 1000
               Return
            }
            
@@ -1286,16 +1289,16 @@ Return
 !LButton::
 ~LButton::
     SetTimer, MasterTimer, Off
-    lButtonDrag := True
-    showDesktopD := False
-    showDesktopU := False
-    savedWin := False
-    PossiblyChangedSize := False
+    lButtonDrag          := True
+    showDesktopD         := False
+    showDesktopU         := False
+    savedWin             := False
+    PossiblyChangedSize  := False
+    LButtonPreviousTick1 := A_TickCount
     MouseGetPos, lmx, lmy, ClickedWinHwnd
     WinGetClass, class, ahk_id %ClickedWinHwnd%
     mWinClickedID = ahk_id %ClickedWinHwnd%
     WinGet, mWinClickeHwnd, ID, %mWinClickedID%
-    LButtonPreviousTick1 := A_TickCount
     WinGetPos, lb_x, lb_y, lb_w, lb_h, %mWinClickedID%
     
     If (class == "WorkerW" || class == "Progman")
@@ -1360,19 +1363,28 @@ Return
         }
     }
     
-    KeyWait, LButton, T30
+    loop
+    {
+        LButtonPreviousTick2 := A_TickCount
+        If !GetKeyState("LButton", "P")
+            break
+        Else
+        {
+            ; MouseGetPos, lmx2, lmy2, ClickedWinHwndU
+            ; WinGetClass, classU, ahk_id %ClickedWinHwndU%
+            MouseGetPos, MXw, MYw, MouseWinHwnd
+            WinGetClass, wmClass, ahk_id %MouseWinHwnd%
+            GoSub, WatchMouse
+            sleep 100
+        }
+    }
     
-    LButtonPreviousTick2 := A_TickCount
-    
-    MouseGetPos, lmx2, lmy2, ClickedWinHwndU
-    WinGetClass, classU, ahk_id %ClickedWinHwndU%
-    
-    If (classU == "WorkerW" || classU == "Progman")
+    If (wmClass == "WorkerW" || wmClass == "Progman")
         showDesktopU := True
     
     If showDesktopD && showDesktopU
         DesktopIcons(True)
-    Else If (!showDesktopD && showDesktopU && (lmx != lmx2 || lmy != lmy2))
+    Else If (!showDesktopD && showDesktopU && (lmx != MXw || lmy != MYw))
         DesktopIcons(True)
     Else
     {
