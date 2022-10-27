@@ -1303,8 +1303,12 @@ Return
     
     If (class == "WorkerW" || class == "Progman")
         showDesktopD := True
-    Else If (class == "#32768" || class == "#32770")
+    Else If (class == "#32768")
+    {
+        lButtonDrag := False
+        SetTimer, MasterTimer, On
         return
+    }
     
     If (WinActive("ahk_class " class) && class != "Shell_TrayWnd")
     {
