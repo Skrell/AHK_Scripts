@@ -149,6 +149,9 @@ MasterTimer:
     MouseGetPos, MXw, MYw, MouseWinHwnd
     WinGetClass, wmClass, ahk_id %MouseWinHwnd%
 
+    If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw == 0)
+        DesktopIcons(True)
+    
     If WinExist("ahk_class #32768")
     {
         WinGet, chwnd, ID, ahk_class #32768
@@ -713,8 +716,9 @@ CheckButtonColor:
 Return
 
 $MButton::
-    ; SetTimer, ButCapture, Off
     SetTimer, MasterTimer, Off
+    DesktopIcons(False)
+
     EWD_MouseOrgX := 0
     EWD_MouseOrgY := 0
     EWD_MouseX := 0
@@ -1392,7 +1396,8 @@ Return
         DesktopIcons(True)
     Else
     {
-        DesktopIcons(False)
+        If (wmClass != "#32770")
+            DesktopIcons(False)
 
         If ((LButtonPreviousTick2 - LButtonPreviousTick2_old) < DoubleClickTime)
             Gosub, SendCtrlAdd
