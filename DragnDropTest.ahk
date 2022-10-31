@@ -16,7 +16,7 @@ exitapp
 
 start1:
 Gui,2:submit,nohide
-guicontrolget,F1
+GuiControlGet,F1
 SplitPath, F1, name, dir, ext, name_no_ext, drive
 If Ext Not In jpg,bmp,tif
 {
@@ -39,8 +39,10 @@ ifexist,%new%
 return
 
 2GuiDropFiles:
-GuiControl,2:,F1
+; GuiControl,2:,F1
 Loop, parse, A_GuiEvent, `n
-   GuiControl,2:,F1,%A_LoopField%
+   ; GuiControl,2:,F1,%A_LoopField%
+   MsgBox, 4,, File number %A_Index% is:`n%A_LoopField%.`n`nContinue?
+   ; IfMsgBox, No, break
 return
 ;=============== end script ==============
