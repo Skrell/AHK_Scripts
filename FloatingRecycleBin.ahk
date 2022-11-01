@@ -70,7 +70,9 @@ If !pToken := Gdip_Startup()
     MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
     ExitApp
 }
-frameNum1 := Gdip_CreateBitmapFromFile("resources.png") 
+
+; frameNum1 := Gdip_CreateBitmapFromFile("resources.png") 
+frameNum1 := Gdip_CreateBitmapFromFile(A_WinDir . "\System32\shell32.dll", 33, 128) 
 Gui, 2: -Caption +E0x80000 +LastFound +OwnDialogs +Owner +AlwaysOnTop
 Gui, 2: Show, NA
 hwnd1 := WinExist()
@@ -81,8 +83,8 @@ obm := SelectObject(hdc, hbm)
 G := Gdip_GraphicsFromHDC(hdc)
 Gdip_SetInterpolationMode(G, 7)
 trans := 1
-Gdip_DrawImage(G, frameNum1 , 0, 0, Width/2, Height/3, 0, 0, Width, Height/6, trans)
-UpdateLayeredWindow(hwnd1, hdc, 200, 600, Width, Height)
+Gdip_DrawImage(G, frameNum1 , 0, 0, Width, Height, 0, 0, Width, Height, trans)
+UpdateLayeredWindow(hwnd1, hdc, 0, 0, Width, Height)
 
 loop
 {
