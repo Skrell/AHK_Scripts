@@ -94,11 +94,11 @@ loop
 Return
 
 2GuiDropFiles:
-; GuiControl,2:,F1
 Loop, parse, A_GuiEvent, `n
-   ; GuiControl,2:,F1,%A_LoopField%
-   MsgBox, 4,, File number %A_Index% is:`n%A_LoopField% `n`nContinue?
-   ; IfMsgBox, No, break
+   ; MsgBox, 4,, File number %A_Index% is:`n%A_LoopField% `n`nContinue?
+   FileRecycle, %A_LoopField% 
+   if ErrorLevel   ; i.e. it's not blank or zero.
+      MsgBox, % "Failed to Recycle " A_LoopField
 return
 
 
