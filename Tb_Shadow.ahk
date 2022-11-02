@@ -154,6 +154,8 @@ If !pToken := Gdip_Startup()
     ExitApp
 }
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;frameNum1 := Gdip_CreateBitmapFromFile("6.png") 
 ;Gui, 2: -Caption +E0x80000 +LastFound +OwnDialogs +Owner +AlwaysOnTop
 ;Gui, 2: Show, NA
@@ -168,3 +170,37 @@ If !pToken := Gdip_Startup()
 ;....................................sizeX,  sizeY,  0, 0, showX, showY,  trans
 ;Gdip_DrawImage(G, frameNum1 , 0, 0, Width,  Height, 0, 0, Width, Height, trans)
 ;UpdateLayeredWindow(hwnd1, hdc, 200, 600, Width, Height)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;https://www.autohotkey.com/boards/viewtopic.php?p=264086&force_isolation=true#p264086
+;#NoEnv
+;CS_DROPSHADOW := 0x00020000
+;ClassStyle := GetGuiClassStyle()
+;Gui, New, +hwndHGUI
+;SetGuiClassStyle(HGUI, ClassStyle | CS_DROPSHADOW)
+;Gui, Show, x100 y100 w250 h200, Test 1
+;SetGuiClassStyle(HGUI, ClassStyle)
+;Gui, New
+;Gui, Show, x400 y100 w250 h200, Test 2
+;Gui, New, +hwndHGUI
+;SetGuiClassStyle(HGUI, ClassStyle | CS_DROPSHADOW)
+;Gui, Show, x700 y100 w250 h200, Test 3
+;SetGuiClassStyle(HGUI, ClassStyle)
+;Return
+;GuiClose:
+;GuiEscape:
+;ExitApp
+;GetGuiClassStyle() {
+;   Gui, GetGuiClassStyleGUI:Add, Text
+;   Module := DllCall("GetModuleHandle", "Ptr", 0, "UPtr")
+;   VarSetCapacity(WNDCLASS, A_PtrSize * 10, 0)
+;   ClassStyle := DllCall("GetClassInfo", "Ptr", Module, "Str", "AutoHotkeyGUI", "Ptr", &WNDCLASS, "UInt")
+;                 ? NumGet(WNDCLASS, "Int")
+;                 : ""
+;   Gui, GetGuiClassStyleGUI:Destroy
+;   Return ClassStyle
+;}
+;SetGuiClassStyle(HGUI, Style) {
+;   Return DllCall("SetClassLong" . (A_PtrSize = 8 ? "Ptr" : ""), "Ptr", HGUI, "Int", -26, "Ptr", Style, "UInt")
+;}
