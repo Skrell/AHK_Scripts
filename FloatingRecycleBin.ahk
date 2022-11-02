@@ -81,9 +81,23 @@ hbm := CreateDIBSection(Width, Height)
 hdc := CreateCompatibleDC()
 obm := SelectObject(hdc, hbm)
 G := Gdip_GraphicsFromHDC(hdc)
+Gdip_SetSmoothingMode(G, 4)
 Gdip_SetInterpolationMode(G, 7)
 trans := 1
+
+; Create a green brush (this will be used to fill the background with green). The brush is fully opaque (ARGB)
+; pBrush := Gdip_BrushCreateSolid(0x55000000)
+
+; Filll the entire graphics of the bitmap with the green brush (this will be out background colour)
+; Gdip_FillRectangle(G, pBrush, 0, 0, Width, Height)
+
+; Delete the brush created to save memory as we don't need the same brush anymore
+; Gdip_DeleteBrush(pBrush)
+
+blurframeNum1 := Gdip_BlurBitmap(frameNum1, 10)
+
 Gdip_DrawImage(G, frameNum1 , 0, 0, Width, Height, 0, 0, Width, Height, trans)
+
 UpdateLayeredWindow(hwnd1, hdc, 0, 0, Width, Height)
 
 loop
