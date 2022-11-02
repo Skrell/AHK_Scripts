@@ -173,10 +173,12 @@ MasterTimer:
     
     fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
     fileOpHwnd2 := WinExist("ahk_class #32770", "Type of file")
-    If (fileOpHwnd1 || fileOpHwnd2)
+    fileOpHwnd3 := WinExist("ahk_class OperationStatusWindow")
+    If (fileOpHwnd1 || fileOpHwnd2 || fileOpHwnd3)
     {
         WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd1%
         WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd2%
+        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd3%
     }
     
     If (wmClass == "Shell_TrayWnd")
@@ -1306,7 +1308,10 @@ Return
     WinGetPos, lb_x, lb_y, lb_w, lb_h, %mWinClickedID%
     
     If (class == "WorkerW" || class == "Progman")
+    {
         showDesktopD := True
+        DesktopIcons(True)
+    }
     Else If (class == "#32768")
     {
         lButtonDrag := False
@@ -1382,6 +1387,10 @@ Return
             ; WinGetClass, classU, ahk_id %ClickedWinHwndU%
             MouseGetPos, MXw, MYw, MouseWinHwnd
             WinGetClass, wmClass, ahk_id %MouseWinHwnd%
+            If (class == "CabinetWClass" && wmClass != "CabinetWClass" && (lmx != MXw || lmy != MYw))
+            {
+                DesktopIcons(True)
+            }
             GoSub, WatchMouse
             sleep 100
         }
@@ -1389,14 +1398,9 @@ Return
     
     If (wmClass == "WorkerW" || wmClass == "Progman")
         showDesktopU := True
-    
-    If showDesktopD && showDesktopU
-        DesktopIcons(True)
-    Else If (!showDesktopD && showDesktopU && (lmx != MXw || lmy != MYw))
-        DesktopIcons(True)
     Else
     {
-        If (wmClass != "#32770")
+        If (wmClass != "#32770" && wmClass != "OperationStatusWindow")
             DesktopIcons(False)
 
         If ((LButtonPreviousTick2 - LButtonPreviousTick2_old) < DoubleClickTime)
