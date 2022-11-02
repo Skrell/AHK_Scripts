@@ -156,23 +156,6 @@ If !pToken := Gdip_Startup()
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;frameNum1 := Gdip_CreateBitmapFromFile("6.png") 
-;Gui, 2: -Caption +E0x80000 +LastFound +OwnDialogs +Owner +AlwaysOnTop
-;Gui, 2: Show, NA
-;hwnd1 := WinExist()
-;Width := Gdip_GetImageWidth(frameNum1), Height := Gdip_GetImageHeight(frameNum1)
-;hbm := CreateDIBSection(Width, Height)
-;hdc := CreateCompatibleDC()
-;obm := SelectObject(hdc, hbm)
-;G := Gdip_GraphicsFromHDC(hdc)
-;Gdip_SetInterpolationMode(G, 7)
-;trans := 1
-;....................................sizeX,  sizeY,  0, 0, showX, showY,  trans
-;Gdip_DrawImage(G, frameNum1 , 0, 0, Width,  Height, 0, 0, Width, Height, trans)
-;UpdateLayeredWindow(hwnd1, hdc, 200, 600, Width, Height)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 ;https://www.autohotkey.com/boards/viewtopic.php?p=264086&force_isolation=true#p264086
 ;#NoEnv
 ;CS_DROPSHADOW := 0x00020000
