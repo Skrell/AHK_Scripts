@@ -44,7 +44,7 @@ percLeft             := 1.0
 edgePercentage       := .04
 HoveringWinHwnd      := 
 lastWindowPeaked     := False
-MouseMoveBuffer      := 100
+MouseMoveBuffer      := 150
 PrintButton          := False
 PossiblyChangedSize  := False
 ForceButtonRemove    := False
@@ -999,7 +999,7 @@ EWD_WatchDrag:
             }
             Else If (WinLEdge) ; && (EWD_MouseX - EWD_MouseOrgX) > 0)
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) > floor(MouseMoveBuffer/5))
+                If ((EWD_MouseX - EWD_MouseOrgX) > floor(MouseMoveBuffer/6))
                 {
                     ; Tooltip, "3"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -1009,7 +1009,7 @@ EWD_WatchDrag:
             }
             Else If (WinREdge) ; && (EWD_MouseX - EWD_MouseOrgX) < 0) 
             {
-                If ((EWD_MouseX - EWD_MouseOrgX) < ceil(-1*MouseMoveBuffer/5))
+                If ((EWD_MouseX - EWD_MouseOrgX) < ceil(-1*MouseMoveBuffer/6))
                 {
                     ; Tooltip, "4"
                     WinMove, %EWD_winId%,, EWD_WinXF + (EWD_MouseX - EWD_MouseOrgX), EWD_WinY + (EWD_MouseY - EWD_MouseOrgY)
@@ -1249,25 +1249,71 @@ FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
    Return
 }
 
-MoveToTargetSpot(winId, targetX, orgX)
+MoveToTargetSpot(winId, targetX, orgX, targetY := -1, orgY := -1)
 {
    Critical On
+   loopCount := 0
+   xIsFurther := False
+   yIsFurther := False
+   
    If (targetX > orgX)
-      moveIncrement := 120
+      moveIncrementX := 100
    Else
-      moveIncrement := -120
+      moveIncrementX := -100
+      
+   If (targetY > orgY)
+      moveIncrementY := 100
+   Else
+      moveIncrementY := -100
       
    If WinExist(winId)
    {
-       loopCount := floor(abs((targetX-orgX)/moveIncrement))
-       newX := orgX
-       loop % loopCount
-       {   
-           newX := newX + moveIncrement
-           sleep, 1
-           WinMove, %winId%,, newX 
+       If (abs(targetX-orgX) > abs(targetY-orgY))
+       {
+            loopCount := floor(abs((targetX-orgX)/moveIncrementX))
+            xIsFurther := True
+            adjustedIncPerc := abs(targetY-orgY)/abs(targetX-orgX)
        }
-       WinMove, %winId%,, targetX
+       Else
+       {
+            loopCount := floor(abs((targetY-orgY)/moveIncrementY))
+            yIsFurther := True
+            adjustedIncPerc := abs(targetX-orgX)/abs(targetY-orgY)
+       }
+       
+       If (targetY == -1)
+       {
+           newX := orgX
+           loop % loopCount
+           {   
+               newX := newX + moveIncrementX
+               sleep, 1
+               WinMove, %winId%,, newX 
+           }
+           WinMove, %winId%,, targetX
+       }
+       Else
+       {
+          newX := orgX
+          newY := orgY
+          loop % loopCount
+          {   
+              If (xIsFurther)
+              {
+                  tooltip, % adjustedIncPerc
+                  newX := newX + moveIncrementX
+                  newY := newY + ceil(moveIncrementY*adjustedIncPerc)
+              }
+              Else
+              {
+                  newX := newX + ceil(moveIncrementX*adjustedIncPerc)
+                  newY := newY + moveIncrementY
+              }
+              sleep, 1
+              WinMove, %winId%,, newX, newY 
+          }
+          WinMove, %winId%,, targetX, targetY
+       }
    }
    Critical Off
    Return
@@ -1355,7 +1401,8 @@ Return
                     
                     If (WinX < 0) {
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
-                        MoveToTargetSpot(winHwndx_ID, 0-offL, WinX)
+                        ; MoveToTargetSpot(winHwndx_ID, 0-offL, WinX)
+                        MoveToTargetSpot(winHwndx_ID, A_ScreenWidth/2, WinX, 0 , WinY)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
                         TaskbarPeak := True
                         Break
