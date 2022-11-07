@@ -1,8 +1,17 @@
 #SingleInstance, Force
 #NoEnv
 SetBatchLines, -1
+SetWinDelay, -1
 ; Uncomment if Gdip.ahk is not in your standard library
 #Include, Gdip_All.ahk
+SetTimer, MasterTimer, 100
+SetTimer, CheckProgress, 100, 1
+
+SetTimer, CheckProgress, Off
+
+DoubleClickTime := DllCall("GetDoubleClickTime")
+Menu, MyMenu, Add, Empty Bin, BinMenu
+
 ; Start gdi+
 If !pToken := Gdip_Startup()
 {
@@ -20,8 +29,12 @@ pBitmap := Gdip_CreateBitmapFromFile(A_WinDir . "\System32\shell32.dll", 33, 128
 Gui, 2: -Caption +E0x80000 +LastFound +OwnDialogs +Owner +AlwaysOnTop
 ; Show the window
 Gui, 2: Show, NA
+OnMessage(0x201, "WM_LBUTTONDOWN")
+OnMessage(0x204, "WM_RBUTTONDOWN")
+
 ; Get a handle to this window we have created in order to update it later
-hwnd1 := WinExist()
+hwnd2 := WinExist()
+winId2 = ahk_id %hwnd2%
 ; Check to ensure we actually got a bitmap from the file, in case the file was corrupt or some other error occured
 If !pBitmap
 {
@@ -78,8 +91,7 @@ Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, Matrix)
 Gdip_DrawImage(G, pBitmap, 0, 0, Width, Height, 0, 0, Width, Height, 1)
 ; Update the specified window we have created (hwnd1) with a handle to our bitmap (hdc), specifying the x,y,w,h we want it positioned on our screen
 ; So this will position our gui at (0,0) with the Width and Height specified earlier (half of the original image)
-UpdateLayeredWindow(hwnd1, hdc, 0, 0, Width, Height)
-
+UpdateLayeredWindow(hwnd2, hdc, -1*Width, -1*Height, Width, Height)
 ; Select the object back into the hdc
 SelectObject(hdc, obm)
 ; Now the bitmap may be deleted
@@ -90,6 +102,7 @@ DeleteDC(hdc)
 Gdip_DeleteGraphics(G)
 ; The bitmap we made from the image may be deleted
 Gdip_DisposeImage(pBitmap)
+Return 
 
 2GuiDropFiles:
 Loop, parse, A_GuiEvent, `n
@@ -99,10 +112,202 @@ Loop, parse, A_GuiEvent, `n
       MsgBox, % "Failed to Recycle " A_LoopField
 return
 
+MasterTimer:
+    MouseGetPos, mtX, mtY, MouseWinHwnd
+    WinGetClass, mtClass, ahk_id %MouseWinHwnd%
+
+    If ((mtClass == "WorkerW" || mtClass == "Progman") && mtX <= 3 && mtY <= 3)
+    {
+        MoveToTargetSpot(winId2, 10, 0, -1*Width, 0, -1*Height)
+        SetTimer, MasterTimer, Off
+    }
+Return
+
+BinMenu:
+    TotalFiles := SHQueryRecycleBin("C:\", 3)
+    TotalSize  := SHQueryRecycleBin("C:\", 2)
+    MsgBox, 4, Confirm Delete, % TotalFiles " files, with a total size of " TotalSize
+    IfMsgBox Yes
+    {
+        SetTimer, CheckProgress, on
+        FileRecycleEmpty
+        SetTimer, CheckProgress, off
+    }
+Return
+
+CheckProgress:
+    Gui, 3: New, -Caption +AlwaysOnTop
+    Gui, 3: Add, Progress, w200 h20 cLime vMyProgress, 0
+    Gui, 3: Show, NA
+    loop
+    {
+        SizeRemaining := SHQueryRecycleBin("C:\", 2)
+        GuiControl,, MyProgress, 100 - ceil(100 * (SizeRemaining/TotalSize)) ; Set the position of the bar to 50%.
+        If ((100 * (SizeRemaining/TotalSize)) > 99)
+            break
+    }
+    Gui, 3: Destroy
+Return
+
+WM_RBUTTONDOWN(wParam, lParam)
+{
+    X := lParam & 0xFFFF
+    Y := lParam >> 16
+    if A_GuiControl
+        Control := "`n(in control " . A_GuiControl . ")"
+    ; ToolTip You left-clicked in Gui window #%A_Gui% at client coordinates %X%x%Y%.%Control%
+    Menu, MyMenu, Show
+}
+
+WM_LBUTTONDOWN(wParam, lParam)
+{
+    global hwnd2
+    X := lParam & 0xFFFF
+    Y := lParam >> 16
+    if A_GuiControl
+        Control := "`n(in control " . A_GuiControl . ")"
+    ; ToolTip You left-clicked in Gui window #%A_Gui% at client coordinates %X%x%Y%.%Control%
+    MouseGetPos, , , currentHwnd
+    WinGet, whwnd, ID, ahk_id %currentHwnd%
+    If (whwnd == hwnd2)
+    {
+        Run, explorer.exe shell:RecycleBinFolder
+    }
+}
+
+~LButton::
+    SetTimer, MasterTimer, Off
+    MouseGetPos, lmx, lmy, ClickedWinHwnd
+    WinGetClass, wmClassD, ahk_id %ClickedWinHwnd%
+        
+    If (wmClassD == "CabinetWClass" || wmClassD == "WorkerW" || wmClassD == "Progman")
+    {
+        loop
+        {
+            If GetKeyState("LButton", "P")
+            {
+                ; MouseGetPos, lmx2, lmy2, ClickedWinHwndU
+                ; WinGetClass, classU, ahk_id %ClickedWinHwndU%
+                MouseGetPos, MXw, MYw, MouseWinHwnd
+                WinGetClass, wmClassU, ahk_id %MouseWinHwnd%
+                If (wmClassU != "CabinetWClass" && (lmx > MXw))
+                {
+                    MoveToTargetSpot(winId2, 10, 0, -1*Width, 0, -1*Height)
+                    break
+                }
+                lmx := MXw
+                lmy := MYw
+                sleep 100
+            }
+            else
+                Break
+        }
+    }
+    KeyWait, LButton, T30
+    WinGetPos, wx, wy , , ,%winId2%
+    If (wx >= 0)
+    {
+        MoveToTargetSpot(winId2, 10, -1*Width, 0, -1*Height , 0)
+    }
+    SetTimer, MasterTimer, On
+Return
 
 ;#######################################################################
 Exit:
 ; gdi+ may now be shutdown on exiting the program
 Gdip_Shutdown(pToken)
-ExitApp
+    ExitApp
 Return
+
+MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
+{
+   Critical On
+   loopCount := 0
+   xIsFurther := False
+   yIsFurther := False
+   
+   If (targetX > orgX)
+      moveIncrementX := moveincrement
+   Else
+      moveIncrementX := -1*moveincrement
+      
+   If (targetY > orgY)
+      moveIncrementY := moveincrement
+   Else
+      moveIncrementY := -1*moveincrement
+      
+   If WinExist(winId)
+   {
+       If (abs(targetX-orgX) > abs(targetY-orgY))
+       {
+            loopCount := floor(abs((targetX-orgX)/moveIncrementX))
+            xIsFurther := True
+            adjustedIncPerc := abs(targetY-orgY)/abs(targetX-orgX)
+       }
+       Else
+       {
+            loopCount := floor(abs((targetY-orgY)/moveIncrementY))
+            yIsFurther := True
+            adjustedIncPerc := abs(targetX-orgX)/abs(targetY-orgY)
+       }
+       
+       If (targetY == -1)
+       {
+           newX := orgX
+           loop % loopCount
+           {   
+               newX := newX + moveIncrementX
+               sleep, 1
+               WinMove, %winId%,, newX 
+           }
+           WinMove, %winId%,, targetX
+       }
+       Else
+       {
+          newX := orgX
+          newY := orgY
+          loop % loopCount
+          {   
+              If (xIsFurther)
+              {
+                  tooltip, % adjustedIncPerc
+                  newX := newX + moveIncrementX
+                  newY := newY + ceil(moveIncrementY*adjustedIncPerc)
+              }
+              Else
+              {
+                  newX := newX + ceil(moveIncrementX*adjustedIncPerc)
+                  newY := newY + moveIncrementY
+              }
+              sleep, 1
+              WinMove, %winId%,, newX, newY 
+          }
+          WinMove, %winId%,, targetX, targetY
+       }
+   }
+   Else
+   {
+      Msgbox, "Window doesn't exist"
+   }
+   Critical Off
+   Return
+}
+
+/*
+======================================================
+Find RecycleBin Size
+https://www.autohotkey.com/boards/viewtopic.php?f=5&t=3463&p=17525#p17525
+======================================================
+*/
+SHQueryRecycleBin(pszRootPath, Param) {
+	VarSetCapacity(SHQUERYRBINFO, 24, 0) ; Create SHQUERYRBINFO structure
+	NumPut(24, SHQUERYRBINFO, "UInt") ; Fill cbSize member
+	DllCall("Shell32.dll\SHQueryRecycleBin" . ((A_IsUnicode = 1) ? "W" : "A"), "Str", pszRootPath, ((A_PtrSize = 8) ? "Ptr" : "UInt"), &SHQUERYRBINFO, "UInt") ; Call function
+	ByteSize := NumGet(SHQUERYRBINFO, ((A_PtrSize = 8) ? "8" : "4"), "Int64") ; Retrieve data size (bytes)
+	NumItems := NumGet(SHQUERYRBINFO, ((A_PtrSize = 8) ? "16" : "12"), "Int64") ; Retrieve item count
+	VarSetCapacity(BININFOFORMAT, 32, 0) ; Create BININFOFORMAT structure
+	DllCall("Shlwapi.dll\StrFormatByteSize64A", "Int64", ByteSize, "UInt", &BININFOFORMAT, "UInt", 32, ((A_IsUnicode = 1) ? "AStr" : "Str")) ; Format data size
+	FormatSize := StrGet(&BININFOFORMAT, "CP0") ; Retrieve data size (bytes, KB, MB, GB, etc...)
+	Array := [ByteSize, FormatSize, NumItems] ; Create array for retrieving the data
+	return Result := Array[Param] ; Return the value for the specified parameter
+}
