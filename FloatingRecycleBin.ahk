@@ -190,7 +190,7 @@ WM_LBUTTONDOWN(wParam, lParam)
                 ; WinGetClass, classU, ahk_id %ClickedWinHwndU%
                 MouseGetPos, MXw, MYw, MouseWinHwnd
                 WinGetClass, wmClassU, ahk_id %MouseWinHwnd%
-                If (wmClassU != "CabinetWClass" && (lmx > MXw))
+                If (wmClassU != "CabinetWClass" && (lmx > MXw && lmy > MYw))
                 {
                     MoveToTargetSpot(winId2, 10, 0, -1*Width, 0, -1*Height)
                     break
