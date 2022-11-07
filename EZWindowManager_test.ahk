@@ -24,7 +24,6 @@ EWD_winId    :=
 MonitorWorkArea :=
 MButtonPreviousTick :=
 DoubleClickTime := DllCall("GetDoubleClickTime") 
-LButtonPreviousTick := A_TickCount 
 LookForLeaveWindow := False
 winCount := 0
 fifteenMinutes := 1000*60*5
@@ -149,7 +148,7 @@ MasterTimer:
     MouseGetPos, MXw, MYw, MouseWinHwnd
     WinGetClass, wmClass, ahk_id %MouseWinHwnd%
 
-    If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw == 0)
+    If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 20)
         DesktopIcons(True)
     
     If WinExist("ahk_class #32768")
@@ -1346,30 +1345,34 @@ Return
     showDesktopU         := False
     savedWin             := False
     PossiblyChangedSize  := False
-    LButtonPreviousTick1 := A_TickCount
     MouseGetPos, lmx, lmy, ClickedWinHwnd
-    WinGetClass, class, ahk_id %ClickedWinHwnd%
+    WinGetClass, wmClassD, ahk_id %ClickedWinHwnd%
     mWinClickedID = ahk_id %ClickedWinHwnd%
     WinGet, mWinClickeHwnd, ID, %mWinClickedID%
     WinGetPos, lb_x, lb_y, lb_w, lb_h, %mWinClickedID%
     
-    If (class == "WorkerW" || class == "Progman")
+    If (wmClassD == "WorkerW" || wmClassD == "Progman")
     {
         showDesktopD := True
         DesktopIcons(True)
     }
-    Else If (class == "#32768")
+    Else If (wmClassD == "#32768")
     {
         lButtonDrag := False
         SetTimer, MasterTimer, On
         return
     }
     
-    If (WinActive("ahk_class " class) && class != "Shell_TrayWnd")
+    If (WinActive("ahk_class " wmClassD) && wmClassD != "Shell_TrayWnd")
     {
-        WinGet, lastActiveWinhwnd, ID, ahk_class %class%
+        WinGet, lastActiveWinhwnd, ID, ahk_class %wmClassD%
     }
     
+    If ((A_PriorHotkey == A_ThisHotkey) && (A_TimeSincePriorHotkey <= (DoubleClickTime * 2)))
+    {
+        Gosub, SendCtrlAdd
+    }
+
     for idx, val in PeaksArray {
         If (val == ("ahk_id " . ClickedWinHwnd)) {
             savedWin := True
@@ -1381,7 +1384,7 @@ Return
     { 
         lastWindowPeaked := False
         
-        If (class == "Shell_TrayWnd")
+        If (wmClassD == "Shell_TrayWnd")
         {
             ; j := join(GuisCreated, True)
             ; FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - %j%`n, C:\Users\vbonaven\Desktop\log.txt
@@ -1396,13 +1399,13 @@ Return
                 
                 If (lmx > gx && lmx < (gx+gw) && state == 0 && winHwndx != lastActiveWinhwnd)
                 {
-                    tooltip, % winHwndx "-" lastActiveWinhwnd
+                    ; tooltip, % winHwndx "-" lastActiveWinhwnd
                     WinGetPosEx(winHwndx, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
                     
                     If (WinX < 0) {
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
                         ; MoveToTargetSpot(winHwndx_ID, 0-offL, WinX)
-                        MoveToTargetSpot(winHwndx_ID, A_ScreenWidth/2, WinX, 0 , WinY)
+                        MoveToTargetSpot(winHwndx_ID, A_ScreenWidth/2, WinX)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
                         TaskbarPeak := True
                         Break
@@ -1425,36 +1428,30 @@ Return
     
     loop
     {
-        LButtonPreviousTick2 := A_TickCount
-        If !GetKeyState("LButton", "P")
-            break
-        Else
+        If GetKeyState("LButton", "P")
         {
             ; MouseGetPos, lmx2, lmy2, ClickedWinHwndU
             ; WinGetClass, classU, ahk_id %ClickedWinHwndU%
             MouseGetPos, MXw, MYw, MouseWinHwnd
-            WinGetClass, wmClass, ahk_id %MouseWinHwnd%
-            If (class == "CabinetWClass" && wmClass != "CabinetWClass" && (lmx != MXw || lmy != MYw))
+            WinGetClass, wmClassU, ahk_id %MouseWinHwnd%
+            If (wmClassD == "CabinetWClass" && wmClassU != "CabinetWClass" && MXw == 0)
             {
                 DesktopIcons(True)
             }
             GoSub, WatchMouse
-            sleep 100
         }
+        Else
+            Break
     }
     
-    If (wmClass == "WorkerW" || wmClass == "Progman")
+    If (wmClassU == "WorkerW" || wmClassU == "Progman")
         showDesktopU := True
     Else
     {
-        If (wmClass != "#32770" && wmClass != "OperationStatusWindow")
+        If (wmClassU != "#32770" && wmClassU != "OperationStatusWindow")
             DesktopIcons(False)
 
-        If ((LButtonPreviousTick2 - LButtonPreviousTick2_old) < DoubleClickTime)
-            Gosub, SendCtrlAdd
-        
         WinGetPos, lb_x2, lb_y2, lb_w2, lb_h2, %mWinClickedID%
-        
         If (savedWin && (lb_w != lb_w2 || lb_h != lb_h2))
         {
             PossiblyChangedSize := True
@@ -1464,7 +1461,7 @@ Return
         
         lb_xw  := lb_x + lb_w
         lb_xw2 := lb_x2 + lb_w2
-        If ((abs(lb_xw - lb_xw2) > 5 || abs(lb_y - lb_y2) > 5) && (LButtonPreviousTick2-LButtonPreviousTick1) > 250)
+        If ((abs(lb_xw - lb_xw2) > 5 || abs(lb_y - lb_y2) > 5) && ((A_PriorHotkey == A_ThisHotkey) && A_TimeSincePriorHotkey  > 250))
         {
             foundClickedId := False
             for shwnds, c in scannedAhkIds
@@ -1511,7 +1508,6 @@ Return
     }    
         
     lButtonDrag := False
-    LButtonPreviousTick2_old := LButtonPreviousTick2
     Wheel_disabled :=  False ; catchall in case for some reason wheel is still disabled
     ForceButtonCheck := True
     SetTimer, MasterTimer, On
@@ -1520,7 +1516,6 @@ Return
 SendCtrlAdd:
     If (WinActive("ahk_class CabinetWClass"))
     {
-        sleep 200
         Send ^{NumpadAdd}
     }
 Return
