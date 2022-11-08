@@ -4,16 +4,14 @@ SetBatchLines, -1
 SetWinDelay, -1
 CoordMode, Mouse, Screen
 CoordMode, Pixel, Screen
-; Uncomment if Gdip.ahk is not in your standard library
-#Include, Gdip_All.ahk
-SetTimer, MasterTimer, 100
-SetTimer, CheckProgress, 100
 
-; SetTimer, CheckProgress, Off
-
-DoubleClickTime := DllCall("GetDoubleClickTime")
 Menu, MyMenu, Add, Empty Bin, BinMenu
 
+Gui, 3: New, -Caption +AlwaysOnTop
+Gui, 3: Add, progress, vprogress w200 h20 cLime 
+SetTimer, CheckProgress, 100
+
+#Include, Gdip_All.ahk
 ; Start gdi+
 If !pToken := Gdip_Startup()
 {
@@ -65,7 +63,7 @@ Gdip_SetSmoothingMode(G, 4)
 ; Create a green brush (this will be used to fill the background with green). The brush is fully opaque (ARGB)
 ; pBrush := Gdip_BrushCreateSolid(0x55000000)
 
-; Filll the entire graphics of the bitmap with the green brush (this will be out background colour)
+; Fill the entire graphics of the bitmap with the green brush (this will be out background color)
 ; Gdip_FillRectangle(G, pBrush, 0, 0, Width, Height)
 
 ; Delete the brush created to save memory as we don't need the same brush anymore
@@ -104,7 +102,24 @@ DeleteDC(hdc)
 Gdip_DeleteGraphics(G)
 ; The bitmap we made from the image may be deleted
 Gdip_DisposeImage(pBitmap)
-Return 
+
+SetTimer, MasterTimer, 500
+Return
+
+CheckProgress:
+    TotalFiles := SHQueryRecycleBin("C:\", 3)
+    TotalSize  := SHQueryRecycleBin("C:\", 2)
+    Gui, 3: Show,NA
+    ; guicontrol, 3:,progress,+1
+    loop
+    {
+        FilesRemaining := SHQueryRecycleBin("C:\", 3)
+        newPerc := 100 - ceil(100 * (FilesRemaining/TotalFiles))
+        GuiControl, 3: , MyProgress, %newPerc% ; Set the position of the bar to 50%.
+        If (FilesRemaining == 0)
+            break
+    }
+Return
 
 2GuiDropFiles:
 Loop, parse, A_GuiEvent, `n
@@ -135,24 +150,6 @@ BinMenu:
         FileRecycleEmpty
         SetTimer, CheckProgress, off
     }
-Return
-
-CheckProgress:
-    TotalFiles := SHQueryRecycleBin("C:\", 3)
-    TotalSize  := SHQueryRecycleBin("C:\", 2)
-    Gui, 3: New, -Caption +AlwaysOnTop
-    Gui, 3: Add, Progress, w200 h20 cLime vMyProgress, 0
-    Gui, 3: Show, NA
-    loop
-    {
-        FilesRemaining := SHQueryRecycleBin("C:\", 3)
-        newPerc := 100 - ceil(100 * (FilesRemaining/TotalFiles))
-        GuiControl, 3: , MyProgress, %newPerc% ; Set the position of the bar to 50%.
-        If (FilesRemaining == 0)
-            break
-    }
-    GuiControl, 3: , MyProgress, 100
-    Gui, 3: Destroy
 Return
 
 WM_RBUTTONDOWN(wParam, lParam)
@@ -220,8 +217,8 @@ Return
 
 ;#######################################################################
 Exit:
-; gdi+ may now be shutdown on exiting the program
-Gdip_Shutdown(pToken)
+    ; gdi+ may now be shutdown on exiting the program
+    Gdip_Shutdown(pToken)
     ExitApp
 Return
 
@@ -276,7 +273,6 @@ MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
           {   
               If (xIsFurther)
               {
-                  tooltip, % adjustedIncPerc
                   newX := newX + moveIncrementX
                   newY := newY + ceil(moveIncrementY*adjustedIncPerc)
               }
