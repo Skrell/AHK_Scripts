@@ -227,8 +227,8 @@ Return
 
 ;#######################################################################
 Exit:
-; gdi+ may now be shutdown on exiting the program
-Gdip_Shutdown(pToken)
+    ; gdi+ may now be shutdown on exiting the program
+    Gdip_Shutdown(pToken)
     ExitApp
 Return
 
@@ -283,7 +283,6 @@ MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
           {   
               If (xIsFurther)
               {
-                  tooltip, % adjustedIncPerc
                   newX := newX + moveIncrementX
                   newY := newY + ceil(moveIncrementY*adjustedIncPerc)
               }
