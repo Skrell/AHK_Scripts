@@ -119,13 +119,19 @@ Return
 return
 
 MasterTimer:
-    MouseGetPos, mtX, mtY, MouseWinHwnd
-    WinGetClass, mtClass, ahk_id %MouseWinHwnd%
+    MouseGetPos, mtX, mtY, 
+    WinGetPos, wtx, wty , , , %winId2%
 
-    If (mtX <= 3 && mtY <= 3)
+    If (mtX <= 3 && mtY <= 3 && wtx < 0)
     {
         MoveToTargetSpot(winId2, 10, 0, -1*Width, 0, -1*Height)
-        SetTimer, MasterTimer, Off
+    }
+    Else 
+    {   
+        If (mtX == 0 && mtY >= 100 && wtx >= 0)
+        {
+            MoveToTargetSpot(winId2, 10, -1*Width, 0, -1*Height , 0)
+        }
     }
 Return
 
@@ -197,6 +203,7 @@ WM_LBUTTONDOWN(wParam, lParam)
     SetTimer, MasterTimer, Off
     MouseGetPos, lmx, lmy, ClickedWinHwnd
     WinGetClass, wmClassD, ahk_id %ClickedWinHwnd%
+    WinGetPos, wx, wy , , ,%winId2%
         
     If (wmClassD == "CabinetWClass" || wmClassD == "WorkerW" || wmClassD == "Progman")
     {
@@ -208,7 +215,7 @@ WM_LBUTTONDOWN(wParam, lParam)
                 ; WinGetClass, classU, ahk_id %ClickedWinHwndU%
                 MouseGetPos, MXw, MYw, MouseWinHwnd
                 WinGetClass, wmClassU, ahk_id %MouseWinHwnd%
-                If (wmClassU != "CabinetWClass" && (lmx > MXw && lmy > MYw))
+                If (wmClassU != "CabinetWClass" && wx < 0 && (lmx > MXw && lmy > MYw))
                 {
                     MoveToTargetSpot(winId2, 10, 0, -1*Width, 0, -1*Height)
                     break
