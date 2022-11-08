@@ -107,18 +107,22 @@ Gdip_DisposeImage(pBitmap)
 Return 
 
 2GuiDropFiles:
-Loop, parse, A_GuiEvent, `n
-   ; MsgBox, 4,, File number %A_Index% is:`n%A_LoopField% `n`nContinue?
-   FileRecycle, %A_LoopField% 
-   if ErrorLevel   ; i.e. it's not blank or zero.
-      MsgBox, % "Failed to Recycle " A_LoopField
+    Tooltip, Moving Files...
+    Loop, parse, A_GuiEvent, `n
+    {
+       ; MsgBox, 4,, File number %A_Index% is:`n%A_LoopField% `n`nContinue?
+       FileRecycle, %A_LoopField% 
+       if ErrorLevel   ; i.e. it's not blank or zero.
+          MsgBox, % "Failed to Recycle " A_LoopField
+    }
+    Tooltip, 
 return
 
 MasterTimer:
     MouseGetPos, mtX, mtY, MouseWinHwnd
     WinGetClass, mtClass, ahk_id %MouseWinHwnd%
 
-    If ((mtClass == "WorkerW" || mtClass == "Progman") && mtX <= 3 && mtY <= 3)
+    If (mtX <= 3 && mtY <= 3)
     {
         MoveToTargetSpot(winId2, 10, 0, -1*Width, 0, -1*Height)
         SetTimer, MasterTimer, Off
@@ -134,7 +138,8 @@ BinMenu:
     {
         SetTimer, CheckProgress, on
         ; FileRecycleEmpty
-        Run, %A_ScriptDir%\nircmd.exe emptybin
+        ; Run, %A_ScriptDir%\nircmd.exe emptybin
+        Run, powershell.exe -command Clear-RecycleBin -Force,, 'hide'
         SetTimer, CheckProgress, off
     }
 Return
