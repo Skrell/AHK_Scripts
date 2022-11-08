@@ -2,12 +2,14 @@
 #NoEnv
 SetBatchLines, -1
 SetWinDelay, -1
+CoordMode, Mouse, Screen
+CoordMode, Pixel, Screen
 ; Uncomment if Gdip.ahk is not in your standard library
 #Include, Gdip_All.ahk
 SetTimer, MasterTimer, 100
-SetTimer, CheckProgress, 100, 1
+SetTimer, CheckProgress, 100
 
-SetTimer, CheckProgress, Off
+; SetTimer, CheckProgress, Off
 
 DoubleClickTime := DllCall("GetDoubleClickTime")
 Menu, MyMenu, Add, Empty Bin, BinMenu
@@ -136,16 +138,20 @@ BinMenu:
 Return
 
 CheckProgress:
+    TotalFiles := SHQueryRecycleBin("C:\", 3)
+    TotalSize  := SHQueryRecycleBin("C:\", 2)
     Gui, 3: New, -Caption +AlwaysOnTop
     Gui, 3: Add, Progress, w200 h20 cLime vMyProgress, 0
     Gui, 3: Show, NA
     loop
     {
-        SizeRemaining := SHQueryRecycleBin("C:\", 2)
-        GuiControl,, MyProgress, 100 - ceil(100 * (SizeRemaining/TotalSize)) ; Set the position of the bar to 50%.
-        If ((100 * (SizeRemaining/TotalSize)) > 99)
+        FilesRemaining := SHQueryRecycleBin("C:\", 3)
+        newPerc := 100 - ceil(100 * (FilesRemaining/TotalFiles))
+        GuiControl, 3: , MyProgress, %newPerc% ; Set the position of the bar to 50%.
+        If (FilesRemaining == 0)
             break
     }
+    GuiControl, 3: , MyProgress, 100
     Gui, 3: Destroy
 Return
 
