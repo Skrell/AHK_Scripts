@@ -92,7 +92,7 @@ Tooltip,
 
 t_KeepOnTop := t_WatchMouse := t_CheckButtonSize := t_ButCapture := t_RedetectColor := t_CheckButtonColor := A_TickCount 
 SetTimer, MasterTimer, 20, -1
-SetTimer, OtherTimer, 500
+SetTimer, OtherTimer, 100, -1
 
 Gui +LastFound
 hWnd := WinExist()
@@ -148,7 +148,7 @@ MasterTimer:
     MouseGetPos, MXw, MYw, MouseWinHwnd
     WinGetClass, wmClass, ahk_id %MouseWinHwnd%
 
-    If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 20)
+    If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 100)
         DesktopIcons(True)
     
     If WinExist("ahk_class #32768")
