@@ -235,7 +235,7 @@ WM_LBUTTONDOWN(wParam, lParam)
     WinGetClass, wmClassD, ahk_id %ClickedWinHwnd%
     WinGetPos, wx, wy , , ,%winId2%
         
-    If (GetKeyState("Shift", "P") && (wmClassD == "WorkerW") || wmClassD == "Progman")
+    If (GetKeyState("Shift", "P") && (wmClassD == "WorkerW" || wmClassD == "Progman"))
         Return
         
     If (wmClassD == "CabinetWClass" || wmClassD == "WorkerW" || wmClassD == "Progman")
