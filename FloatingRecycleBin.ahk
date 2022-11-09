@@ -7,12 +7,9 @@ CoordMode, Pixel, Screen
 ; Uncomment if Gdip.ahk is not in your standard library
 #Include, Gdip_All.ahk
 SetTimer, MasterTimer, 100
-SetTimer, CheckProgress, 100, 1
 
-SetTimer, CheckProgress, Off
-
-DoubleClickTime := DllCall("GetDoubleClickTime")
 Menu, MyMenu, Add, Empty Bin, BinMenu
+Menu, Tray, Icon, C:\Windows\system32\shell32.dll,33
 
 ; Start gdi+
 If !pToken := Gdip_Startup()
@@ -25,8 +22,9 @@ OnExit, Exit
 ; If !FileExist("33017060.jpg")
 ; UrlDownloadToFile, http://img714.imageshack.us/img714/9609/33017060.jpg, 33017060.jpg
 ; Get a bitmap from the image
-; pBitmap := Gdip_CreateBitmapFromFile("33017060.jpg")
-pBitmap := Gdip_CreateBitmapFromFile(A_WinDir . "\System32\shell32.dll", 33, 128) 
+; pBitmapFull := Gdip_CreateBitmapFromFile("33017060.jpg")
+pBitmapFull  := Gdip_CreateBitmapFromFile(A_WinDir . "\System32\shell32.dll", 33, 128) 
+pBitmapEmpty := Gdip_CreateBitmapFromFile(A_WinDir . "\System32\shell32.dll", 32, 128) 
 ; Create a layered window (+E0x80000 : must be used for UpdateLayeredWindow to work!) that is always on top (+AlwaysOnTop), has no taskbar entry or caption
 Gui, 2: -Caption +E0x80000 +LastFound +OwnDialogs +Owner +AlwaysOnTop
 ; Show the window
@@ -38,14 +36,14 @@ OnMessage(0x204, "WM_RBUTTONDOWN")
 hwnd2 := WinExist()
 winId2 = ahk_id %hwnd2%
 ; Check to ensure we actually got a bitmap from the file, in case the file was corrupt or some other error occured
-If !pBitmap
+If !pBitmapFull
 {
 	MsgBox, 48, File loading error!, Could not load the image specified
 	ExitApp
 }
 ; Get the width and height of the bitmap we have just created from the file
 ; This will be the dimensions that the file is
-Width := Gdip_GetImageWidth(pBitmap), Height := Gdip_GetImageHeight(pBitmap)
+Width := Gdip_GetImageWidth(pBitmapFull), Height := Gdip_GetImageHeight(pBitmapFull)
 ; Create a gdi bitmap with width and height of what we are going to draw into it. This is the entire drawing area for everything
 ; We are creating this "canvas" at half the size of the actual image
 ; We are halving it because we want the image to show in a gui on the screen at half its dimensions
@@ -71,13 +69,13 @@ Gdip_SetSmoothingMode(G, 4)
 ; Delete the brush created to save memory as we don't need the same brush anymore
 ; Gdip_DeleteBrush(pBrush)
 
-blurpBitmap := Gdip_BlurBitmap(pBitmap, 8)
+blurpBitmap := Gdip_BlurBitmap(pBitmapFull, 8)
 
 ; DrawImage will draw the bitmap we took from the file into the graphics of the bitmap we created
 ; We are wanting to draw the entire image, but at half its size
 ; Coordinates are therefore taken from (0,0) of the source bitmap and also into the destination bitmap
 ; The source height and width are specified, and also the destination width and height (half the original)
-; Gdip_DrawImage(pGraphics, pBitmap, dx, dy, dw, dh, sx, sy, sw, sh, Matrix)
+; Gdip_DrawImage(pGraphics, pBitmapFull, dx, dy, dw, dh, sx, sy, sw, sh, Matrix)
 ; d is for destination and s is for source. We will not talk about the matrix yet (this is for changing colours when drawing)
 ; Can be passed in pretty much any format you want with anything used as a separator
 ; I have made the function use RegExReplace to fix any errors. So you could pass it as 0.9|0|0|0|00|0.9|0|0|00|0|1.5|0|00|0|0|1|0-1|0|5|0|1
@@ -90,7 +88,7 @@ Matrix =
 0		0		0		0		1
 )
 Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, Matrix)
-Gdip_DrawImage(G, pBitmap, 0, 0, Width, Height, 0, 0, Width, Height, 1)
+Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, 1)
 ; Update the specified window we have created (hwnd1) with a handle to our bitmap (hdc), specifying the x,y,w,h we want it positioned on our screen
 ; So this will position our gui at (0,0) with the Width and Height specified earlier (half of the original image)
 UpdateLayeredWindow(hwnd2, hdc, -1*Width, -1*Height, Width, Height)
@@ -101,9 +99,9 @@ DeleteObject(hbm)
 ; Also the device context related to the bitmap may be deleted
 DeleteDC(hdc)
 ; The graphics may now be deleted
-Gdip_DeleteGraphics(G)
+; Gdip_DeleteGraphics(G)
 ; The bitmap we made from the image may be deleted
-Gdip_DisposeImage(pBitmap)
+; Gdip_DisposeImage(pBitmapFull)
 Return 
 
 2GuiDropFiles:
@@ -119,11 +117,46 @@ Return
 return
 
 MasterTimer:
+    TotalFiles   := SHQueryRecycleBin("C:\", 3)
+
     MouseGetPos, mtX, mtY, 
     WinGetPos, wtx, wty , , , %winId2%
 
     If (mtX <= 3 && mtY <= 3 && wtx < 0)
     {
+        If (TotalFiles == 0)
+        {
+            hbm := CreateDIBSection(Width*2, Height*2)
+            ; Get a device context compatible with the screen
+            hdc := CreateCompatibleDC()
+            ; Select the bitmap into the device context
+            obm := SelectObject(hdc, hbm)
+            ; Get a pointer to the graphics of the bitmap, for use with drawing functions
+            G := Gdip_GraphicsFromHDC(hdc)
+            Gdip_GraphicsClear(G)
+            Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, Matrix)
+            Gdip_DrawImage(G, pBitmapEmpty, 0, 0, Width, Height, 0, 0, Width, Height, 1)
+        }
+        Else
+        {
+            hbm := CreateDIBSection(Width*2, Height*2)
+            ; Get a device context compatible with the screen
+            hdc := CreateCompatibleDC()
+            ; Select the bitmap into the device context
+            obm := SelectObject(hdc, hbm)
+            ; Get a pointer to the graphics of the bitmap, for use with drawing functions
+            G := Gdip_GraphicsFromHDC(hdc)
+            Gdip_GraphicsClear(G)
+            Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, Matrix)
+            Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, 1)
+        }
+        UpdateLayeredWindow(hwnd2, hdc, -1*Width, -1*Height, Width, Height)   
+        ; Select the object back into the hdc
+        SelectObject(hdc, obm)
+        ; Now the bitmap may be deleted
+        DeleteObject(hbm)
+        ; Also the device context related to the bitmap may be deleted
+        DeleteDC(hdc)
         MoveToTargetSpot(winId2, 10, 0, -1*Width, 0, -1*Height)
     }
     Else 
@@ -142,11 +175,10 @@ BinMenu:
     MsgBox, 4, Confirm Delete, % TotalFiles " files, with a total size of " TotalSizeMB
     IfMsgBox Yes
     {
-        SetTimer, CheckProgress, on
+        SetTimer, CheckProgress, -1
         ; FileRecycleEmpty
         ; Run, %A_ScriptDir%\nircmd.exe emptybin
         Run, powershell.exe -command Clear-RecycleBin -Force,, 'hide'
-        SetTimer, CheckProgress, off
     }
 Return
 
@@ -211,8 +243,6 @@ WM_LBUTTONDOWN(wParam, lParam)
         {
             If GetKeyState("LButton", "P")
             {
-                ; MouseGetPos, lmx2, lmy2, ClickedWinHwndU
-                ; WinGetClass, classU, ahk_id %ClickedWinHwndU%
                 MouseGetPos, MXw, MYw, MouseWinHwnd
                 WinGetClass, wmClassU, ahk_id %MouseWinHwnd%
                 If (wmClassU != "CabinetWClass" && wx < 0 && (lmx > MXw && lmy > MYw))
