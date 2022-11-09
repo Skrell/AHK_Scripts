@@ -103,6 +103,7 @@ DeleteDC(hdc)
 ; The bitmap we made from the image may be deleted
 ; Gdip_DisposeImage(pBitmapFull)
 Return 
+
 2GuiDropFiles:
     Tooltip, Moving Files...
     Loop, parse, A_GuiEvent, `n
@@ -114,6 +115,7 @@ Return
     }
     Tooltip, 
 return
+
 MasterTimer:
     TotalFiles   := SHQueryRecycleBin("C:\", 3)
     MouseGetPos, mtX, mtY, 
@@ -163,6 +165,7 @@ MasterTimer:
         }
     }
 Return
+
 BinMenu:
     TotalFiles   := SHQueryRecycleBin("C:\", 3)
     TotalSizeMB  := SHQueryRecycleBin("C:\", 2)
@@ -176,6 +179,7 @@ BinMenu:
         Run, powershell.exe -command Clear-RecycleBin -Force,, 'hide'
     }
 Return
+
 CheckProgress:
     previousAmount := -1
     Gui, 3: New, +AlwaysOnTop, Deleting Files...
@@ -198,6 +202,7 @@ CheckProgress:
     GuiControl, 3:, MyProgress, 100
     Gui, 3: Destroy
 Return
+
 WM_RBUTTONDOWN(wParam, lParam)
 {
     X := lParam & 0xFFFF
@@ -207,6 +212,7 @@ WM_RBUTTONDOWN(wParam, lParam)
     ; ToolTip You left-clicked in Gui window #%A_Gui% at client coordinates %X%x%Y%.%Control%
     Menu, MyMenu, Show
 }
+
 WM_LBUTTONDOWN(wParam, lParam)
 {
     global hwnd2
@@ -222,11 +228,15 @@ WM_LBUTTONDOWN(wParam, lParam)
         Run, explorer.exe shell:RecycleBinFolder
     }
 }
+
 ~LButton::
     SetTimer, MasterTimer, Off
     MouseGetPos, lmx, lmy, ClickedWinHwnd
     WinGetClass, wmClassD, ahk_id %ClickedWinHwnd%
     WinGetPos, wx, wy , , ,%winId2%
+        
+    If (GetKeyState("Shift", "P") && (wmClassD == "WorkerW") || wmClassD == "Progman")
+        Return
         
     If (wmClassD == "CabinetWClass" || wmClassD == "WorkerW" || wmClassD == "Progman")
     {
@@ -257,12 +267,15 @@ WM_LBUTTONDOWN(wParam, lParam)
     }
     SetTimer, MasterTimer, On
 Return
+
 ;#######################################################################
 Exit:
     ; gdi+ may now be shutdown on exiting the program
     Gdip_Shutdown(pToken)
     ExitApp
 Return
+
+;#######################################################################
 MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
 {
    Critical On
