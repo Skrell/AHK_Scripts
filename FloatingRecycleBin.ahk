@@ -7,10 +7,8 @@ CoordMode, Pixel, Screen
 ; Uncomment if Gdip.ahk is not in your standard library
 #Include, Gdip_All.ahk
 SetTimer, MasterTimer, 100
-
 Menu, MyMenu, Add, Empty Bin, BinMenu
 Menu, Tray, Icon, C:\Windows\system32\shell32.dll,33
-
 ; Start gdi+
 If !pToken := Gdip_Startup()
 {
@@ -31,7 +29,6 @@ Gui, 2: -Caption +E0x80000 +LastFound +OwnDialogs +Owner +AlwaysOnTop
 Gui, 2: Show, NA
 OnMessage(0x201, "WM_LBUTTONDOWN")
 OnMessage(0x204, "WM_RBUTTONDOWN")
-
 ; Get a handle to this window we have created in order to update it later
 hwnd2 := WinExist()
 winId2 = ahk_id %hwnd2%
@@ -59,18 +56,13 @@ G := Gdip_GraphicsFromHDC(hdc)
 ; Interpolation mode has been set to HighQualityBicubic = 7
 Gdip_SetInterpolationMode(G, 7)
 Gdip_SetSmoothingMode(G, 4)
-
 ; Create a green brush (this will be used to fill the background with green). The brush is fully opaque (ARGB)
 ; pBrush := Gdip_BrushCreateSolid(0x55000000)
-
 ; Filll the entire graphics of the bitmap with the green brush (this will be out background colour)
 ; Gdip_FillRectangle(G, pBrush, 0, 0, Width, Height)
-
 ; Delete the brush created to save memory as we don't need the same brush anymore
 ; Gdip_DeleteBrush(pBrush)
-
-blurpBitmap := Gdip_BlurBitmap(pBitmapFull, 8)
-
+blurpBitmap := Gdip_BlurBitmap(pBitmapFull, 20)
 ; DrawImage will draw the bitmap we took from the file into the graphics of the bitmap we created
 ; We are wanting to draw the entire image, but at half its size
 ; Coordinates are therefore taken from (0,0) of the source bitmap and also into the destination bitmap
@@ -79,16 +71,24 @@ blurpBitmap := Gdip_BlurBitmap(pBitmapFull, 8)
 ; d is for destination and s is for source. We will not talk about the matrix yet (this is for changing colours when drawing)
 ; Can be passed in pretty much any format you want with anything used as a separator
 ; I have made the function use RegExReplace to fix any errors. So you could pass it as 0.9|0|0|0|00|0.9|0|0|00|0|1.5|0|00|0|0|1|0-1|0|5|0|1
-Matrix =
+MatrixBlur =
 (
 0.0		0		0		0		0
 0		0.0		0		0		0
 0		0		0.0		0		0
-0		0		0		0.75	0
+0		0		0		0.35	0
 0		0		0		0		1
 )
-Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, Matrix)
-Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, 1)
+MatrixBright =
+(
+1.25	0		0		0		0
+0		1.25	0		0		0
+0		0		1.25	0		0
+0		0		0		1   	0
+0		0		0		0		1
+)
+Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBlur)
+Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBright)
 ; Update the specified window we have created (hwnd1) with a handle to our bitmap (hdc), specifying the x,y,w,h we want it positioned on our screen
 ; So this will position our gui at (0,0) with the Width and Height specified earlier (half of the original image)
 UpdateLayeredWindow(hwnd2, hdc, -1*Width, -1*Height, Width, Height)
@@ -103,7 +103,6 @@ DeleteDC(hdc)
 ; The bitmap we made from the image may be deleted
 ; Gdip_DisposeImage(pBitmapFull)
 Return 
-
 2GuiDropFiles:
     Tooltip, Moving Files...
     Loop, parse, A_GuiEvent, `n
@@ -115,13 +114,10 @@ Return
     }
     Tooltip, 
 return
-
 MasterTimer:
     TotalFiles   := SHQueryRecycleBin("C:\", 3)
-
     MouseGetPos, mtX, mtY, 
     WinGetPos, wtx, wty , , , %winId2%
-
     If (mtX <= 3 && mtY <= 3 && wtx < 0)
     {
         If (TotalFiles == 0)
@@ -134,8 +130,8 @@ MasterTimer:
             ; Get a pointer to the graphics of the bitmap, for use with drawing functions
             G := Gdip_GraphicsFromHDC(hdc)
             Gdip_GraphicsClear(G)
-            Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, Matrix)
-            Gdip_DrawImage(G, pBitmapEmpty, 0, 0, Width, Height, 0, 0, Width, Height, 1)
+            Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBlur)
+            Gdip_DrawImage(G, pBitmapEmpty, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBright)
         }
         Else
         {
@@ -147,8 +143,8 @@ MasterTimer:
             ; Get a pointer to the graphics of the bitmap, for use with drawing functions
             G := Gdip_GraphicsFromHDC(hdc)
             Gdip_GraphicsClear(G)
-            Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, Matrix)
-            Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, 1)
+            Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBlur)
+            Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBright)
         }
         UpdateLayeredWindow(hwnd2, hdc, -1*Width, -1*Height, Width, Height)   
         ; Select the object back into the hdc
@@ -167,7 +163,6 @@ MasterTimer:
         }
     }
 Return
-
 BinMenu:
     TotalFiles   := SHQueryRecycleBin("C:\", 3)
     TotalSizeMB  := SHQueryRecycleBin("C:\", 2)
@@ -181,12 +176,11 @@ BinMenu:
         Run, powershell.exe -command Clear-RecycleBin -Force,, 'hide'
     }
 Return
-
 CheckProgress:
     previousAmount := -1
-    Gui, 3: New, -Caption +AlwaysOnTop
-    Gui, 3: Add, Progress, w200 h20 c06AA24 vMyProgress, 0
-    Gui, 3: Show, NA
+    Gui, 3: New, +AlwaysOnTop, Deleting Files...
+    Gui, 3: Add, Progress, w400 h20 c06AA24 vMyProgress, 0
+    Gui, 3: Show, 
     loop
     {
         FilesRemaining := SHQueryRecycleBin("C:\", 3)
@@ -204,7 +198,6 @@ CheckProgress:
     GuiControl, 3:, MyProgress, 100
     Gui, 3: Destroy
 Return
-
 WM_RBUTTONDOWN(wParam, lParam)
 {
     X := lParam & 0xFFFF
@@ -214,7 +207,6 @@ WM_RBUTTONDOWN(wParam, lParam)
     ; ToolTip You left-clicked in Gui window #%A_Gui% at client coordinates %X%x%Y%.%Control%
     Menu, MyMenu, Show
 }
-
 WM_LBUTTONDOWN(wParam, lParam)
 {
     global hwnd2
@@ -230,7 +222,6 @@ WM_LBUTTONDOWN(wParam, lParam)
         Run, explorer.exe shell:RecycleBinFolder
     }
 }
-
 ~LButton::
     SetTimer, MasterTimer, Off
     MouseGetPos, lmx, lmy, ClickedWinHwnd
@@ -266,14 +257,12 @@ WM_LBUTTONDOWN(wParam, lParam)
     }
     SetTimer, MasterTimer, On
 Return
-
 ;#######################################################################
 Exit:
     ; gdi+ may now be shutdown on exiting the program
     Gdip_Shutdown(pToken)
     ExitApp
 Return
-
 MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
 {
    Critical On
@@ -346,7 +335,6 @@ MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
    Critical Off
    Return
 }
-
 /*
 ======================================================
 Find RecycleBin Size
