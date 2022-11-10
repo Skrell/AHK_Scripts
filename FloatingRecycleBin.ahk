@@ -231,12 +231,20 @@ WM_LBUTTONDOWN(wParam, lParam)
 
 ~LButton::
     SetTimer, MasterTimer, Off
-    MouseGetPos, lmx, lmy, ClickedWinHwnd
+    MouseGetPos, lmx, lmy, ClickedWinHwnd, CtrlClass
     WinGetClass, wmClassD, ahk_id %ClickedWinHwnd%
     WinGetPos, wx, wy , , ,%winId2%
         
-    If (GetKeyState("Shift", "P") && (wmClassD == "WorkerW" || wmClassD == "Progman"))
+    If (!IsMouseOverIcon(wmClassD, CtrlClass) || (GetKeyState("Shift", "P") && (wmClassD == "WorkerW" || wmClassD == "Progman")))
+    {
+        WinGetPos, wx, wy , , ,%winId2%
+        If (wx >= 0)
+        {
+            MoveToTargetSpot(winId2, 10, -1*Width, 0, -1*Height , 0)
+        }
+        SetTimer, MasterTimer, On
         Return
+    }
         
     If (wmClassD == "CabinetWClass" || wmClassD == "WorkerW" || wmClassD == "Progman")
     {
@@ -347,6 +355,40 @@ MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
    }
    Critical Off
    Return
+}
+/*
+======================================================
+https://www.autohotkey.com/boards/viewtopic.php?f=6&t=62224
+======================================================
+*/
+IsMouseOverIcon(WinClass, CtrlClass) {
+   try if (WinClass = "CabinetWClass" && CtrlClass = "DirectUIHWND2") {
+      oAcc := Acc_ObjectFromPoint()
+      Name := Acc_Parent(oAcc).accValue(0)
+      Name := Name ? Name : oAcc.accValue(0)
+      Return  Name ? true : false
+   } else if (WinClass = "Progman" || WinClass = "WorkerW") {
+      oAcc := Acc_ObjectFromPoint(ChildID)
+      Return  ChildID ? true : false
+   }
+}
+; https://github.com/Drugoy/Autohotkey-scripts-.ahk/blob/master/Libraries/Acc.ahk
+Acc_Init() {
+	Static h
+	If Not h
+		h:=DllCall("LoadLibrary","Str","oleacc","Ptr")
+}
+Acc_ObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
+	Acc_Init()
+	If	DllCall("oleacc\AccessibleObjectFromPoint", "Int64", x==""||y==""?0*DllCall("GetCursorPos","Int64*",pt)+pt:x&0xFFFFFFFF|y<<32, "Ptr*", pacc, "Ptr", VarSetCapacity(varChild,8+2*A_PtrSize,0)*0+&varChild)=0
+	Return ComObjEnwrap(9,pacc,1), _idChild_:=NumGet(varChild,8,"UInt")
+}
+Acc_Parent(Acc) { 
+	try parent:=Acc.accParent
+	return parent?Acc_Query(parent):
+}
+Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=81731&p=509530#509530
+	try return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
 }
 /*
 ======================================================
