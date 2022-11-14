@@ -7,6 +7,9 @@ CoordMode, Pixel, Screen
 ; Uncomment if Gdip.ahk is not in your standard library
 #Include, Gdip_All.ahk
 SetTimer, MasterTimer, 100
+MoveIncrement := 5
+PI := 3.14159265
+
 Menu, MyMenu, Add, Empty Bin, BinMenu
 Menu, Tray, Icon, C:\Windows\system32\shell32.dll,33
 ; Start gdi+
@@ -54,15 +57,15 @@ G := Gdip_GraphicsFromHDC(hdc)
 ; We do not need SmoothingMode as we did in previous examples for drawing an image
 ; Instead we must set InterpolationMode. This specifies how a file will be resized (the quality of the resize)
 ; Interpolation mode has been set to HighQualityBicubic = 7
-Gdip_SetInterpolationMode(G, 7)
-Gdip_SetSmoothingMode(G, 4)
+; Gdip_SetInterpolationMode(G, 7)
+; Gdip_SetSmoothingMode(G, 4)
 ; Create a green brush (this will be used to fill the background with green). The brush is fully opaque (ARGB)
 ; pBrush := Gdip_BrushCreateSolid(0x55000000)
 ; Filll the entire graphics of the bitmap with the green brush (this will be out background colour)
 ; Gdip_FillRectangle(G, pBrush, 0, 0, Width, Height)
 ; Delete the brush created to save memory as we don't need the same brush anymore
 ; Gdip_DeleteBrush(pBrush)
-blurpBitmap := Gdip_BlurBitmap(pBitmapFull, 20)
+blurpBitmap := Gdip_BlurBitmap(pBitmapEmpty, 4)
 ; DrawImage will draw the bitmap we took from the file into the graphics of the bitmap we created
 ; We are wanting to draw the entire image, but at half its size
 ; Coordinates are therefore taken from (0,0) of the source bitmap and also into the destination bitmap
@@ -76,7 +79,7 @@ MatrixBlur =
 0.0		0		0		0		0
 0		0.0		0		0		0
 0		0		0.0		0		0
-0		0		0		0.35	0
+0		0		0		0.35 	0
 0		0		0		0		1
 )
 MatrixBright =
@@ -87,17 +90,17 @@ MatrixBright =
 0		0		0		1   	0
 0		0		0		0		1
 )
-Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBlur)
-Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBright)
+; Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBlur)
+; Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBright)
 ; Update the specified window we have created (hwnd1) with a handle to our bitmap (hdc), specifying the x,y,w,h we want it positioned on our screen
 ; So this will position our gui at (0,0) with the Width and Height specified earlier (half of the original image)
-UpdateLayeredWindow(hwnd2, hdc, -1*Width, -1*Height, Width, Height)
+; UpdateLayeredWindow(hwnd2, hdc, -1*Width, -1*Height, Width, Height)
 ; Select the object back into the hdc
-SelectObject(hdc, obm)
+; SelectObject(hdc, obm)
 ; Now the bitmap may be deleted
-DeleteObject(hbm)
+; DeleteObject(hbm)
 ; Also the device context related to the bitmap may be deleted
-DeleteDC(hdc)
+; DeleteDC(hdc)
 ; The graphics may now be deleted
 ; Gdip_DeleteGraphics(G)
 ; The bitmap we made from the image may be deleted
@@ -117,13 +120,20 @@ Return
 return
 
 MasterTimer:
-    TotalFiles   := SHQueryRecycleBin("C:\", 3)
+    TotalFiles   := SHQueryRecycleBin("", 3)
     MouseGetPos, mtX, mtY, 
     WinGetPos, wtx, wty , , , %winId2%
     If (mtX <= 3 && mtY <= 3 && wtx < 0)
     {
         If (TotalFiles == 0)
         {
+            ; Select the object back into the hdc
+            SelectObject(hdc, obm)
+            ; Now the bitmap may be deleted
+            DeleteObject(hbm)
+            ; Also the device context related to the bitmap may be deleted
+            DeleteDC(hdc)
+            
             hbm := CreateDIBSection(Width*2, Height*2)
             ; Get a device context compatible with the screen
             hdc := CreateCompatibleDC()
@@ -131,12 +141,21 @@ MasterTimer:
             obm := SelectObject(hdc, hbm)
             ; Get a pointer to the graphics of the bitmap, for use with drawing functions
             G := Gdip_GraphicsFromHDC(hdc)
+            ; Gdip_SetInterpolationMode(G, 7)
+            Gdip_SetSmoothingMode(G, 4)
             Gdip_GraphicsClear(G)
-            Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBlur)
+            Gdip_DrawImage(G, blurpBitmap,  4, 4, Width, Height, 0, 0, Width, Height, MatrixBlur)
             Gdip_DrawImage(G, pBitmapEmpty, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBright)
         }
         Else
         {
+            ; Select the object back into the hdc
+            SelectObject(hdc, obm)
+            ; Now the bitmap may be deleted
+            DeleteObject(hbm)
+            ; Also the device context related to the bitmap may be deleted
+            DeleteDC(hdc)
+            
             hbm := CreateDIBSection(Width*2, Height*2)
             ; Get a device context compatible with the screen
             hdc := CreateCompatibleDC()
@@ -144,32 +163,28 @@ MasterTimer:
             obm := SelectObject(hdc, hbm)
             ; Get a pointer to the graphics of the bitmap, for use with drawing functions
             G := Gdip_GraphicsFromHDC(hdc)
+            ; Gdip_SetInterpolationMode(G, 7)
+            Gdip_SetSmoothingMode(G, 4)
             Gdip_GraphicsClear(G)
-            Gdip_DrawImage(G, blurpBitmap, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBlur)
+            Gdip_DrawImage(G, blurpBitmap, 4, 4, Width, Height, 0, 0, Width, Height, MatrixBlur)
             Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBright)
         }
-        UpdateLayeredWindow(hwnd2, hdc, -1*Width, -1*Height, Width, Height)   
-        ; Select the object back into the hdc
-        SelectObject(hdc, obm)
-        ; Now the bitmap may be deleted
-        DeleteObject(hbm)
-        ; Also the device context related to the bitmap may be deleted
-        DeleteDC(hdc)
-        MoveToTargetSpot(winId2, 10, 0, -1*Width, 0, -1*Height)
+        UpdateLayeredWindow(hwnd2, hdc, -1*Width, -1*Height, Width, Height, 0)   
+        MoveToTargetSpot(winId2, MoveIncrement, 0, -1*Width, 0, -1*Height, "in")
     }
     Else 
     {   
         If (mtX == 0 && mtY >= 100 && wtx >= 0)
         {
-            MoveToTargetSpot(winId2, 10, -1*Width, 0, -1*Height , 0)
+            MoveToTargetSpot(winId2, MoveIncrement, -1*Width, 0, -1*Height , 0, "out")
         }
     }
 Return
 
 BinMenu:
-    TotalFiles   := SHQueryRecycleBin("C:\", 3)
-    TotalSizeMB  := SHQueryRecycleBin("C:\", 2)
-    TotalSize    := SHQueryRecycleBin("C:\", 1)
+    TotalFiles   := SHQueryRecycleBin("", 3)
+    TotalSizeMB  := SHQueryRecycleBin("", 2)
+    TotalSize    := SHQueryRecycleBin("", 1)
     MsgBox, 4, Confirm Delete, % TotalFiles " files, with a total size of " TotalSizeMB
     IfMsgBox Yes
     {
@@ -187,8 +202,8 @@ CheckProgress:
     Gui, 3: Show, 
     loop
     {
-        FilesRemaining := SHQueryRecycleBin("C:\", 3)
-        SizeRemaining  := SHQueryRecycleBin("C:\", 1)
+        FilesRemaining := SHQueryRecycleBin("", 3)
+        SizeRemaining  := SHQueryRecycleBin("", 1)
         amountLeft := 100 - ceil(100 * (SizeRemaining/TotalSize))
         If (previousAmount != amountLeft)
             GuiControl, 3:, MyProgress, %amountLeft% ; Set the position of the bar to 50%.
@@ -240,7 +255,7 @@ WM_LBUTTONDOWN(wParam, lParam)
         WinGetPos, wx, wy , , ,%winId2%
         If (wx >= 0)
         {
-            MoveToTargetSpot(winId2, 10, -1*Width, 0, -1*Height , 0)
+            MoveToTargetSpot(winId2, MoveIncrement, -1*Width, 0, -1*Height , 0, "out")
         }
         SetTimer, MasterTimer, On
         Return
@@ -256,7 +271,7 @@ WM_LBUTTONDOWN(wParam, lParam)
                 WinGetClass, wmClassU, ahk_id %MouseWinHwnd%
                 If (wmClassU != "CabinetWClass" && wx < 0 && (lmx > MXw && lmy > MYw))
                 {
-                    MoveToTargetSpot(winId2, 10, 0, -1*Width, 0, -1*Height)
+                    MoveToTargetSpot(winId2, MoveIncrement, 0, -1*Width, 0, -1*Height, "in")
                     break
                 }
                 lmx := MXw
@@ -271,7 +286,8 @@ WM_LBUTTONDOWN(wParam, lParam)
     WinGetPos, wx, wy , , ,%winId2%
     If (wx >= 0)
     {
-        MoveToTargetSpot(winId2, 10, -1*Width, 0, -1*Height , 0)
+        sleep 500
+        MoveToTargetSpot(winId2, MoveIncrement, -1*Width, 0, -1*Height , 0, "out")
     }
     SetTimer, MasterTimer, On
 Return
@@ -284,12 +300,15 @@ Exit:
 Return
 
 ;#######################################################################
-MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
+MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1, fade := "na")
 {
+   global hwnd2, hdc, PI
    Critical On
-   loopCount := 0
-   xIsFurther := False
-   yIsFurther := False
+   loopCount     := 0
+   startTrans    := 0
+   loopCountInit := loopCount
+   xIsFurther    := False
+   yIsFurther    := False
    
    If (targetX > orgX)
       moveIncrementX := moveincrement
@@ -316,16 +335,47 @@ MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
             adjustedIncPerc := abs(targetX-orgX)/abs(targetY-orgY)
        }
        
+       If (fade != "na" && loopCount < 255)
+       {
+            fadeIncr := (PI/2/loopCount) ;;floor(255/loopCount)
+            If (fade == "out")
+            {
+                fadeIncr := -1 * fadeIncr
+                startTrans := 255
+            }
+            else
+            {
+                startTrans := 0
+            }
+       }
+       
        If (targetY == -1)
        {
-           newX := orgX
-           loop % loopCount
-           {   
-               newX := newX + moveIncrementX
-               sleep, 1
-               WinMove, %winId%,, newX 
-           }
-           WinMove, %winId%,, targetX
+          newX := orgX
+          loop % loopCount
+          {   
+              newX := newX + moveIncrementX
+              sleep, 10
+              WinMove, %winId%,, newX 
+              
+              If (fade == "in")
+              {
+                 UpdateLayeredWindow(hwnd2, hdc, , , , , startTrans)   
+                 startTrans := floor(255*(sin((3*PI/2) + (A_Index*fadeIncr)))) + 255
+              }
+              Else If (fade == "out")
+              {
+                 UpdateLayeredWindow(hwnd2, hdc, , , , , startTrans)   
+                 startTrans := floor(255*(sin((2*PI) + (A_Index*fadeIncr)))) + 255
+              }
+          }
+          
+          WinMove, %winId%,, targetX
+                     
+          If (fade == "in")
+             UpdateLayeredWindow(hwnd2, hdc, , , , , 255)
+          Else If (fade == "out")
+             UpdateLayeredWindow(hwnd2, hdc, , , , , 0)
        }
        Else
        {
@@ -343,10 +393,27 @@ MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1)
                   newX := newX + ceil(moveIncrementX*adjustedIncPerc)
                   newY := newY + moveIncrementY
               }
-              sleep, 1
+              sleep, 10
               WinMove, %winId%,, newX, newY 
+             
+              If (fade == "in")
+              {
+                 UpdateLayeredWindow(hwnd2, hdc, , , , , startTrans)   
+                 startTrans := floor(255*(sin((3*PI/2) + (A_Index*fadeIncr)))) + 255
+              }
+              Else If (fade == "out")
+              {
+                 UpdateLayeredWindow(hwnd2, hdc, , , , , startTrans)   
+                 startTrans := floor(255*(sin((2*PI) + (A_Index*fadeIncr)))) + 255
+              }
           }
+          
           WinMove, %winId%,, targetX, targetY
+          
+          If (fade == "in")
+             UpdateLayeredWindow(hwnd2, hdc, , , , , 255)
+          Else If (fade == "out")
+             UpdateLayeredWindow(hwnd2, hdc, , , , , 0)
        }
    }
    Else
