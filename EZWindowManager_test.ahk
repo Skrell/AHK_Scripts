@@ -17,6 +17,7 @@ CoordMode, Pixel, Screen
 #Include %A_ScriptDir%\UIA_Interface.ahk 
 
 Wheel_disabled := False
+PI := 3.14159265
 TransparentValue := 120
 KDE_WinUp    :=
 KDE_WinLeft  :=
@@ -96,7 +97,7 @@ SetTimer, OtherTimer, 100, -1
 
 Gui +LastFound
 hWnd := WinExist()
-DetectHiddenWindows, On
+DetectHiddenWindows, Off
 DllCall( "RegisterShellHookWindow", UInt,hWnd )
 MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
 OnMessage( MsgNum, "ShellMessage" )
@@ -148,7 +149,7 @@ MasterTimer:
     MouseGetPos, MXw, MYw, MouseWinHwnd
     WinGetClass, wmClass, ahk_id %MouseWinHwnd%
 
-    If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 100)
+    If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 150)
         DesktopIcons(True)
     
     If WinExist("ahk_class #32768")
@@ -170,13 +171,13 @@ MasterTimer:
         CmenuArrayIds := []
     }
     
-    fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
-    fileOpHwnd2 := WinExist("ahk_class #32770", "Type of file")
+    ; fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
+    ; fileOpHwnd2 := WinExist("ahk_class #32770", "Type of file")
+    fileOpHwnd1 := WinExist("ahk_class #32770")
     fileOpHwnd3 := WinExist("ahk_class OperationStatusWindow")
     If (fileOpHwnd1 || fileOpHwnd2 || fileOpHwnd3)
     {
         WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd1%
-        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd2%
         WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd3%
     }
     
@@ -273,12 +274,13 @@ WatchMouse:
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, 0-offL, WinX)
-                    FadeToTargetTrans(winId, 255, 200)
+                    MoveToTargetSpot(winId, 40, 0-offL, WinX, -1, -1, "in", 100)
+                    ; FadeToTargetTrans(winId, 255, 200)
                     FileAppend, WatchMouse - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                     lastWindowPeaked   := True
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
                     AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
+                    WinSet, AlwaysOnTop, On, %winId%
                     Break
                 }
                 Else If (WinX+WinH > A_ScreenWidth) && (lastWindowPeaked ||  ((MXw-MXw_bkup) > MouseMoveBuffer) || (MXw >= (A_ScreenWidth-2) && MXw_bkup >= (A_ScreenWidth-2))) 
@@ -286,12 +288,13 @@ WatchMouse:
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, A_ScreenWidth-WinW-OffR, WinX)
-                    FadeToTargetTrans(winId, 255, 200)
+                    MoveToTargetSpot(winId, 40, A_ScreenWidth-WinW-OffR, WinX, -1, -1, "in", 100)
+                    ; FadeToTargetTrans(winId, 255, 200)
                     FileAppend, WatchMouse1 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
                     lastWindowPeaked   := True
                     AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
+                    WinSet, AlwaysOnTop, On, %winId%
                     Break
                 }
             }
@@ -330,7 +333,7 @@ WatchMouse:
         }
     }
     
-    If (LookForLeaveWindow && MouseWinHwnd && HoveringWinHwnd) 
+    If (LookForLeaveWindow && MouseWinHwnd && HoveringWinHwnd) && wmClass != "#32770" && wmClass != "OperationStatusWindow" 
     {
         If (HoveringWinHwnd != MouseWinHwnd)
         {
@@ -385,9 +388,9 @@ WatchMouse:
                       
                       WinMove, %winId%,, newOrgX-OffR
                       If (percLeft < 0.10)
-                        FadeToTargetTrans(winId, 100)
+                         FadeToTargetTrans(winId, 100)
                       Else
-                        FadeToTargetTrans(winId, 200)
+                         FadeToTargetTrans(winId, 200)
                       LookForLeaveWindow := False
                       FileAppend, WatchMouse2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                       WinSet, Bottom, , %winId%
@@ -1248,22 +1251,23 @@ FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
    Return
 }
 
-MoveToTargetSpot(winId, targetX, orgX, targetY := -1, orgY := -1)
+MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1, fade := "na", transVal := 0)
 {
+   global PI
    Critical On
    loopCount := 0
    xIsFurther := False
    yIsFurther := False
    
    If (targetX > orgX)
-      moveIncrementX := 100
+      moveIncrementX := moveincrement
    Else
-      moveIncrementX := -100
+      moveIncrementX := -1*moveincrement
       
    If (targetY > orgY)
-      moveIncrementY := 100
+      moveIncrementY := moveincrement
    Else
-      moveIncrementY := -100
+      moveIncrementY := -1*moveincrement
       
    If WinExist(winId)
    {
@@ -1280,6 +1284,22 @@ MoveToTargetSpot(winId, targetX, orgX, targetY := -1, orgY := -1)
             adjustedIncPerc := abs(targetX-orgX)/abs(targetY-orgY)
        }
        
+       If (fade != "na" && loopCount < (255-transVal))
+       {
+            ; fadeIncr := floor((255-transVal)/loopCount)
+
+            fadeIncr := (PI/2/((255-transVal)/loopCount)) 
+            If (fade == "out")
+            {
+                fadeIncr := -1 * fadeIncr
+                startTrans := 255
+            }
+            else
+            {
+                startTrans := transVal
+            }
+       }
+       
        If (targetY == -1)
        {
            newX := orgX
@@ -1288,8 +1308,26 @@ MoveToTargetSpot(winId, targetX, orgX, targetY := -1, orgY := -1)
                newX := newX + moveIncrementX
                sleep, 1
                WinMove, %winId%,, newX 
+               
+              If (fade == "in")
+              {
+                 WinSet, Transparent, %startTrans%, %winId%
+                 startTrans := transVal + (floor((255-transVal)*(sin((3*PI/2) + (A_Index*fadeIncr)))) + (255-transVal))
+              }
+              Else If (fade == "out")
+              {
+                 WinSet, Transparent, %startTrans%, %winId%
+                 startTrans := transVal + (floor((255-transVal)*(sin((2*PI) + (A_Index*fadeIncr)))) + (255-transVal))
+              }
            }
+           
            WinMove, %winId%,, targetX
+           
+           If (fade == "in")
+              WinSet, Transparent, 255, %winId%
+           Else If (fade == "out")
+              WinSet, Transparent, transVal, %winId%
+
        }
        Else
        {
@@ -1299,7 +1337,6 @@ MoveToTargetSpot(winId, targetX, orgX, targetY := -1, orgY := -1)
           {   
               If (xIsFurther)
               {
-                  tooltip, % adjustedIncPerc
                   newX := newX + moveIncrementX
                   newY := newY + ceil(moveIncrementY*adjustedIncPerc)
               }
@@ -1310,8 +1347,26 @@ MoveToTargetSpot(winId, targetX, orgX, targetY := -1, orgY := -1)
               }
               sleep, 1
               WinMove, %winId%,, newX, newY 
+              
+              If (fade == "in")
+              {
+                 WinSet, Transparent, %startTrans%, %winId%
+                 startTrans := transVal + (floor((255-transVal)*(sin((3*PI/2) + (A_Index*fadeIncr)))) + (255-transVal))
+              }
+              Else If (fade == "out")
+              {
+                 WinSet, Transparent, %startTrans%, %winId%
+                 startTrans := transVal + (floor((255-transVal)*(sin((2*PI) + (A_Index*fadeIncr)))) + (255-transVal))
+              }
           }
+          
           WinMove, %winId%,, targetX, targetY
+          
+          If (fade == "in")
+             WinSet, Transparent, 255, %winId%
+          Else If (fade == "out")
+             WinSet, Transparent, transVal, %winId%
+             
        }
    }
    Critical Off
@@ -1404,15 +1459,14 @@ Return
                     
                     If (WinX < 0) {
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
-                        ; MoveToTargetSpot(winHwndx_ID, 0-offL, WinX)
-                        MoveToTargetSpot(winHwndx_ID, A_ScreenWidth/2, WinX)
+                        MoveToTargetSpot(winHwndx_ID, 100, 0-OffL, WinX)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
                         TaskbarPeak := True
                         Break
                     }
                     Else If (WinX+WinH > A_ScreenWidth) {
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
-                        MoveToTargetSpot(winHwndx_ID, A_ScreenWidth-WinW-OffR, WinX)
+                        MoveToTargetSpot(winHwndx_ID, 100, A_ScreenWidth-WinW-OffR, WinX)
                         FadeToTargetTrans(winHwndx_ID, 255, 200)
                         TaskbarPeak := True
                         Break
