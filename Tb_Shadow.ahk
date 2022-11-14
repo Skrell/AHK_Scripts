@@ -1,10 +1,12 @@
 #NoEnv 
 #SingleInstance force 
 #Persistent 
-SetTitleMatchMode RegEx
-
+SetBatchLines, -1
+SetWinDelay, -1   ; Makes the below move faster/smoother.
+Process, Priority,, High
 SysGet, MonitorWorkArea, MonitorWorkArea 
 SysGet, MonitorArea, Monitor 
+CmenuArrayIds        := []
 
 MonitorWorkAreaWidth := MonitorWorkAreaRight - MonitorWorkAreaLeft
 
@@ -31,10 +33,9 @@ Menu, Tray, Check, Bold Shadow
 IfExist, %A_Startup%/Tb_Shadow.lnk
     Menu, Tray, Check, Run at Startup
 
-
 Gui, Shadow1:New
 Gui, +HwndIGUI1
-Gui, -Caption +ToolWindow +Lastfound -Border
+Gui, -Caption +ToolWindow +Lastfound -Border +E0x08000000 +AlwaysOnTop
 Gui, Color, FF00FF
 Gui, Show, Center w%MonitorWorkAreaWidth% h%TaskBarHeight%  y%TaskBarYPosition%, AHK GUI1
 FrameShadow(IGUI1)
@@ -42,11 +43,9 @@ FrameShadow(IGUI1)
 WinSet, TransColor, FF00FF, ahk_id %IGUI1%
 WinSet, Bottom, , ahk_id %IGUI1%
 
-WinSet_Click_Through(IGUI1,"On")
-
 Gui, Shadow2:New
 Gui, +HwndIGUI2
-Gui, -Caption +ToolWindow +Lastfound -Border
+Gui, -Caption +ToolWindow +Lastfound -Border +E0x08000000 +AlwaysOnTop
 Gui, Color, FF00FF
 Gui, Show, Center w%MonitorWorkAreaWidth% h%TaskBarHeight% y%TaskBarYPosition%, AHK GUI2
 FrameShadow(IGUI2)
@@ -54,19 +53,100 @@ FrameShadow(IGUI2)
 WinSet, TransColor, FF00FF, ahk_id %IGUI2%
 WinSet, Bottom, , ahk_id %IGUI2%
 
-WinSet_Click_Through(IGUI2,"On")
+Gui, Shadow3:New
+Gui, +HwndIGUI3
+Gui, -Caption +ToolWindow +Lastfound -Border +E0x08000000 +AlwaysOnTop
+Gui, Color, FF00FF
+Gui, Show, Center w%MonitorWorkAreaWidth% h%TaskBarHeight% y%TaskBarYPosition%, AHK GUI3
+FrameShadow(IGUI3)
+
+WinSet, TransColor, FF00FF, ahk_id %IGUI3%
+WinSet, Bottom, , ahk_id %IGUI3%
+
+Gui, ShadowRM:New
+Gui, +HwndIGUIR
+Gui, -Caption +ToolWindow +Lastfound -Border +E0x08000000
+WinSet, TransColor, F2F2F2 0, ahk_id %IGUIR%
+Gui, Color, F2F2F2
+Gui,Margin,0,0
+
+WinSet, ExStyle, +0x20, ahk_id %IGUIR%
+WinSet, AlwaysOnTop, On, ahk_id %IGUIR%
+
+SetTimer, LookForMenu, 100
+Return
+
+~LButton::
+    Gui, ShadowRM: Hide
+    WinSet, TransColor, F2F2F2 0, ahk_id %IGUIR%
+Return
+
+~RButton::
+    Gui, ShadowRM: Hide
+    WinSet, TransColor, F2F2F2 0, ahk_id %IGUIR%
+Return
+
+LookForMenu:
+    If (WinExist("ahk_class #32768"))
+    {
+        MouseGetPos , , , mId
+        WinGetClass, mClass, ahk_id %mid%
+        WinGet, winId, ID, ahk_class #32768
+        
+        WinGetPos, x, y, w, h, ahk_id %winId%
+        If ((oldId != winId) && x && y && w && h)
+        {
+            Gui, ShadowRM: Hide
+            
+            rmenuX := x
+            rmenuY := y
+            rmenuW := w ;- 2
+            rmenuH := h ;- 2
+            
+            Gui, ShadowRM:Show, NA x%rmenuX% y%rmenuY% w%rmenuW% h%rmenuH%, AHK GUI3 
+            FrameShadow(IGUIR)
+            WinSet, TransColor, F2F2F2 0, ahk_id %IGUIR%
+            WinSet, AlwaysOnTop, On, ahk_id %IGUIR%
+            
+            transLevel := 0
+            If !(HasVal(CmenuArrayIds, winId))
+            {
+                CmenuArrayIds.push(winId)
+            }
+            for idx, wid in CmenuArrayIds
+            {
+                If WinExist("ahk_id " . wid)
+                    WinSet, AlwaysOnTop, On, ahk_id %wid%
+            }
+            loop % 30
+            {
+                sleep 5
+                transLevel += 9
+                If transLevel > 255
+                    transLevel := 255
+                WinSet, TransColor, F2F2F2 %transLevel%, ahk_id %IGUIR%
+            }
+        }
+        oldId := winId
+    }
+    Else
+    {
+        Gui, ShadowRM: Hide
+        WinSet, TransColor, F2F2F2 0, ahk_id %IGUIR%
+        CmenuArrayIds := []
+    }
 Return
 
 DefaultShadow:
     Menu, Tray, Check, Default Shadow
     Menu, Tray, UnCheck, Bold Shadow
-    Gui, Shadow2:Hide
+    Gui, Shadow3:Hide
 Return
     
 BoldShadow:
     Menu, Tray, Check, Bold Shadow
     Menu, Tray, UnCheck, Default Shadow
-    Gui, Shadow2:Show
+    Gui, Shadow3:Show
 Return
 
 strtup:
@@ -126,8 +206,6 @@ WinSet_Click_Through(IDHWND, T="254") {
     Else
         Return 0
 }
-
-
 ShadowBorder(handle)
 {
     DllCall("user32.dll\SetClassLongPtr", "ptr", handle, "int", -26, "ptr", DllCall("user32.dll\GetClassLongPtr", "ptr", handle, "int", -26, "uptr") | 0x20000)
@@ -148,11 +226,51 @@ FrameShadow(handle) {
     }
 }
 
-If !pToken := Gdip_Startup()
+FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
 {
-    MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
-    ExitApp
+    Critical On
+    transIncrement := 10
+    If (targetValue != 255)
+    {   
+        maxValue := startValue
+        loop % (abs(startValue - targetValue)/transIncrement)
+        {   
+            sleep, 1
+            If (startValue > targetValue)
+                maxValue := maxValue - transIncrement
+            Else
+                maxValue := maxValue + transIncrement
+            WinSet, Transparent, %maxValue%, %winId%
+        }
+    }
+    Else ;target MUST be 255 opaque
+    {
+        init := startValue
+        loop % (ceil((255 - startValue)/transIncrement))
+        {
+            sleep, 1
+            init := init + transIncrement
+            WinSet, Transparent, %init%, %winId%
+        }
+    }
+    Critical Off
+   Return
 }
+
+HasVal(haystack, needle) {
+    for index, value in haystack
+        if (value == needle)
+            return True
+    if !(IsObject(haystack))
+        throw Exception("Bad haystack!", -1, haystack)
+    return False
+}
+
+;If !pToken := Gdip_Startup()
+;{
+;    MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
+;    ExitApp
+;}
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
