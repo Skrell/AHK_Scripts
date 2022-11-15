@@ -108,6 +108,7 @@ MatrixBright =
 Return 
 
 2GuiDropFiles:
+    TotalFiles   := SHQueryRecycleBin("", 3)
     Tooltip, Moving Files...
     Loop, parse, A_GuiEvent, `n
     {
@@ -115,6 +116,29 @@ Return
        FileRecycle, %A_LoopField% 
        if ErrorLevel   ; i.e. it's not blank or zero.
           MsgBox, % "Failed to Recycle " A_LoopField
+    }
+    
+    If (TotalFiles == 0)
+    {
+        ; Select the object back into the hdc
+        SelectObject(hdc, obm)
+        ; Now the bitmap may be deleted
+        DeleteObject(hbm)
+        ; Also the device context related to the bitmap may be deleted
+        DeleteDC(hdc)
+        
+        hbm := CreateDIBSection(Width*2, Height*2)
+        ; Get a device context compatible with the screen
+        hdc := CreateCompatibleDC()
+        ; Select the bitmap into the device context
+        obm := SelectObject(hdc, hbm)
+        ; Get a pointer to the graphics of the bitmap, for use with drawing functions
+        G := Gdip_GraphicsFromHDC(hdc)
+        ; Gdip_SetInterpolationMode(G, 7)
+        Gdip_SetSmoothingMode(G, 4)
+        Gdip_GraphicsClear(G)
+        Gdip_DrawImage(G, blurpBitmap, 4, 4, Width, Height, 0, 0, Width, Height, MatrixBlur)
+        Gdip_DrawImage(G, pBitmapFull, 0, 0, Width, Height, 0, 0, Width, Height, MatrixBright)
     }
     Tooltip, 
 return
