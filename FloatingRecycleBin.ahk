@@ -1,4 +1,5 @@
 #SingleInstance, Force
+#Persistent 
 #NoEnv
 SetBatchLines, -1
 SetWinDelay, -1
@@ -11,7 +12,18 @@ MoveIncrement := 5
 PI := 3.14159265
 
 Menu, MyMenu, Add, Empty Bin, BinMenu
-Menu, Tray, Icon, C:\Windows\system32\shell32.dll,33
+
+Menu, Tray, NoStandard
+Menu, Tray, Add, &Open, LaunchBin
+Menu, Tray, Add, Empty Bin, BinMenu
+Menu, Tray, Add, Reload, ReloadMenu
+Menu, Tray, Add, Exit, ExitMenu
+Menu, Tray, Default, &Open
+Menu, Tray, Click, 1
+Menu, Tray, Tip, % SHQueryRecycleBin("", 3) " files, with a total size of " SHQueryRecycleBin("", 2)
+Menu, Tray, Icon, C:\Windows\system32\shell32.dll,32
+
+
 ; Start gdi+
 If !pToken := Gdip_Startup()
 {
@@ -107,8 +119,13 @@ MatrixBright =
 ; Gdip_DisposeImage(pBitmapFull)
 Return 
 
+LaunchBin:
+    Run, explorer.exe shell:RecycleBinFolder
+Return
+
 2GuiDropFiles:
     TotalFiles   := SHQueryRecycleBin("", 3)
+    TotalSize    := SHQueryRecycleBin("", 1)
     Tooltip, Moving Files...
     Loop, parse, A_GuiEvent, `n
     {
@@ -118,7 +135,7 @@ Return
           MsgBox, % "Failed to Recycle " A_LoopField
     }
     
-    If (TotalFiles == 0)
+    If (TotalFiles == 0 && TotalSize == 0)
     {
         ; Select the object back into the hdc
         SelectObject(hdc, obm)
@@ -145,11 +162,12 @@ return
 
 MasterTimer:
     TotalFiles   := SHQueryRecycleBin("", 3)
+    TotalSize    := SHQueryRecycleBin("", 1)
     MouseGetPos, mtX, mtY, 
     WinGetPos, wtx, wty , , , %winId2%
     If (mtX <= 3 && mtY <= 3 && wtx < 0)
     {
-        If (TotalFiles == 0)
+        If (TotalFiles == 0 && TotalSize == 0)
         {
             ; Select the object back into the hdc
             SelectObject(hdc, obm)
@@ -203,6 +221,17 @@ MasterTimer:
             MoveToTargetSpot(winId2, MoveIncrement, -1*Width, 0, -1*Height , 0, "out")
         }
     }
+    
+    If (TotalFiles == 0 && TotalSize == 0)
+    {
+        Menu, Tray, Icon, C:\Windows\system32\shell32.dll,32
+    }
+    Else
+    {
+        Menu, Tray, Icon, C:\Windows\system32\shell32.dll,33
+    }
+    
+    Menu, Tray, Tip, % SHQueryRecycleBin("", 3) " files, with a total size of " SHQueryRecycleBin("", 2)
 Return
 
 BinMenu:
@@ -217,6 +246,14 @@ BinMenu:
         ; Run, %A_ScriptDir%\nircmd.exe emptybin
         Run, powershell.exe -command Clear-RecycleBin -Force,, 'hide'
     }
+Return
+
+ReloadMenu:
+    Reload
+Return
+
+ExitMenu:
+    ExitApp
 Return
 
 CheckProgress:
