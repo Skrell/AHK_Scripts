@@ -92,7 +92,7 @@ sleep 2000
 Tooltip, 
 
 t_KeepOnTop := t_WatchMouse := t_CheckButtonSize := t_ButCapture := t_RedetectColor := t_CheckButtonColor := A_TickCount 
-SetTimer, MasterTimer, 20, -1
+SetTimer, MasterTimer, 10, -1
 SetTimer, OtherTimer, 100, -1
 
 Gui +LastFound
@@ -151,25 +151,6 @@ MasterTimer:
 
     If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 150)
         DesktopIcons(True)
-    
-    If WinExist("ahk_class #32768")
-    {
-        WinGet, chwnd, ID, ahk_class #32768
-        If !(HasVal(CmenuArrayIds, chwnd))
-        {
-            CmenuArrayIds.push(chwnd)
-            for idx, chwnd in CmenuArrayIds
-            {
-                If WinExist("ahk_id " . chwnd)
-                    WinSet, AlwaysOnTop, On, ahk_id %chwnd%
-            }
-        }
-        ; tooltip, % join(CmenuArrayIds)
-    }
-    Else
-    {
-        CmenuArrayIds := []
-    }
     
     ; fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
     ; fileOpHwnd2 := WinExist("ahk_class #32770", "Type of file")
@@ -274,9 +255,9 @@ WatchMouse:
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, 40, 0-offL, WinX, -1, -1, "in", 100)
+                    MoveToTargetSpot(winId, 50, 0-offL, WinX, -1, -1, "in", 100)
                     ; FadeToTargetTrans(winId, 255, 200)
-                    FileAppend, WatchMouse - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
+                    FileAppend, WatchMouse - %LookForLeaveWindow% "-" %MouseWinHwnd% `n, C:\Users\vbonaven\Desktop\log.txt
                     lastWindowPeaked   := True
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
                     AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
@@ -288,9 +269,9 @@ WatchMouse:
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, 40, A_ScreenWidth-WinW-OffR, WinX, -1, -1, "in", 100)
+                    MoveToTargetSpot(winId, 50, A_ScreenWidth-WinW-OffR, WinX, -1, -1, "in", 100)
                     ; FadeToTargetTrans(winId, 255, 200)
-                    FileAppend, WatchMouse1 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
+                    FileAppend, WatchMouse1 - %LookForLeaveWindow% "-" %MouseWinHwnd% `n, C:\Users\vbonaven\Desktop\log.txt
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
                     lastWindowPeaked   := True
                     AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
@@ -333,7 +314,7 @@ WatchMouse:
         }
     }
     
-    If (LookForLeaveWindow && MouseWinHwnd && HoveringWinHwnd) && wmClass != "#32770" && wmClass != "OperationStatusWindow" 
+    If (LookForLeaveWindow && MouseWinHwnd && HoveringWinHwnd && wmClass != "#32770" && wmClass != "OperationStatusWindow" && !clickedOnSavedWin)
     {
         If (HoveringWinHwnd != MouseWinHwnd)
         {
@@ -778,7 +759,7 @@ $MButton::
     Else
        KDE_WinUp := -1
 
-    WinActivate, %EWD_winId%
+    WinSet, AlwaysOnTop, On, %EWD_winId%
     If (WinActive("ahk_class " EWD_winClass) && EWD_winClass != "Shell_TrayWnd")
     {
         WinGet, lastActiveWinhwnd, ID, ahk_class %EWD_winClass%
@@ -787,7 +768,7 @@ $MButton::
     SetTimer, CheckforTransparent, 50
     
     KeyWait, MButton, T30
-    If ((MX == EWD_MouseX) && (MY == EWD_MouseY))
+    If (abs(MX - EWD_MouseX) < 3 && abs(MY - EWD_MouseY) < 3)
     {
         ; Tooltip, here %MX% : %MY% : %EWD_MouseX% : %EWD_MouseY%
         WinSet, Transparent, Off, %EWD_winId%
@@ -814,6 +795,7 @@ $MButton::
     }
     Wheel_disabled := False
     SetTimer, MasterTimer, On
+    WinSet, AlwaysOnTop, Off, %EWD_winId%
 Return 
 
 EWD_WatchDrag:
@@ -1392,13 +1374,12 @@ Return
     Gosub, SendCtrlAdd
 Return
 
-!LButton::
 ~LButton::
     SetTimer, MasterTimer, Off
     lButtonDrag          := True
     showDesktopD         := False
     showDesktopU         := False
-    savedWin             := False
+    clickedOnSavedWin             := False
     PossiblyChangedSize  := False
     MouseGetPos, lmx, lmy, ClickedWinHwnd
     WinGetClass, wmClassD, ahk_id %ClickedWinHwnd%
@@ -1430,12 +1411,12 @@ Return
 
     for idx, val in PeaksArray {
         If (val == ("ahk_id " . ClickedWinHwnd)) {
-            savedWin := True
+            clickedOnSavedWin := True
             break
         }
     }
 
-    If !savedWin ; didn't left click on a peaked window
+    If !clickedOnSavedWin ; didn't left click on a peaked window
     { 
         lastWindowPeaked := False
         
@@ -1506,7 +1487,7 @@ Return
             DesktopIcons(False)
 
         WinGetPos, lb_x2, lb_y2, lb_w2, lb_h2, %mWinClickedID%
-        If (savedWin && (lb_w != lb_w2 || lb_h != lb_h2))
+        If (clickedOnSavedWin && (lb_w != lb_w2 || lb_h != lb_h2))
         {
             PossiblyChangedSize := True
             LookForLeaveWindow := True
