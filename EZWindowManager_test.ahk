@@ -152,10 +152,10 @@ MasterTimer:
     If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 150)
         DesktopIcons(True)
     
-    ; fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
-    ; fileOpHwnd2 := WinExist("ahk_class #32770", "Type of file")
-    fileOpHwnd1 := WinExist("ahk_class #32770")
-    fileOpHwnd3 := WinExist("ahk_class OperationStatusWindow")
+    fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
+    fileOpHwnd3 := WinExist("ahk_class #32770", "Type of file")
+    ; fileOpHwnd1 := WinExist("ahk_class #32770")
+    ; fileOpHwnd3 := WinExist("ahk_class OperationStatusWindow")
     If (fileOpHwnd1 || fileOpHwnd2 || fileOpHwnd3)
     {
         WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd1%
@@ -255,7 +255,7 @@ WatchMouse:
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, 50, 0-offL, WinX, -1, -1, "in", 100)
+                    MoveToTargetSpot(winId, 100, 0-offL, WinX, -1, -1, "in", 100)
                     ; FadeToTargetTrans(winId, 255, 200)
                     FileAppend, WatchMouse - %LookForLeaveWindow% "-" %MouseWinHwnd% `n, C:\Users\vbonaven\Desktop\log.txt
                     lastWindowPeaked   := True
@@ -269,7 +269,7 @@ WatchMouse:
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, 50, A_ScreenWidth-WinW-OffR, WinX, -1, -1, "in", 100)
+                    MoveToTargetSpot(winId, 100, A_ScreenWidth-WinW-OffR, WinX, -1, -1, "in", 100)
                     ; FadeToTargetTrans(winId, 255, 200)
                     FileAppend, WatchMouse1 - %LookForLeaveWindow% "-" %MouseWinHwnd% `n, C:\Users\vbonaven\Desktop\log.txt
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
