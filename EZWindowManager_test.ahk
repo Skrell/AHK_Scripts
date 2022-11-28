@@ -775,6 +775,7 @@ $MButton::
         SetTimer, EWD_WatchDrag, Off
         SetTimer, CheckforTransparent, Off
         If (IsOverTitleBar(MX, MY, EWD_MouseWinHwnd)==1 && !ToggledOnTop) {
+            WinActivate, %EWD_winId%
             Send !{F4}
             CleanUpStoredWindow(EWD_winId, EWD_MouseWinHwnd)
         }
