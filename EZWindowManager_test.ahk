@@ -153,13 +153,21 @@ MasterTimer:
         DesktopIcons(True)
     
     fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
+    fileOpHwnd2 := WinExist("ahk_class #32770", "Shortcut")
     fileOpHwnd3 := WinExist("ahk_class #32770", "Type of file")
+    fileOpHwnd4 := WinExist("ahk_class #32770", "Security")
+    fileOpHwnd5 := WinExist("ahk_class #32770", "compatibilty")
+    fileOpHwnd6 := WinExist("ahk_class #32770", "Details")
     ; fileOpHwnd1 := WinExist("ahk_class #32770")
     ; fileOpHwnd3 := WinExist("ahk_class OperationStatusWindow")
     If (fileOpHwnd1 || fileOpHwnd2 || fileOpHwnd3)
     {
         WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd1%
+        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd2%
         WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd3%
+        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd4%
+        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd5%
+        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd6%
     }
     
     If (wmClass == "Shell_TrayWnd")
@@ -255,7 +263,7 @@ WatchMouse:
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, 100, 0-offL, WinX, -1, -1, "in", 100)
+                    MoveToTargetSpot(winId, 75, 0-offL, WinX, -1, -1, "in", 100)
                     ; FadeToTargetTrans(winId, 255, 200)
                     FileAppend, WatchMouse - %LookForLeaveWindow% "-" %MouseWinHwnd% `n, C:\Users\vbonaven\Desktop\log.txt
                     lastWindowPeaked   := True
@@ -269,7 +277,7 @@ WatchMouse:
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, 100, A_ScreenWidth-WinW-OffR, WinX, -1, -1, "in", 100)
+                    MoveToTargetSpot(winId, 75, A_ScreenWidth-WinW-OffR, WinX, -1, -1, "in", 100)
                     ; FadeToTargetTrans(winId, 255, 200)
                     FileAppend, WatchMouse1 - %LookForLeaveWindow% "-" %MouseWinHwnd% `n, C:\Users\vbonaven\Desktop\log.txt
                     WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
@@ -314,7 +322,7 @@ WatchMouse:
         }
     }
     
-    If (LookForLeaveWindow && MouseWinHwnd && HoveringWinHwnd && wmClass != "#32770" && wmClass != "OperationStatusWindow" && !clickedOnSavedWin)
+    If (LookForLeaveWindow && MouseWinHwnd && HoveringWinHwnd && wmClass != "#32768" && wmClass != "#32770" && wmClass != "OperationStatusWindow" && !clickedOnSavedWin)
     {
         If (HoveringWinHwnd != MouseWinHwnd)
         {
@@ -1441,15 +1449,15 @@ Return
                     
                     If (WinX < 0) {
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
-                        MoveToTargetSpot(winHwndx_ID, 100, 0-OffL, WinX)
-                        FadeToTargetTrans(winHwndx_ID, 255, 200)
+                        MoveToTargetSpot(winHwndx_ID, 75, 0-OffL, WinX)
+                        ; FadeToTargetTrans(winHwndx_ID, 255, 200)
                         TaskbarPeak := True
                         Break
                     }
                     Else If (WinX+WinH > A_ScreenWidth) {
                         WinSet, AlwaysOnTop, On, %winHwndx_ID%
-                        MoveToTargetSpot(winHwndx_ID, 100, A_ScreenWidth-WinW-OffR, WinX)
-                        FadeToTargetTrans(winHwndx_ID, 255, 200)
+                        MoveToTargetSpot(winHwndx_ID, 75, A_ScreenWidth-WinW-OffR, WinX)
+                        ; FadeToTargetTrans(winHwndx_ID, 255, 200)
                         TaskbarPeak := True
                         Break
                     }
