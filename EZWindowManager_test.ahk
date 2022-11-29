@@ -152,6 +152,7 @@ MasterTimer:
     If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 150)
         DesktopIcons(True)
     
+    fileOpHwnd  := WinActive("ahk_class #32770")
     fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
     fileOpHwnd2 := WinExist("ahk_class #32770", "Shortcut")
     fileOpHwnd3 := WinExist("ahk_class #32770", "Type of file")
@@ -160,14 +161,9 @@ MasterTimer:
     fileOpHwnd6 := WinExist("ahk_class #32770", "Details")
     ; fileOpHwnd1 := WinExist("ahk_class #32770")
     ; fileOpHwnd3 := WinExist("ahk_class OperationStatusWindow")
-    If (fileOpHwnd1 || fileOpHwnd2 || fileOpHwnd3)
+    If (LookForLeaveWindow && fileOpHwnd)
     {
-        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd1%
-        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd2%
-        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd3%
-        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd4%
-        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd5%
-        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd6%
+        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd%
     }
     
     If (wmClass == "Shell_TrayWnd")
