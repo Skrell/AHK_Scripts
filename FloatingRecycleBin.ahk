@@ -3,8 +3,10 @@
 #NoEnv
 SetBatchLines, -1
 SetWinDelay, -1
+
 CoordMode, Mouse, Screen
 CoordMode, Pixel, Screen
+
 ; Uncomment if Gdip.ahk is not in your standard library
 #Include, Gdip_All.ahk
 SetTimer, MasterTimer, 100
@@ -163,9 +165,10 @@ return
 MasterTimer:
     TotalFiles   := SHQueryRecycleBin("", 3)
     TotalSize    := SHQueryRecycleBin("", 1)
-    MouseGetPos, mtX, mtY, 
+    MouseGetPos, mtX, mtY, mthwnd
     WinGetPos, wtx, wty , , , %winId2%
-    If (mtX <= 3 && mtY <= 3 && wtx < 0)
+        
+    If (!IsFullScreen(mthwnd) && mtX <= 3 && mtY <= 3 && wtx < 0)
     {
         If (TotalFiles == 0 && TotalSize == 0)
         {
@@ -311,7 +314,7 @@ WM_LBUTTONDOWN(wParam, lParam)
     WinGetClass, wmClassD, ahk_id %ClickedWinHwnd%
     WinGetPos, wx, wy , , ,%winId2%
         
-    If (!IsMouseOverIcon(wmClassD, CtrlClass) || (GetKeyState("Shift", "P") && (wmClassD == "WorkerW" || wmClassD == "Progman")))
+    If (!IsMouseOverIcon(wmClassD, CtrlClass) || (GetKeyState("Shift", "P")))
     {
         WinGetPos, wx, wy , , ,%winId2%
         If (wx >= 0)
@@ -322,7 +325,7 @@ WM_LBUTTONDOWN(wParam, lParam)
         Return
     }
         
-    If (wmClassD == "CabinetWClass" || wmClassD == "WorkerW" || wmClassD == "Progman")
+    If (IsMouseOverIcon(wmClassD, CtrlClass))
     {
         loop
         {
@@ -330,7 +333,7 @@ WM_LBUTTONDOWN(wParam, lParam)
             {
                 MouseGetPos, MXw, MYw, MouseWinHwnd
                 WinGetClass, wmClassU, ahk_id %MouseWinHwnd%
-                If (wmClassU != "CabinetWClass" && wx < 0 && (lmx > MXw && lmy > MYw))
+                If (wx < 0 && (lmx > MXw && lmy > MYw) && MXw < A_ScreenWidth/3 && MYw < A_ScreenHeight/3)
                 {
                     MoveToTargetSpot(winId2, MoveIncrement, 0, -1*Width, 0, -1*Height, "in")
                     break
@@ -535,4 +538,30 @@ SHQueryRecycleBin(pszRootPath, Param) {
 	FormatSize := StrGet(&BININFOFORMAT, "CP0") ; Retrieve data size (bytes, KB, MB, GB, etc...)
 	Array := [ByteSize, FormatSize, NumItems] ; Create array for retrieving the data
 	return Result := Array[Param] ; Return the value for the specified parameter
+}
+
+/*!  
+======================================================
+    Checks if a window is in fullscreen mode.
+    ______________________________________________________________________________________________________________
+	Usage: isFullScreen()
+	Return: True/False
+	GitHub Repo: https://github.com/Nigh/isFullScreen
+======================================================
+*/
+IsFullScreen(hWnd) {
+   static nonFullScreenStyles := (WS_CAPTION := 0xC00000) | (WS_THICKFRAME := 0x40000)
+        , nonFullScreenExStyles := (WS_EX_WINDOWEDGE := 0x100) | (WS_EX_CLIENTEDGE := 0x200) | (WS_EX_STATICEDGE := 0x20000)
+   local wClass
+   
+   WinGetClass, wClass, ahk_id %hWnd%
+   
+   If (wClass == "WorkerW" || wClass == "Progman")
+     Return False
+   Else
+   {
+       WinGet, styles, Style, ahk_id %hWnd%
+       WinGet, exStyles, ExStyle, ahk_id %hWnd%
+       Return !(styles & nonFullScreenStyles || exStyles & nonFullScreenExStyles)
+   }
 }
