@@ -1,3 +1,7 @@
+#Include %A_ScriptDir%\WinGetPosEx.ahk 
+#Include %A_ScriptDir%\UIA_Interface.ahk 
+#Include %A_ScriptDir%\WinHook.ahk 
+
 #NoEnv 
 #SingleInstance force 
 #Persistent 
@@ -7,14 +11,12 @@ SetBatchLines, -1
 SetWinDelay, -1   ; Makes the below move faster/smoother.
 ; Thread, interrupt, 0  ; Make all threads IMMEDIATELY interruptible.
 Process, Priority,, High
+DetectHiddenWindows, Off
 SendMode, Input
 SetTitleMatchMode, 2
 CoordMode, Mouse, Screen
 CoordMode, Pixel, Screen
 
-#Include %A_ScriptDir%\WinGetPosEx.ahk 
-; #Include %A_ScriptDir%\RunAsAdmin.ahk
-#Include %A_ScriptDir%\UIA_Interface.ahk 
 
 Wheel_disabled := False
 PI := 3.14159265
@@ -31,13 +33,14 @@ fifteenMinutes := 1000*60*5
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
 
-WindowArray     := []
-PeaksArray      := []
-WinBackupXs     := []
-WinBackupColors := []
-GuisCreated     := []
-scannedAhkIds   := []
-CmenuArrayIds   := []
+WindowArray      := []
+PeaksArray       := []
+WinBackupXs      := []
+WinBackupColors  := []
+GuisCreated      := []
+scannedAhkIds    := []
+CmenuArrayIds    := []
+ExplorerArrayIds := []
 
 minButtonWidth       := 32
 percLeft             := 1.0
@@ -81,6 +84,8 @@ global tbEl      := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
 global toolbarEl := tbEl.FindFirstBy("ClassName=MSTaskListWClass AND ControlType=Toolbar")
 ; windowEls := toolbarEl ? toolbarEl.FindAllBy("Name=running", 0x4, 2, True) : tbEl.FindAllBy("ClassName=Taskbar.TaskListButtonAutomationPeer")
 
+WinHook.Shell.Add("Destroyed",,,,2) ; Notepad Window Destroyed
+
 Msgbox, 0, EzWindowManager, Detecting Theme Accent Color...%AccentColorHex%, 2
 global AccentColorHex := SampleAccentColor()
 
@@ -94,45 +99,19 @@ Tooltip,
 t_KeepOnTop := t_WatchMouse := t_CheckButtonSize := t_ButCapture := t_RedetectColor := t_CheckButtonColor := A_TickCount 
 SetTimer, MasterTimer, 10, -1
 SetTimer, OtherTimer, 100, -1
-
-Gui +LastFound
-hWnd := WinExist()
-DetectHiddenWindows, Off
-DllCall( "RegisterShellHookWindow", UInt,hWnd )
-MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
-OnMessage( MsgNum, "ShellMessage" )
+SetTimer, LookForExplorerSpawn, 100, -1
 
 Return
 
-ShellMessage( wParam, lParam ) {
-  Local k
-  If ( wParam = 1 ) ;  HSHELL_WINDOWCREATED := 1
-     {
-       WinGetTitle, currentTitle, ahk_id %lParam%
-       If currentTitle
-       {
-           WinGetClass, currentClass, A
-           WinGet, currentHwnd, ID, A
-           WinGet, currentExe, ProcessName, A
-           If ( WinExist(ahk_id %lParam%) 
-                &&  (currentClass != "tooltips_class32")
-                &&  (currentClass != "Windows.UI.Core.CoreWindow" )
-                &&  (currentClass != "ApplicationManager_DesktopShellWindow" )
-                &&  (currentClass != "TaskListThumbnailWnd" )
-                &&  (currentClass != "MSO_BORDEREFFECT_WINDOW_CLASS" )
-                &&  (currentClass != "MultitaskingViewFrame"         )
-                &&  (currentClass != "#32768"                        )
-                &&  (currentClass != "#32770"                        )
-                &&  (currentClass != "Shell_TrayWnd")
-                &&  (currentClass != "WorkerW"      ))
-           {
-               lastGoodHwnd    := currentHwnd
-               lastGoodCapture := currentClass
-               lastGoodExe     := currentExe
-               GoSub, CheckButtonSize
-               GoSub, ButCaptureCached
-           }
-       }
+Destroyed(Win_Hwnd, Win_Title, Win_Class, Win_Exe, Win_Event)
+{
+    WinGet, exStyle, exStyle, % "ahk_id" Win_Hwnd
+    If (exStyle & 0x100 & ~0x00000080) && Win_Title && (Win_Title != "Task Host Window")
+    {
+        SoundPlay, %A_ScriptDir%\button-124476.mp3
+        ; Tooltip, Destroyed %Win_Title%
+        ; sleep 3000
+        ; Tooltip,
     }
 }
 
@@ -152,18 +131,18 @@ MasterTimer:
     If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 150)
         DesktopIcons(True)
     
-    fileOpHwnd  := WinActive("ahk_class #32770")
-    fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
-    fileOpHwnd2 := WinExist("ahk_class #32770", "Shortcut")
-    fileOpHwnd3 := WinExist("ahk_class #32770", "Type of file")
-    fileOpHwnd4 := WinExist("ahk_class #32770", "Security")
-    fileOpHwnd5 := WinExist("ahk_class #32770", "compatibilty")
-    fileOpHwnd6 := WinExist("ahk_class #32770", "Details")
-    ; fileOpHwnd1 := WinExist("ahk_class #32770")
-    ; fileOpHwnd3 := WinExist("ahk_class OperationStatusWindow")
-    If (LookForLeaveWindow && fileOpHwnd)
+    ; fileOpHwnd  := WinActive("ahk_class #32770")
+    ; fileOpHwnd1 := WinExist("ahk_class #32770", "Recycle")
+    ; fileOpHwnd2 := WinExist("ahk_class #32770", "Shortcut")
+    ; fileOpHwnd3 := WinExist("ahk_class #32770", "Type of file")
+    ; fileOpHwnd4 := WinExist("ahk_class #32770", "Security")
+    ; fileOpHwnd5 := WinExist("ahk_class #32770", "compatibilty")
+    ; fileOpHwnd6 := WinExist("ahk_class #32770", "Details")
+    fileOpHwnd1 := WinActive("ahk_class #32770")
+    fileOpHwnd3 := WinActive("ahk_class OperationStatusWindow")
+    If (LookForLeaveWindow && (fileOpHwnd1 || fileOpHwnd3))
     {
-        WinSet, AlwaysOnTop, On, ahk_id %fileOpHwnd%
+        WinSet, AlwaysOnTop, On, A
     }
     
     If (wmClass == "Shell_TrayWnd")
@@ -208,12 +187,62 @@ ReDetectAccentColor:
 Return    
     
 LookForExplorerSpawn:
-    Winwait, ahk_class CabinetWClass
-    Gosub, SendCtrlAdd
-    WinWaitClose, ahk_class CabinetWClass
+    lesX := lesY := lesW := lesH := 0
+    i := 1
+    while (i <= ExplorerArrayIds.MaxIndex())
+    {
+        ; tooltip, % "stuck " ExplorerArrayIds.MaxIndex()
+        If (!WinExist("ahk_id " . ExplorerArrayIds[i]))
+        {
+            ExplorerArrayIds.Remove(i)
+        }
+        ++i
+    }
+    
+    If WinActive("ahk_class CabinetWClass")
+    {
+        WinGet, les_Id, ID, A
+        les_ahkId = ahk_id %les_Id%
+        ; Tooltip, % join(ExplorerArrayIds)
+            
+        foundID := False
+        
+        for idx, savedID in ExplorerArrayIds
+        {
+            if (savedID == les_Id)
+            {
+                foundID := True
+                break
+            }
+        }
+        
+        If (!foundID)
+        {
+            ; tooltip, %les_Id%
+            ExplorerArrayIds.push(les_Id) 
+            MouseGetPos, lesMX, lesMY
+            WinGetPosEx(les_Id, lesX, lesY, lesW, lesH)
+            
+            finalX := lesMX-(lesW/2)
+            finalY := lesMY - 128
+
+            If (finalY < 0)
+                finalY := 0
+            If (finalX < 0)
+                finalX := 0
+            If (finalX + lesW > A_ScreenWidth)
+                finalX := A_ScreenWidth-lesW  
+            If (finalY + lesH > MonitorWorkAreaBottom)
+                finalY := MonitorWorkAreaBottom-lesH
+            
+            WinMoveEx(les_ahkId, 50, finalX, finalY)
+        }
+    }
+    ; tooltip, done
 Return
 
 WatchMouse:
+    WinX := WinY :=  WinW :=  WinH := OffL :=  OffT := OffR := OffB := 0
     If ResetMousePosBkup
     {
         MXw_bkup := MXw
@@ -249,22 +278,19 @@ WatchMouse:
             If !LookForLeaveWindow
             {
                 winId = ahk_id %MouseWinHwnd%
-                percLeft := CalculateWinScreenPercent(winId)
+                percLeft := CalculateWinScreenPercent(MouseWinHwnd)
                 
-                WinGet, winHwnd, ID, %winId%
-                WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
+                WinGetPosEx(MouseWinHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
                 
                 If (WinX < 0) && (lastWindowPeaked ||  ((MXw-MXw_bkup) < (-1*MouseMoveBuffer)) || (MXw == 0 &&  MXw_bkup == 0)) 
                 {
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, 75, 0-offL, WinX, -1, -1, "in", 100)
+                    WinMoveEx(winId, 75, 0-OffL, -1, "in", 100)
                     ; FadeToTargetTrans(winId, 255, 200)
-                    FileAppend, WatchMouse - %LookForLeaveWindow% "-" %MouseWinHwnd% `n, C:\Users\vbonaven\Desktop\log.txt
+                    FileAppend, WatchMouse - %LookForLeaveWindow% "-" %winId% `n, C:\Users\vbonaven\Desktop\log.txt
                     lastWindowPeaked   := True
-                    WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
-                    AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
                     WinSet, AlwaysOnTop, On, %winId%
                     Break
                 }
@@ -273,12 +299,10 @@ WatchMouse:
                     WinSet, AlwaysOnTop, On, %winId%
                     LookForLeaveWindow := True
                     HoveringWinHwnd    := MouseWinHwnd
-                    MoveToTargetSpot(winId, 75, A_ScreenWidth-WinW-OffR, WinX, -1, -1, "in", 100)
+                    WinMoveEx(winId, 75, A_ScreenWidth-WinW-OffR, -1, "in", 100)
                     ; FadeToTargetTrans(winId, 255, 200)
-                    FileAppend, WatchMouse1 - %LookForLeaveWindow% "-" %MouseWinHwnd% `n, C:\Users\vbonaven\Desktop\log.txt
-                    WinGetPosEx(winHwnd, WinX2, WinY2, WinW2, WinH2)
+                    FileAppend, WatchMouse1 - %LookForLeaveWindow% "-" %winId% `n, C:\Users\vbonaven\Desktop\log.txt
                     lastWindowPeaked   := True
-                    AdjustWinDims(winId, WinX2-WinX, WinY2-WinY)
                     WinSet, AlwaysOnTop, On, %winId%
                     Break
                 }
@@ -286,7 +310,7 @@ WatchMouse:
         }
     }
     
-    If (FinishedLoop) 
+    If (FinishedLoop && !lButtonDrag) 
     {
         ; tooltip, 2
         MXwOffset := 0
@@ -333,8 +357,8 @@ WatchMouse:
                   FileAppend, Found Hovered %title%`n, C:\Users\vbonaven\Desktop\log.txt
                   ; tooltip, 4
                   winId = ahk_id %HoveringWinHwnd%
-                  WinGet, winHwnd, ID, %winId%
-                  WinGetPosEx(winHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
+                  
+                  WinGetPosEx(HoveringWinHwnd, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
                   ; Make sure we've moved the mouse outside the window we're hovering over
                   If (MXw < WinX || Mxw > (WinX+WinW) || MYw < WinY || MYw > (WinY+WinH))
                   {
@@ -408,7 +432,7 @@ ResetPeakedWindows:
             WinMove, %winId%,, newOrgX-OffR
             FadeToTargetTrans(winId, 200)
             WinSet, Bottom, , %winId%
-            sleep 200
+            ; sleep 200
          }
          LookForLeaveWindow := False
          FileAppend, ResetPeakedWindows - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
@@ -763,6 +787,7 @@ $MButton::
     Else
        KDE_WinUp := -1
 
+    WinActivate, %EWD_winId%
     WinSet, AlwaysOnTop, On, %EWD_winId%
     If (WinActive("ahk_class " EWD_winClass) && EWD_winClass != "Shell_TrayWnd")
     {
@@ -786,17 +811,6 @@ $MButton::
         Else If (!ToggledOnTop) {
             Send, {MButton}
         }
-    }
-    Else
-    {
-       WinGetTitle, currentTitle, A
-       WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, EWD_OffL, EWD_OffT, EWD_OffR, EWD_OffB)
-       If currentTitle
-       {
-           WinGet, currentHwnd, ID, A
-           ahkid = ahk_id %currentHwnd% 
-           AdjustWinDims(ahkid, (EWD_WinX+EWD_WinW)-(EWD_WinXorg+EWD_WinWorg), EWD_WinY-EWD_WinYorg)
-       }
     }
     Wheel_disabled := False
     SetTimer, MasterTimer, On
@@ -1238,10 +1252,14 @@ FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
    Return
 }
 
-MoveToTargetSpot(winId, moveincrement, targetX, orgX, targetY := -1, orgY := -1, fade := "na", transVal := 0)
+WinMoveEx(winId, moveincrement, targetX, targetY := -1, fade := "na", transVal := 0)
 {
    global PI
+   orgX := 0
+   orgY := 0
    Critical On
+   WinGet, winHwnd, ID, %winId%
+   WinGetPosEx(winHwnd, orgX, orgY)
    loopCount := 0
    xIsFurther := False
    yIsFurther := False
@@ -1389,6 +1407,7 @@ Return
     MouseGetPos, lmx, lmy, ClickedWinHwnd
     WinGetClass, wmClassD, ahk_id %ClickedWinHwnd%
     mWinClickedID = ahk_id %ClickedWinHwnd%
+    WinGetTitle, mWinClickedTitle, %mWinClickedID%
     WinGet, mWinClickeHwnd, ID, %mWinClickedID%
     WinGetPos, lb_x, lb_y, lb_w, lb_h, %mWinClickedID%
     
@@ -1434,9 +1453,9 @@ Return
             {
                 winHwndx := Format("{:#x}", winHwnd)
                 
-                winHwndx_ID = ahk_id %winHwndx%
+                winId = ahk_id %winHwndx%
                 WinGetPos, gx, gy, gw, gh, ahk_id %guiHwnd%
-                WinGet, state, MinMax, %winHwndx_ID%
+                WinGet, state, MinMax, %winId%
                 
                 If (lmx > gx && lmx < (gx+gw) && state == 0 && winHwndx != lastActiveWinhwnd)
                 {
@@ -1444,15 +1463,15 @@ Return
                     WinGetPosEx(winHwndx, WinX, WinY, WinW, WinH, OffL, OffT, OffR, OffB)
                     
                     If (WinX < 0) {
-                        WinSet, AlwaysOnTop, On, %winHwndx_ID%
-                        MoveToTargetSpot(winHwndx_ID, 75, 0-OffL, WinX)
+                        WinSet, AlwaysOnTop, On, %winId%
+                        WinMoveEx(winId, 75, 0-OffL)
                         ; FadeToTargetTrans(winHwndx_ID, 255, 200)
                         TaskbarPeak := True
                         Break
                     }
                     Else If (WinX+WinH > A_ScreenWidth) {
-                        WinSet, AlwaysOnTop, On, %winHwndx_ID%
-                        MoveToTargetSpot(winHwndx_ID, 75, A_ScreenWidth-WinW-OffR, WinX)
+                        WinSet, AlwaysOnTop, On, %winId%
+                        WinMoveEx(winId, 75, A_ScreenWidth-WinW-OffR)
                         ; FadeToTargetTrans(winHwndx_ID, 255, 200)
                         TaskbarPeak := True
                         Break
@@ -1498,53 +1517,6 @@ Return
             LookForLeaveWindow := True
             HoveringWinHwnd := ClickedWinHwnd
         }
-        
-        lb_xw  := lb_x + lb_w
-        lb_xw2 := lb_x2 + lb_w2
-        If ((abs(lb_xw - lb_xw2) > 5 || abs(lb_y - lb_y2) > 5) && ((A_PriorHotkey == A_ThisHotkey) && A_TimeSincePriorHotkey  > 250))
-        {
-            foundClickedId := False
-            for shwnds, c in scannedAhkIds
-            {
-                If (shwnds == mWinClickedID)
-                {
-                    foundClickedId := True
-                    break
-                }
-            }
-            
-            If foundClickedId
-                AdjustWinDims(mWinClickedID, lb_xw2-lb_xw, lb_y2-lb_y)
-            Else
-            {
-                WinGetTitle, currentTitle, %mWinClickedID%
-                If currentTitle
-                {
-                    WinGet, currentExe, ProcessName, %mWinClickedID%
-                    If ( WinExist(mWinClickedID) 
-                         &&  (class != "tooltips_class32")
-                         &&  (class != "Windows.UI.Core.CoreWindow" )
-                         &&  (class != "TaskListThumbnailWnd" )
-                         &&  (class != "MSO_BORDEREFFECT_WINDOW_CLASS" )
-                         &&  (class != "MultitaskingViewFrame"         )
-                         &&  (class != "#32768"                        )
-                         &&  (class != "#32770"                        )
-                         &&  (class != "Shell_TrayWnd")
-                         &&  (class != "WorkerW"      ))
-                     {
-                         lastGoodHwnd    := mWinClickeHwnd
-                         lastGoodCapture := class
-                         lastGoodExe     := currentExe
-                         GoSub, ButCaptureCached
-                     }
-                }
-            }
-        }
-        Else 
-        {
-            PrintButton := True
-            Gosub, ButCaptureCached
-        }
     }    
         
     lButtonDrag := False
@@ -1566,11 +1538,11 @@ MouseIsOver(WinTitle) {
 }
 
 ;==================================================
-~Esc::  ; <-- CLOSE WITH DOUBLE ESCAPE
+!Capslock::  ; <-- CLOSE WITH DOUBLE ESCAPE
     If (A_PriorHotkey <> A_ThisHotKey or A_TimeSincePriorHotkey > DllCall("GetDoubleClickTime"))
     {
         MouseGetPos, mousePosX, mousePosY, WindowUnderMouseID1
-        KeyWait, Esc
+        ; KeyWait, Esc
         Return
     }
     MouseGetPos, mousePosX, mousePosY, WindowUnderMouseID2
