@@ -20,7 +20,7 @@ CoordMode, Pixel, Screen
 
 Wheel_disabled := False
 PI := 3.14159265
-TransparentValue := 120
+TransparentValue := 110
 KDE_WinUp    :=
 KDE_WinLeft  :=
 EWD_winId    :=
@@ -223,7 +223,7 @@ LookForExplorerSpawn:
             MouseGetPos, lesMX, lesMY
             WinGetPosEx(les_Id, lesX, lesY, lesW, lesH)
             
-            finalX := lesMX-(lesW/2)
+            finalX := lesMX-(lesW/2)+256
             finalY := lesMY - 128
 
             If (finalY < 0)
@@ -486,17 +486,43 @@ Return
     RButton & MButton::Return
 #If
 
-!WheelUp::
-    MouseGetPos, , , wheelhwnd
-    WinActivate, ahk_id %wheelhwnd%
-    Send, {PgUp}
-return
+~RButton::
+    KeyWait, RButton
+    If (rkeydown)
+    {
+        rkeydown := False
+        Send, {Esc}
+    }
+Return
 
-!WheelDown::
-    MouseGetPos, , , wheelhwnd
-    WinActivate, ahk_id %wheelhwnd%
-    Send, {PgDn}
-return
+WheelUp::
+    If (GetKeyState("RButton", "P"))
+    {
+        MouseGetPos, , , wheelhwnd
+        WinActivate, ahk_id %wheelhwnd%
+        Send, {PgUp}
+        rkeydown := True
+    }
+    Else
+    {
+        rkeydown := False
+        Send, {WheelUp}
+    }
+Return
+
+WheelDown::
+    If (GetKeyState("RButton", "P"))
+    {
+        MouseGetPos, , , wheelhwnd
+        WinActivate, ahk_id %wheelhwnd%
+        Send, {PgDn}
+        rkeydown := True
+    }
+    Else
+    {   rkeydown := False
+        Send, {WheelDown}
+    }
+Return
 
 KeepOnTop:
     for guiHwnd, winHwnd in GuisCreated
@@ -942,6 +968,7 @@ EWD_WatchDrag:
         If (GetKeyState("RButton", "P"))
         {
             registerRbutton := True
+            rkeydown := True
         }
         Else If (registerRbutton)
         {
