@@ -486,12 +486,39 @@ Return
     RButton & MButton::Return
 #If
 
-~RButton::
-    KeyWait, RButton
-    If (rkeydown)
+RButton::
+    If (GetKeyState("MButton", "P"))
+        Return
+        
+    MouseGetPos, RBx1, RBy1,
+    RBx2 := RBx1
+    RBy2 := RBy1
+    sleep 125
+    If !GetKeyState("RButton", "P")
     {
-        rkeydown := False
-        Send, {Esc}
+        Send, {RButton}
+        Return
+    }
+    Else
+    {    
+       loop
+       {
+          If !GetKeyState("RButton", "P")
+             Return 
+          Else If (abs(RBx1 - RBX2) > 2 || abs(RBy1 - RBy2) > 2)
+          {
+              Send, {RButton down}
+              loop
+              {
+                  If !GetKeyState("RButton", "P")
+                  {
+                     Send, {RButton up}
+                     Return
+                  }
+              }
+          }
+          MouseGetPos, RBx2, RBy2
+       }
     }
 Return
 
@@ -501,11 +528,9 @@ WheelUp::
         MouseGetPos, , , wheelhwnd
         WinActivate, ahk_id %wheelhwnd%
         Send, {PgUp}
-        rkeydown := True
     }
     Else
     {
-        rkeydown := False
         Send, {WheelUp}
     }
 Return
@@ -516,10 +541,9 @@ WheelDown::
         MouseGetPos, , , wheelhwnd
         WinActivate, ahk_id %wheelhwnd%
         Send, {PgDn}
-        rkeydown := True
     }
     Else
-    {   rkeydown := False
+    {
         Send, {WheelDown}
     }
 Return
@@ -968,7 +992,6 @@ EWD_WatchDrag:
         If (GetKeyState("RButton", "P"))
         {
             registerRbutton := True
-            rkeydown := True
         }
         Else If (registerRbutton)
         {
