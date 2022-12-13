@@ -78,6 +78,9 @@ LastRemovedWinHwnd :=
 firstButtonPosXOld := 0
 winCountOld := 0
 
+GroupAdd, HorzScrollApps , OneNote
+GroupAdd, HorzScrollApps , Excel
+
 BlockInput, On
 global UIA       := UIA_Interface()
 global tbEl      := UIA.ElementFromHandle("ahk_class Shell_TrayWnd")
@@ -456,6 +459,36 @@ ExtractAppTitle(FullTitle)
 ***** SHORTCUTS CONFIGURATION *****
 ***********************************
 */
+;-------------------------------------------
+;---------------OneNote---------------------
+;-------------------------------------------
+; #IfWinActive ahk_group HorzScrollApps
+#IfWinActive OneNote
+~LShift & WheelUp::  ; Scroll left.
+ControlGetFocus, fcontrol, A
+Loop 2  ; <-- Increase this value to scroll faster.
+    SendMessage, 0x114, 0, 0, %fcontrol%, A  ; 0x114 is WM_HSCROLL and the 0 after it is SB_LINELEFT.
+return
+~LShift & WheelDown::  ; Scroll right.
+ControlGetFocus, fcontrol, A
+Loop 2  ; <-- Increase this value to scroll faster.
+    SendMessage, 0x114, 1, 0, %fcontrol%, A  ; 0x114 is WM_HSCROLL and the 1 after it is SB_LINERIGHT.
+return
+#IfWinActive
+#IfWinActive Excel
+~LShift & WheelUp::  ; Scroll left.
+Loop 2  ; <-- Increase this value to scroll faster.
+    SetScrollLockState, On 
+    SendInput {Left} 
+    SetScrollLockState, Off 
+return
+~LShift & WheelDown::  ; Scroll right.
+Loop 2  ; <-- Increase this value to scroll faster.
+    SetScrollLockState, On 
+    SendInput {Right} 
+    SetScrollLockState, Off 
+return
+#IfWinActive
 
 ; Alt + ` -  Activate NEXT Window of same type (title checking) of the current APP
 !`::
