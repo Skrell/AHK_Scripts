@@ -226,7 +226,7 @@ LookForExplorerSpawn:
             MouseGetPos, lesMX, lesMY
             WinGetPosEx(les_Id, lesX, lesY, lesW, lesH)
             
-            finalX := lesMX-(lesW/2)+256
+            finalX := lesMX-(lesW/2)
             finalY := lesMY - 128
 
             If (finalY < 0)
@@ -846,7 +846,7 @@ $MButton::
         Return
     }
     
-    If (EWD_winClass == "WorkerW")
+    If (EWD_winClass == "WorkerW" || EWD_winClass == "Shell_TrayWnd" || EWD_winClass == "Progman")
     {
         KeyWait, MButton, T3
         send, {MButton}
@@ -882,11 +882,17 @@ $MButton::
     KeyWait, MButton, T30
     If (abs(MX - EWD_MouseX) < 3 && abs(MY - EWD_MouseY) < 3)
     {
-        ; Tooltip, here %MX% : %MY% : %EWD_MouseX% : %EWD_MouseY%
+        PixelGetColor, MColor1, %MX%, %MY%-2, RGB
+        PixelGetColor, MColor2, %MX%, %MY%-1, RGB
+        PixelGetColor, MColor3, %MX%, %MY%,   RGB
+        PixelGetColor, MColor4, %MX%, %MY%+1, RGB
+        PixelGetColor, MColor5, %MX%, %MY%+2, RGB
+        
         WinSet, Transparent, Off, %MBtn_winId%
         SetTimer, EWD_WatchDrag, Off
         SetTimer, CheckforTransparent, Off
-        If (IsOverTitleBar(MX, MY, EWD_MouseWinHwnd)==1 && !ToggledOnTop) {
+        If (((A_PriorHotkey == A_ThisHotkey) && (A_TimeSincePriorHotkey <= (ceil(DoubleClickTime * 1.5))))  && !ToggledOnTop && MColor1 == MColor1_org && MColor2 == MColor2_org && MColor3 == MColor3_org && MColor4 == MColor4_org && MColor5 == MColor5_org) 
+        {
             WinActivate, %MBtn_winId%
             Send !{F4}
             CleanUpStoredWindow(MBtn_winId, EWD_MouseWinHwnd)
@@ -894,6 +900,12 @@ $MButton::
         Else If (!ToggledOnTop) {
             Send, {MButton}
         }
+        
+         MColor1_org :=  MColor1
+         MColor2_org :=  MColor2
+         MColor3_org :=  MColor3
+         MColor4_org :=  MColor4
+         MColor5_org :=  MColor5
     }
     Wheel_disabled := False
     SetTimer, MasterTimer, On
@@ -1029,6 +1041,7 @@ EWD_WatchDrag:
     Else If (registerRbutton)
     {
         registerRbutton := False
+        MButtonPreviousTick := A_TickCount
         SetTimer, EWD_WatchDrag, on
     }
     ; CORRECTIONS FOR TOP AND BOTTOM OF WINDOW
@@ -1620,20 +1633,19 @@ MouseIsOver(WinTitle) {
 }
 
 ;==================================================
-!Capslock::  ; <-- CLOSE WITH DOUBLE ESCAPE
-    If (A_PriorHotkey <> A_ThisHotKey or A_TimeSincePriorHotkey > DllCall("GetDoubleClickTime"))
-    {
-        MouseGetPos, mousePosX, mousePosY, WindowUnderMouseID1
-        ; KeyWait, Esc
-        Return
-    }
-    MouseGetPos, mousePosX, mousePosY, WindowUnderMouseID2
-    If (WindowUnderMouseID1 = WindowUnderMouseID2)
-    {
-        winId = ahk_id %WindowUnderMouseID2%
-        WinClose , %winId%
-    }
-Return
+; !Capslock::  ; <-- CLOSE WITH DOUBLE ESCAPE
+    ; If (A_PriorHotkey <> A_ThisHotKey or A_TimeSincePriorHotkey > DllCall("GetDoubleClickTime"))
+    ; {
+        ; MouseGetPos, mousePosX, mousePosY, WindowUnderMouseID1
+        ; Return
+    ; }
+    ; MouseGetPos, mousePosX, mousePosY, WindowUnderMouseID2
+    ; If (WindowUnderMouseID1 = WindowUnderMouseID2)
+    ; {
+        ; winId = ahk_id %WindowUnderMouseID2%
+        ; WinClose , %winId%
+    ; }
+; Return
 
 ;===========================================================================================================
 ;ElementFromPoint is the original Microsoft implementation, but it has the drawback of sometimes not 
