@@ -20,7 +20,7 @@ CoordMode, Pixel, Screen
 
 Wheel_disabled := False
 PI := 3.14159265
-TransparentValue := 110
+TransparentValue := 100
 KDE_WinUp    :=
 KDE_WinLeft  :=
 MBtn_winId    :=
@@ -41,6 +41,7 @@ GuisCreated      := []
 scannedAhkIds    := []
 CmenuArrayIds    := []
 ExplorerArrayIds := []
+AlwaysOnTopWins  := []
 
 minButtonWidth       := 32
 percLeft             := 1.0
@@ -394,6 +395,7 @@ WatchMouse:
                       }
 
                       WinSet, Bottom, , %winId%
+                      WinSet, AlwaysOnTop, Off, %winId%
                       WinGet, except, ProcessName, %winId%
                       If (except == "Signal.exe")
                          OffR := 0
@@ -406,6 +408,7 @@ WatchMouse:
                       LookForLeaveWindow := False
                       FileAppend, WatchMouse2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                       WinSet, Bottom, , %winId%
+                      WinSet, AlwaysOnTop, Off, %winId%
                   }
                   Break
                }
@@ -428,6 +431,7 @@ ResetPeakedWindows:
             newOrgX := orgX
             
             WinSet, Bottom, , %winId%
+            WinSet, AlwaysOnTop, Off, %winId%
             WinGet, except, ProcessName, %winId%
             If (except == "Signal.exe")
                OffR := 0
@@ -435,7 +439,7 @@ ResetPeakedWindows:
             WinMove, %winId%,, newOrgX-OffR
             FadeToTargetTrans(winId, 200)
             WinSet, Bottom, , %winId%
-            ; sleep 200
+            WinSet, AlwaysOnTop, Off, %winId%
          }
          LookForLeaveWindow := False
          FileAppend, ResetPeakedWindows - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
@@ -527,7 +531,7 @@ RButton::
     RBx2 := RBx1
     RBy2 := RBy1
     sleep 125
-    If !GetKeyState("RButton", "P")
+    If (!GetKeyState("RButton", "P"))
     {
         Send, {RButton}
         Return
@@ -536,12 +540,14 @@ RButton::
     {    
        loop
        {
-          If !GetKeyState("RButton", "P")
+          If (!GetKeyState("RButton", "P"))
+          {
              Return 
+          }
           Else If (abs(RBx1 - RBX2) > 2 || abs(RBy1 - RBy2) > 2)
           {
               Send, {RButton down}
-              loop
+              loop 100000
               {
                   If !GetKeyState("RButton", "P")
                   {
@@ -553,6 +559,7 @@ RButton::
           MouseGetPos, RBx2, RBy2
        }
     }
+    Send, {RButton up}
 Return
 
 WheelUp::
@@ -815,10 +822,10 @@ $MButton::
     SetTimer, MasterTimer, Off
     DesktopIcons(False)
 
-    EWD_MouseOrgX := 0
-    EWD_MouseOrgY := 0
-    EWD_MouseX := 0
-    EWD_MouseY := 0
+    EWD_MouseOrgX   := 0
+    EWD_MouseOrgY   := 0
+    EWD_MouseX      := 0
+    EWD_MouseY      := 0
     
     MouseGetPos, MX, MY, EWD_MouseWinHwnd ; Get cursor position
     MBtn_winId = ahk_id %EWD_MouseWinHwnd% ; Get the active window's title
@@ -833,13 +840,13 @@ $MButton::
     
     MButtonPreviousTick := A_TickCount
     
-    MouseMoved := False
-    registerRbutton := False
-    TimeSinceStop := A_TickCount
-    ToggledOnTop  := False
-    ChangedDims   := False
-    WinLEdge    := False
-    WinREdge    := False
+    MouseMoved          := False
+    registerRbutton     := False
+    TimeSinceStop       := A_TickCount
+    ToggledOnTop        := False
+    ChangedDims         := False
+    WinLEdge            := False
+    WinREdge            := False
     
     If (EWD_WinState = 1)
     {
@@ -871,35 +878,37 @@ $MButton::
        KDE_WinUp := -1
 
     WinActivate, %MBtn_winId%
-    WinSet, AlwaysOnTop, On, %MBtn_winId%
     If (WinActive("ahk_class " EWD_winClass) && EWD_winClass != "Shell_TrayWnd")
     {
         WinGet, lastActiveWinhwnd, ID, ahk_class %EWD_winClass%
     }
-    SetTimer, EWD_WatchDrag, 10 ; Track the mouse as the user drags it.
-    SetTimer, CheckforTransparent, 50
+    
+    If (GetKeyState("MButton", "P"))
+    {
+        SetTimer, EWD_WatchDrag, 10 ; Track the mouse as the user drags it.
+        SetTimer, CheckforTransparent, 50
+    }
     
     KeyWait, MButton, T30
     If (abs(MX - EWD_MouseX) < 3 && abs(MY - EWD_MouseY) < 3)
     {
-        PixelGetColor, MColor1, %MX%, %MY%-2, RGB
-        PixelGetColor, MColor2, %MX%, %MY%-1, RGB
-        PixelGetColor, MColor3, %MX%, %MY%,   RGB
-        PixelGetColor, MColor4, %MX%, %MY%+1, RGB
-        PixelGetColor, MColor5, %MX%, %MY%+2, RGB
+        PixelGetColor, MColor1, %MX%-2, %MY%-2, RGB
+        PixelGetColor, MColor2, %MX%-1, %MY%-1, RGB
+        PixelGetColor, MColor3, %MX%,   %MY%,   RGB
+        PixelGetColor, MColor4, %MX%+1, %MY%+1, RGB
+        PixelGetColor, MColor5, %MX%+2, %MY%+2, RGB
         
         WinSet, Transparent, Off, %MBtn_winId%
         SetTimer, EWD_WatchDrag, Off
         SetTimer, CheckforTransparent, Off
-        If (((A_PriorHotkey == A_ThisHotkey) && (A_TimeSincePriorHotkey <= (ceil(DoubleClickTime * 1.5))))  && !ToggledOnTop && MColor1 == MColor1_org && MColor2 == MColor2_org && MColor3 == MColor3_org && MColor4 == MColor4_org && MColor5 == MColor5_org) 
+        If (((A_PriorHotkey == A_ThisHotkey) && (A_TimeSincePriorHotkey <= (ceil(DoubleClickTime * 1.5)))) && MColor1 == MColor1_org && MColor2 == MColor2_org && MColor3 == MColor3_org && MColor4 == MColor4_org && MColor5 == MColor5_org) 
         {
             WinActivate, %MBtn_winId%
             Send !{F4}
             CleanUpStoredWindow(MBtn_winId, EWD_MouseWinHwnd)
         }
-        Else If (!ToggledOnTop) {
+        Else If (!ToggledOnTop)
             Send, {MButton}
-        }
         
          MColor1_org :=  MColor1
          MColor2_org :=  MColor2
@@ -909,32 +918,32 @@ $MButton::
     }
     Wheel_disabled := False
     SetTimer, MasterTimer, On
-    WinSet, AlwaysOnTop, Off, %MBtn_winId%
 Return 
 
 EWD_WatchDrag:
     If (!(GetKeyState("MButton", "P")) && !(GetKeyState("RButton", "P"))) 
-    { 
-       SetTimer, CheckforTransparent, Off
-       SetTimer, EWD_WatchDrag, Off
-       percentageLeft := CalculateWinScreenPercent(MBtn_winId)
-       
-       If (percentageLeft < 0.40)
-       {
-          If (percentageLeft < 0.10)
-            FadeToTargetTrans(MBtn_winId, 100, TransparentValue)
-          Else
-            FadeToTargetTrans(MBtn_winId, 200, TransparentValue)
-          PeaksArray.push(MBtn_winId)
-          WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
-          xsize := GetSize(WinBackupXs)
-          FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Make %EWD_MouseWinHwnd%:%EWD_WinX% size: %xsize%`n, C:\Users\vbonaven\Desktop\log.txt
-          ForceButtonRemove := True
-          ResetMousePosBkup := True
-          WinSet, Bottom, , %MBtn_winId%
-          sleep 1000
-          Return
-       }
+    {
+        SetTimer, CheckforTransparent, Off
+        SetTimer, EWD_WatchDrag, Off
+        percentageLeft := CalculateWinScreenPercent(MBtn_winId)
+        
+        If (percentageLeft < 0.40)
+        {
+           If (percentageLeft < 0.10)
+             FadeToTargetTrans(MBtn_winId, 100, TransparentValue)
+           Else
+             FadeToTargetTrans(MBtn_winId, 200, TransparentValue)
+           PeaksArray.push(MBtn_winId)
+           WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
+           xsize := GetSize(WinBackupXs)
+           FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - Make %EWD_MouseWinHwnd%:%EWD_WinX% size: %xsize%`n, C:\Users\vbonaven\Desktop\log.txt
+           ForceButtonRemove := True
+           ResetMousePosBkup := True
+           WinSet, Bottom, , %MBtn_winId%
+           WinSet, AlwaysOnTop, Off, %MBtn_winId%
+           sleep 500
+           Return
+        }
        
         ; CORRECTIONS FOR LEFT AND RIGHT EDGES OF WINDOW
         WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, EWD_OffL, EWD_OffT, EWD_OffR, EWD_OffB)
@@ -943,73 +952,104 @@ EWD_WatchDrag:
         Else If (((EWD_WinX+EWD_WinW) == A_ScreenWidth)) ;&& EWD_WinY == 0) || ((EWD_WinX+EWD_WinW) == A_ScreenWidth && EWD_WinB == MonitorWorkAreaBottom))
             WinREdge := True
         
-       removePeakedWin := False
+        removePeakedWin := False
 
-       If ((percentageLeft >= 0.40) && !WinLEdge && !WinREdge)
-       {
-          removeId := False
-          removeIdx := 0
-            
-          for idx, val in PeaksArray {
-             If (val == MBtn_winId)
-             {
-                 WinSet, AlwaysOnTop, off, %MBtn_winId%
-                 removeIdx := idx
-                 removeId := True
-                 Break
-             }
-          }
-          
-          If removeId
-          {
-             LastRemovedWinHwnd := EWD_MouseWinHwnd
-             ForceButtonRemove  := True
-             removePeakedWin    := True
-             LookForLeaveWindow := False
-             FileAppend, EWD_WatchDrag - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-             PeaksArray.remove(removeIdx)
-             WinBackupXs.remove(EWD_MouseWinHwnd)
-             xsize := GetSize(WinBackupXs)
-             FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - size: %xsize%`n, C:\Users\vbonaven\Desktop\log.txt
-          }
-          
-       }
-       Else If ((percentageLeft >= 0.40) && (WinLEdge || WinREdge))
-       {
-          for k, v in WinBackupXs {
-             If (k == EWD_MouseWinHwnd)
-             {
-                 ; tooltip, window edging!
-                 LookForLeaveWindow  := True
-                 FileAppend, EWD_WatchDrag2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-                 HoveringWinHwnd     := EWD_MouseWinHwnd
-                 PossiblyChangedSize := True
-                 Break
-             }
-          }
-       }
-       
-       If MouseMoved
-          FadeToTargetTrans(MBtn_winId, 255, TransparentValue)
-
-       If removePeakedWin
-          lastWindowPeaked := False
-       
-       Return
+        If ((percentageLeft >= 0.40) && !WinLEdge && !WinREdge)
+        {
+           removeId := False
+           removeIdx := 0
+             
+           for idx, val in PeaksArray {
+              If (val == MBtn_winId)
+              {
+                  WinSet, AlwaysOnTop, off, %MBtn_winId%
+                  removeIdx := idx
+                  removeId := True
+                  Break
+              }
+           }
+           
+           If removeId
+           {
+              LastRemovedWinHwnd := EWD_MouseWinHwnd
+              ForceButtonRemove  := True
+              removePeakedWin    := True
+              LookForLeaveWindow := False
+              FileAppend, EWD_WatchDrag - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
+              PeaksArray.remove(removeIdx)
+              WinBackupXs.remove(EWD_MouseWinHwnd)
+              xsize := GetSize(WinBackupXs)
+              FileAppend, %A_MM%/%A_DD%/%A_YYYY% @ %A_Hour%:%A_Min%:%A_Sec% - size: %xsize%`n, C:\Users\vbonaven\Desktop\log.txt
+           }
+           
+        }
+        Else If (WinLEdge || WinREdge)
+        {
+           for k, v in WinBackupXs {
+              If (k == EWD_MouseWinHwnd)
+              {
+                  ; tooltip, window edging!
+                  LookForLeaveWindow  := True
+                  FileAppend, EWD_WatchDrag2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
+                  HoveringWinHwnd     := EWD_MouseWinHwnd
+                  PossiblyChangedSize := True
+                  Break
+              }
+           }
+        }
+        
+        If MouseMoved
+        {
+           FadeToTargetTrans(MBtn_winId, 255, TransparentValue)
+           WinSet, AlwaysOnTop, Off, %MBtn_winId%
+        }
+        
+        If removePeakedWin
+           lastWindowPeaked := False
+        
+        Return
     }
            
     MouseGetPos, EWD_MouseX, EWD_MouseY
     If (((EWD_MouseX != EWD_MouseOrgX) || (EWD_MouseY != EWD_MouseOrgY)) && !registerRbutton)
+    {
         MouseMoved := True
+        If (!HasVal(AlwaysOnTopWins, MBtn_winId))
+        {
+            WinSet, AlwaysOnTop, On, %MBtn_winId%
+        }
+    }
+    Else If (!HasVal(AlwaysOnTopWins, MBtn_winId))
+    {
+        WinSet, AlwaysOnTop, Off, %MBtn_winId%
+    }
     
     If ((EWD_MouseX == MX) && (EWD_MouseY == MY))
     {
-        If ((A_TickCount - TimeSinceStop) > 1100)
+        If ((A_TickCount - TimeSinceStop) > 1100 && IsOverTitleBar(EWD_MouseX, EWD_MouseY, EWD_winHwnd))
         {
             SetTimer, EWD_WatchDrag, off
-            WinSet, AlwaysOnTop, toggle, %MBtn_winId%
+            If (!HasVal(AlwaysOnTopWins, MBtn_winId))
+            {
+                WinSet, AlwaysOnTop, On, %MBtn_winId%
+                ToggledOnTop := True
+            }
+            Else
+            {
+                targetIdx := 0
+                WinSet, AlwaysOnTop, Off, %MBtn_winId%
+                loop % AlwaysOnTopWins.MaxIndex()
+                {
+                    If (AlwaysOnTopWins[A_Index] == MBtn_winId)
+                        targetIdx := A_Index
+                }
+                AlwaysOnTopWins.remove(targetIdx)
+                ToggledOnTop := True
+            }
             Tooltip, Top State Toggled!
-            ToggledOnTop := True
+            AlwaysOnTopWins.push(MBtn_winId)
+            sleep 750
+            Tooltip, 
             Return
         }
     }
@@ -1560,14 +1600,14 @@ Return
                     If (WinX < 0) {
                         WinSet, AlwaysOnTop, On, %winId%
                         WinMoveEx(winId, 75, 0-OffL)
-                        ; FadeToTargetTrans(winHwndx_ID, 255, 200)
+                        FadeToTargetTrans(winId, 255, 200)
                         TaskbarPeak := True
                         Break
                     }
                     Else If (WinX+WinH > A_ScreenWidth) {
                         WinSet, AlwaysOnTop, On, %winId%
                         WinMoveEx(winId, 75, A_ScreenWidth-WinW-OffR)
-                        ; FadeToTargetTrans(winHwndx_ID, 255, 200)
+                        FadeToTargetTrans(winId, 255, 200)
                         TaskbarPeak := True
                         Break
                     }
@@ -1580,7 +1620,7 @@ Return
         }
     }
     
-    loop
+    loop 10000
     {
         If GetKeyState("LButton", "P")
         {
@@ -2160,7 +2200,7 @@ ButCaptureCached:
     }    
 Return
 
-CleanUpStoredWindow(ahkId := "", hwnd := "")
+CleanUpStoredWindow(ahkId, hwnd)
 {
     global ForceButtonRemove, LastRemovedWinHwnd, PeaksArray, WinBackupXs
     
