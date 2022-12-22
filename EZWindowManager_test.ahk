@@ -680,8 +680,6 @@ CheckButtonSize:
                         buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "MenuItem", 0x4, "RegEx", False)
                     Else If (buttonEl != "")
                     {
-                        ; If !InStr(buttonEl.CurrentName, "1 running")
-                            ; groupedWindows := True
                         break
                     }
                 }
@@ -698,22 +696,12 @@ CheckButtonSize:
                 If (!buttonEl)
                     buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "MenuItem", 0x4, "RegEx", False)
              }
-             ; Else
-             ; {
-                ; If !InStr(buttonEl.CurrentName, "1 running")
-                    ; groupedWindows := True
-             ; }
              
              If (!buttonEl)
              {
                 typeString := % "AutomationId=" wProcess " OR Automation=" procNameArray[1]
                 buttonEl := toolbarEl.FindFirstBy(typeString, 0x4, 2, False)
              }
-             ; Else
-             ; {
-                ; If !InStr(buttonEl.CurrentName, "1 running")
-                    ; groupedWindows := True
-             ; }
              
              If (buttonEl)
              {
@@ -755,8 +743,6 @@ CheckButtonColor:
                     buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "MenuItem", 0x4, "RegEx", False)
                 Else If (buttonEl != "")
                 {
-                    ; If !InStr(buttonEl.CurrentName, "1 running")
-                        ; groupedWindows := True
                     break
                 }
             }
@@ -773,22 +759,12 @@ CheckButtonColor:
             If (!buttonEl)
                 buttonEl := toolbarEl.FindFirstByNameAndType(regexTitle, "MenuItem", 0x4, "RegEx", False)
          }
-         ; Else
-         ; {
-            ; If !InStr(buttonEl.CurrentName, "1 running")
-                ; groupedWindows := True
-         ; }
          
          If (!buttonEl)
          {
             typeString := % "AutomationId=" wProcess " OR Automation=" procNameArray[1]
             buttonEl := toolbarEl.FindFirstBy(typeString, 0x4, 2, False)
          }
-         ; Else
-         ; {
-            ; If !InStr(buttonEl.CurrentName, "1 running")
-                ; groupedWindows := True
-         ; }
              
          If (buttonEl)
          {
