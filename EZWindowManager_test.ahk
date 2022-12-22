@@ -77,7 +77,12 @@ windowEls      := {}
 lastActiveWinhwnd  := 
 LastRemovedWinHwnd := 
 firstButtonPosXOld := 0
-winCountOld := 0
+MColor1_org        := 0
+MColor2_org        := 0
+MColor3_org        := 0
+MColor4_org        := 0
+MColor5_org        := 0
+A_Cursor_org       := ""
 
 GroupAdd, HorzScrollApps , OneNote
 GroupAdd, HorzScrollApps , Excel
@@ -901,7 +906,7 @@ $MButton::
         WinSet, Transparent, Off, %MBtn_winId%
         SetTimer, EWD_WatchDrag, Off
         SetTimer, CheckforTransparent, Off
-        If (((A_PriorHotkey == A_ThisHotkey) && (A_TimeSincePriorHotkey <= (ceil(DoubleClickTime * 1.5)))) && MColor1 == MColor1_org && MColor2 == MColor2_org && MColor3 == MColor3_org && MColor4 == MColor4_org && MColor5 == MColor5_org) 
+        If (((A_PriorHotkey == A_ThisHotkey) && (A_TimeSincePriorHotkey <= (ceil(DoubleClickTime * 2)))) && ((A_Cursor == "Unknown") || (MColor1 == MColor1_org && MColor2 == MColor2_org && MColor3 == MColor3_org && MColor4 == MColor4_org && MColor5 == MColor5_org)) )
         {
             WinActivate, %MBtn_winId%
             Send !{F4}
@@ -910,11 +915,12 @@ $MButton::
         Else If (!ToggledOnTop)
             Send, {MButton}
         
-         MColor1_org :=  MColor1
-         MColor2_org :=  MColor2
-         MColor3_org :=  MColor3
-         MColor4_org :=  MColor4
-         MColor5_org :=  MColor5
+         MColor1_org  :=  MColor1
+         MColor2_org  :=  MColor2
+         MColor3_org  :=  MColor3
+         MColor4_org  :=  MColor4
+         MColor5_org  :=  MColor5
+         A_Cursor_org := A_Cursor
     }
     Wheel_disabled := False
     SetTimer, MasterTimer, On
