@@ -32,6 +32,9 @@ winCount := 0
 fifteenMinutes := 1000*60*5
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
+SysGet, CaptionButtonHeight, 31
+SysGet, CaptionSize, 4  ; SM_CYCAPTION: Height of a caption area, in pixels
+SysGet, SizeFrame, 32   ; SM_CXSIZEFRAME: Width of the horizontal border
 
 WindowArray      := []
 PeaksArray       := []
@@ -453,22 +456,32 @@ ResetPeakedWindows:
 Return
 
 /* ;
-*****************************
-***** UTILITY FUNCTIONS *****
-*****************************
-*/
-
-ExtractAppTitle(FullTitle)
-{   
-    AppTitle := SubStr(FullTitle, InStr(FullTitle, " ", False, -1) + 1)
-    Return AppTitle
-}
-
-/* ;
 ***********************************
 ***** SHORTCUTS CONFIGURATION *****
 ***********************************
 */
+#If (Doubleclick() && IsOverTitleBar(_x, _y, _hwnd))
+LButton::
+    WinGet, FS_winHwnd, ID, A
+    FS_OffB := FS_OffT := 0
+    WinGetPosEx(FS_winHwnd, FS_WinX, FS_WinY, FS_WinW, FS_WinH, FS_OffL, FS_OffT, FS_OffR, FS_OffB)
+    WinGet, vv, MinMax, A           ; 1 = max, 0 = restored
+    if (vv = 1) {
+      WinRestore, A
+      WinSet, Style, +0xC00000, A       ; SHOW TITLE BAR
+      ; WinShow, ahk_class Shell_TrayWnd  ; SHOW TASK BAR
+    }
+    else {
+      WinGet, Style, Style, A
+      If (Style & 0xC00000 & 0x800000)
+        WinSet, Style, -0xC00000, A       ; HIDE TITLE BAR
+      ; WinHide, ahk_class Shell_TrayWnd  ; HIDE TASK BAR
+      WinMaximize, A
+      If (Style & 0xC00000 & 0x800000)
+        WinMove, A,, , , , MonitorWorkAreaBottom+CaptionSize-FS_OffT-FS_OffB
+    }
+Return
+#If
 ;-------------------------------------------
 ;---------------OneNote---------------------
 ;-------------------------------------------
@@ -478,12 +491,12 @@ ExtractAppTitle(FullTitle)
 ControlGetFocus, fcontrol, A
 Loop 2  ; <-- Increase this value to scroll faster.
     SendMessage, 0x114, 0, 0, %fcontrol%, A  ; 0x114 is WM_HSCROLL and the 0 after it is SB_LINELEFT.
-return
+Return
 ~LShift & WheelDown::  ; Scroll right.
 ControlGetFocus, fcontrol, A
 Loop 2  ; <-- Increase this value to scroll faster.
     SendMessage, 0x114, 1, 0, %fcontrol%, A  ; 0x114 is WM_HSCROLL and the 1 after it is SB_LINERIGHT.
-return
+Return
 #IfWinActive
 #IfWinActive Excel
 ~LShift & WheelUp::  ; Scroll left.
@@ -491,14 +504,36 @@ Loop 2  ; <-- Increase this value to scroll faster.
     SetScrollLockState, On 
     SendInput {Left} 
     SetScrollLockState, Off 
-return
+Return
 ~LShift & WheelDown::  ; Scroll right.
 Loop 2  ; <-- Increase this value to scroll faster.
     SetScrollLockState, On 
     SendInput {Right} 
     SetScrollLockState, Off 
-return
+Return
 #IfWinActive
+
+; SHOW WINDOW IN FULL SCREEN - TOGGLE
+#^f::
+WinGet, FS_winHwnd, ID, A
+FS_OffB := FS_OffT := 0
+WinGetPosEx(FS_winHwnd, FS_WinX, FS_WinY, FS_WinW, FS_WinH, FS_OffL, FS_OffT, FS_OffR, FS_OffB)
+WinGet, vv, MinMax, A           ; 1 = max, 0 = restored
+if (vv = 1) {
+  WinRestore, A
+  WinSet, Style, +0xC00000, A       ; SHOW TITLE BAR
+  ; WinShow, ahk_class Shell_TrayWnd  ; SHOW TASK BAR
+}
+else {
+  WinGet, Style, Style, A
+  If (Style & 0xC00000)
+    WinSet, Style, -0xC00000, A       ; HIDE TITLE BAR
+  ; WinHide, ahk_class Shell_TrayWnd  ; HIDE TASK BAR
+  WinMaximize, A
+  If (Style & 0xC00000)
+    WinMove, A,, , , , MonitorWorkAreaBottom+CaptionSize-FS_OffT-FS_OffB
+}
+Return
 
 ; Alt + ` -  Activate NEXT Window of same type (title checking) of the current APP
 !`::
@@ -1323,188 +1358,6 @@ EWD_WatchDrag:
     EWD_MouseOrgX := EWD_MouseX, EWD_MouseOrgY := EWD_MouseY ; Update for the next timer-call to this subroutine.
 Return
 
-IsOverTitleBar(x, y, hWnd) {
-    SendMessage, 0x84,, (x & 0xFFFF) | (y & 0xFFFF) << 16,, ahk_id %hWnd%
-    If ErrorLevel in 2
-        Return 1
-    Else
-        Return 0
-}
-
-CalculateWinScreenPercent(winId)
-{
-    visibleWindowArea := 0
-    WinGet, EWD_winHwnd, ID, %winId%
-    WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, offL, OffT, OffR, OffB)
-    totalWindowArea := EWD_WinW * EWD_WinH
-    
-    If (EWD_WinX < 0) ; hanging over left side
-        visibleWindowArea := (EWD_WinW+EWD_WinX) * EWD_WinH
-    Else If ((EWD_WinX+EWD_WinW) > A_ScreenWidth)
-        visibleWindowArea := (EWD_WinX-A_ScreenWidth) * EWD_WinH
-    Else
-        Return 1.0
-        
-    Return abs(visibleWindowArea/totalWindowArea)
-}
-
-FadeToTargetTrans(winId, targetValue := 255, startValue := 255)
-{
-    Critical On
-    transIncrement := 10
-    If (targetValue != 255)
-    {   
-        maxValue := startValue
-        loop % (abs(startValue - targetValue)/transIncrement)
-        {   
-            sleep, 1
-            If (startValue > targetValue)
-                maxValue := maxValue - transIncrement
-            Else
-                maxValue := maxValue + transIncrement
-            WinSet, Transparent, %maxValue%, %winId%
-        }
-    }
-    Else ;target MUST be 255 opaque
-    {
-        init := startValue
-        loop % (ceil((255 - startValue)/transIncrement))
-        {
-            sleep, 1
-            init := init + transIncrement
-            WinSet, Transparent, %init%, %winId%
-        }
-    }
-    Critical Off
-   Return
-}
-
-WinMoveEx(winId, moveincrement, targetX, targetY := -1, fade := "na", transVal := 0)
-{
-   global PI
-   orgX := 0
-   orgY := 0
-   Critical On
-   WinGet, winHwnd, ID, %winId%
-   WinGetPosEx(winHwnd, orgX, orgY)
-   loopCount := 0
-   xIsFurther := False
-   yIsFurther := False
-   
-   If (targetX > orgX)
-      moveIncrementX := moveincrement
-   Else
-      moveIncrementX := -1*moveincrement
-      
-   If (targetY > orgY)
-      moveIncrementY := moveincrement
-   Else
-      moveIncrementY := -1*moveincrement
-      
-   If WinExist(winId)
-   {
-       If (abs(targetX-orgX) > abs(targetY-orgY))
-       {
-            loopCount := floor(abs((targetX-orgX)/moveIncrementX))
-            xIsFurther := True
-            adjustedIncPerc := abs(targetY-orgY)/abs(targetX-orgX)
-       }
-       Else
-       {
-            loopCount := floor(abs((targetY-orgY)/moveIncrementY))
-            yIsFurther := True
-            adjustedIncPerc := abs(targetX-orgX)/abs(targetY-orgY)
-       }
-       
-       If (fade != "na" && loopCount < (255-transVal))
-       {
-            ; fadeIncr := floor((255-transVal)/loopCount)
-
-            fadeIncr := (PI/2/((255-transVal)/loopCount)) 
-            If (fade == "out")
-            {
-                fadeIncr := -1 * fadeIncr
-                startTrans := 255
-            }
-            else
-            {
-                startTrans := transVal
-            }
-       }
-       
-       If (targetY == -1)
-       {
-           newX := orgX
-           loop % loopCount
-           {   
-               newX := newX + moveIncrementX
-               sleep, 1
-               WinMove, %winId%,, newX 
-               
-              If (fade == "in")
-              {
-                 WinSet, Transparent, %startTrans%, %winId%
-                 startTrans := transVal + (floor((255-transVal)*(sin((3*PI/2) + (A_Index*fadeIncr)))) + (255-transVal))
-              }
-              Else If (fade == "out")
-              {
-                 WinSet, Transparent, %startTrans%, %winId%
-                 startTrans := transVal + (floor((255-transVal)*(sin((2*PI) + (A_Index*fadeIncr)))) + (255-transVal))
-              }
-           }
-           
-           WinMove, %winId%,, targetX
-           
-           If (fade == "in")
-              WinSet, Transparent, 255, %winId%
-           Else If (fade == "out")
-              WinSet, Transparent, transVal, %winId%
-
-       }
-       Else
-       {
-          newX := orgX
-          newY := orgY
-          loop % loopCount
-          {   
-              If (xIsFurther)
-              {
-                  newX := newX + moveIncrementX
-                  newY := newY + ceil(moveIncrementY*adjustedIncPerc)
-              }
-              Else
-              {
-                  newX := newX + ceil(moveIncrementX*adjustedIncPerc)
-                  newY := newY + moveIncrementY
-              }
-              sleep, 1
-              WinMove, %winId%,, newX, newY 
-              
-              If (fade == "in")
-              {
-                 WinSet, Transparent, %startTrans%, %winId%
-                 startTrans := transVal + (floor((255-transVal)*(sin((3*PI/2) + (A_Index*fadeIncr)))) + (255-transVal))
-              }
-              Else If (fade == "out")
-              {
-                 WinSet, Transparent, %startTrans%, %winId%
-                 startTrans := transVal + (floor((255-transVal)*(sin((2*PI) + (A_Index*fadeIncr)))) + (255-transVal))
-              }
-          }
-          
-          WinMove, %winId%,, targetX, targetY
-          
-          If (fade == "in")
-             WinSet, Transparent, 255, %winId%
-          Else If (fade == "out")
-             WinSet, Transparent, transVal, %winId%
-             
-       }
-   }
-   Critical Off
-   Return
-}
-
 CheckforTransparent:
     If Wheel_disabled && MouseMoved
     {
@@ -1524,7 +1377,9 @@ Return
     Gosub, SendCtrlAdd
 Return
 
+#If (!Doubleclick() || !IsOverTitleBar(_x, _y, _hwnd))
 ~LButton::
+#If
     SetTimer, MasterTimer, Off
     lButtonDrag          := True
     showDesktopD         := False
@@ -1658,11 +1513,6 @@ SendCtrlAdd:
         Send ^{NumpadAdd}
     }
 Return
-
-MouseIsOver(WinTitle) {
-    MouseGetPos, , , Win
-    Return WinExist(WinTitle . " ahk_id " . Win)
-}
 
 ;==================================================
 ; !Capslock::  ; <-- CLOSE WITH DOUBLE ESCAPE
@@ -2192,8 +2042,18 @@ ButCaptureCached:
     }    
 Return
 
-CleanUpStoredWindow(ahkId, hwnd)
-{
+/*
+********************************************************************************************************
+************************************* UTILITY FUNCTIONS ************************************************
+********************************************************************************************************
+*/
+
+ExtractAppTitle(FullTitle) {
+    AppTitle := SubStr(FullTitle, InStr(FullTitle, " ", False, -1) + 1)
+    Return AppTitle
+}
+
+CleanUpStoredWindow(ahkId, hwnd) {
     global ForceButtonRemove, LastRemovedWinHwnd, PeaksArray, WinBackupXs
     
     removeId := False
@@ -2221,8 +2081,7 @@ CleanUpStoredWindow(ahkId, hwnd)
     Return
 }
 
-IsUIAObjSaved(idstring := "")
-{
+IsUIAObjSaved(idstring := "") {
     global WindowArray
     ; Tooltip, % WindowArray.Length()
     for k, v in WindowArray {
@@ -2286,8 +2145,7 @@ RangeTip(x:="", y:="", w:="", h:="", color:=0x0, d:=2, winHwnd:=0, print:=False,
     Return
 }
 
-AdjustWinDims(ahkId := "", x_delta := 0, y_delta := 0)
-{
+AdjustWinDims(ahkId := "", x_delta := 0, y_delta := 0) {
     global minDimsAhkId, maxDimsAhkId, closeDimsAhkId
         
     for element in minDimsAhkId
@@ -2331,23 +2189,20 @@ AdjustWinDims(ahkId := "", x_delta := 0, y_delta := 0)
 
 ; https://msdn.microsoft.com/en-us/library/windows/desktop/ms724371(v=vs.85).aspx
 ; MsgBox % GetSysColor(13) . "`n" . GetSysColor(29)
-GetSysColor(n)
-{
+GetSysColor(n) {
     Local BGR := DllCall("User32.dll\GetSysColor", "Int", n, "UInt")
         , RGB := (BGR & 255) << 16 | (BGR & 65280) | (BGR >> 16)
     Return Format("0x{:06X}", RGB)
 } 
 
-HexToDec(hex)
-{
+HexToDec(hex) {
     VarSetCapacity(dec, 66, 0)
     , val := DllCall("msvcrt.dll\_wcstoui64", "Str", hex, "UInt", 0, "UInt", 16, "CDECL Int64")
     , DllCall("msvcrt.dll\_i64tow", "Int64", val, "Str", dec, "UInt", 10, "CDECL")
     Return dec
 }
 
-SampleAccentColor(startingX := 0)
-{
+SampleAccentColor(startingX := 0) {
     global AccentColorHex, toolbarEl
     
     HexColor  :=
@@ -2369,8 +2224,7 @@ SampleAccentColor(startingX := 0)
     Return HexColor
 }
 
-GetAccentColor()
-{
+GetAccentColor() {
     ; RegRead, CheckReg, HKCU\SOFTWARE\Microsoft\Windows\DWM, ColorizationColor
     RegRead, CheckReg, HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Accent, AccentPalette
     ; CheckRegHex := int2hex(Checkreg)
@@ -2382,8 +2236,7 @@ GetAccentColor()
     Return CheckRegHex
 }
 
-join( strArray, allHex := False )
-{
+join( strArray, allHex := False ) {
     s := ""
     for i,v in strArray
     {   If allHex
@@ -2394,8 +2247,7 @@ join( strArray, allHex := False )
     Return substr(s, 3)
 }
 
-SessionIsLocked()
-{
+SessionIsLocked() {
     static WTS_CURRENT_SERVER_HANDLE := 0, WTSSessionInfoEx := 25, WTS_SESSIONSTATE_LOCK := 0x00000000, WTS_SESSIONSTATE_UNLOCK := 0x00000001 ;, WTS_SESSIONSTATE_UNKNOWN := 0xFFFFFFFF
     ret := False
     If (DllCall("ProcessIdToSessionId", "UInt", DllCall("GetCurrentProcessId", "UInt"), "UInt*", sessionId)
@@ -2425,20 +2277,231 @@ HasKey(haystack, needle) {
     return False
 }
 
-GetSize(haystack)
-{
+GetSize(haystack) {
     size := 0
     for index, value in haystack
         size += 1
     return size
 }
 
-DesktopIcons( Show:=-1 )                  ; By SKAN for ahk/ah2 on D35D/D495 @ tiny.cc/desktopicons
-{
+; By SKAN for ahk/ah2 on D35D/D495 @ tiny.cc/desktopicons
+DesktopIcons( Show:=-1 ) {
     Local hProgman := WinExist("ahk_class WorkerW", "FolderView") ? WinExist()
                    :  WinExist("ahk_class Progman", "FolderView")
     Local hShellDefView := DllCall("user32.dll\GetWindow", "ptr",hProgman,      "int",5, "ptr")
     Local hSysListView  := DllCall("user32.dll\GetWindow", "ptr",hShellDefView, "int",5, "ptr")
     If ( DllCall("user32.dll\IsWindowVisible", "ptr",hSysListView) != Show )
          DllCall("user32.dll\SendMessage", "ptr",hShellDefView, "ptr",0x111, "ptr",0x7402, "ptr",0)
+}
+
+IsOverTitleBar(x, y, hWnd) {
+    SendMessage, 0x84,, (x & 0xFFFF) | (y & 0xFFFF) << 16,, ahk_id %hWnd%
+    
+    If ErrorLevel in 2
+        Return 1
+    Else
+        Return 0
+}
+
+Doubleclick() {
+	global _x, _y, _hwnd, DoubleClickTime
+	static priortime := a_tickcount
+	
+	MouseGetPos, _x, _y, _hwnd
+	settimer update, -10
+	
+    Return ((a_tickcount - priortime) < DoubleClickTime)
+	
+    update:
+		priortime := a_tickcount
+	Return
+}
+
+CalculateWinScreenPercent(winId) {
+    visibleWindowArea := 0
+    WinGet, EWD_winHwnd, ID, %winId%
+    WinGetPosEx(EWD_winHwnd, EWD_WinX, EWD_WinY, EWD_WinW, EWD_WinH, offL, OffT, OffR, OffB)
+    totalWindowArea := EWD_WinW * EWD_WinH
+    
+    If (EWD_WinX < 0) ; hanging over left side
+        visibleWindowArea := (EWD_WinW+EWD_WinX) * EWD_WinH
+    Else If ((EWD_WinX+EWD_WinW) > A_ScreenWidth)
+        visibleWindowArea := (EWD_WinX-A_ScreenWidth) * EWD_WinH
+    Else
+        Return 1.0
+        
+    Return abs(visibleWindowArea/totalWindowArea)
+}
+
+FadeToTargetTrans(winId, targetValue := 255, startValue := 255) {
+    Critical On
+    transIncrement := 10
+    If (targetValue != 255)
+    {   
+        maxValue := startValue
+        loop % (abs(startValue - targetValue)/transIncrement)
+        {   
+            sleep, 1
+            If (startValue > targetValue)
+                maxValue := maxValue - transIncrement
+            Else
+                maxValue := maxValue + transIncrement
+            WinSet, Transparent, %maxValue%, %winId%
+        }
+    }
+    Else ;target MUST be 255 opaque
+    {
+        init := startValue
+        loop % (ceil((255 - startValue)/transIncrement))
+        {
+            sleep, 1
+            init := init + transIncrement
+            WinSet, Transparent, %init%, %winId%
+        }
+    }
+    Critical Off
+   Return
+}
+
+WinMoveEx(winId, moveincrement, targetX, targetY := -1, fade := "na", transVal := 0) {
+   global PI
+   orgX := 0
+   orgY := 0
+   Critical On
+   WinGet, winHwnd, ID, %winId%
+   WinGetPosEx(winHwnd, orgX, orgY)
+   loopCount := 0
+   xIsFurther := False
+   yIsFurther := False
+   
+   If (targetX > orgX)
+      moveIncrementX := moveincrement
+   Else
+      moveIncrementX := -1*moveincrement
+      
+   If (targetY > orgY)
+      moveIncrementY := moveincrement
+   Else
+      moveIncrementY := -1*moveincrement
+      
+   If WinExist(winId)
+   {
+       If (abs(targetX-orgX) > abs(targetY-orgY))
+       {
+            loopCount := floor(abs((targetX-orgX)/moveIncrementX))
+            xIsFurther := True
+            adjustedIncPerc := abs(targetY-orgY)/abs(targetX-orgX)
+       }
+       Else
+       {
+            loopCount := floor(abs((targetY-orgY)/moveIncrementY))
+            yIsFurther := True
+            adjustedIncPerc := abs(targetX-orgX)/abs(targetY-orgY)
+       }
+       
+       If (fade != "na" && loopCount < (255-transVal))
+       {
+            ; fadeIncr := floor((255-transVal)/loopCount)
+
+            fadeIncr := (PI/2/((255-transVal)/loopCount)) 
+            If (fade == "out")
+            {
+                fadeIncr := -1 * fadeIncr
+                startTrans := 255
+            }
+            else
+            {
+                startTrans := transVal
+            }
+       }
+       
+       If (targetY == -1)
+       {
+           newX := orgX
+           loop % loopCount
+           {   
+               newX := newX + moveIncrementX
+               sleep, 1
+               WinMove, %winId%,, newX 
+               
+              If (fade == "in")
+              {
+                 WinSet, Transparent, %startTrans%, %winId%
+                 startTrans := transVal + (floor((255-transVal)*(sin((3*PI/2) + (A_Index*fadeIncr)))) + (255-transVal))
+              }
+              Else If (fade == "out")
+              {
+                 WinSet, Transparent, %startTrans%, %winId%
+                 startTrans := transVal + (floor((255-transVal)*(sin((2*PI) + (A_Index*fadeIncr)))) + (255-transVal))
+              }
+           }
+           
+           WinMove, %winId%,, targetX
+           
+           If (fade == "in")
+              WinSet, Transparent, 255, %winId%
+           Else If (fade == "out")
+              WinSet, Transparent, transVal, %winId%
+
+       }
+       Else
+       {
+          newX := orgX
+          newY := orgY
+          loop % loopCount
+          {   
+              If (xIsFurther)
+              {
+                  newX := newX + moveIncrementX
+                  newY := newY + ceil(moveIncrementY*adjustedIncPerc)
+              }
+              Else
+              {
+                  newX := newX + ceil(moveIncrementX*adjustedIncPerc)
+                  newY := newY + moveIncrementY
+              }
+              sleep, 1
+              WinMove, %winId%,, newX, newY 
+              
+              If (fade == "in")
+              {
+                 WinSet, Transparent, %startTrans%, %winId%
+                 startTrans := transVal + (floor((255-transVal)*(sin((3*PI/2) + (A_Index*fadeIncr)))) + (255-transVal))
+              }
+              Else If (fade == "out")
+              {
+                 WinSet, Transparent, %startTrans%, %winId%
+                 startTrans := transVal + (floor((255-transVal)*(sin((2*PI) + (A_Index*fadeIncr)))) + (255-transVal))
+              }
+          }
+          
+          WinMove, %winId%,, targetX, targetY
+          
+          If (fade == "in")
+             WinSet, Transparent, 255, %winId%
+          Else If (fade == "out")
+             WinSet, Transparent, transVal, %winId%
+             
+       }
+   }
+   Critical Off
+   Return
+}
+
+; based on closeContextMenu() by Stefaan - http://www.autohotkey.com/community/viewtopic.php?p=163183#p163183 
+DetectContextMenu() {
+   GuiThreadInfoSize = 48
+   VarSetCapacity(GuiThreadInfo, 48)
+   NumPut(GuiThreadInfoSize, GuiThreadInfo, 0)
+   if not DllCall("GetGUIThreadInfo", uint, 0, str, GuiThreadInfo)
+   {
+      MsgBox GetGUIThreadInfo() indicated a failure.
+      return
+   }
+   ; GuiThreadInfo contains a DWORD flags at byte 4
+   ; Bit 4 of this flag is set if the thread is in menu mode. GUI_INMENUMODE = 0x4
+   if (NumGet(GuiThreadInfo, 4) & 0x4)
+      Return 1 ; we've found a context menu
+   Else
+      Return 0
 }
