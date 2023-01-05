@@ -410,10 +410,11 @@ WatchMouse:
                          FadeToTargetTrans(winId, 100)
                       Else
                          FadeToTargetTrans(winId, 200)
+                      
+                      ; WinSet, Bottom, , %winId%
+                      ; WinSet, AlwaysOnTop, Off, %winId%
                       LookForLeaveWindow := False
-                      FileAppend, WatchMouse2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
-                      WinSet, Bottom, , %winId%
-                      WinSet, AlwaysOnTop, Off, %winId%
+                      ; FileAppend, WatchMouse2 - %LookForLeaveWindow%`n, C:\Users\vbonaven\Desktop\log.txt
                   }
                   Break
                }
@@ -912,9 +913,9 @@ EWD_WatchDrag:
         If (percentageLeft < 0.40)
         {
            If (percentageLeft < 0.10)
-             FadeToTargetTrans(MBtn_winId, 100, TransparentValue)
+               FadeToTargetTrans(MBtn_winId, 100, TransparentValue)
            Else
-             FadeToTargetTrans(MBtn_winId, 200, TransparentValue)
+               FadeToTargetTrans(MBtn_winId, 200, TransparentValue)
            PeaksArray.push(MBtn_winId)
            WinBackupXs[EWD_MouseWinHwnd] := EWD_WinX
            xsize := GetSize(WinBackupXs)
@@ -922,7 +923,10 @@ EWD_WatchDrag:
            ForceButtonRemove := True
            ResetMousePosBkup := True
            WinSet, Bottom, , %MBtn_winId%
-           WinSet, AlwaysOnTop, Off, %MBtn_winId%
+           If (!HasVal(AlwaysOnTopWins, MBtn_winId))
+           {
+               WinSet, AlwaysOnTop, Off, %MBtn_winId%
+           }
            sleep 500
            Return
         }
@@ -944,7 +948,10 @@ EWD_WatchDrag:
            for idx, val in PeaksArray {
               If (val == MBtn_winId)
               {
-                  WinSet, AlwaysOnTop, off, %MBtn_winId%
+                  If (!HasVal(AlwaysOnTopWins, MBtn_winId))
+                  {
+                      WinSet, AlwaysOnTop, Off, %MBtn_winId%
+                  }
                   removeIdx := idx
                   removeId := True
                   Break
@@ -983,7 +990,10 @@ EWD_WatchDrag:
         If MouseMoved
         {
            FadeToTargetTrans(MBtn_winId, 255, TransparentValue)
-           WinSet, AlwaysOnTop, Off, %MBtn_winId%
+           If (!HasVal(AlwaysOnTopWins, MBtn_winId))
+           {
+               WinSet, AlwaysOnTop, Off, %MBtn_winId%
+           }
         }
         
         If removePeakedWin
@@ -1014,6 +1024,7 @@ EWD_WatchDrag:
             If (!HasVal(AlwaysOnTopWins, MBtn_winId))
             {
                 WinSet, AlwaysOnTop, On, %MBtn_winId%
+                AlwaysOnTopWins.push(MBtn_winId)
                 ToggledOnTop := True
             }
             Else
@@ -1029,7 +1040,6 @@ EWD_WatchDrag:
                 ToggledOnTop := True
             }
             Tooltip, Top State Toggled!
-            AlwaysOnTopWins.push(MBtn_winId)
             sleep 750
             Tooltip, 
             Return
