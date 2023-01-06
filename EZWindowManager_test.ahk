@@ -113,6 +113,17 @@ SetTimer, MasterTimer, 10, -1
 SetTimer, OtherTimer, 100, -1
 SetTimer, LookForExplorerSpawn, 100, -1
 
+CaptionGuiX := A_ScreenWidth-138
+
+Gui, CaptionGUI: New, +AlwaysOnTop,
+; Gui, 3: Add, Progress, w400 h20 c06AA24 vMyProgress, 0
+Gui, CaptionGUI: +LastFound
+; WTNCA_NODRAWICON := 2
+; WTNCA_NOSYSMENU := 4
+DllCall("uxtheme\SetWindowThemeAttribute", "ptr", WinExist()
+    , "int", 1, "int64*", 6 | 6<<32, "uint", 8)
+Gui, CaptionGUI: Hide,
+
 Return
 
 Destroyed(Win_Hwnd, Win_Title, Win_Class, Win_Exe, Win_Event)
@@ -139,6 +150,20 @@ Return
 MasterTimer:
     MouseGetPos, MXw, MYw, MouseWinHwnd
     WinGetClass, wmClass, ahk_id %MouseWinHwnd%
+    WinGet, wmState, MinMax, ahk_id %MouseWinHwnd%
+    WinGet, wmStyle, style, ahk_id %MouseWinHwnd%
+    
+    ; tooltip, % wmState "," wmStyle "," MXw "," MYw
+    If (wmState == 1 && !(wmStyle & 0xC00000) && MXw >= (A_ScreenWidth-2) && MYw == 0)
+    {
+        Gui, CaptionGUI: Show, x%CaptionGuiX% y0 w138 h0, ` `
+        Return
+    }
+    Else if (wmState == 1 && !(wmStyle & 0xC00000) && (MXw < (A_ScreenWidth-2) || MYw > CaptionButtonHeight))
+    {
+        Gui, CaptionGUI: Hide
+        Return
+    }
 
     If ((wmClass == "WorkerW" || wmClass == "Progman") && MXw == 0 && MYw >= 150)
         DesktopIcons(True)
