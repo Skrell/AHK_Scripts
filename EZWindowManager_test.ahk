@@ -519,6 +519,8 @@ LButton::
     FS_OffB := FS_OffT := 0
     WinGetPosEx(FS_winHwnd, FS_WinX, FS_WinY, FS_WinW, FS_WinH, FS_OffL, FS_OffT, FS_OffR, FS_OffB)
     WinGet, vv, MinMax, A           ; 1 = max, 0 = restored
+    WinGetText, vvText, A
+    
     if (vv = 1) {
       WinRestore, A
       WinSet, Style, +0xC00000, A       ; SHOW TITLE BAR
@@ -526,11 +528,11 @@ LButton::
     }
     else {
       WinGet, Style, Style, A
-      If (Style & 0xC00000 & 0x800000)
+      If ((Style & 0xC00000 & 0x800000) && !(InStr(vvText, "uiribbon", false)))
         WinSet, Style, -0xC00000, A       ; HIDE TITLE BAR
       ; WinHide, ahk_class Shell_TrayWnd  ; HIDE TASK BAR
       WinMaximize, A
-      If (Style & 0xC00000 & 0x800000)
+      If ((Style & 0xC00000 & 0x800000) && !(InStr(vvText, "uiribbon", false)))
         WinMove, A,, , , , MonitorWorkAreaBottom+CaptionSize-FS_OffT-FS_OffB
     }
 Return
