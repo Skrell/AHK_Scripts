@@ -77,6 +77,7 @@ maximizeEl     := {}
 closeEl        := {}
 windowEls      := {}
 
+specialMaxWindowId :=
 lastActiveWinhwnd  := 
 LastRemovedWinHwnd := 
 firstButtonPosXOld := 0
@@ -120,10 +121,14 @@ Gui, CaptionGUI: New, +AlwaysOnTop,
 Gui, CaptionGUI: +LastFound
 ; WTNCA_NODRAWICON := 2
 ; WTNCA_NOSYSMENU := 4
-DllCall("uxtheme\SetWindowThemeAttribute", "ptr", WinExist()
-    , "int", 1, "int64*", 6 | 6<<32, "uint", 8)
+DllCall("uxtheme\SetWindowThemeAttribute", "ptr", WinExist(), "int", 1, "int64*", 6 | 6<<32, "uint", 8)
 Gui, CaptionGUI: Hide,
 
+Return
+
+CaptionGUIGuiClose:
+    Gui, CaptionGUI: Hide,
+    WinClose, %specialMaxWindowId%
 Return
 
 Destroyed(Win_Hwnd, Win_Title, Win_Class, Win_Exe, Win_Event)
@@ -156,6 +161,10 @@ MasterTimer:
     ; tooltip, % wmState "," wmStyle "," MXw "," MYw
     If (wmState == 1 && !(wmStyle & 0xC00000) && MXw >= (A_ScreenWidth-2) && MYw == 0)
     {
+        specialMaxWindowId = ahk_id %MouseWinHwnd%
+        Gui, CaptionGUI: New, +AlwaysOnTop
+        Gui, CaptionGUI: +LastFound
+        DllCall("uxtheme\SetWindowThemeAttribute", "ptr", WinExist(), "int", 1, "int64*", 6 | 6<<32, "uint", 8)
         Gui, CaptionGUI: Show, x%CaptionGuiX% y0 w138 h0, ` `
         Return
     }
