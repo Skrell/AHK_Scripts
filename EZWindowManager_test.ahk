@@ -32,6 +32,7 @@ winCount := 0
 fifteenMinutes := 1000*60*5
 
 SysGet, MonitorWorkArea, MonitorWorkArea 
+SysGet, CaptionButtonWidth, 30
 SysGet, CaptionButtonHeight, 31
 SysGet, CaptionSize, 4  ; SM_CYCAPTION: Height of a caption area, in pixels
 SysGet, SizeFrame, 32   ; SM_CXSIZEFRAME: Width of the horizontal border
@@ -114,9 +115,10 @@ SetTimer, MasterTimer, 10, -1
 SetTimer, OtherTimer, 100, -1
 SetTimer, LookForExplorerSpawn, 100, -1
 
-CaptionGuiX := A_ScreenWidth-138
+CaptionWidth := 138
+CaptionGuiX  := A_ScreenWidth-CaptionWidth-SizeFrame
 
-Gui, CaptionGUI: New, +AlwaysOnTop,
+Gui, CaptionGUI: New, +AlwaysOnTop +Resize
 ; Gui, 3: Add, Progress, w400 h20 c06AA24 vMyProgress, 0
 Gui, CaptionGUI: +LastFound
 ; WTNCA_NODRAWICON := 2
@@ -127,8 +129,25 @@ Gui, CaptionGUI: Hide,
 Return
 
 CaptionGUIGuiClose:
-    Gui, CaptionGUI: Hide,
+    Gui, CaptionGUI: Destroy
     WinClose, %specialMaxWindowId%
+Return
+
+CaptionGUIGuiSize:
+    If (A_EventInfo == 0)
+    {
+    }
+    Else If (A_EventInfo == 1)
+    {
+        Gui, CaptionGUI: Destroy
+        WinMinimize, %specialMaxWindowId%    
+    }
+    Else If (A_EventInfo == 2)
+    {
+        Gui, CaptionGUI: Destroy
+        WinRestore, %specialMaxWindowId%
+        WinSet, Style, +0xC00000, %specialMaxWindowId%
+    }
 Return
 
 Destroyed(Win_Hwnd, Win_Title, Win_Class, Win_Exe, Win_Event)
@@ -162,10 +181,10 @@ MasterTimer:
     If (wmState == 1 && !(wmStyle & 0xC00000) && MXw >= (A_ScreenWidth-2) && MYw == 0)
     {
         specialMaxWindowId = ahk_id %MouseWinHwnd%
-        Gui, CaptionGUI: New, +AlwaysOnTop
+        Gui, CaptionGUI: New, +AlwaysOnTop +Resize
         Gui, CaptionGUI: +LastFound
         DllCall("uxtheme\SetWindowThemeAttribute", "ptr", WinExist(), "int", 1, "int64*", 6 | 6<<32, "uint", 8)
-        Gui, CaptionGUI: Show, x%CaptionGuiX% y0 w138 h0, ` `
+        Gui, CaptionGUI: Show, x%CaptionGuiX% y0 w%CaptionWidth% h0, ` `
         Return
     }
     Else if (wmState == 1 && !(wmStyle & 0xC00000) && (MXw < (A_ScreenWidth-2) || MYw > CaptionButtonHeight))
