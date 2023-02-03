@@ -82,9 +82,7 @@ CapsLock:: Send {Delete}
 ;------------------------------------------------------------------------------
 #NoEnv ; For security
 #SingleInstance force
-;#Hotstring EndChars -()[]{}:;/\,.?!`n `t
-#IfWinNotActive ahk_class PuTTY
-#IfWinNotActive NoMachine
+#Hotstring EndChars -()[]{}:;/\,.?!`n `t
 #IfWinNotActive Notepad++
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.
@@ -975,6 +973,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::analagous::analogous
 ::analogeous::analogous
 ::analitic::analytic
+::analyse::analyze
 ::anarchim::anarchism
 ::anarchistm::anarchism
 ::ansestors::ancestors
@@ -2880,6 +2879,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::i'd::I'd
 ::i"m::I'm
 ::i'm::I'm
+::I"m::I'm
 ::im::I'm
 ::i"ll::I'll
 ::i'll::I'll
@@ -2887,6 +2887,8 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::i've::I've
 ::iv'e::I've
 ::ive::I've
+::ti's::it's
+::ti"s::it's
 ::iconclastic::iconoclastic
 ::idae::idea
 ::idaeidae::idea
