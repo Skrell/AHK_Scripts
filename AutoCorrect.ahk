@@ -122,8 +122,8 @@ Return
 ;------------------------------------------------------------------------------
 #NoEnv ; For security
 #SingleInstance force
-; #Hotstring EndChars -()[]{}:;/\,.?!`n `t
 #IfWinNotActive Notepad++
+#IfWinNotActive Microsoft Visual Studio
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.
 ; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
@@ -195,9 +195,8 @@ Loop % StrLen(Hotstring) + 4
 SetTimer, MoveCaret, Off
 return
 
+#Hotstring EndChars -()[]{}:;"/\,.?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
-
-
 ;------------------------------------------------------------------------------
 ; Fix for -ign instead of -ing.
 ; Words to exclude: (could probably do this by return without rewrite)
@@ -244,18 +243,161 @@ return
 ::unalign::
 ::unbenign::
 ::verisign::
+;------------------------------------------------------------------------------
+; Special Exceptions
+;------------------------------------------------------------------------------
+::yt::
+::fats::
+::gg::
+::hah::
+::haha::
+::meh::
+:*:ugh::
+:?:.org::
+:?:.com::
+:?:.net::
+:?:.txt::
+:?:.aif::
+:?:.cda::
+:?:.mid::
+:?:.mp3::
+:?:.mpa::
+:?:.ogg::
+:?:.wav::
+:?:.wma::
+:?:.wpl::
+:?:.7z ::
+:?:.arj::
+:?:.deb::
+:?:.pkg::
+:?:.rar::
+:?:.rpm::
+:?:.tar.gz::
+:?:.z::
+:?:.zip::
+:?:.bin::
+:?:.dmg::
+:?:.iso::
+:?:.toast::
+:?:.vcd::
+:?:.csv::
+:?:.dat::
+:?:.db::
+:?:.log::
+:?:.mdb::
+:?:.sav::
+:?:.sql::
+:?:.tar::
+:?:.xml::
+:?:.email::
+:?:.eml::
+:?:.emlx::
+:?:.msg::
+:?:.oft::
+:?:.ost::
+:?:.pst::
+:?:.vcf::
+:?:.apk::
+:?:.bat::
+:?:.bin::
+:?:.cgi::
+:?:.com::
+:?:.exe::
+:?:.gadget::
+:?:.jar::
+:?:.msi::
+:?:.py::
+:?:.wsf::
+:?:.fnt::
+:?:.fon::
+:?:.otf::
+:?:.ttf::
+:?:.ai::
+:?:.bmp::
+:?:.gif::
+:?:.ico::
+:?:.jpeg::
+:?:.png::
+:?:.ps::
+:?:.psd::
+:?:.svg::
+:?:.tif::
+:?:.webp::
+:?:.asp::
+:?:.cer::
+:?:.cfm::
+:?:.cgi::
+:?:.css::
+:?:.htm::
+:?:.js::
+:?:.jsp::
+:?:.part::
+:?:.php::
+:?:.py::
+:?:.rss::
+:?:.xhtml::
+:?:.key::
+:?:.odp::
+:?:.pps::
+:?:.ppt::
+:?:.pptx::
+:?:.c::
+:?:.cgi::
+:?:.class::
+:?:.cpp::
+:?:.cs::
+:?:.h::
+:?:.java::
+:?:.php::
+:?:.py::
+:?:.sh::
+:?:.swift::
+:?:.vb::
+:?:.ods::
+:?:.xls::
+:?:.xlsm::
+:?:.xlsx::
+:?:.bak::
+:?:.cab::
+:?:.cfg::
+:?:.cpl::
+:?:.cur::
+:?:.dll::
+:?:.dmp::
+:?:.drv::
+:?:.icns::
+:?:.ico::
+:?:.ini::
+:?:.lnk::
+:?:.msi::
+:?:.sys::
+:?:.tmp::
+:?:.3g2::
+:?:.3gp::
+:?:.avi::
+:?:.flv::
+:?:.h264::
+:?:.m4v::
+:?:.mkv::
+:?:.mov::
+:?:.mp4::
+:?:.mpg::
+:?:.rm::
+:?:.swf::
+:?:.vob::
+:?:.webm::
+:?:.wmv::
+:?:.doc::
+:?:.odt::
+:?:.pdf::
+:?:.rtf::
+:?:.tex::
+:?:.txt::
+:?:.wpd::
 return  ; This makes the above hotstrings do nothing so that they override the ign->ing rule below.
 
 #Hotstring B T C k-1 ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).; Turn back on automatic backspacing for all subsequent hotstrings.
 :?:ign::ing
-
-
-;------------------------------------------------------------------------------
-; Special Exceptions
-;------------------------------------------------------------------------------
-::yt::yt
-::fats::fats
-::gg::gg
 
 ;------------------------------------------------------------------------------
 ; Word endings
@@ -5412,6 +5554,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::wont::won't
 ::resovle::resolve
 ::cant::can't
+::cant'::can't
 ::Suggetsions::Suggestions
 ::thnaks::thanks
 ::hoep::hope
