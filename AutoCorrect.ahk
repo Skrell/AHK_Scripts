@@ -10,7 +10,7 @@ SetWinDelay   -1
 SetKeyDelay, 0
 SetTitleMatchMode, RegEx
 
-#include %A_ScriptDir%\RunAsAdmin.ahk
+; #include %A_ScriptDir%\RunAsAdmin.ahk
 
 Process, Priority,, High
 Menu, Tray, Icon
@@ -195,8 +195,10 @@ Loop % StrLen(Hotstring) + 4
 SetTimer, MoveCaret, Off
 return
 
-#Hotstring EndChars -()[]{}:;"/\,.?!`n `t
+#Hotstring EndChars -()[]{}:;/\,.?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
+
+
 ;------------------------------------------------------------------------------
 ; Fix for -ign instead of -ing.
 ; Words to exclude: (could probably do this by return without rewrite)
@@ -249,17 +251,25 @@ return
 ::yt::
 ::fats::
 ::gg::
+::sigh::
 ::hah::
 ::haha::
 ::meh::
+::ugh::
 :*:ugh::
+::git::
+::tho::
+::comon::
+::huh::
+::suck::
+::hell::
+::dll::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
 :?:.org::
 :?:.com::
 :?:.net::
-:?:.txt::
 :?:.aif::
 :?:.cda::
 :?:.mid::
@@ -397,6 +407,7 @@ return
 :?:.tex::
 :?:.txt::
 :?:.wpd::
+:?:.json::
 return  ; This makes the above hotstrings do nothing so that they override the ign->ing rule below.
 
 #Hotstring B T C k-1 ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).; Turn back on automatic backspacing for all subsequent hotstrings.
@@ -413,7 +424,12 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :?:, btu::, but ; Not just replacing "btu", as that is a unit of heat.
 :?:; btu::; but
 :?:n;t::n't
+:?:nt'::n't
+:?:'nt::n't
 :?:;ll::'ll
+:?:ll'::'ll
+:?:'l::'ll
+:?:;l::'ll
 :?:;re::'re
 :?:;ve::'ve
 ::sice::since  ; Must precede the following line!
@@ -557,6 +573,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::httpL::http:
 ::herf::href
 
+::yb::by 
 ::avengence::a vengeance
 ::adbandon::abandon
 ::abandonned::abandoned
@@ -2142,6 +2159,10 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::doe snot::does not ; *could* be legitimate... but very unlikely!
 ::doens't::doesn't
 ::doesnt::doesn't
+::deosnt::doesn't
+::dosent::doesn't
+::doenst::doesn't
+::doestn::doesn't
 ::dosen't::doesn't
 ::dosn't::doesn't
 ::doign::doing
@@ -5557,7 +5578,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::wont::won't
 ::resovle::resolve
 ::cant::can't
-::cant'::can't
 ::Suggetsions::Suggestions
 ::thnaks::thanks
 ::hoep::hope
