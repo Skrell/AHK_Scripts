@@ -10,7 +10,7 @@ SetWinDelay   -1
 SetKeyDelay, 0
 SetTitleMatchMode, RegEx
 
-; #include %A_ScriptDir%\RunAsAdmin.ahk
+;#include %A_ScriptDir%\RunAsAdmin.ahk
 
 Process, Priority,, High
 Menu, Tray, Icon
@@ -195,10 +195,8 @@ Loop % StrLen(Hotstring) + 4
 SetTimer, MoveCaret, Off
 return
 
-#Hotstring EndChars -()[]{}:;/\,.?!`n `t
+; #Hotstring EndChars -()[]{}:;"/\,.?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
-
-
 ;------------------------------------------------------------------------------
 ; Fix for -ign instead of -ing.
 ; Words to exclude: (could probably do this by return without rewrite)
@@ -249,27 +247,21 @@ return
 ; Special Exceptions
 ;------------------------------------------------------------------------------
 ::yt::
+::git::
 ::fats::
 ::gg::
-::sigh::
 ::hah::
 ::haha::
 ::meh::
-::ugh::
 :*:ugh::
-::git::
-::tho::
-::comon::
-::huh::
-::suck::
-::hell::
-::dll::
+:?*:_::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
 :?:.org::
 :?:.com::
 :?:.net::
+:?:.txt::
 :?:.aif::
 :?:.cda::
 :?:.mid::
@@ -424,12 +416,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :?:, btu::, but ; Not just replacing "btu", as that is a unit of heat.
 :?:; btu::; but
 :?:n;t::n't
-:?:nt'::n't
-:?:'nt::n't
 :?:;ll::'ll
-:?:ll'::'ll
-:?:'l::'ll
-:?:;l::'ll
 :?:;re::'re
 :?:;ve::'ve
 ::sice::since  ; Must precede the following line!
@@ -573,7 +560,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::httpL::http:
 ::herf::href
 
-::yb::by 
 ::avengence::a vengeance
 ::adbandon::abandon
 ::abandonned::abandoned
@@ -2159,10 +2145,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::doe snot::does not ; *could* be legitimate... but very unlikely!
 ::doens't::doesn't
 ::doesnt::doesn't
-::deosnt::doesn't
-::dosent::doesn't
-::doenst::doesn't
-::doestn::doesn't
 ::dosen't::doesn't
 ::dosn't::doesn't
 ::doign::doing
@@ -2791,6 +2773,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::hypocricy::hypocrisy
 ::hypocrit::hypocrite
 ::hypocrits::hypocrites
+::id'::I'd
 ::i;d::I'd
 ::i"d::I'd
 ::i'd::I'd
@@ -5188,20 +5171,9 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::yuo::you
 ::youare::you are
 ::youd::you'd
-::your’e::you're
-::your a::you're a
-::your an::you're an
-::your her::you're her
-::your here::you're here
-::your his::you're his
-::your my::you're my
-::your the::you're the
-::your their::you're their
-::your your::you're your
 ::youve::you've
 ::yoru::your
 ::yuor::your
-::you're own::your own
 ::youself::yourself
 ::youseff::yousef
 ::zeebra::zebra
@@ -5566,7 +5538,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::amn::man
 ::fro::for
 ::intesreting::interesting
-::youre::you're
 ::releated::related
 ::resset::reset
 ::machiens::machines
@@ -5578,6 +5549,23 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::wont::won't
 ::resovle::resolve
 ::cant::can't
+::cant'::can't
+::your a::you're a
+::your an::you're an
+::your her::you're her
+::your here::you're here
+::your his::you're his
+::your my::you're my
+::your the::you're the
+::your their::you're their
+::your your::you're your
+::you're own::your own
+::youre::you're
+::your'e::you're
+::youe'r::you're
+::you'er::you're
+::youer::you're
+::yorue::you're
 ::Suggetsions::Suggestions
 ::thnaks::thanks
 ::hoep::hope
@@ -5589,7 +5577,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::doc::document
 ::votlages::voltages
 ::deisgn::desIgn
-::youv’e::you've
+::youv'e::you've
 ::ahvent::haven't
 ::can not::cannot
 ::throough::thorough
@@ -5599,7 +5587,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::signle::single
 ::familir::familiar
 ::tahnks::thanks
-::your’e::you're
 ::questionaire::questionnaire
 ::ppl::people
 ::serach::search
@@ -5830,7 +5817,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::hwy::why
 ::adddressing::addressing
 ::ahven't::haven't
-::youe'r::you're
 ::disucsison::discussion
 ::Produciton::ProductIon
 ::doucments::documents
@@ -5851,13 +5837,10 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::iopll::IOPLL
 ::Suggesitons::SuggestIons
 ::Vicne::Vince
-::you'er::you're
 ::shceduled::scheduled
 ::quesitons::questIons
 ::pgorammer::programmer
-::youer::you're
 ::youv'e::you've
-::yorue::you're
 ::clsoe::close
 ::Antony::Anthony
 ::intenral::internal
