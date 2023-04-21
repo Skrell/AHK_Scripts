@@ -5,11 +5,13 @@
 ; r = raw output
 
 #WinActivateForce
+#InstallMouseHook
 SetBatchLines -1
 SetWinDelay   -1
 SetKeyDelay, 0
 SetTitleMatchMode, RegEx
 
+ComboActive := False
 ;#include %A_ScriptDir%\RunAsAdmin.ahk
 
 Process, Priority,, High
@@ -40,26 +42,53 @@ CapsLock:: Send {Delete}
 !,:: Send {DOWN}
 !j:: Send {LCtrl down}{LEFT}{LCtrl up}
 !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
+
+; #If !GetKeyState("LButton", "P") && !GetKeyState("WheelDown", "P") && !GetKeyState("WheelUp", "P")
+$RButton::
+    loop {
+        ; tooltip, wtf
+        If !(GetKeyState("RButton", "P"))
+        {
+            ; tooltip, done
+            break
+        }
+        sleep 20
+    }
+    If !ComboActive
+    {
+        Send, {Click, Right}
+    }
+Return
+; #If
+
+; #If GetKeyState("RButton", "P")
 RButton & WheelUp::
+    ComboActive := True
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
     Send {PgUp}
+    ComboActive := False
 Return
+; #If
 
+; #If GetKeyState("RButton", "P")
 RButton & WheelDown::
+    ComboActive := True
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
     Send {PgDn}
+    ComboActive := False
 Return
+; #If
 
-RButton:: Send {RButton}
-
+; #If GetKeyState("RButton", "P")
 RButton & LButton::
+    ComboActive := True
     Send, {LWin down}{v}{LWin up}
-    ; MouseGetPos, tmpX, tmpY
-    ; WinWait, ahk_class ApplicationFrameWindow
-    ; WinMove, ahk_class ApplicationFrameWindow, , tmpX, tmpY
+    ComboActive := False
 Return
+; #If
+
 
 Startup:
     Menu, Tray, Togglecheck, Run at startup
@@ -5507,6 +5536,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ;-------------------------------------------------------------------------------
 ; Anything below this point was added to the script by the user via the Win+H hotkey.
 ;-------------------------------------------------------------------------------
+::woudlnt::wouldn't 
 ::ti::it
 ::god::God
 ::ram::RAM
@@ -5970,6 +6000,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::workin::working
 ::lookin::looking
 ::checkins::check-ins
+::inprecisely::imprecisely
 ;------------------------------------------------------------------------------
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
