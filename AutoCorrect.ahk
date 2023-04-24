@@ -11,7 +11,8 @@ SetWinDelay   -1
 SetKeyDelay, 0
 SetTitleMatchMode, RegEx
 
-ComboActive := False
+Global moving := False
+Global ComboActive := False
 ;#include %A_ScriptDir%\RunAsAdmin.ahk
 
 Process, Priority,, High
@@ -23,6 +24,8 @@ Menu, Tray, Add, Reload, Reload_label
 Menu, Tray, Add, Exit, Exit_label
 Menu, Tray, Default, &Suspend
 Menu, Tray, Click, 1
+
+SetTimer track, 50
 
 CapsLock:: Send {Delete}
 
@@ -43,7 +46,11 @@ CapsLock:: Send {Delete}
 !j:: Send {LCtrl down}{LEFT}{LCtrl up}
 !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
 
-; #If !GetKeyState("LButton", "P") && !GetKeyState("WheelDown", "P") && !GetKeyState("WheelUp", "P")
+#If moving
+~RButton::Return
+#If
+
+#If !moving
 $RButton::
     loop {
         ; tooltip, wtf
@@ -59,9 +66,9 @@ $RButton::
         Send, {Click, Right}
     }
 Return
-; #If
+#If
 
-; #If GetKeyState("RButton", "P")
+#If !moving
 RButton & WheelUp::
     ComboActive := True
     MouseGetPos, , , target
@@ -69,9 +76,9 @@ RButton & WheelUp::
     Send {PgUp}
     ComboActive := False
 Return
-; #If
+#If
 
-; #If GetKeyState("RButton", "P")
+#If !moving
 RButton & WheelDown::
     ComboActive := True
     MouseGetPos, , , target
@@ -79,16 +86,15 @@ RButton & WheelDown::
     Send {PgDn}
     ComboActive := False
 Return
-; #If
+#If
 
-; #If GetKeyState("RButton", "P")
+#If !moving
 RButton & LButton::
     ComboActive := True
     Send, {LWin down}{v}{LWin up}
     ComboActive := False
 Return
-; #If
-
+#If
 
 Startup:
     Menu, Tray, Togglecheck, Run at startup
@@ -113,6 +119,24 @@ Return
 Exit_label:
     exitapp
 Return  
+
+track() {
+    Static x, y, lastX, lastY
+    
+    CoordMode Mouse
+    lastX := x, lastY := y
+    MouseGetPos x, y
+    
+    If ((abs(x - lastX) > 3 || abs(y - lastY) > 3) && lastX != "") {
+        moving := True
+        sleep 150
+        ; ToolTip Moving
+    } Else {
+        moving := False
+        sleep 150
+        ; ToolTip
+    }
+}
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
