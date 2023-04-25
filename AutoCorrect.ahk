@@ -25,7 +25,7 @@ Menu, Tray, Add, Exit, Exit_label
 Menu, Tray, Default, &Suspend
 Menu, Tray, Click, 1
 
-SetTimer track, 50
+SetTimer track, 25
 
 CapsLock:: Send {Delete}
 
@@ -129,11 +129,10 @@ track() {
     
     If ((abs(x - lastX) > 3 || abs(y - lastY) > 3) && lastX != "") {
         moving := True
-        sleep 150
+        sleep 100
         ; ToolTip Moving
     } Else {
         moving := False
-        sleep 150
         ; ToolTip
     }
 }
