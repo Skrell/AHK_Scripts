@@ -53,10 +53,8 @@ CapsLock:: Send {Delete}
 #If !moving
 $RButton::
     loop {
-        ; tooltip, wtf
         If !(GetKeyState("RButton", "P"))
         {
-            ; tooltip, done
             break
         }
         sleep 20
@@ -125,11 +123,13 @@ track() {
     
     CoordMode Mouse
     lastX := x, lastY := y
-    MouseGetPos x, y
+    MouseGetPos x, y, hwndId
+    WinGetClass, classId, ahk_id %hwndId%
     
-    If ((abs(x - lastX) > 3 || abs(y - lastY) > 3) && lastX != "") {
+    If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
         moving := True
-        sleep 100
+        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW")
+            sleep 250
         ; ToolTip Moving
     } Else {
         moving := False
@@ -267,7 +267,7 @@ Loop % StrLen(Hotstring) + 4
 SetTimer, MoveCaret, Off
 return
 
-; #Hotstring EndChars -()[]{}:;"/\,.?!`n `t
+#Hotstring EndChars -()[]{}:;"/\,?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 ;------------------------------------------------------------------------------
 ; Fix for -ign instead of -ing.
@@ -332,6 +332,7 @@ return
 ::ugh::
 :*:ugh::
 :?*:_::
+::i.e::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
@@ -3096,6 +3097,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::i snot::is not
 ::isthe::is the
 ::isnt::isn't
+::isnt'::isn't
 ::issueing::issuing
 ::itis::it is
 ::itwas::it was
