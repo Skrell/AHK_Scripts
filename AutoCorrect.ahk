@@ -494,9 +494,13 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :?:, btu::, but ; Not just replacing "btu", as that is a unit of heat.
 :?:; btu::; but
 :?:n;t::n't
+:?:nt'::n't
 :?:;ll::'ll
+:?:ll'::'ll
 :?:;re::'re
+:?:re'::'re
 :?:;ve::'ve
+:?:ve'::'ve
 ::sice::since  ; Must precede the following line!
 :?:sice::sive
 ;:?:t eh:: the   ; converts "but eh" to "bu the"
@@ -3096,7 +3100,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::iritated::irritated
 ::i snot::is not
 ::isthe::is the
-::isnt::isn't
 ::isnt'::isn't
 ::issueing::issuing
 ::itis::it is
