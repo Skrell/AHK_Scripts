@@ -333,6 +333,9 @@ return
 :*:ugh::
 :?*:_::
 ::i.e::
+::gcc::
+::g++::
+::dll::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
@@ -622,7 +625,8 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :*:soem::some
 :*:seom::some
 :*:tyr::try
-
+:*:cmakel::CMakeLists.txt
+:*:cmaket::CMakeLists.txt
 
 ;------------------------------------------------------------------------------
 ; Word middles
@@ -5564,6 +5568,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ;-------------------------------------------------------------------------------
 ; Anything below this point was added to the script by the user via the Win+H hotkey.
 ;-------------------------------------------------------------------------------
+::cmake::CMake
 ::woudlnt::wouldn't 
 ::ti::it
 ::god::God
