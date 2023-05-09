@@ -325,14 +325,17 @@ return
 ::hah::
 ::haha::
 ::meh::
+::coop::
 ::json::
 ::hell::
 ::hm::
 :*:hm::
 ::ugh::
 :*:ugh::
+::ggi::
 :?*:_::
 ::i.e::
+::shit::
 ::gcc::
 ::g++::
 ::dll::
@@ -3104,6 +3107,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::iritated::irritated
 ::i snot::is not
 ::isthe::is the
+::isnt::isn't
 ::isnt'::isn't
 ::issueing::issuing
 ::itis::it is
@@ -5568,8 +5572,13 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ;-------------------------------------------------------------------------------
 ; Anything below this point was added to the script by the user via the Win+H hotkey.
 ;-------------------------------------------------------------------------------
+::repetative::repetitive
+::repetetive::repetitive
+::deterant::deterrent
+::deterants::deterrents
+::inprecise::imprecise
 ::cmake::CMake
-::woudlnt::wouldn't 
+::woudlnt::wouldn't
 ::ti::it
 ::god::God
 ::ram::RAM
@@ -5708,7 +5717,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::coupel::couple
 ::Unfortuantley::Unfortunatley
 ::alogn::along
-::woudn’t::wouldn’t
+::woudn't::wouldn't
 ::thakns::thanks
 ::respresnted::represented
 ::challenege::challenge
@@ -5813,14 +5822,14 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::determininstic::deterministic
 ::Hye::Hey
 ::lokoing::looking
-::hsan’t::hasn’t
+::hsan't::hasn't
 ::bene::been
 ::roled::rolled
 ::noe::one
 ::ilke::like
 ::oru::our
 ::selectino::selection
-::hsouldn’t::shouldn’t
+::hsouldn't::shouldn't
 ::meteing::meeting
 ::quetsion::question
 ::whats::what's
@@ -5829,7 +5838,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::th e::the
 ::ucstomers::customers
 ::ilnks::links
-::youv’e::you’ve
+::youv'e::you've
 ::brining::bringing
 ::saerch::search
 ::blieve::believe
@@ -6276,14 +6285,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::prnit::print
 ::prnti::print
 ::pritn::print
-::ont::dont
-::dnt::dont
-::odnt::dont
-::ondt::dont
-::ontd::dont
-::dnot::dont
-::dnto::dont
-::dotn::dont
 ::wll::will
 ::wil::will
 ::iwll::will
