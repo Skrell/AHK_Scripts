@@ -5,12 +5,15 @@
 ; r = raw output
 
 #WinActivateForce
+#InstallMouseHook
 SetBatchLines -1
 SetWinDelay   -1
 SetKeyDelay, 0
 SetTitleMatchMode, RegEx
 
-#include %A_ScriptDir%\RunAsAdmin.ahk
+Global moving := False
+Global ComboActive := False
+;#include %A_ScriptDir%\RunAsAdmin.ahk
 
 Process, Priority,, High
 Menu, Tray, Icon
@@ -21,6 +24,8 @@ Menu, Tray, Add, Reload, Reload_label
 Menu, Tray, Add, Exit, Exit_label
 Menu, Tray, Default, &Suspend
 Menu, Tray, Click, 1
+
+SetTimer track, 25
 
 CapsLock:: Send {Delete}
 
@@ -41,6 +46,53 @@ CapsLock:: Send {Delete}
 !j:: Send {LCtrl down}{LEFT}{LCtrl up}
 !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
 
+#If moving
+~RButton::Return
+#If
+
+#If !moving
+$RButton::
+    loop {
+        If !(GetKeyState("RButton", "P"))
+        {
+            break
+        }
+        sleep 20
+    }
+    If !ComboActive
+    {
+        Send, {Click, Right}
+    }
+Return
+#If
+
+#If !moving
+RButton & WheelUp::
+    ComboActive := True
+    MouseGetPos, , , target
+    WinActivate, ahk_id %target%
+    Send {PgUp}
+    ComboActive := False
+Return
+#If
+
+#If !moving
+RButton & WheelDown::
+    ComboActive := True
+    MouseGetPos, , , target
+    WinActivate, ahk_id %target%
+    Send {PgDn}
+    ComboActive := False
+Return
+#If
+
+#If !moving
+RButton & LButton::
+    ComboActive := True
+    Send, {LWin down}{v}{LWin up}
+    ComboActive := False
+Return
+#If
 
 Startup:
     Menu, Tray, Togglecheck, Run at startup
@@ -65,6 +117,25 @@ Return
 Exit_label:
     exitapp
 Return  
+
+track() {
+    Static x, y, lastX, lastY
+    
+    CoordMode Mouse
+    lastX := x, lastY := y
+    MouseGetPos x, y, hwndId
+    WinGetClass, classId, ahk_id %hwndId%
+    
+    If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
+        moving := True
+        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW")
+            sleep 250
+        ; ToolTip Moving
+    } Else {
+        moving := False
+        ; ToolTip
+    }
+}
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
@@ -196,7 +267,7 @@ Loop % StrLen(Hotstring) + 4
 SetTimer, MoveCaret, Off
 return
 
-#Hotstring EndChars -()[]{}:;"/\,?!`n `t
+#Hotstring EndChars ()[]{}.:;"/\,?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 ;------------------------------------------------------------------------------
 ; Fix for -ign instead of -ing.
@@ -268,6 +339,11 @@ return
 ::gcc::
 ::g++::
 ::dll::
+::impl::
+::ouch::
+::dug::
+::owe::
+::lag::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
@@ -559,7 +635,8 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :*:tyr::try
 :*:cmakel::CMakeLists.txt
 :*:cmaket::CMakeLists.txt
-
+:*:unfor::unfortunately
+:*:Unfor::Unfortunately
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
@@ -2805,6 +2882,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::i've::I've
 ::iv'e::I've
 ::ive::I've
+::its'::it's
 ::ti's::it's
 ::ti"s::it's
 ::iconclastic::iconoclastic
@@ -5506,8 +5584,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::deterant::deterrent
 ::deterants::deterrents
 ::inprecise::imprecise
-::cmake::CMake
-::woudlnt::wouldn't
+::woudlnt::wouldn't 
 ::ti::it
 ::god::God
 ::ram::RAM
@@ -5547,7 +5624,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::confrim::confirm
 ::havent::haven't
 ::ar eyou::are you
-::quesiton::questIon
+::quesiton::question
 ::advatnage::advantage
 ::al lthe::all the
 ::interestin::interest in
@@ -5863,7 +5940,8 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::Suggesitons::SuggestIons
 ::Vicne::Vince
 ::shceduled::scheduled
-::quesitons::questIons
+::quesiton::question
+::quesitons::questions
 ::pgorammer::programmer
 ::youv'e::you've
 ::clsoe::close
