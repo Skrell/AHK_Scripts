@@ -9,7 +9,7 @@
 SetBatchLines -1
 SetWinDelay   -1
 SetKeyDelay, 0
-SetTitleMatchMode, RegEx
+; SetTitleMatchMode, RegEx
 
 Global moving := False
 Global ComboActive := False
@@ -40,15 +40,30 @@ CapsLock:: Send {Delete}
 <^!k::  SendInput {LCtrl down}{DOWN}{LCtrl up}
 <^+!j:: SendInput {LCtrl down}{LShift down}{LEFT}{LShift up}{LCtrl up}
 <^+!l:: SendInput {LCtrl down}{LShift down}{RIGHT}{LShift up}{LCtrl up}
-!i:: Send {UP}
-!k:: Send {DOWN}
-!,:: Send {DOWN}
-!j:: Send {LCtrl down}{LEFT}{LCtrl up}
-!l:: Send {LCtrl down}{RIGHT}{LCtrl up}
+!i:: SendInput {UP}
+!k:: SendInput {DOWN}
+!,:: SendInput {DOWN}
+!j:: SendInput {LCtrl down}{LEFT}{LCtrl up}
+!l:: SendInput {LCtrl down}{RIGHT}{LCtrl up}
 
 #If moving
 ~RButton::Return
 #If
+
+#If VolumeHover()
+LButton::
+    Run, C:\Windows\System32\SndVol.exe
+    WinWaitActive, ahk_exe SndVol.exe
+    WinGetPos, sx, sy, sw, sh, ahk_exe SndVol.exe
+    sw := sw + 200
+    WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, A_ScreenHeight-sh, sw
+Return
+#If 
+
+VolumeHover() {
+	ControlGetText, toolText,, ahk_class tooltips_class32
+	return InStr(toolText, "Speakers")
+}
 
 #If !moving
 $RButton::
