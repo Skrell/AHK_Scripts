@@ -27,6 +27,9 @@ Menu, Tray, Click, 1
 
 SetTimer track, 25
 
+SysGet, MonNum, MonitorPrimary 
+SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
+
 CapsLock:: Send {Delete}
 
 +!i::   SendInput {SHIFT down}{UP}{SHIFT up}
@@ -56,13 +59,16 @@ LButton::
     WinWaitActive, ahk_exe SndVol.exe
     WinGetPos, sx, sy, sw, sh, ahk_exe SndVol.exe
     sw := sw + 200
-    WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, A_ScreenHeight-sh, sw
+    WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, MonitorWorkAreaBottom-sh, sw
 Return
 #If 
 
 VolumeHover() {
 	ControlGetText, toolText,, ahk_class tooltips_class32
-	return InStr(toolText, "Speakers")
+    If (InStr(toolText, "Speakers") || InStr(toolText, "Headphones"))
+        Return True
+    Else
+        Return False
 }
 
 #If !moving
@@ -211,6 +217,7 @@ track() {
 #IfWinNotActive Notepad++
 #IfWinNotActive Microsoft Visual Studio
 #IfWinNotActive Command Prompt
+#IfWinNotActive vbonaventura@
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.
 ; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
