@@ -56,10 +56,11 @@ CapsLock:: Send {Delete}
 #If VolumeHover()
 LButton::
     Run, C:\Windows\System32\SndVol.exe
-    WinWaitActive, ahk_exe SndVol.exe
+    WinWait, ahk_exe SndVol.exe
     WinGetPos, sx, sy, sw, sh, ahk_exe SndVol.exe
     sw := sw + 200
     WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, MonitorWorkAreaBottom-sh, sw
+    WinActivate, ahk_exe SndVol.exe
 Return
 #If 
 
