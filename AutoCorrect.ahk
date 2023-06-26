@@ -61,6 +61,21 @@ LButton::
     sw := sw + 200
     WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, MonitorWorkAreaBottom-sh, sw
     WinActivate, ahk_exe SndVol.exe
+    x_coord := A_ScreenWidth - floor((sx+sw)/2)
+    y_coord := MonitorWorkAreaBottom - 30
+    CoordMode, Pixel, Screen
+    sleep 300
+    loop
+    {
+        PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
+        ; msgbox, %HexColor% - %x_coord% - %y_coord%
+        newX := A_ScreenWidth-sw-(10*A_Index)
+        newW := sw + (10*A_Index)
+        If (HexColor == 0xCDCDCD || HexColor == 0xF0F0F0)
+            WinMove, ahk_exe SndVol.exe, , %newX%, , %newW% 
+        Else
+            break
+    }
 Return
 #If 
 
