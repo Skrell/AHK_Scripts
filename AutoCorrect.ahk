@@ -77,16 +77,18 @@ CapsLock:: Send {Delete}
 !l:: SendInput {LCtrl down}{RIGHT}{LCtrl up}
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
-#1::
+#MaxThreadsPerHotkey 2
+!1::
   If GetKeyState("Lbutton", "P")
   {
       Send {Lbutton up}
       WinGetTitle, Title, A
+      WinSet, AlwaysOnTop , On, %Title%
       loop, 5
       {
         level := 255-(A_Index*50)
         WinSet, Transparent , %level%, %Title%
-        sleep, 50
+        sleep, 30
       }
       WinSet, ExStyle, ^0x80, %Title%
       Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
@@ -96,12 +98,13 @@ CapsLock:: Send {Delete}
       {
         level := (A_Index*50)
         WinSet, Transparent , %level%, %Title%
-        sleep, 50
+        sleep, 30
       }
       WinSet, Transparent , off, %Title%
       WinActivate, %Title%
       Send {Lbutton down}
       KeyWait, Lbutton, U T10
+      WinSet, AlwaysOnTop , Off, %Title%
   }
   else
   {
@@ -109,16 +112,17 @@ CapsLock:: Send {Delete}
   }
 Return
 
-#2::
+!2::
   If GetKeyState("Lbutton", "P")
   {
       Send {Lbutton up}
       WinGetTitle, Title, A
+      WinSet, AlwaysOnTop , On, %Title%
       loop, 5
       {
         level := 255-(A_Index*50)
         WinSet, Transparent , %level%, %Title%
-        sleep, 50
+        sleep, 30
       }
       WinSet, ExStyle, ^0x80, %Title%
       Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
@@ -128,18 +132,20 @@ Return
       {
         level := (A_Index*50)
         WinSet, Transparent , %level%, %Title%
-        sleep, 50
+        sleep, 30
       }
       WinSet, Transparent , off, %Title%
       WinActivate, %Title%
       Send {Lbutton down}
       KeyWait, Lbutton, U T10
+      WinSet, AlwaysOnTop , Off, %Title%
   }
   else
   {
     Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
   }
 Return
+#MaxThreadsPerHotkey 1
 ;============================================================================================================================
 
 #If moving
