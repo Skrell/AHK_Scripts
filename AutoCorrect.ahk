@@ -6,6 +6,7 @@
 
 #WinActivateForce
 #InstallMouseHook
+#InstallKeybdHook
 SetBatchLines -1
 SetWinDelay   -1
 SetKeyDelay, 0
@@ -30,6 +31,32 @@ SetTimer track, 25
 SysGet, MonNum, MonitorPrimary 
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
 
+;############### CAse COrrector ######################
+; For AHK v1.1.31+
+; By kunkel321, help from Mikeyww, Rohwedder, Others.
+; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=118807
+CaseArr := [] ; Create the array.
+Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
+Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
+EndKeys := "abcdefghijklmnopqrstuvwxyz{Bs}{Space}{Enter}{Tab}=+-_,.?/\&1234567890{{}{}}()[]<>|"
+ccih := InputHook("V I2 E", EndKeys)
+Loop ; WARNING will loop forever until process is killed.
+{
+	ccih.Start() ; Start the hook.
+	ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
+	CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
+	If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
+		CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
+		;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
+	If (inStr(Uppers,CaseArr[1],true) && inStr(Uppers,CaseArr[2],true) && inStr(Lowers,CaseArr[3],true)) && (CaseArr[3] > 0) { ; "true" makes inStr() case-sensitive.
+		Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
+		StringLower, Last2, Last2 
+		Send, {Backspace 2} ; Do actual correction.
+		Send, %Last2%
+		;SoundBeep
+	}
+}
+
 CapsLock:: Send {Delete}
 
 +!i::   SendInput {SHIFT down}{UP}{SHIFT up}
@@ -48,6 +75,72 @@ CapsLock:: Send {Delete}
 !,:: SendInput {DOWN}
 !j:: SendInput {LCtrl down}{LEFT}{LCtrl up}
 !l:: SendInput {LCtrl down}{RIGHT}{LCtrl up}
+
+;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
+#1::
+  If GetKeyState("Lbutton", "P")
+  {
+      Send {Lbutton up}
+      WinGetTitle, Title, A
+      loop, 5
+      {
+        level := 255-(A_Index*50)
+        WinSet, Transparent , %level%, %Title%
+        sleep, 50
+      }
+      WinSet, ExStyle, ^0x80, %Title%
+      Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
+      sleep, 500
+      WinSet, ExStyle, ^0x80, %Title%
+      loop, 5
+      {
+        level := (A_Index*50)
+        WinSet, Transparent , %level%, %Title%
+        sleep, 50
+      }
+      WinSet, Transparent , off, %Title%
+      WinActivate, %Title%
+      Send {Lbutton down}
+      KeyWait, Lbutton, U T10
+  }
+  else
+  {
+    Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+  }
+Return
+
+#2::
+  If GetKeyState("Lbutton", "P")
+  {
+      Send {Lbutton up}
+      WinGetTitle, Title, A
+      loop, 5
+      {
+        level := 255-(A_Index*50)
+        WinSet, Transparent , %level%, %Title%
+        sleep, 50
+      }
+      WinSet, ExStyle, ^0x80, %Title%
+      Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+      sleep, 500
+      WinSet, ExStyle, ^0x80, %Title%
+      loop, 5
+      {
+        level := (A_Index*50)
+        WinSet, Transparent , %level%, %Title%
+        sleep, 50
+      }
+      WinSet, Transparent , off, %Title%
+      WinActivate, %Title%
+      Send {Lbutton down}
+      KeyWait, Lbutton, U T10
+  }
+  else
+  {
+    Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+  }
+Return
+;============================================================================================================================
 
 #If moving
 ~RButton::Return
@@ -255,7 +348,6 @@ Hoty:
 Return
 */
 
-
 ;------------------------------------------------------------------------------
 ; Win+H to enter misspelling correction.  It will be added to this script.
 ;------------------------------------------------------------------------------
@@ -305,7 +397,8 @@ Loop % StrLen(Hotstring) + 4
 SetTimer, MoveCaret, Off
 return
 
-#Hotstring EndChars ()[]{}.:;"/\,?!`n `t
+
+#Hotstring EndChars ()[]{}:;"/\,?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 ;------------------------------------------------------------------------------
 ; Fix for -ign instead of -ing.
@@ -382,6 +475,7 @@ return
 ::dug::
 ::owe::
 ::lag::
+::i.e.::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
@@ -531,7 +625,10 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 
 #Hotstring B T C k-1 ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).; Turn back on automatic backspacing for all subsequent hotstrings.
 :?:ign::ing
-
+::VMs::VMs
+::VMware::VMware
+::SXe::SXe
+::vmware::VMware
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
@@ -673,8 +770,8 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :*:tyr::try
 :*:cmakel::CMakeLists.txt
 :*:cmaket::CMakeLists.txt
-:*:unfor::unfortunately
-:*:Unfor::Unfortunately
+:*:unfo::unfortunately `
+:*:Unfo::Unfortunately `
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
@@ -4458,9 +4555,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::shorly::shortly
 ::shoudl::should
 ::should of::should have
-::shoudln't::shouldn't
-::shouldent::shouldn't
-::shouldnt::shouldn't
 ::sohw::show
 ::showinf::showing
 ::shreak::shriek
@@ -4840,6 +4934,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::thatthe::that the
 ::thast::that's
 ::thats::that's
+::taht's::that's
 ::hte::the
 ::teh::the
 ::tehw::the
@@ -5540,7 +5635,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::sepulcre::sepulchre, sepulcher
 ::shamen::shaman, shamans
 ::sheat::sheath, sheet, cheat
-::shoudln::should, shouldn't
 ::sieze::seize, size
 ::siezed::seized, sized
 ::siezing::seizing, sizing
@@ -5873,7 +5967,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::ilke::like
 ::oru::our
 ::selectino::selection
-::hsouldn't::shouldn't
 ::meteing::meeting
 ::quetsion::question
 ::whats::what's
