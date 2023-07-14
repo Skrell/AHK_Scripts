@@ -30,6 +30,11 @@ SetTimer track, 25
 
 SysGet, MonNum, MonitorPrimary 
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
+SysGet, MonCount, MonitorCount
+
+Tooltip, %MonCount%
+sleep 1000
+Tooltip,
 
 ;############### CAse COrrector ######################
 ; For AHK v1.1.31+
@@ -259,7 +264,8 @@ Exit_label:
 Return  
 
 track() {
-    Static x, y, lastX, lastY, A_lasttime
+    Static x, y, lastX, lastY, taskview
+    Global MonCount
     
     CoordMode Mouse
     lastX := x, lastY := y
@@ -276,23 +282,37 @@ track() {
         ; ToolTip
     }
     
-    If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
+    If (MonCount == 1 &&  x <= 3 && y <= 3 && !taskview)
     {
-        sleep 200
-        If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
-        {   
-            Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
-            sleep 700
+        Send {LWin down}{Tab down}{LWin up}{Tab up}
+        taskview := True
+        sleep 700
+    }
+    Else
+    {
+        If (MonCount == 1 && x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
+        {
+            sleep 250
+            If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
+            {   
+                Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+                sleep 700
+            }
+        }
+        Else If (MonCount == 1 && x <= 3 && y >= A_ScreenHeight-3)
+        {
+            sleep 250
+            If (x <= 3 && y >= A_ScreenHeight-3)
+            {
+                Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+                sleep 700
+            }
         }
     }
-    Else If (x <= 3 && y >= A_ScreenHeight-3)
+    
+    If (MonCount == 1 &&  x > 3 && y > 3)
     {
-        sleep 200
-        If (x <= 3 && y >= A_ScreenHeight-3)
-        {
-            Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
-            sleep 700
-        }
+        taskview := False
     }
 }
 ;------------------------------------------------------------------------------
