@@ -81,6 +81,7 @@ CapsLock:: Send {Delete}
 !1::
   If GetKeyState("Lbutton", "P")
   {
+      BlockInput, MouseMove
       Send {Lbutton up}
       WinGetTitle, Title, A
       WinSet, AlwaysOnTop , On, %Title%
@@ -103,6 +104,7 @@ CapsLock:: Send {Delete}
       WinSet, Transparent , off, %Title%
       WinActivate, %Title%
       Send {Lbutton down}
+      BlockInput, MouseMoveOff
       KeyWait, Lbutton, U T10
       WinSet, AlwaysOnTop , Off, %Title%
   }
@@ -115,6 +117,7 @@ Return
 !2::
   If GetKeyState("Lbutton", "P")
   {
+      BlockInput, MouseMove
       Send {Lbutton up}
       WinGetTitle, Title, A
       WinSet, AlwaysOnTop , On, %Title%
@@ -137,6 +140,7 @@ Return
       WinSet, Transparent , off, %Title%
       WinActivate, %Title%
       Send {Lbutton down}
+      BlockInput, MouseMoveOff
       KeyWait, Lbutton, U T10
       WinSet, AlwaysOnTop , Off, %Title%
   }
@@ -255,7 +259,7 @@ Exit_label:
 Return  
 
 track() {
-    Static x, y, lastX, lastY
+    Static x, y, lastX, lastY, A_lasttime
     
     CoordMode Mouse
     lastX := x, lastY := y
@@ -270,6 +274,25 @@ track() {
     } Else {
         moving := False
         ; ToolTip
+    }
+    
+    If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
+    {
+        sleep 200
+        If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
+        {   
+            Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+            sleep 700
+        }
+    }
+    Else If (x <= 3 && y >= A_ScreenHeight-3)
+    {
+        sleep 200
+        If (x <= 3 && y >= A_ScreenHeight-3)
+        {
+            Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+            sleep 700
+        }
     }
 }
 ;------------------------------------------------------------------------------
@@ -631,10 +654,13 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 
 #Hotstring B T C k-1 ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).; Turn back on automatic backspacing for all subsequent hotstrings.
 :?:ign::ing
+::vms::VMs
 ::VMs::VMs
 ::VMware::VMware
+::sxe::SXe
 ::SXe::SXe
 ::vmware::VMware
+::VMware::VMware
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
