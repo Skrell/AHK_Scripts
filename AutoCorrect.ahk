@@ -4,16 +4,27 @@
 ; ? = triggered even when the character typed immediately before it is alphanumeric
 ; r = raw output
 
+#include %A_ScriptDir%\_VD.ahk
+dummyFunction1() {
+    static dummyStatic1 := VD.init()
+}
+
 #WinActivateForce
 #InstallMouseHook
 #InstallKeybdHook
 SetBatchLines -1
 SetWinDelay   -1
+SetControlDelay -1
 SetKeyDelay, 0
+#KeyHistory 0
+#WinActivateForce
+
 ; SetTitleMatchMode, RegEx
 
 Global moving := False
 Global ComboActive := False
+Global skipCheck := False
+Global hwndVD
 ;#include %A_ScriptDir%\RunAsAdmin.ahk
 
 Process, Priority,, High
@@ -89,6 +100,8 @@ CapsLock:: Send {Delete}
       BlockInput, MouseMove
       Send {Lbutton up}
       WinGetTitle, Title, A
+      WinGet, hwndVD, ID, A
+      WinActivate, ahk_class Shell_TrayWnd
       WinSet, AlwaysOnTop , On, %Title%
       loop, 5
       {
@@ -98,7 +111,10 @@ CapsLock:: Send {Delete}
       }
       WinSet, ExStyle, ^0x80, %Title%
       Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
+      sleep, 250
+      Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
       sleep, 500
+      WinMinimize, ahk_class Shell_TrayWnd
       WinSet, ExStyle, ^0x80, %Title%
       loop, 5
       {
@@ -111,20 +127,81 @@ CapsLock:: Send {Delete}
       Send {Lbutton down}
       BlockInput, MouseMoveOff
       KeyWait, Lbutton, U T10
+      Send {Lbutton up}
       WinSet, AlwaysOnTop , Off, %Title%
   }
   else
   {
-    Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+      WinActivate, ahk_class Shell_TrayWnd
+      Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+      sleep 250
+      Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+      sleep 250
+      WinMinimize, ahk_class Shell_TrayWnd
+      WinSet, Transparent, off, ahk_id %hwndVD%
   }
 Return
 
 !2::
+  If (VD.getCurrentDesktopNum() == 2)
+    Return
+    
   If GetKeyState("Lbutton", "P")
   {
       BlockInput, MouseMove
       Send {Lbutton up}
       WinGetTitle, Title, A
+      WinGet, hwndVD, ID, A
+      WinActivate, ahk_class Shell_TrayWnd
+      WinSet, AlwaysOnTop , On, %Title%
+      loop, 5
+      {
+        level := 255-(A_Index*50)
+        WinSet, Transparent , %level%, %Title%
+        sleep, 30
+      }
+      WinSet, ExStyle, ^0x80, %Title%
+      
+      If (VD.getCurrentDesktopNum() == 1)
+        Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+      Else If (VD.getCurrentDesktopNum() == 3)
+        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+        
+      sleep, 500
+      WinMinimize, ahk_class Shell_TrayWnd
+      WinSet, ExStyle, ^0x80, %Title%
+      loop, 5
+      {
+        level := (A_Index*50)
+        WinSet, Transparent , %level%, %Title%
+        sleep, 30
+      }
+      WinSet, Transparent , off, %Title%
+      WinActivate, %Title%
+      Send {Lbutton down}
+      BlockInput, MouseMoveOff
+      KeyWait, Lbutton, U T10
+      Send {Lbutton up}
+      WinSet, AlwaysOnTop , Off, %Title%
+  }
+  else
+  {
+      WinActivate, ahk_class Shell_TrayWnd
+      Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+      sleep 250
+      WinMinimize, ahk_class Shell_TrayWnd
+      WinSet, Transparent, off, ahk_id %hwndVD%
+  }
+Return
+
+!3::
+  If GetKeyState("Lbutton", "P")
+  {
+      BlockInput, MouseMove
+      Send {Lbutton up}
+      WinGetTitle, Title, A
+      WinGet, hwndVD, ID, A
+      WinActivate, ahk_class Shell_TrayWnd
       WinSet, AlwaysOnTop , On, %Title%
       loop, 5
       {
@@ -134,7 +211,10 @@ Return
       }
       WinSet, ExStyle, ^0x80, %Title%
       Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+      sleep, 250
+      Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
       sleep, 500
+      WinMinimize, ahk_class Shell_TrayWnd
       WinSet, ExStyle, ^0x80, %Title%
       loop, 5
       {
@@ -147,11 +227,18 @@ Return
       Send {Lbutton down}
       BlockInput, MouseMoveOff
       KeyWait, Lbutton, U T10
+      Send {Lbutton up}
       WinSet, AlwaysOnTop , Off, %Title%
   }
   else
   {
-    Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+      WinActivate, ahk_class Shell_TrayWnd
+      Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+      sleep, 250
+      Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+      sleep, 250
+      WinMinimize, ahk_class Shell_TrayWnd
+      WinSet, Transparent, off, ahk_id %hwndVD%
   }
 Return
 #MaxThreadsPerHotkey 1
@@ -264,13 +351,14 @@ Exit_label:
 Return  
 
 track() {
-    Static x, y, lastX, lastY, taskview
+    Static x, y, lastX, lastY, lastMon, currentMon, taskview, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Global MonCount
     
     CoordMode Mouse
-    lastX := x, lastY := y
+    lastX := x, lastY := y, lastMon := currentMon
     MouseGetPos x, y, hwndId
     WinGetClass, classId, ahk_id %hwndId%
+    WinGet, hwndId, ID, A
     
     If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
         moving := True
@@ -282,11 +370,15 @@ track() {
         ; ToolTip
     }
     
-    If (MonCount == 1 &&  x <= 3 && y <= 3 && !taskview)
+    If (MonCount == 1 &&  x <= 3 && y <= 3 && !taskview && !GetKeyState("Lbutton","P") && !skipCheck)
     {
         Send {LWin down}{Tab down}{LWin up}{Tab up}
         taskview := True
         sleep 700
+    }
+    Else If (MonCount == 1 &&  x <= 3 && y <= 3 && !taskview && GetKeyState("Lbutton","P"))
+    {
+        skipCheck := True
     }
     Else
     {
@@ -313,7 +405,78 @@ track() {
     If (MonCount == 1 &&  x > 3 && y > 3)
     {
         taskview := False
+        skipCheck := False
     }
+    
+    If (MonCount > 1) {
+        currentMon := MWAGetMonitorMouseIsIn()
+        currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+        
+        If (currentMon == 1 && currentMonHasActWin) {
+            LastActiveWinHwnd1 := hwndId
+        }
+        Else If (currentMon == 2 && currentMonHasActWin) {
+            LastActiveWinHwnd2 := hwndId
+        }
+        Else If (currentMon == 3 && currentMonHasActWin) {
+            LastActiveWinHwnd3 := hwndId
+        }
+        Else If (currentMon == 4 && currentMonHasActWin) {
+            LastActiveWinHwnd4 := hwndId
+        }
+        
+        LastActiveWinHwnd := LastActiveWinHwnd%currentMon%
+        WinGet, State, MinMax, ahk_id %LastActiveWinHwnd%
+        ; tooltip, %LastActiveWinHwnd% "-" %hwndId%
+        If (lastMon != currentMon && WinExist("ahk_id " . LastActiveWinHwnd) && State != -1 && !GetKeyState("Lbutton", "P"))
+            WinActivate, ahk_id %LastActiveWinHwnd%
+    }
+}
+
+;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
+GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
+    ;Get number of monitor
+    SysGet, monCount, MonitorCount
+    
+    ;Iterate through each monitor
+    Loop %monCount%{
+        ;Get Monitor working area
+        SysGet, workArea, Monitor, % A_Index
+        
+        ;Get the position of the focus window
+        WinGetPos, X, Y, , , ahk_id %thisWindowHwnd%
+        X += 8
+        Y += 8
+        ;Check if the focus window in on the current monitor index
+        if ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
+            ; tooltip, %X%  %Y% %workAreaLeft% %workAreaTop% %workAreaBottom% %workAreaRight%
+            ;Return the monitor index since it's within that monitors borders.
+            ; return % A_Index
+            return True
+        }
+    }
+    return False
+}
+
+;https://www.autohotkey.com/boards/viewtopic.php?f=6&t=54557
+MWAGetMonitorMouseIsIn() ; we didn't actually need the "Monitor = 0"
+{
+    ; get the mouse coordinates first
+    Coordmode, Mouse, Screen    ; use Screen, so we can compare the coords with the sysget information`
+    MouseGetPos, Mx, My
+
+    SysGet, MonitorCount, 80    ; monitorcount, so we know how many monitors there are, and the number of loops we need to do
+    Loop, %MonitorCount%
+    {
+        SysGet, mon%A_Index%, Monitor, %A_Index%    ; "Monitor" will get the total desktop space of the monitor, including taskbars
+
+        if ( Mx >= mon%A_Index%left ) && ( Mx < mon%A_Index%right ) && ( My >= mon%A_Index%top ) && ( My < mon%A_Index%bottom )
+        {
+            ActiveMon := A_Index
+            break
+        }
+    }
+    return ActiveMon
 }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
@@ -578,6 +741,7 @@ return
 :?:.cgi::
 :?:.com::
 :?:.exe::
+:?:.elf::
 :?:.gadget::
 :?:.jar::
 :?:.msi::
@@ -679,6 +843,8 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::VMware::VMware
 ::sxe::SXe
 ::SXe::SXe
+::ips::IPs
+::IPs::IPs
 ::vmware::VMware
 ::VMware::VMware
 ;------------------------------------------------------------------------------
