@@ -187,7 +187,10 @@ Return
   else
   {
       WinActivate, ahk_class Shell_TrayWnd
-      Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+      If (VD.getCurrentDesktopNum() == 1)
+        Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+      Else If (VD.getCurrentDesktopNum() == 3)
+        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
       sleep 250
       WinMinimize, ahk_class Shell_TrayWnd
       WinSet, Transparent, off, ahk_id %hwndVD%
@@ -318,13 +321,56 @@ RButton & WheelDown::
 Return
 #If
 
+/* ;
+***********************************
+***** SHORTCUTS CONFIGURATION *****
+***** https://github.com/JuanmaMenendez/AutoHotkey-script-Open-Show-Apps/blob/master/Switch-opened-windows-of-same-App.ahk ****
+***********************************
+*/
+
+; Alt + ` - hotkey to activate NEXT Window of same type of the current App or Chrome Website Shortcut
 #If !moving
 RButton & LButton::
-    ComboActive := True
-    Send, {LWin down}{v}{LWin up}
-    ComboActive := False
+
+WinGet, activeProcessName, ProcessName, A
+
+if (activeProcessName = "chrome.exe") {
+    HandleChromeWindowsWithSameTitle()
+} else {
+    HandleWindowsWithSameProcessAndClass(activeProcessName)
+}
 Return
 #If
+
+/* ;
+*****************************
+***** UTILITY FUNCTIONS *****
+*****************************
+*/
+
+; Extracts the application title from the window's full title
+ExtractAppTitle(FullTitle) {
+    return SubStr(FullTitle, InStr(FullTitle, " ", false, -1) + 1)
+}
+
+; Switch a "Chrome App or Chrome Website Shortcut" open windows based on the same application title
+HandleChromeWindowsWithSameTitle() {
+    WinGetTitle, FullTitle, A
+    AppTitle := ExtractAppTitle(FullTitle)
+    SetTitleMatchMode, 2
+    WinGet, windowsWithSameTitleList, List, %AppTitle%
+    WinActivate, % "ahk_id " windowsWithSameTitleList%windowsWithSameTitleList%
+}
+
+; Switch "App" open windows based on the same process and class
+HandleWindowsWithSameProcessAndClass(activeProcessName) {
+    WinGetClass, activeClass, A
+    SetTitleMatchMode, 2
+    WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
+    WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%windowsListWithSameProcessAndClass%
+}
+
+
 
 Startup:
     Menu, Tray, Togglecheck, Run at startup
@@ -382,7 +428,7 @@ track() {
     }
     Else
     {
-        If (MonCount == 1 && x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
+        If (MonCount == 1 && x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3 )
         {
             sleep 250
             If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
@@ -391,7 +437,7 @@ track() {
                 sleep 700
             }
         }
-        Else If (MonCount == 1 && x <= 3 && y >= A_ScreenHeight-3)
+        Else If (MonCount == 1 && x <= 3 && y >= A_ScreenHeight-3 )
         {
             sleep 250
             If (x <= 3 && y >= A_ScreenHeight-3)
@@ -402,7 +448,7 @@ track() {
         }
     }
     
-    If (MonCount == 1 &&  x > 3 && y > 3)
+    If (MonCount == 1 &&  x > 3 && y > 3 && x < A_ScreenWidth-3 && y < A_ScreenHeight-3)
     {
         taskview := False
         skipCheck := False
