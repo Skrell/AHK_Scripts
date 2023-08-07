@@ -95,6 +95,7 @@ CapsLock:: Send {Delete}
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
 #MaxThreadsPerHotkey 2
 !1::
+  HideTrayTip() 
   If GetKeyState("Lbutton", "P")
   {
       BlockInput, MouseMove
@@ -140,9 +141,13 @@ CapsLock:: Send {Delete}
       WinMinimize, ahk_class Shell_TrayWnd
       WinSet, Transparent, off, ahk_id %hwndVD%
   }
+  TrayTip , , Desktop 1, , 16
+  sleep 1500
+  HideTrayTip() 
 Return
 
 !2::
+  HideTrayTip() 
   If (VD.getCurrentDesktopNum() == 2)
     Return
     
@@ -195,9 +200,13 @@ Return
       WinMinimize, ahk_class Shell_TrayWnd
       WinSet, Transparent, off, ahk_id %hwndVD%
   }
+  TrayTip , , Desktop 2, , 16
+  sleep 1500
+  HideTrayTip() 
 Return
 
 !3::
+  HideTrayTip() 
   If GetKeyState("Lbutton", "P")
   {
       BlockInput, MouseMove
@@ -243,9 +252,103 @@ Return
       WinMinimize, ahk_class Shell_TrayWnd
       WinSet, Transparent, off, ahk_id %hwndVD%
   }
+  TrayTip , , Desktop 3, , 16
+  sleep 1500
+  HideTrayTip() 
 Return
-#MaxThreadsPerHotkey 1
+
 ;============================================================================================================================
+#MaxThreadsPerHotkey 1
+
+; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
+
+!`::
+InputBox, UserInput, Find and focus running windows, Type part of a window title to display a menu with all possible matches.., , 300, 140,
+if ErrorLevel
+{
+    ; MsgBox, CANCEL was pressed.
+    return
+}   
+else
+{
+    DetectHiddenWindows, On
+    list := ""
+    Menu, windows, Add
+    Menu, windows, deleteAll
+    WinGet, id, list
+    Loop, %id%
+    {
+        this_ID := id%A_Index%
+        WinGetTitle, title, ahk_id %this_ID%
+        If (title = "" || title = "Microsoft Text Input Application")
+            continue            
+        If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
+            continue
+        If !InStr(title, UserInput)
+            continue
+        Menu, windows, Add, %title%, ActivateWindow 
+        WinGet, Path, ProcessPath, ahk_id %this_ID%
+        Try 
+            Menu, windows, Icon, %title%, %Path%,, 0
+        Catch 
+            Menu, windows, Icon, %title%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
+    }
+    CoordMode, Mouse, Screen
+    MouseGetPos, Xm, Xy
+    CoordMode, Menu, Screen
+    ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
+    DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+    ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
+    Menu, windows, Delete
+}
+return
+
+ActivateWindow:
+    DetectHiddenWindows, On
+    SetTitleMatchMode, 3
+    VD.MoveWindowToCurrentDesktop(A_ThisMenuItem)
+    WinRestore , %A_ThisMenuItem%
+    WinActivate, %A_ThisMenuItem%
+return
+
+; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
+MyTimer() {
+   DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1)
+   run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
+}
+
+;-----------------------------------------------------------------
+; Check whether the target window is activation target
+;-----------------------------------------------------------------
+; https://www.autohotkey.com/boards/viewtopic.php?t=81064
+ShowMenu(hMenu, MenuLoop:=0, X:=0, Y:=0, Flags:=0) {            ; Ver 0.61 by SKAN on D39F/D39G
+    Local                                                           ;            @ tiny.cc/showmenu
+      If (hMenu="WM_ENTERMENULOOP")
+        Return True
+      Fn := Func("ShowMenu").Bind("WM_ENTERMENULOOP"), n := MenuLoop=0 ? 0 : OnMessage(0x211,Fn,-1)
+      DllCall("SetForegroundWindow","Ptr",A_ScriptHwnd)     
+      R := DllCall("TrackPopupMenu", "Ptr",hMenu, "Int",Flags, "Int",X, "Int",Y, "Int",0
+                 , "Ptr",A_ScriptHwnd, "Ptr",0, "UInt"),                     OnMessage(0x211,Fn, 0)
+      DllCall("PostMessage", "Ptr",A_ScriptHwnd, "Int",0, "Ptr",0, "Ptr",0)
+    Return R
+}
+
+IsWindow(hWnd){
+    WinGet, dwStyle, Style, ahk_id %hWnd%
+    if ((dwStyle&0x08000000) || !(dwStyle&0x10000000)) {
+        return false
+    }
+    WinGet, dwExStyle, ExStyle, ahk_id %hWnd%
+    if (dwExStyle & 0x00000080) {
+        return false
+    }
+    WinGetClass, szClass, ahk_id %hWnd%
+    if (szClass = "TApplication") {
+        return false
+    }
+    return true
+}
+
 
 #If moving
 ~RButton::Return
@@ -287,6 +390,7 @@ VolumeHover() {
 
 #If !moving
 $RButton::
+    ComboActive := False
     loop {
         If !(GetKeyState("RButton", "P"))
         {
@@ -297,6 +401,7 @@ $RButton::
     If !ComboActive
     {
         Send, {Click, Right}
+        ComboActive := False
     }
 Return
 #If
@@ -307,7 +412,6 @@ RButton & WheelUp::
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
     Send {PgUp}
-    ComboActive := False
 Return
 #If
 
@@ -317,7 +421,6 @@ RButton & WheelDown::
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
     Send {PgDn}
-    ComboActive := False
 Return
 #If
 
@@ -331,15 +434,15 @@ Return
 ; Alt + ` - hotkey to activate NEXT Window of same type of the current App or Chrome Website Shortcut
 #If !moving
 RButton & LButton::
+    ComboActive := True
+    WinGet, activeProcessName, ProcessName, A
 
-WinGet, activeProcessName, ProcessName, A
-
-if (activeProcessName = "chrome.exe") {
-    HandleChromeWindowsWithSameTitle()
-} else {
-    HandleWindowsWithSameProcessAndClass(activeProcessName)
-}
-Return
+    if (activeProcessName = "chrome.exe") {
+        HandleChromeWindowsWithSameTitle()
+    } else {
+        HandleWindowsWithSameProcessAndClass(activeProcessName)
+    }
+    Return
 #If
 
 /* ;
@@ -347,6 +450,15 @@ Return
 ***** UTILITY FUNCTIONS *****
 *****************************
 */
+; Copy this function into your script to use it.
+HideTrayTip() {
+    TrayTip  ; Attempt to hide it the normal way.
+    if SubStr(A_OSVersion,1,3) = "10." {
+        Menu Tray, NoIcon
+        Sleep 200  ; It may be necessary to adjust this sleep.
+        Menu Tray, Icon
+    }
+}
 
 ; Extracts the application title from the window's full title
 ExtractAppTitle(FullTitle) {
