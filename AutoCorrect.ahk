@@ -47,6 +47,18 @@ Tooltip, %MonCount%
 sleep 1000
 Tooltip,
 
+Gui, ShadowFrFull: New
+Gui, ShadowFrFull: +HwndIGUIF
+Gui, ShadowFrFull: +AlwaysOnTop +ToolWindow -DPIScale +E0x08000000 +E0x20 -Caption +Owner +LastFound
+Gui, ShadowFrFull: Color, FF00FF
+FrameShadow(IGUIF)
+
+Gui, ShadowFrFull2: New
+Gui, ShadowFrFull2: +HwndIGUIF2
+Gui, ShadowFrFull2: +AlwaysOnTop +ToolWindow -DPIScale +E0x08000000 +E0x20 -Caption +Owner +LastFound
+Gui, ShadowFrFull2: Color, FF00FF
+FrameShadow(IGUIF2)
+   
 ;############### CAse COrrector ######################
 ; For AHK v1.1.31+
 ; By kunkel321, help from Mikeyww, Rohwedder, Others.
@@ -273,6 +285,10 @@ else
 {
     DetectHiddenWindows, On
     list := ""
+    winArray := []
+    winAssoc := {}
+    winArraySort := []
+
     Menu, windows, Add
     Menu, windows, deleteAll
     WinGet, id, list
@@ -286,35 +302,75 @@ else
             continue
         If !InStr(title, UserInput)
             continue
-        Menu, windows, Add, %title%, ActivateWindow 
-        WinGet, Path, ProcessPath, ahk_id %this_ID%
+        desknum := VD.getDesktopNumOfWindow(title)
+        If desknum < 0
+            continue
+        finalTitle := % "Desktop " desknum " : " title "^" this_ID
+        winArray.Push(finalTitle)
+    }
+    
+    For k, v in winArray 
+    {
+        winAssoc[v] := k
+    }
+    
+    For k, v in winAssoc
+    {
+        winArraySort.Push(k)
+    }
+    
+    For k, ft in winArraySort
+    {
+        splitEntry := StrSplit(ft , "^")
+        entry := splitEntry[1]
+        ahkid := splitEntry[2]
+        Menu, windows, Add, %entry%, ActivateWindow 
+        WinGet, Path, ProcessPath, ahk_id %ahkid%
         Try 
-            Menu, windows, Icon, %title%, %Path%,, 0
+            Menu, windows, Icon, %entry%, %Path%,, 0
         Catch 
-            Menu, windows, Icon, %title%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
+            Menu, windows, Icon, %entry%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
     }
     CoordMode, Mouse, Screen
     MouseGetPos, Xm, Xy
     CoordMode, Menu, Screen
     ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
     DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+    drawX := A_ScreenWidth/2
+    drawY := A_ScreenHeight/2
+    Gui, ShadowFrFull: Show, x%drawX% y%drawY% h1 y1
+    WinSet, TransColor, FF00FF 254, ahk_id %IGUIF% 
+    Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
+    WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2% 
     ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
     Menu, windows, Delete
+    Gui, ShadowFrFull: Hide
+    Gui, ShadowFrFull2: Hide
 }
 return
 
 ActivateWindow:
     DetectHiddenWindows, On
     SetTitleMatchMode, 3
-    VD.MoveWindowToCurrentDesktop(A_ThisMenuItem)
-    WinRestore , %A_ThisMenuItem%
-    WinActivate, %A_ThisMenuItem%
+    splitEntry := StrSplit(A_ThisMenuItem , ":", , 2)
+    fulltitle := splitEntry[2]
+    fulltitle := Trim(fulltitle)
+    VD.MoveWindowToCurrentDesktop(fulltitle)
+    WinRestore , %fulltitle%
+    WinActivate, %fulltitle%
 return
 
 ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
 MyTimer() {
+   Global IGUIF
+   Global IGUIF2
    DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1)
    run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
+   WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
+   WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh, 
+   WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh, 
+   ; Gui, ShadowFrFull: Show, x%menux% w%menuw% h%menuh% y%menuy%
+   WinSet, AlwaysOnTop, on,  ahk_class #32768
 }
 
 ;-----------------------------------------------------------------
@@ -435,12 +491,14 @@ Return
 #If !moving
 RButton & LButton::
     ComboActive := True
-    WinGet, activeProcessName, ProcessName, A
-
+    MouseGetPos, , , belowID
+    WinGet, activeProcessName, ProcessName, ahk_id %belowID%
+    WinGetTitle, FullTitle, ahk_id %belowID%
+    WinGetClass, FullClass, ahk_id %belowID%
     if (activeProcessName = "chrome.exe") {
-        HandleChromeWindowsWithSameTitle()
+        HandleChromeWindowsWithSameTitle(FullTitle)
     } else {
-        HandleWindowsWithSameProcessAndClass(activeProcessName)
+        HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
     }
     Return
 #If
@@ -450,6 +508,21 @@ RButton & LButton::
 ***** UTILITY FUNCTIONS *****
 *****************************
 */
+FrameShadow(HGui) {
+	DllCall("dwmapi\DwmIsCompositionEnabled","IntP",_ISENABLED) ; Get if DWM Manager is Enabled
+	if !_ISENABLED ; if DWM is not enabled, Make Basic Shadow
+		DllCall("SetClassLong","UInt",HGui,"Int",-26,"Int",DllCall("GetClassLong","UInt",HGui,"Int",-26)|0x20000)
+	else {
+		VarSetCapacity(_MARGINS,16)
+		NumPut(1,&_MARGINS,0,"UInt")
+		NumPut(1,&_MARGINS,4,"UInt")
+		NumPut(1,&_MARGINS,8,"UInt")
+		NumPut(1,&_MARGINS,12,"UInt")
+		DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", HGui, "UInt", 2, "Int*", 2, "UInt", 4)
+		DllCall("dwmapi\DwmExtendFrameIntoClientArea", "Ptr", HGui, "Ptr", &_MARGINS)
+	}
+}
+
 ; Copy this function into your script to use it.
 HideTrayTip() {
     TrayTip  ; Attempt to hide it the normal way.
@@ -466,17 +539,15 @@ ExtractAppTitle(FullTitle) {
 }
 
 ; Switch a "Chrome App or Chrome Website Shortcut" open windows based on the same application title
-HandleChromeWindowsWithSameTitle() {
-    WinGetTitle, FullTitle, A
-    AppTitle := ExtractAppTitle(FullTitle)
+HandleChromeWindowsWithSameTitle(title := "") {
+    AppTitle := ExtractAppTitle(title)
     SetTitleMatchMode, 2
     WinGet, windowsWithSameTitleList, List, %AppTitle%
     WinActivate, % "ahk_id " windowsWithSameTitleList%windowsWithSameTitleList%
 }
 
 ; Switch "App" open windows based on the same process and class
-HandleWindowsWithSameProcessAndClass(activeProcessName) {
-    WinGetClass, activeClass, A
+HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     SetTitleMatchMode, 2
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
     WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%windowsListWithSameProcessAndClass%
@@ -518,7 +589,7 @@ track() {
     WinGetClass, classId, ahk_id %hwndId%
     WinGet, hwndId, ID, A
     
-    If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
+    If ((abs(x - lastX) > 3 || abs(y - lastY) > 3) && lastX != "") {
         moving := True
         If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW")
             sleep 250
