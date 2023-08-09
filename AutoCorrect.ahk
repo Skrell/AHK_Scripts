@@ -85,8 +85,8 @@ Loop ; WARNING will loop forever until process is killed.
 	}
 }
 
-CapsLock:: Send {Delete}
 
+CapsLock:: Send {Delete}
 +!i::   SendInput {SHIFT down}{UP}{SHIFT up}
 +!k::   SendInput {SHIFT down}{DOWN}{SHIFT up}
 +!,::   SendInput {SHIFT down}{DOWN}{SHIFT up}
@@ -508,6 +508,64 @@ RButton & LButton::
 ***** UTILITY FUNCTIONS *****
 *****************************
 */
+; Extracts the application title from the window's full title
+ExtractAppTitle(FullTitle) {
+    return SubStr(FullTitle, InStr(FullTitle, " ", false, -1) + 1)
+}
+
+; Switch a "Chrome App or Chrome Website Shortcut" open windows based on the same application title
+HandleChromeWindowsWithSameTitle(title := "") {
+    AppTitle := ExtractAppTitle(title)
+    SetTitleMatchMode, 2
+    WinGet, windowsWithSameTitleList, List, %AppTitle%
+    counter := 2
+    WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
+    numWindows := windowsWithSameTitleList
+    KeyWait, LButton, U
+    counter++
+    loop
+    {
+        KeyWait, LButton, D T0.25
+        if !ErrorLevel
+        {
+            WinActivate, % "ahk_id " windowsWithSameTitleList%counter%    
+            KeyWait, LButton, U T0.25
+            counter++
+        }
+        if (counter > numWindows)
+        {
+            counter := 1
+        }
+    }
+    until (!GetKeyState("RButton", "P"))
+}
+
+; Switch "App" open windows based on the same process and class
+HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
+    SetTitleMatchMode, 2
+    WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
+    counter := 2
+    WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
+    numWindows := windowsWithSameTitleList
+    KeyWait, LButton, U
+    counter++
+    loop
+    {
+        KeyWait, LButton, D T0.25
+        if !ErrorLevel
+        {
+            WinActivate, % "ahk_id " windowsWithSameTitleList%counter%    
+            KeyWait, LButton, U T0.25
+            counter++
+        }
+        if (counter > numWindows)
+        {
+            counter := 1
+        }
+    }
+    until (!GetKeyState("RButton", "P"))
+}
+
 FrameShadow(HGui) {
 	DllCall("dwmapi\DwmIsCompositionEnabled","IntP",_ISENABLED) ; Get if DWM Manager is Enabled
 	if !_ISENABLED ; if DWM is not enabled, Make Basic Shadow
@@ -532,28 +590,6 @@ HideTrayTip() {
         Menu Tray, Icon
     }
 }
-
-; Extracts the application title from the window's full title
-ExtractAppTitle(FullTitle) {
-    return SubStr(FullTitle, InStr(FullTitle, " ", false, -1) + 1)
-}
-
-; Switch a "Chrome App or Chrome Website Shortcut" open windows based on the same application title
-HandleChromeWindowsWithSameTitle(title := "") {
-    AppTitle := ExtractAppTitle(title)
-    SetTitleMatchMode, 2
-    WinGet, windowsWithSameTitleList, List, %AppTitle%
-    WinActivate, % "ahk_id " windowsWithSameTitleList%windowsWithSameTitleList%
-}
-
-; Switch "App" open windows based on the same process and class
-HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    SetTitleMatchMode, 2
-    WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
-    WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%windowsListWithSameProcessAndClass%
-}
-
-
 
 Startup:
     Menu, Tray, Togglecheck, Run at startup
