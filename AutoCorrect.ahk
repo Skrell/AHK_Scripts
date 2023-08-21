@@ -546,7 +546,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
     counter := 2
     WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
-    numWindows := windowsWithSameTitleList
+    numWindows := windowsListWithSameProcessAndClass
     KeyWait, LButton, U
     counter++
     loop
@@ -554,7 +554,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         KeyWait, LButton, D T0.25
         if !ErrorLevel
         {
-            WinActivate, % "ahk_id " windowsWithSameTitleList%counter%    
+            WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%    
             KeyWait, LButton, U T0.25
             counter++
         }
@@ -625,7 +625,7 @@ track() {
     WinGetClass, classId, ahk_id %hwndId%
     WinGet, hwndId, ID, A
     
-    If ((abs(x - lastX) > 3 || abs(y - lastY) > 3) && lastX != "") {
+    If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
         moving := True
         If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW")
             sleep 250
@@ -645,11 +645,107 @@ track() {
     {
         skipCheck := True
     }
+    Else If (MonCount == 1 && x >= A_ScreenWidth-3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P"))
+    {
+        KeyWait, Lbutton, T0.3
+        If (ErrorLevel == 1)
+        {
+            Critical On
+            BlockInput, MouseMove
+            MouseGetPos x, y
+            Send {Lbutton up}
+            WinGetTitle, Title, A
+            WinGet, hwndVD, ID, A
+            WinGetPos, wx, wy, wh, ww, ahk_id %hwndVD%
+            MouseToLeftEdge := x - wx
+            WinActivate, ahk_class Shell_TrayWnd
+            WinSet, AlwaysOnTop , On, %Title%
+            ; loop, 5
+            ; {
+              ; level := 255-(A_Index*50)
+              WinSet, Transparent , 0, %Title%
+            ; }
+            WinMove, ahk_id %hwndVD%,, -1*MouseToLeftEdge+40
+            WinSet, ExStyle, ^0x80, %Title%
+            
+            Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+            MouseMove, 40, y
+              
+            sleep, 400
+            WinMinimize, ahk_class Shell_TrayWnd
+            WinSet, ExStyle, ^0x80, %Title%
+            loop, 5
+            {
+              level := (A_Index*50)
+              WinSet, Transparent , %level%, %Title%
+              sleep 10
+            }
+            WinSet, Transparent , off, %Title%
+            WinActivate, %Title%
+            WinSet, AlwaysOnTop , Off, %Title%
+
+            Send {Lbutton down}
+            BlockInput, MouseMoveOff
+            ; KeyWait, Lbutton, U T10
+            ; Send {Lbutton up}
+            sleep 500
+            Critical off
+        }
+    }
+    Else If (MonCount == 1 && x <= 3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P"))
+    {
+        KeyWait, Lbutton, T0.3
+        If (ErrorLevel == 1)
+        {
+            Critical On
+            BlockInput, MouseMove
+            MouseGetPos x, y
+            Send {Lbutton up}
+            WinGetTitle, Title, A
+            WinGet, hwndVD, ID, A
+            WinGetPos, wx, wy, wh, ww, ahk_id %hwndVD%
+            LeftWinEdge := A_ScreenWidth+wx-40
+            WinActivate, ahk_class Shell_TrayWnd
+            WinSet, AlwaysOnTop , On, %Title%
+            ; loop, 5
+            ; {
+              ; level := 255-(A_Index*50)
+              WinSet, Transparent , 0, %Title%
+            ; }
+            WinMove, ahk_id %hwndVD%,, %LeftWinEdge%
+            WinSet, ExStyle, ^0x80, %Title%
+            
+            Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
+            temp := A_ScreenWidth - 40
+            MouseMove, %temp%, y
+            
+            sleep, 400
+            WinMinimize, ahk_class Shell_TrayWnd
+            WinSet, ExStyle, ^0x80, %Title%
+            loop, 5
+            {
+              level := (A_Index*50)
+              WinSet, Transparent , %level%, %Title%
+              sleep 10
+            }
+            WinSet, Transparent , off, %Title%
+            WinActivate, %Title%
+            WinSet, AlwaysOnTop , Off, %Title%
+
+            Send {Lbutton down}
+            BlockInput, MouseMoveOff
+            ; KeyWait, Lbutton, U T10
+            ; Send {Lbutton up}
+            sleep 500
+            Critical Off
+        }
+    }
     Else
     {
         If (MonCount == 1 && x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3 )
         {
             sleep 250
+            MouseGetPos x, y, hwndId
             If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
             {   
                 Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
@@ -659,6 +755,7 @@ track() {
         Else If (MonCount == 1 && x <= 3 && y >= A_ScreenHeight-3 )
         {
             sleep 250
+            MouseGetPos x, y, hwndId
             If (x <= 3 && y >= A_ScreenHeight-3)
             {
                 Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
