@@ -645,7 +645,7 @@ track() {
     {
         skipCheck := True
     }
-    Else If (MonCount == 1 && x >= A_ScreenWidth-3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P"))
+    Else If (MonCount == 1 && x >= A_ScreenWidth-3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P") && MouseIsOverTitleBar())
     {
         KeyWait, Lbutton, T0.3
         If (ErrorLevel == 1)
@@ -692,7 +692,7 @@ track() {
             Critical off
         }
     }
-    Else If (MonCount == 1 && x <= 3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P"))
+    Else If (MonCount == 1 && x <= 3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P") && MouseIsOverTitleBar())
     {
         KeyWait, Lbutton, T0.3
         If (ErrorLevel == 1)
@@ -793,6 +793,15 @@ track() {
         If (lastMon != currentMon && WinExist("ahk_id " . LastActiveWinHwnd) && State != -1 && !GetKeyState("Lbutton", "P"))
             WinActivate, ahk_id %LastActiveWinHwnd%
     }
+}
+
+;https://www.autohotkey.com/boards/search.php?author_id=139004&sr=posts&sid=13343c88f1a3953143867b71b22fdafc
+MouseIsOverTitleBar() {
+	CoordMode, Mouse, Screen 
+	MouseGetPos, xPos, yPos, WindowUnderMouseID
+	WinGetClass, class, ahk_id %WindowUnderMouseID%
+	SendMessage, 0x84, , ( yPos << 16 )|xPos, , ahk_id %WindowUnderMouseID%
+	return (class <> "Shell_TrayWnd") && (ErrorLevel = 2)
 }
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
