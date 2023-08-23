@@ -665,11 +665,11 @@ track() {
               ; level := 255-(A_Index*50)
               WinSet, Transparent , 0, %Title%
             ; }
-            WinMove, ahk_id %hwndVD%,, -1*MouseToLeftEdge+40
+            WinMove, ahk_id %hwndVD%,, -1*MouseToLeftEdge+50
             WinSet, ExStyle, ^0x80, %Title%
             
             Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-            MouseMove, 40, y
+            MouseMove, 50, y
               
             sleep, 400
             WinMinimize, ahk_class Shell_TrayWnd
@@ -681,14 +681,14 @@ track() {
               sleep 10
             }
             WinSet, Transparent , off, %Title%
-            WinActivate, %Title%
             WinSet, AlwaysOnTop , Off, %Title%
+            WinActivate, %Title%
 
             Send {Lbutton down}
             BlockInput, MouseMoveOff
-            ; KeyWait, Lbutton, U T10
-            ; Send {Lbutton up}
-            sleep 500
+            KeyWait, Lbutton, U T10
+            Send {Lbutton up}
+            ; sleep 500
             Critical off
         }
     }
@@ -704,7 +704,7 @@ track() {
             WinGetTitle, Title, A
             WinGet, hwndVD, ID, A
             WinGetPos, wx, wy, wh, ww, ahk_id %hwndVD%
-            LeftWinEdge := A_ScreenWidth+wx-40
+            LeftWinEdge := A_ScreenWidth+wx-50
             WinActivate, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , On, %Title%
             ; loop, 5
@@ -716,7 +716,7 @@ track() {
             WinSet, ExStyle, ^0x80, %Title%
             
             Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
-            temp := A_ScreenWidth - 40
+            temp := A_ScreenWidth - 50
             MouseMove, %temp%, y
             
             sleep, 400
@@ -729,14 +729,14 @@ track() {
               sleep 10
             }
             WinSet, Transparent , off, %Title%
-            WinActivate, %Title%
             WinSet, AlwaysOnTop , Off, %Title%
+            WinActivate, %Title%
 
             Send {Lbutton down}
             BlockInput, MouseMoveOff
-            ; KeyWait, Lbutton, U T10
-            ; Send {Lbutton up}
-            sleep 500
+            KeyWait, Lbutton, U T10
+            Send {Lbutton up}
+            ; sleep 500
             Critical Off
         }
     }
