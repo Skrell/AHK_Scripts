@@ -25,6 +25,9 @@ Global moving := False
 Global ComboActive := False
 Global skipCheck := False
 Global hwndVD
+Global forward := true
+Global cycling := false
+
 ;#include %A_ScriptDir%\RunAsAdmin.ahk
 
 Process, Priority,, High
@@ -59,11 +62,11 @@ Gui, ShadowFrFull2: +AlwaysOnTop +ToolWindow -DPIScale +E0x08000000 +E0x20 -Capt
 Gui, ShadowFrFull2: Color, FF00FF
 FrameShadow(IGUIF2)
    
-Gui +LastFound
-hWnd := WinExist()
-DllCall( "RegisterShellHookWindow", UInt,hWnd )
-MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
-OnMessage( MsgNum, "ShellMessage" )
+; Gui +LastFound
+; hWnd := WinExist()
+; DllCall( "RegisterShellHookWindow", UInt,hWnd )
+; MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
+; OnMessage( MsgNum, "ShellMessage" )
 Return
 
 ;############### CAse COrrector ######################
@@ -110,6 +113,43 @@ CapsLock:: Send {Delete}
 !,:: SendInput {DOWN}
 !j:: SendInput {LCtrl down}{LEFT}{LCtrl up}
 !l:: SendInput {LCtrl down}{RIGHT}{LCtrl up}
+
+
+;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
+~Alt Up::
+if cycling
+    forward := !forward
+cycling := false
+return
+
+!Tab::Cycle(forward)
+!+Tab::Cycle(!forward)
+
+Cycle(direction)
+{
+    global cycling
+    if direction
+    {
+        loop {
+            send !{Escape}
+            WinGetTitle, cTitle, A
+            WinGet, state, MinMax, %cTitle%
+            if (state > -1)
+                break
+        }
+    }
+    else
+    {
+        loop {
+            send !+{Escape}
+            WinGetTitle, cTitle, A
+            WinGet, state, MinMax, %cTitle%
+            if (state > -1)
+                break
+        }
+    }
+    cycling := true
+}
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
 #MaxThreadsPerHotkey 2
@@ -372,16 +412,21 @@ ShellMessage( wParam,lParam ) {
   {            
       hwnd := NumGet( lParam+0 ) 
       ; WinGetTitle, Title, ahk_id %hwnd%
-      ; WinGet, status, MinMax, ahk_id %hwnd%
+      WinGet, status, MinMax, ahk_id %hwnd%
       ; WinGet, id, id, ahk_id %hwnd%
-      if (status<>0)
+      if (status == -1)
       {
-          WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
-          sleep 50
-          WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
-          ; soundbeep
-          ; ToolTip, last min window= %Title%,10,10
-          ; WinSet, Bottom, , ahk_id %hwnd%
+          ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
+          ; sleep 50
+          ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
+          ;https://www.autohotkey.com/boards/viewtopic.php?t=59047
+          WinGet oldxs, ExStyle, ahk_id %hwnd%
+          newxs := (oldxs & ~0x40000) | 0x80
+          if (newxs != oldxs)
+          {
+             WinSet ExStyle, % newxs, ahk_id %hwnd%
+             WinSet ExStyle, % oldxs, ahk_id %hwnd%
+          }
       }
    }
 }
