@@ -59,6 +59,13 @@ Gui, ShadowFrFull2: +AlwaysOnTop +ToolWindow -DPIScale +E0x08000000 +E0x20 -Capt
 Gui, ShadowFrFull2: Color, FF00FF
 FrameShadow(IGUIF2)
    
+Gui +LastFound
+hWnd := WinExist()
+DllCall( "RegisterShellHookWindow", UInt,hWnd )
+MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
+OnMessage( MsgNum, "ShellMessage" )
+Return
+
 ;############### CAse COrrector ######################
 ; For AHK v1.1.31+
 ; By kunkel321, help from Mikeyww, Rohwedder, Others.
@@ -360,6 +367,25 @@ ActivateWindow:
     WinActivate, %fulltitle%
 return
 
+ShellMessage( wParam,lParam ) {
+  If (wParam == 5)  ;HSHELL_GETMINRECT
+  {            
+      hwnd := NumGet( lParam+0 ) 
+      ; WinGetTitle, Title, ahk_id %hwnd%
+      ; WinGet, status, MinMax, ahk_id %hwnd%
+      ; WinGet, id, id, ahk_id %hwnd%
+      if (status<>0)
+      {
+          WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
+          sleep 50
+          WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
+          ; soundbeep
+          ; ToolTip, last min window= %Title%,10,10
+          ; WinSet, Bottom, , ahk_id %hwnd%
+      }
+   }
+}
+      
 ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
 MyTimer() {
    Global IGUIF
@@ -617,6 +643,7 @@ Return
 
 track() {
     Static x, y, lastX, lastY, lastMon, currentMon, taskview, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
+    Static LbuttonHeld := False
     Global MonCount
     
     CoordMode Mouse
@@ -624,6 +651,12 @@ track() {
     MouseGetPos x, y, hwndId
     WinGetClass, classId, ahk_id %hwndId%
     WinGet, hwndId, ID, A
+    
+    If (LbuttonHeld && !GetKeyState("Lbutton", "P"))
+    {
+        LbuttonHeld := False
+        Send {Lbutton up}
+    }
     
     If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
         moving := True
@@ -647,17 +680,17 @@ track() {
     }
     Else If (MonCount == 1 && x >= A_ScreenWidth-3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P") && MouseIsOverTitleBar())
     {
-        KeyWait, Lbutton, T0.3
-        If (ErrorLevel == 1)
+        KeyWait, Lbutton, T0.2
+        MouseGetPos nx, ny
+        If (ErrorLevel == 1 && abs(y-ny) < 3)
         {
             Critical On
             BlockInput, MouseMove
-            MouseGetPos x, y
             Send {Lbutton up}
             WinGetTitle, Title, A
             WinGet, hwndVD, ID, A
             WinGetPos, wx, wy, wh, ww, ahk_id %hwndVD%
-            MouseToLeftEdge := x - wx
+            MouseToLeftEdge := nx - wx
             WinActivate, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , On, %Title%
             ; loop, 5
@@ -669,7 +702,7 @@ track() {
             WinSet, ExStyle, ^0x80, %Title%
             
             Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-            MouseMove, 50, y
+            MouseMove, 50, ny
               
             sleep, 400
             WinMinimize, ahk_class Shell_TrayWnd
@@ -685,21 +718,22 @@ track() {
             WinActivate, %Title%
 
             Send {Lbutton down}
+            LbuttonHeld := True
             BlockInput, MouseMoveOff
-            KeyWait, Lbutton, U T10
-            Send {Lbutton up}
+            ; KeyWait, Lbutton, U T10
+            ; Send {Lbutton up}
             ; sleep 500
             Critical off
         }
     }
     Else If (MonCount == 1 && x <= 3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P") && MouseIsOverTitleBar())
     {
-        KeyWait, Lbutton, T0.3
-        If (ErrorLevel == 1)
+        KeyWait, Lbutton, T0.2
+        MouseGetPos nx, ny
+        If (ErrorLevel == 1 && abs(y-ny) < 3)
         {
             Critical On
             BlockInput, MouseMove
-            MouseGetPos x, y
             Send {Lbutton up}
             WinGetTitle, Title, A
             WinGet, hwndVD, ID, A
@@ -717,7 +751,7 @@ track() {
             
             Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
             temp := A_ScreenWidth - 50
-            MouseMove, %temp%, y
+            MouseMove, %temp%, ny
             
             sleep, 400
             WinMinimize, ahk_class Shell_TrayWnd
@@ -733,9 +767,10 @@ track() {
             WinActivate, %Title%
 
             Send {Lbutton down}
+            LbuttonHeld := True
             BlockInput, MouseMoveOff
-            KeyWait, Lbutton, U T10
-            Send {Lbutton up}
+            ; KeyWait, Lbutton, U T10
+            ; Send {Lbutton up}
             ; sleep 500
             Critical Off
         }
