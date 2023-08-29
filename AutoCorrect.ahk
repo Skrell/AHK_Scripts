@@ -19,14 +19,14 @@ SetKeyDelay, 0
 #KeyHistory 0
 #WinActivateForce
 
-; SetTitleMatchMode, RegEx
-
 Global moving := False
 Global ComboActive := False
 Global skipCheck := False
 Global hwndVD
 Global forward := true
 Global cycling := false
+Global initWinId
+Global cycleCount := 0
 
 ;#include %A_ScriptDir%\RunAsAdmin.ahk
 
@@ -62,11 +62,11 @@ Gui, ShadowFrFull2: +AlwaysOnTop +ToolWindow -DPIScale +E0x08000000 +E0x20 -Capt
 Gui, ShadowFrFull2: Color, FF00FF
 FrameShadow(IGUIF2)
    
-; Gui +LastFound
-; hWnd := WinExist()
-; DllCall( "RegisterShellHookWindow", UInt,hWnd )
-; MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
-; OnMessage( MsgNum, "ShellMessage" )
+Gui +LastFound
+hWnd := WinExist()
+DllCall( "RegisterShellHookWindow", UInt,hWnd )
+MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
+OnMessage( MsgNum, "ShellMessage" )
 Return
 
 ;############### CAse COrrector ######################
@@ -95,7 +95,6 @@ Loop ; WARNING will loop forever until process is killed.
 	}
 }
 
-
 CapsLock:: Send {Delete}
 +!i::   SendInput {SHIFT down}{UP}{SHIFT up}
 +!k::   SendInput {SHIFT down}{DOWN}{SHIFT up}
@@ -114,42 +113,86 @@ CapsLock:: Send {Delete}
 !j:: SendInput {LCtrl down}{LEFT}{LCtrl up}
 !l:: SendInput {LCtrl down}{RIGHT}{LCtrl up}
 
-
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
-~Alt Up::
-if cycling
-    forward := !forward
-cycling := false
-return
+; ~Alt Up::
+    ; if cycling
+        ; forward := !forward
+    ; cycling := false
+    ; if (cycleCount > 1)
+    ; {
+        ; WinSet, Transparent, 0, ahk_id %initWinId%
+        ; WinActivate, ahk_id %initWinId%
+        ; WinActivate, ahk_id %selectedWinId%
+        ; WinSet, Transparent, 50, ahk_id %initWinId%
+        ; sleep 20
+        ; WinSet, Transparent, 100, ahk_id %initWinId%
+        ; sleep 20
+        ; WinSet, Transparent, 200, ahk_id %initWinId%
+        ; sleep 20
+        ; WinSet, Transparent, 255, ahk_id %initWinId%
+    ; }
+    ; cycleCount := 0
+; return
 
-!Tab::Cycle(forward)
-!+Tab::Cycle(!forward)
+; !Tab::Cycle(forward)
+; !+Tab::Cycle(!forward)
 
-Cycle(direction)
-{
-    global cycling
-    if direction
-    {
-        loop {
-            send !{Escape}
-            WinGetTitle, cTitle, A
-            WinGet, state, MinMax, %cTitle%
-            if (state > -1)
-                break
-        }
-    }
-    else
-    {
-        loop {
-            send !+{Escape}
-            WinGetTitle, cTitle, A
-            WinGet, state, MinMax, %cTitle%
-            if (state > -1)
-                break
-        }
-    }
-    cycling := true
-}
+; Cycle(direction)
+; {
+    ; Global cycling
+    ; Global initWinId
+    ; Global selectedWinId
+    ; Global cycleCount
+    
+    ; If !cycling
+    ; {
+        ; WinGet, allWindows, List
+        ; loop % allWindows
+        ; {
+            ; hwndID := allWindows%A_Index%
+            ; WinGet, initWinId, ID, ahk_id %hwndID%
+            ; if (IsWindow(hwndID))
+            ; {
+                ; WinActivate, ahk_id %initWinId%
+                ; break
+            ; }
+        ; }
+    ; }
+    
+    ; if direction
+    ; {
+        ; loop {
+            ; send !{Escape}
+            ; WinGet, cID, ID, A
+            ; WinGet, state, MinMax, ahk_id %cID%
+            ; WinGetTitle, cTitle, ahk_id %cID%
+            ; if (state > -1 && cTitle)
+            ; {
+                ; WinActivate, ahk_id %cID%
+                ; WinGet, selectedWinId, ID, A
+                ; cycleCount += 1
+                ; break
+            ; }
+        ; }
+    ; }
+    ; else
+    ; {
+        ; loop {
+            ; send !+{Escape}
+            ; WinGet, cID, ID, A
+            ; WinGet, state, MinMax, ahk_id %cID%
+            ; WinGetTitle, cTitle, ahk_id %cID%
+            ; if (state > -1 && cTitle)
+            ; {   
+                ; WinActivate, ahk_id %cID%
+                ; WinGet, selectedWinId, ID, A
+                ; cycleCount += 1
+                ; break
+            ; }
+        ; }
+    ; }
+    ; cycling := true
+; }
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
 #MaxThreadsPerHotkey 2
@@ -343,6 +386,7 @@ else
     {
         this_ID := id%A_Index%
         WinGetTitle, title, ahk_id %this_ID%
+        
         If (title = "" || title = "Microsoft Text Input Application")
             continue            
         If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
@@ -393,27 +437,74 @@ else
     Menu, windows, Delete
     Gui, ShadowFrFull: Hide
     Gui, ShadowFrFull2: Hide
+    DetectHiddenWindows, Off
 }
 return
 
 ActivateWindow:
+    
+    Gui, ShadowFrFull2: Hide
     DetectHiddenWindows, On
     SetTitleMatchMode, 3
     splitEntry := StrSplit(A_ThisMenuItem , ":", , 2)
     fulltitle := splitEntry[2]
     fulltitle := Trim(fulltitle)
-    VD.MoveWindowToCurrentDesktop(fulltitle)
-    WinRestore , %fulltitle%
-    WinActivate, %fulltitle%
+    WinGetPos, vwx,vwy,vww,, %fulltitle%
+    
+    cdt := VD.getCurrentDesktopNum()
+    desknum := VD.getDesktopNumOfWindow(fulltitle)
+   
+    if (vwx > 0 && desknum < cdt)
+    {
+        WinSet, Transparent, 0, %fulltitle%
+        VD.MoveWindowToCurrentDesktop(fulltitle)
+        WinRestore , %fulltitle%
+        WinActivate, %fulltitle%
+        offscreenX := -1*vww
+        WinMove, %fulltitle%,, %offscreenX%, , , ,
+        WinSet, Transparent, 255, %fulltitle%
+        loopCount := (vwx+abs(offscreenX))/100
+        ; tooltip, %loopCount%
+        loop, %loopCount%
+        {
+            offscreenX := offscreenX + 100
+            WinMove, %fulltitle%,, offscreenX, , , , 
+            sleep 1
+        }
+        WinMove, %fulltitle%,, vwx, , , , 
+    }
+    else if (vwx > 0 && desknum > cdt)
+    {
+        WinSet, Transparent, 0, %fulltitle%
+        VD.MoveWindowToCurrentDesktop(fulltitle)
+        WinRestore , %fulltitle%
+        WinActivate, %fulltitle%
+        offscreenX := A_ScreenWidth
+        WinMove, %fulltitle%,, %offscreenX%, , , ,
+        WinSet, Transparent, 255, %fulltitle%
+        loopCount := (A_ScreenWidth-vwx)/100
+        ; tooltip, %loopCount%
+        loop, %loopCount%
+        {
+            offscreenX := offscreenX - 100
+            WinMove, %fulltitle%,, offscreenX, , , , 
+            sleep 1
+        }
+        WinMove, %fulltitle%,, vwx, , , , 
+    }
+    else
+    {
+        VD.MoveWindowToCurrentDesktop(fulltitle)
+        WinRestore , %fulltitle%
+        WinActivate, %fulltitle%
+    }
 return
 
 ShellMessage( wParam,lParam ) {
   If (wParam == 5)  ;HSHELL_GETMINRECT
   {            
       hwnd := NumGet( lParam+0 ) 
-      ; WinGetTitle, Title, ahk_id %hwnd%
       WinGet, status, MinMax, ahk_id %hwnd%
-      ; WinGet, id, id, ahk_id %hwnd%
       if (status == -1)
       {
           ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
