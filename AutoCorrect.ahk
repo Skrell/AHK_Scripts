@@ -843,6 +843,7 @@ track() {
             sleep, 400
             WinMinimize, ahk_class Shell_TrayWnd
             WinSet, ExStyle, ^0x80, %Title%
+            VD.MoveWindowToCurrentDesktop(Title,False)
             loop, 5
             {
               level := (A_Index*50)
@@ -892,6 +893,7 @@ track() {
             sleep, 400
             WinMinimize, ahk_class Shell_TrayWnd
             WinSet, ExStyle, ^0x80, %Title%
+            VD.MoveWindowToCurrentDesktop(Title,False)
             loop, 5
             {
               level := (A_Index*50)
