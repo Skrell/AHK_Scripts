@@ -96,6 +96,7 @@ Loop ; WARNING will loop forever until process is killed.
 }
 
 CapsLock:: Send {Delete}
+CapsLock & Space:: Send {Backspace}
 +!i::   SendInput {SHIFT down}{UP}{SHIFT up}
 +!k::   SendInput {SHIFT down}{DOWN}{SHIFT up}
 +!,::   SendInput {SHIFT down}{DOWN}{SHIFT up}
@@ -840,7 +841,7 @@ track() {
             Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
             MouseMove, 50, ny
               
-            sleep, 400
+            sleep, 250
             WinMinimize, ahk_class Shell_TrayWnd
             WinSet, ExStyle, ^0x80, %Title%
             VD.MoveWindowToCurrentDesktop(Title,False)
@@ -890,7 +891,7 @@ track() {
             temp := A_ScreenWidth - 50
             MouseMove, %temp%, ny
             
-            sleep, 400
+            sleep, 250
             WinMinimize, ahk_class Shell_TrayWnd
             WinSet, ExStyle, ^0x80, %Title%
             VD.MoveWindowToCurrentDesktop(Title,False)
