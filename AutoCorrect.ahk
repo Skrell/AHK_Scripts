@@ -865,7 +865,7 @@ track() {
             Send {Lbutton down}
             LbuttonHeld := True
             BlockInput, MouseMoveOff
-            sleep 250
+            sleep 500
             Critical off
         }
     }
@@ -892,8 +892,8 @@ track() {
             }  
             WinSet, ExStyle, ^0x80, %Title%
             VD.MoveWindowToDesktopNum(Title, currentVD-1)
-            WinSet, Transparent , off, %Title%
             Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
+            WinSet, Transparent , off, %Title%
             sleep, 250
             WinMinimize, ahk_class Shell_TrayWnd
             WinSet, ExStyle, ^0x80, %Title%
@@ -909,7 +909,7 @@ track() {
             Send {Lbutton down}
             LbuttonHeld := True
             BlockInput, MouseMoveOff
-            sleep 250
+            sleep 500
             Critical Off
         }
     }
@@ -1079,11 +1079,7 @@ MWAGetMonitorMouseIsIn() ; we didn't actually need the "Monitor = 0"
 ;------------------------------------------------------------------------------
 #NoEnv ; For security
 #SingleInstance force
-#IfWinNotActive Notepad++
-#IfWinNotActive Microsoft Visual Studio
-#IfWinNotActive Command Prompt
-#IfWinNotActive vbonaventura@
-#IfWinNotActive Everything
+
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.
 ; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
@@ -1154,7 +1150,8 @@ Loop % StrLen(Hotstring) + 4
 SetTimer, MoveCaret, Off
 return
 
-
+SetTitleMatchMode, 2
+#If !WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe cmd.exe") && !WinActive("ahk_exe Everything.exe")  && !WinActive("ahk_exe Conhost.exe") 
 #Hotstring EndChars ()[]{}:;"/\,?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 ;------------------------------------------------------------------------------
@@ -9054,3 +9051,4 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::receievr::receiver
 ::receierv::receiver
 ::receivre::receiver
+#If
