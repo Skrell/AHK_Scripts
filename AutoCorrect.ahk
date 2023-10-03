@@ -788,6 +788,16 @@ track() {
     MouseGetPos x, y, hwndId
     WinGetClass, classId, ahk_id %hwndId%
     WinGet, hwndId, ID, A
+    currentVD := VD.getCurrentDesktopNum()
+    If (currentVd < VD.getCount())
+        nextVD := currentVD + 1
+    Else
+        nextVD := currentVD
+        
+    If (currentVd > 1)
+        prevVD := currentVD - 1
+    Else
+        prevVD := currentVD    
     
     If (LbuttonHeld && !GetKeyState("Lbutton", "P"))
     {
@@ -830,37 +840,32 @@ track() {
             MouseToLeftEdge := nx - wx
             WinActivate, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , On, %Title%
-            ; loop, 5
-            ; {
-              ; level := 255-(A_Index*50)
-              WinSet, Transparent , 0, %Title%
-            ; }
-            WinMove, ahk_id %hwndVD%,, -1*MouseToLeftEdge+50
+            loop, 5
+            {
+                level := 255 - (A_Index*50)
+                WinSet, Transparent , %level%, %Title%
+                sleep 10
+            }  
             WinSet, ExStyle, ^0x80, %Title%
-            
+            VD.MoveWindowToDesktopNum(Title, currentVD+1)
             Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-            MouseMove, 50, ny
-              
+            WinSet, Transparent , off, %Title%
             sleep, 250
             WinMinimize, ahk_class Shell_TrayWnd
             WinSet, ExStyle, ^0x80, %Title%
-            VD.MoveWindowToCurrentDesktop(Title,False)
-            loop, 5
-            {
-              level := (A_Index*50)
-              WinSet, Transparent , %level%, %Title%
-              sleep 10
-            }
-            WinSet, Transparent , off, %Title%
+            ; loop, 5
+            ; {
+              ; level := (A_Index*50)
+              ; WinSet, Transparent , %level%, %Title%
+              ; sleep 10
+            ; }
             WinSet, AlwaysOnTop , Off, %Title%
             WinActivate, %Title%
 
             Send {Lbutton down}
             LbuttonHeld := True
             BlockInput, MouseMoveOff
-            ; KeyWait, Lbutton, U T10
-            ; Send {Lbutton up}
-            ; sleep 500
+            sleep 250
             Critical off
         }
     }
@@ -879,38 +884,32 @@ track() {
             LeftWinEdge := A_ScreenWidth+wx-50
             WinActivate, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , On, %Title%
-            ; loop, 5
-            ; {
-              ; level := 255-(A_Index*50)
-              WinSet, Transparent , 0, %Title%
-            ; }
-            WinMove, ahk_id %hwndVD%,, %LeftWinEdge%
+            loop, 5
+            {
+                level := 255 - (A_Index*50)
+                WinSet, Transparent , %level%, %Title%
+                sleep 10
+            }  
             WinSet, ExStyle, ^0x80, %Title%
-            
+            VD.MoveWindowToDesktopNum(Title, currentVD-1)
+            WinSet, Transparent , off, %Title%
             Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
-            temp := A_ScreenWidth - 50
-            MouseMove, %temp%, ny
-            
             sleep, 250
             WinMinimize, ahk_class Shell_TrayWnd
             WinSet, ExStyle, ^0x80, %Title%
-            VD.MoveWindowToCurrentDesktop(Title,False)
-            loop, 5
-            {
-              level := (A_Index*50)
-              WinSet, Transparent , %level%, %Title%
-              sleep 10
-            }
-            WinSet, Transparent , off, %Title%
+            ; loop, 5
+            ; {
+              ; level := (A_Index*50)
+              ; WinSet, Transparent , %level%, %Title%
+              ; sleep 10
+            ; }
             WinSet, AlwaysOnTop , Off, %Title%
             WinActivate, %Title%
 
             Send {Lbutton down}
             LbuttonHeld := True
             BlockInput, MouseMoveOff
-            ; KeyWait, Lbutton, U T10
-            ; Send {Lbutton up}
-            ; sleep 500
+            sleep 250
             Critical Off
         }
     }
@@ -1084,6 +1083,7 @@ MWAGetMonitorMouseIsIn() ; we didn't actually need the "Monitor = 0"
 #IfWinNotActive Microsoft Visual Studio
 #IfWinNotActive Command Prompt
 #IfWinNotActive vbonaventura@
+#IfWinNotActive Everything
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.
 ; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
