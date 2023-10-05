@@ -25,8 +25,10 @@ Global skipCheck := False
 Global hwndVD
 Global forward := true
 Global cycling := false
-Global initWinId
-Global cycleCount := 0
+Global ValidWindows := []
+Global cycleCount := 1
+Global initWinID
+Global nextWinID
 
 ;#include %A_ScriptDir%\RunAsAdmin.ahk
 
@@ -65,8 +67,8 @@ FrameShadow(IGUIF2)
 Gui +LastFound
 hWnd := WinExist()
 DllCall( "RegisterShellHookWindow", UInt,hWnd )
-MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
-OnMessage( MsgNum, "ShellMessage" )
+; MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
+; OnMessage( MsgNum, "ShellMessage" )
 Return
 
 ;############### CAse COrrector ######################
@@ -114,87 +116,6 @@ CapsLock & Space:: Send {Backspace}
 !j:: SendInput {LCtrl down}{LEFT}{LCtrl up}
 !l:: SendInput {LCtrl down}{RIGHT}{LCtrl up}
 
-;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
-; ~Alt Up::
-    ; if cycling
-        ; forward := !forward
-    ; cycling := false
-    ; if (cycleCount > 1)
-    ; {
-        ; WinSet, Transparent, 0, ahk_id %initWinId%
-        ; WinActivate, ahk_id %initWinId%
-        ; WinActivate, ahk_id %selectedWinId%
-        ; WinSet, Transparent, 50, ahk_id %initWinId%
-        ; sleep 20
-        ; WinSet, Transparent, 100, ahk_id %initWinId%
-        ; sleep 20
-        ; WinSet, Transparent, 200, ahk_id %initWinId%
-        ; sleep 20
-        ; WinSet, Transparent, 255, ahk_id %initWinId%
-    ; }
-    ; cycleCount := 0
-; return
-
-; !Tab::Cycle(forward)
-; !+Tab::Cycle(!forward)
-
-; Cycle(direction)
-; {
-    ; Global cycling
-    ; Global initWinId
-    ; Global selectedWinId
-    ; Global cycleCount
-    
-    ; If !cycling
-    ; {
-        ; WinGet, allWindows, List
-        ; loop % allWindows
-        ; {
-            ; hwndID := allWindows%A_Index%
-            ; WinGet, initWinId, ID, ahk_id %hwndID%
-            ; if (IsWindow(hwndID))
-            ; {
-                ; WinActivate, ahk_id %initWinId%
-                ; break
-            ; }
-        ; }
-    ; }
-    
-    ; if direction
-    ; {
-        ; loop {
-            ; send !{Escape}
-            ; WinGet, cID, ID, A
-            ; WinGet, state, MinMax, ahk_id %cID%
-            ; WinGetTitle, cTitle, ahk_id %cID%
-            ; if (state > -1 && cTitle)
-            ; {
-                ; WinActivate, ahk_id %cID%
-                ; WinGet, selectedWinId, ID, A
-                ; cycleCount += 1
-                ; break
-            ; }
-        ; }
-    ; }
-    ; else
-    ; {
-        ; loop {
-            ; send !+{Escape}
-            ; WinGet, cID, ID, A
-            ; WinGet, state, MinMax, ahk_id %cID%
-            ; WinGetTitle, cTitle, ahk_id %cID%
-            ; if (state > -1 && cTitle)
-            ; {   
-                ; WinActivate, ahk_id %cID%
-                ; WinGet, selectedWinId, ID, A
-                ; cycleCount += 1
-                ; break
-            ; }
-        ; }
-    ; }
-    ; cycling := true
-; }
-
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
 #MaxThreadsPerHotkey 2
 !1::
@@ -234,7 +155,7 @@ CapsLock & Space:: Send {Backspace}
       Send {Lbutton up}
       WinSet, AlwaysOnTop , Off, %Title%
   }
-  else
+  Else
   {
       WinActivate, ahk_class Shell_TrayWnd
       Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
@@ -362,6 +283,107 @@ Return
 
 ;============================================================================================================================
 #MaxThreadsPerHotkey 1
+
+;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
+~Alt Up::
+    If (cycling && cycleCount > 2 && (ValidWindows.length() > 0))
+    {
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+        WinActivate, % "ahk_id " ValidWindows[1]
+        WinActivate, % "ahk_id " ValidWindows[cycleCount]
+        ; nextWinID := ValidWindows[1]
+        ; initWinID := ValidWindows[cycleCount]
+        WinSet, Transparent, 50, % "ahk_id " ValidWindows[1]
+        sleep 20
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+        sleep 20
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+        sleep 20
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+    }
+    Else If (cycling && cycleCount <= 2)
+    {
+        ; WinActivate, % "ahk_id " nextWinID
+        ; temp := nextWinId
+        ; nextWinId := initWinId
+        ; initWinId := temp
+        WinGet, allWindows, List
+        loop % allWindows
+        {
+            If (A_Index == 1)
+                continue
+            If (A_Index > 10)
+                break
+            
+            hwndID := allWindows%A_Index%
+            WinGet, state, MinMax, ahk_id %hwndID%
+            WinGetTitle, cTitle, ahk_id %hwndID%
+            desknum := VD.getDesktopNumOfWindow(cTitle)
+            If (state > -1 && cTitle != "" && desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID))
+            {
+                WinActivate, % "ahk_id " hwndID
+                break
+            }
+        }
+    }
+    ; tooltip, %cycleCount%
+    cycleCount := 1
+    cycling := false
+    ValidWindows := []
+return
+
+!Tab::Cycle(forward)
+!+Tab::Cycle(!forward)
+
+Cycle(direction)
+{
+    Global cycling
+    Global cycleCount
+    Global ValidWindows
+    
+    If !cycling
+    {
+        WinGet, allWindows, List
+        loop % allWindows
+        {
+            If !(GetKeyState("LAlt","P"))
+            {
+                cycling := true
+                cycleCount := 1
+                Return
+            }
+            hwndID := allWindows%A_Index%
+            WinGet, state, MinMax, ahk_id %hwndID%
+            WinGetTitle, cTitle, ahk_id %hwndID%
+            desknum := VD.getDesktopNumOfWindow(cTitle)
+            If (state > -1 && cTitle != "" && desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID))
+            {
+                ValidWindows.push(hwndID)
+            }
+        }
+    }
+    cycling := true
+    
+    If (ValidWindows.length() > 2) 
+    {
+        If direction
+        {
+            If (cycleCount == ValidWindows.MaxIndex())
+                cycleCount := 1
+            Else
+                cycleCount += 1
+            WinActivate, % "ahk_id " ValidWindows[cycleCount]
+        }
+        Else
+        {
+            If (cycleCount == 1)
+                cycleCount := ValidWindows.MaxIndex()
+            Else
+                cycleCount -= 1
+            WinActivate, % "ahk_id " ValidWindows[cycleCount]
+        }
+    }
+}
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 
@@ -815,17 +837,27 @@ track() {
         ; ToolTip
     }
     
-    If (MonCount == 1 &&  x <= 3 && y <= 3 && !taskview && !GetKeyState("Lbutton","P") && !skipCheck)
+    If (MonCount == 1 
+        &&  x <= 3 && y <= 3 
+        && !taskview 
+        && !GetKeyState("Lbutton","P") 
+        && !skipCheck)
     {
         Send {LWin down}{Tab down}{LWin up}{Tab up}
         taskview := True
         sleep 700
     }
-    Else If (MonCount == 1 &&  x <= 3 && y <= 3 && !taskview && GetKeyState("Lbutton","P"))
+    Else If (MonCount == 1 
+            &&  x <= 3 && y <= 3 
+            && !taskview 
+            && GetKeyState("Lbutton","P"))
     {
         skipCheck := True
     }
-    Else If (MonCount == 1 && x >= A_ScreenWidth-3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P") && MouseIsOverTitleBar())
+    Else If (
+            && x >= A_ScreenWidth-3 && y < A_ScreenHeight-200  
+            && GetKeyState("Lbutton", "P") 
+            && MouseIsOverTitleBar())
     {
         KeyWait, Lbutton, T0.2
         MouseGetPos nx, ny
@@ -836,32 +868,27 @@ track() {
             Send {Lbutton up}
             WinGetTitle, Title, A
             WinGet, hwndVD, ID, A
-            WinGetPos, wx, wy, wh, ww, ahk_id %hwndVD%
-            MouseToLeftEdge := nx - wx
+            WinGetPos, wx, wy, ww, wh, ahk_id %hwndVD%
+            newWx := wx
+            
             WinActivate, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , On, %Title%
+            VD.PinWindow(Title)
+            moveAmount := ceil((A_ScreenWidth-wx)/5)
             loop, 5
             {
-                level := 255 - (A_Index*50)
-                WinSet, Transparent , %level%, %Title%
+                newWx += moveAmount
+                WinMove, %Title%,, newWx,,,,
                 sleep 10
             }  
-            WinSet, ExStyle, ^0x80, %Title%
-            VD.MoveWindowToDesktopNum(Title, currentVD+1)
+            sleep 50
             Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-            WinSet, Transparent , off, %Title%
+            WinMove, %Title%,, wx,,,,
             sleep, 250
+            VD.UnPinWindow(Title)
             WinMinimize, ahk_class Shell_TrayWnd
-            WinSet, ExStyle, ^0x80, %Title%
-            ; loop, 5
-            ; {
-              ; level := (A_Index*50)
-              ; WinSet, Transparent , %level%, %Title%
-              ; sleep 10
-            ; }
             WinSet, AlwaysOnTop , Off, %Title%
             WinActivate, %Title%
-
             Send {Lbutton down}
             LbuttonHeld := True
             BlockInput, MouseMoveOff
@@ -869,7 +896,10 @@ track() {
             Critical off
         }
     }
-    Else If (MonCount == 1 && x <= 3 && y < A_ScreenHeight-200  && GetKeyState("Lbutton", "P") && MouseIsOverTitleBar())
+    Else If (
+            && x <= 3 && y < A_ScreenHeight-200  
+            && GetKeyState("Lbutton", "P") 
+            && MouseIsOverTitleBar())
     {
         KeyWait, Lbutton, T0.2
         MouseGetPos nx, ny
@@ -880,32 +910,28 @@ track() {
             Send {Lbutton up}
             WinGetTitle, Title, A
             WinGet, hwndVD, ID, A
-            WinGetPos, wx, wy, wh, ww, ahk_id %hwndVD%
-            LeftWinEdge := A_ScreenWidth+wx-50
+            WinGetPos, wx, wy, ww, wh, ahk_id %hwndVD%
+            newWx := wx
+            
             WinActivate, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , On, %Title%
+           
+            VD.PinWindow(Title)
+            moveAmount := ceil((wx+ww)/5)
             loop, 5
             {
-                level := 255 - (A_Index*50)
-                WinSet, Transparent , %level%, %Title%
+                newWx -= moveAmount
+                WinMove, %Title%,, newWx,,,,
                 sleep 10
             }  
-            WinSet, ExStyle, ^0x80, %Title%
-            VD.MoveWindowToDesktopNum(Title, currentVD-1)
+            sleep 50
             Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
-            WinSet, Transparent , off, %Title%
+            WinMove, %Title%,, wx,,,,
             sleep, 250
+            VD.UnPinWindow(Title)
             WinMinimize, ahk_class Shell_TrayWnd
-            WinSet, ExStyle, ^0x80, %Title%
-            ; loop, 5
-            ; {
-              ; level := (A_Index*50)
-              ; WinSet, Transparent , %level%, %Title%
-              ; sleep 10
-            ; }
             WinSet, AlwaysOnTop , Off, %Title%
             WinActivate, %Title%
-
             Send {Lbutton down}
             LbuttonHeld := True
             BlockInput, MouseMoveOff
@@ -963,7 +989,10 @@ track() {
         LastActiveWinHwnd := LastActiveWinHwnd%currentMon%
         WinGet, State, MinMax, ahk_id %LastActiveWinHwnd%
         ; tooltip, %LastActiveWinHwnd% "-" %hwndId%
-        If (lastMon != currentMon && WinExist("ahk_id " . LastActiveWinHwnd) && State != -1 && !GetKeyState("Lbutton", "P"))
+        If (lastMon != currentMon 
+            && WinExist("ahk_id " . LastActiveWinHwnd) 
+            && State != -1 
+            && !GetKeyState("Lbutton", "P"))
             WinActivate, ahk_id %LastActiveWinHwnd%
     }
 }
@@ -1151,7 +1180,13 @@ SetTimer, MoveCaret, Off
 return
 
 SetTitleMatchMode, 2
-#If !WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe cmd.exe") && !WinActive("ahk_exe Everything.exe")  && !WinActive("ahk_exe Conhost.exe") 
+#If !WinActive("ahk_exe notepad++.exe") 
+        && !WinActive("ahk_exe Code.exe") 
+        && !WinActive("ahk_exe cmd.exe") 
+        && !WinActive("ahk_exe Everything.exe") 
+        && !WinActive("ahk_exe Conhost.exe") 
+        && !WinActive("ahk_exe bash.exe") 
+        && !WinActive("ahk_exe mintty.exe") 
 #Hotstring EndChars ()[]{}:;"/\,?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 ;------------------------------------------------------------------------------
