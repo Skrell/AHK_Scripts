@@ -7,7 +7,7 @@
 #include %A_ScriptDir%\_VD.ahk
 dummyFunction1() {
     static dummyStatic1 := VD.init()
-}
+    }
 
 #WinActivateForce
 #InstallMouseHook
@@ -116,6 +116,11 @@ CapsLock & Space:: Send {Backspace}
 !j:: SendInput {LCtrl down}{LEFT}{LCtrl up}
 !l:: SendInput {LCtrl down}{RIGHT}{LCtrl up}
 
+~Esc::
+If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300) {
+    WinClose, A
+}
+Return
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
 #MaxThreadsPerHotkey 2
 !1::
@@ -317,12 +322,15 @@ Return
             
             hwndID := allWindows%A_Index%
             WinGet, state, MinMax, ahk_id %hwndID%
-            WinGetTitle, cTitle, ahk_id %hwndID%
-            desknum := VD.getDesktopNumOfWindow(cTitle)
-            If (state > -1 && cTitle != "" && desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID))
-            {
-                WinActivate, % "ahk_id " hwndID
-                break
+            If (state > -1) {
+                WinGetTitle, cTitle, ahk_id %hwndID%
+                If (cTitle != "") {
+                    desknum := VD.getDesktopNumOfWindow(cTitle)
+                    If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
+                        WinActivate, % "ahk_id " hwndID
+                        break
+                    }
+                }
             }
         }
     }
@@ -355,11 +363,14 @@ Cycle(direction)
             }
             hwndID := allWindows%A_Index%
             WinGet, state, MinMax, ahk_id %hwndID%
-            WinGetTitle, cTitle, ahk_id %hwndID%
-            desknum := VD.getDesktopNumOfWindow(cTitle)
-            If (state > -1 && cTitle != "" && desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID))
-            {
-                ValidWindows.push(hwndID)
+            If (state > -1) {
+                WinGetTitle, cTitle, ahk_id %hwndID%
+                If (cTitle != "") {
+                    desknum := VD.getDesktopNumOfWindow(cTitle)
+                    If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
+                        ValidWindows.push(hwndID)
+                    }
+                }
             }
             Tooltip, 
         }
