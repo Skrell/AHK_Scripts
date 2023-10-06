@@ -286,7 +286,7 @@ Return
 
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
-    If (cycling && cycleCount > 2 && (ValidWindows.length() > 0))
+    If (cycling && cycleCount > 2 && (ValidWindows.length() > 2))
     {
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
         WinActivate, % "ahk_id " ValidWindows[1]
@@ -326,10 +326,11 @@ Return
             }
         }
     }
-    ; tooltip, %cycleCount%
+    ; Tooltip, %cycleCount%
     cycleCount := 1
     cycling := false
     ValidWindows := []
+    Tooltip, 
 return
 
 !Tab::Cycle(forward)
@@ -360,11 +361,12 @@ Cycle(direction)
             {
                 ValidWindows.push(hwndID)
             }
+            Tooltip, 
         }
     }
     cycling := true
     
-    If (ValidWindows.length() > 2) 
+    If (ValidWindows.length() >= 2) 
     {
         If direction
         {
@@ -383,6 +385,9 @@ Cycle(direction)
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
         }
     }
+    
+    If (ValidWindows.length() <= 1)
+        Tooltip, Empty!
 }
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
