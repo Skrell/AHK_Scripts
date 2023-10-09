@@ -26,9 +26,12 @@ Global hwndVD
 Global forward := true
 Global cycling := false
 Global ValidWindows := []
+Global MinnedWindows := []
 Global cycleCount := 1
-Global initWinID
-Global nextWinID
+Global startHighlight := False
+Global border_thickness := 7
+Global AccentColorHex := 0x00FF22
+Global ShowMinned := False
 
 ;#include %A_ScriptDir%\RunAsAdmin.ahk
 
@@ -307,6 +310,7 @@ Return
     Else If (cycling && cycleCount <= 2)
     {
         WinGet, allWindows, List
+        Critical On
         loop % allWindows
         {
             If (A_Index == 1)
@@ -316,22 +320,60 @@ Return
             
             hwndID := allWindows%A_Index%
             WinGet, state, MinMax, ahk_id %hwndID%
-            If (state > -1) {
-                WinGetTitle, cTitle, ahk_id %hwndID%
-                If (cTitle != "") {
-                    desknum := VD.getDesktopNumOfWindow(cTitle)
-                    If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
-                        WinActivate, % "ahk_id " hwndID
-                        break
+            If (MonCount > 1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+            }
+            Else {
+                currentMonHasActWin := True
+            }
+            
+            If (currentMonHasActWin) {            
+                If (state > -1) {
+                    WinGetTitle, cTitle, ahk_id %hwndID%
+                    If (cTitle != "") {
+                        desknum := VD.getDesktopNumOfWindow(cTitle)
+                        If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
+                            WinActivate, % "ahk_id " hwndID
+                            break
+                        }
                     }
                 }
             }
         }
     }
     ; Tooltip, %cycleCount%
+    Critical Off
+    If (ShowMinned) {
+        Menu, windows, Add
+        Menu, windows, deleteAll
+        ShowMinned := False
+        For k, ft in MinnedWindows
+        {
+            splitEntry := StrSplit(ft , "^")
+            entry := splitEntry[1]
+            ahkid := splitEntry[2]
+            Menu, windows, Add, %entry%, ActivateWindow 
+            WinGet, Path, ProcessPath, ahk_id %ahkid%
+            Try 
+                Menu, windows, Icon, %entry%, %Path%,, 0
+            Catch 
+                Menu, windows, Icon, %entry%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
+        }
+        CoordMode, Mouse, Screen
+        MouseGetPos, Xm, Xy
+        CoordMode, Menu, Screen
+        ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
+        DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+        drawX := A_ScreenWidth/2
+        drawY := A_ScreenHeight/2
+        ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
+        Menu, windows, Delete
+    }
     cycleCount := 1
     cycling := false
     ValidWindows := []
+    MinnedWindows := []
     Gui, GUI4Boarder:Hide
     startHighlight := False
     Tooltip, 
@@ -345,36 +387,68 @@ Cycle(direction)
     Global cycling
     Global cycleCount
     Global ValidWindows
+    Global MinnedWindows
+    Global ShowMinned
+    Global MonCount
     
     If !cycling
     {
+        Critical On
         WinGet, allWindows, List
         loop % allWindows
         {
+            DetectHiddenWindows, On
             If !(GetKeyState("LAlt","P"))
             {
                 cycling := true
                 cycleCount := 1
+                Critical Off
+                DetectHiddenWindows, Off
                 Return
             }
             hwndID := allWindows%A_Index%
-             WinGet, state, MinMax, ahk_id %hwndID%
-            If (state > -1) {
+            WinGet, state, MinMax, ahk_id %hwndID%
+            If (MonCount > 1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+            }
+            Else {
+                currentMonHasActWin := True
+            }
+            
+            If (currentMonHasActWin) {
+                If (state > -1) {
+                    WinGetTitle, cTitle, ahk_id %hwndID%
+                    If (cTitle != "") {
+                        desknum := VD.getDesktopNumOfWindow(cTitle)
+                        If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
+                            ValidWindows.push(hwndID)
+                        }
+                    }
+                }
+            }
+                
+            If (state == -1) {
                 WinGetTitle, cTitle, ahk_id %hwndID%
                 If (cTitle != "") {
                     desknum := VD.getDesktopNumOfWindow(cTitle)
                     If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
-                        ValidWindows.push(hwndID)
+                        MinnedWindows.push( "Desktop " desknum " : " cTitle "^" hwndID)
                     }
                 }
             }
             Tooltip, 
         }
     }
+    Critical Off
     cycling := true
     
     If (cycleCount >= 2)
         startHighlight := True
+    
+    If (cycleCount == ValidWindows.MaxIndex()) {
+        ShowMinned := True
+    }
     
     If (ValidWindows.length() >= 2) 
     {
@@ -402,6 +476,8 @@ Cycle(direction)
     
     If (ValidWindows.length() <= 1)
         Tooltip, Empty!
+        
+    DetectHiddenWindows, Off
 }
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
@@ -410,7 +486,6 @@ Cycle(direction)
 InputBox, UserInput, Find and focus running windows, Type part of a window title to display a menu with all possible matches.., , 300, 140,
 if ErrorLevel
 {
-    ; MsgBox, CANCEL was pressed.
     return
 }   
 else
@@ -484,9 +559,7 @@ else
 return
 
 ActivateWindow:
-    
     Gui, ShadowFrFull2: Hide
-    DetectHiddenWindows, On
     SetTitleMatchMode, 3
     splitEntry := StrSplit(A_ThisMenuItem , ":", , 2)
     fulltitle := splitEntry[2]
@@ -548,39 +621,29 @@ DrawRect:
     ; To avoid the error message
     if (x="")
         return
-
-    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop 
-
+    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop +ToolWindow +E0x08000000 +E0x20 -Caption +Owner
     ; set the background for the GUI window 
     Gui, GUI4Boarder: Color, %AccentColorHex%
-
     ; remove thick window border of the GUI window
     Gui, GUI4Boarder: -Caption
-
     ; Retrieves the minimized/maximized state for a window.
     WinGet, notMedium , MinMax, A
-
     if (notMedium==0){
     ; 0: The window is neither minimized nor maximized.
-
         offset:=0
         outerX:=offset
         outerY:=offset
         outerX2:=w-offset
         outerY2:=h-offset
-
         innerX:=border_thickness+offset
         innerY:=border_thickness+offset
         innerX2:=w-border_thickness-offset
         innerY2:=h-border_thickness-offset
-
         newX:=x
         newY:=y
         newW:=w
         newH:=h
-
         WinSet, Region, %outerX%-%outerY% %outerX2%-%outerY% %outerX2%-%outerY2% %outerX%-%outerY2% %outerX%-%outerY%    %innerX%-%innerY% %innerX2%-%innerY% %innerX2%-%innerY2% %innerX%-%innerY2% %innerX%-%innerY% 
-
         Gui, GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NoActivate, 
         return
     } else {
@@ -588,7 +651,6 @@ DrawRect:
         return
     }
 Return
-
 ShellMessage( wParam,lParam ) {
   If (wParam == 5)  ;HSHELL_GETMINRECT
   {            
@@ -877,6 +939,8 @@ track() {
     WinGetClass, classId, ahk_id %hwndId%
     WinGet, hwndId, ID, A
     currentVD := VD.getCurrentDesktopNum()
+    SysGet, MonCount, MonitorCount
+    
     If (currentVd < VD.getCount())
         nextVD := currentVD + 1
     Else
@@ -1083,8 +1147,8 @@ GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
         SysGet, workArea, Monitor, % A_Index
         
         ;Get the position of the focus window
-        WinGetPos, X, Y, , , ahk_id %thisWindowHwnd%
-        X += 8
+        WinGetPos, X, Y, W, , ahk_id %thisWindowHwnd%
+        X += floor(W/2)
         Y += 8
         ;Check if the focus window in on the current monitor index
         if ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
