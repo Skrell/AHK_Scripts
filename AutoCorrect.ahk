@@ -296,8 +296,6 @@ Return
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
         WinActivate, % "ahk_id " ValidWindows[1]
         WinActivate, % "ahk_id " ValidWindows[cycleCount]
-        ; nextWinID := ValidWindows[1]
-        ; initWinID := ValidWindows[cycleCount]
         WinSet, Transparent, 50, % "ahk_id " ValidWindows[1]
         sleep 20
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
@@ -308,10 +306,6 @@ Return
     }
     Else If (cycling && cycleCount <= 2)
     {
-        ; WinActivate, % "ahk_id " nextWinID
-        ; temp := nextWinId
-        ; nextWinId := initWinId
-        ; initWinId := temp
         WinGet, allWindows, List
         loop % allWindows
         {
@@ -338,6 +332,8 @@ Return
     cycleCount := 1
     cycling := false
     ValidWindows := []
+    Gui, GUI4Boarder:Hide
+    startHighlight := False
     Tooltip, 
 return
 
@@ -362,7 +358,7 @@ Cycle(direction)
                 Return
             }
             hwndID := allWindows%A_Index%
-            WinGet, state, MinMax, ahk_id %hwndID%
+             WinGet, state, MinMax, ahk_id %hwndID%
             If (state > -1) {
                 WinGetTitle, cTitle, ahk_id %hwndID%
                 If (cTitle != "") {
@@ -377,6 +373,9 @@ Cycle(direction)
     }
     cycling := true
     
+    If (cycleCount >= 2)
+        startHighlight := True
+    
     If (ValidWindows.length() >= 2) 
     {
         If direction
@@ -386,6 +385,8 @@ Cycle(direction)
             Else
                 cycleCount += 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
+            If (startHighlight)
+                GoSub, DrawRect
         }
         Else
         {
@@ -394,6 +395,8 @@ Cycle(direction)
             Else
                 cycleCount -= 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
+            If (startHighlight)
+                GoSub, DrawRect
         }
     }
     
@@ -538,6 +541,53 @@ ActivateWindow:
         WinActivate, %fulltitle%
     }
 return
+
+DrawRect:
+    ; Get the current window's position 
+    WinGetPos, x, y, w, h, A
+    ; To avoid the error message
+    if (x="")
+        return
+
+    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop 
+
+    ; set the background for the GUI window 
+    Gui, GUI4Boarder: Color, %AccentColorHex%
+
+    ; remove thick window border of the GUI window
+    Gui, GUI4Boarder: -Caption
+
+    ; Retrieves the minimized/maximized state for a window.
+    WinGet, notMedium , MinMax, A
+
+    if (notMedium==0){
+    ; 0: The window is neither minimized nor maximized.
+
+        offset:=0
+        outerX:=offset
+        outerY:=offset
+        outerX2:=w-offset
+        outerY2:=h-offset
+
+        innerX:=border_thickness+offset
+        innerY:=border_thickness+offset
+        innerX2:=w-border_thickness-offset
+        innerY2:=h-border_thickness-offset
+
+        newX:=x
+        newY:=y
+        newW:=w
+        newH:=h
+
+        WinSet, Region, %outerX%-%outerY% %outerX2%-%outerY% %outerX2%-%outerY2% %outerX%-%outerY2% %outerX%-%outerY%    %innerX%-%innerY% %innerX2%-%innerY% %innerX2%-%innerY2% %innerX%-%innerY2% %innerX%-%innerY% 
+
+        Gui, GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NoActivate, 
+        return
+    } else {
+        WinSet, Region, 0-0 w0 h0
+        return
+    }
+Return
 
 ShellMessage( wParam,lParam ) {
   If (wParam == 5)  ;HSHELL_GETMINRECT
