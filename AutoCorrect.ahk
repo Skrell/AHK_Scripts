@@ -29,11 +29,10 @@ Global ValidWindows := []
 Global MinnedWindows := []
 Global cycleCount := 1
 Global startHighlight := False
-Global border_thickness := 7
+Global border_thickness := 3
 Global AccentColorHex := 0x00FF22
 Global ShowMinned := False
-
-;#include %A_ScriptDir%\RunAsAdmin.ahk
+Global hitTAB := False
 
 Process, Priority,, High
 Menu, Tray, Icon
@@ -294,89 +293,188 @@ Return
 
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
-    If (cycling && cycleCount > 2 && (ValidWindows.length() > 2))
-    {
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+    If !hitTAB
+        Return
+        
+    If (GetKeyState("Lbutton","P") && cycling && startHighlight && (ValidWindows.length() > 2)) {
+        MouseGetPos, , , lclickHwndId
+        GoSub, DrawRect
+        Send, {Lbutton Up}
+        If (lclickHwndId != ValidWindows[1])
+            WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+        If (lclickHwndId != ValidWindows[2])
+            WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+        If (lclickHwndId != ValidWindows[3])
+            WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+        
+        WinActivate, % "ahk_id " ValidWindows[3]
+        WinActivate, % "ahk_id " ValidWindows[2]
         WinActivate, % "ahk_id " ValidWindows[1]
-        WinActivate, % "ahk_id " ValidWindows[cycleCount]
-        WinSet, Transparent, 50, % "ahk_id " ValidWindows[1]
-        sleep 20
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        sleep 20
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        sleep 20
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+        
+        WinActivate, % "ahk_id " lclickHwndId
+
+        If (lclickHwndId != ValidWindows[1]) {
+            WinSet, Transparent, 50, % "ahk_id " ValidWindows[1]
+            sleep 10
+            WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+            sleep 10
+            WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+            sleep 10
+            WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+        }
+        If (lclickHwndId != ValidWindows[2]) {
+            WinSet, Transparent, 50, % "ahk_id " ValidWindows[2]
+            sleep 10
+            WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
+            sleep 10
+            WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
+            sleep 10
+            WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
+        }
+        If (lclickHwndId != ValidWindows[3]) {
+            WinSet, Transparent, 50, % "ahk_id " ValidWindows[3]
+            sleep 10
+            WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
+            sleep 10
+            WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
+            sleep 10
+            WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
+        }
+        
+        WinActivate, % "ahk_id " lclickHwndId
     }
-    Else If (cycling && cycleCount <= 2)
-    {
-        WinGet, allWindows, List
-        Critical On
-        loop % allWindows
+    Else {
+        If (cycling && startHighlight && (ValidWindows.length() > 2))
         {
-            If (A_Index == 1)
-                continue
-            If (A_Index > 10)
-                break
+            If (cycleCount != 1)
+                WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+            If (cycleCount != 2)
+                WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+            If (cycleCount != 3)
+                WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
             
-            hwndID := allWindows%A_Index%
-            WinGet, state, MinMax, ahk_id %hwndID%
-            If (MonCount > 1) {
-                currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
-            }
-            Else {
-                currentMonHasActWin := True
-            }
+            WinActivate, % "ahk_id " ValidWindows[3]
+            WinActivate, % "ahk_id " ValidWindows[2]
+            WinActivate, % "ahk_id " ValidWindows[1]
             
-            If (currentMonHasActWin) {            
-                If (state > -1) {
-                    WinGetTitle, cTitle, ahk_id %hwndID%
-                    If (cTitle != "") {
-                        desknum := VD.getDesktopNumOfWindow(cTitle)
-                        If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
-                            WinActivate, % "ahk_id " hwndID
-                            break
+            WinActivate, % "ahk_id " ValidWindows[cycleCount]
+            
+            If (cycleCount != 1) {
+                WinSet, Transparent, 50, % "ahk_id " ValidWindows[1]
+                sleep 10
+                WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+                sleep 10
+                WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+                sleep 10
+                WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+            } 
+            If (cycleCount != 2) {
+                WinSet, Transparent, 50, % "ahk_id " ValidWindows[2]
+                sleep 10
+                WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
+                sleep 10
+                WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
+                sleep 10
+                WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
+            }
+            If (cycleCOunt != 3) {
+                WinSet, Transparent, 50, % "ahk_id " ValidWindows[3]
+                sleep 10
+                WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
+                sleep 10
+                WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
+                sleep 10
+                WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
+            }
+            WinActivate, % "ahk_id " ValidWindows[cycleCount]
+        }
+        Else If (!cycling && !startHighlight)
+        {
+            skipChild := False
+            skipFirst := True
+            WinGetPos,,,,currActHeight, A
+            If (currActHeight < 375) {
+                skipChild := True
+            }
+
+            Critical On
+            WinGet, allWindows, List
+            loop % allWindows
+            {
+                hwndID := allWindows%A_Index%
+                
+                If (A_Index > 10)
+                    break
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+                }
+                Else {
+                    currentMonHasActWin := True
+                }
+                If (currentMonHasActWin) {
+                    WinGet, state, MinMax, ahk_id %hwndID%
+                    If (state > -1) {
+                        WinGetTitle, cTitle, ahk_id %hwndID%
+                        If (cTitle != "") {
+                            desknum := VD.getDesktopNumOfWindow(cTitle)
+                                
+                            If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
+                                If skipChild {
+                                    skipChild := False
+                                    continue
+                                }
+                                If skipFirst {
+                                    skipFirst := False
+                                    continue
+                                }
+                                Else {
+                                    WinActivate, % "ahk_id " hwndID
+                                    break
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-    }
-    ; Tooltip, %cycleCount%
-    Critical Off
-    If (ShowMinned) {
-        Menu, windows, Add
-        Menu, windows, deleteAll
-        ShowMinned := False
-        For k, ft in MinnedWindows
-        {
-            splitEntry := StrSplit(ft , "^")
-            entry := splitEntry[1]
-            ahkid := splitEntry[2]
-            Menu, windows, Add, %entry%, ActivateWindow 
-            WinGet, Path, ProcessPath, ahk_id %ahkid%
-            Try 
-                Menu, windows, Icon, %entry%, %Path%,, 0
-            Catch 
-                Menu, windows, Icon, %entry%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
+
+        Critical Off
+        If (ShowMinned) {
+            Menu, windows, Add
+            Menu, windows, deleteAll
+            ShowMinned := False
+            For k, ft in MinnedWindows
+            {
+                splitEntry := StrSplit(ft , "^")
+                entry := splitEntry[1]
+                ahkid := splitEntry[2]
+                Menu, windows, Add, %entry%, ActivateWindow 
+                WinGet, Path, ProcessPath, ahk_id %ahkid%
+                Try 
+                    Menu, windows, Icon, %entry%, %Path%,, 0
+                Catch 
+                    Menu, windows, Icon, %entry%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
+            }
+            CoordMode, Mouse, Screen
+            MouseGetPos, Xm, Xy
+            CoordMode, Menu, Screen
+            ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
+            DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+            drawX := A_ScreenWidth/2
+            drawY := A_ScreenHeight/2
+            ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
+            Menu, windows, Delete
         }
-        CoordMode, Mouse, Screen
-        MouseGetPos, Xm, Xy
-        CoordMode, Menu, Screen
-        ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
-        DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-        drawX := A_ScreenWidth/2
-        drawY := A_ScreenHeight/2
-        ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
-        Menu, windows, Delete
     }
-    cycleCount := 1
-    cycling := false
-    ValidWindows := []
-    MinnedWindows := []
-    Gui, GUI4Boarder:Hide
+    
+    cycleCount     := 1
+    cycling        := false
+    ValidWindows   := []
+    MinnedWindows  := []
     startHighlight := False
-    Tooltip, 
+    Gui, GUI4Boarder:Hide
+    ; Tooltip, 
 return
 
 !Tab::Cycle(forward)
@@ -390,24 +488,32 @@ Cycle(direction)
     Global MinnedWindows
     Global ShowMinned
     Global MonCount
+    Global startHighlight
+    Global hitTAB
     
+    hitTAB := True
     If !cycling
     {
         Critical On
+        DetectHiddenWindows, On
+        skipChild := False
+        skipFirst := True
+        WinGetPos,,,,currActHeight, A
+        If (currActHeight < 375) {
+            skipChild := True
+        }
+            
         WinGet, allWindows, List
         loop % allWindows
         {
-            DetectHiddenWindows, On
             If !(GetKeyState("LAlt","P"))
             {
-                cycling := true
-                cycleCount := 1
                 Critical Off
                 DetectHiddenWindows, Off
                 Return
             }
+            
             hwndID := allWindows%A_Index%
-            WinGet, state, MinMax, ahk_id %hwndID%
             If (MonCount > 1) {
                 currentMon := MWAGetMonitorMouseIsIn()
                 currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
@@ -417,31 +523,36 @@ Cycle(direction)
             }
             
             If (currentMonHasActWin) {
-                If (state > -1) {
-                    WinGetTitle, cTitle, ahk_id %hwndID%
-                    If (cTitle != "") {
+                WinGetTitle, cTitle, ahk_id %hwndID%
+                If (cTitle != "") {
+                    WinGet, state, MinMax, ahk_id %hwndID%
+                    If (state > -1) {
                         desknum := VD.getDesktopNumOfWindow(cTitle)
                         If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
                             ValidWindows.push(hwndID)
+                            If (ValidWindows.MaxIndex() == 2) {
+                                WinActivate, % "ahk_id " hwndID
+                                cycling := true
+                            }
+                        }
+                    }
+                    Else If (state == -1) {
+                        desknum := VD.getDesktopNumOfWindow(cTitle)
+                        If (desknum == VD.getCurrentDesktopNum()) {
+                            MinnedWindows.push( "Desktop " desknum " : " cTitle "^" hwndID)
                         }
                     }
                 }
             }
                 
-            If (state == -1) {
-                WinGetTitle, cTitle, ahk_id %hwndID%
-                If (cTitle != "") {
-                    desknum := VD.getDesktopNumOfWindow(cTitle)
-                    If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
-                        MinnedWindows.push( "Desktop " desknum " : " cTitle "^" hwndID)
-                    }
-                }
-            }
             Tooltip, 
         }
+        WinGetPos,,,,cHeight, A
+        If (cHeight < 375)
+            cycleCount += 1
     }
+        
     Critical Off
-    cycling := true
     
     If (cycleCount >= 2)
         startHighlight := True
@@ -630,13 +741,13 @@ DrawRect:
     WinGet, notMedium , MinMax, A
     if (notMedium==0){
     ; 0: The window is neither minimized nor maximized.
-        offset:=0
+        offset:=7
         outerX:=offset
-        outerY:=offset
+        outerY:=0
         outerX2:=w-offset
         outerY2:=h-offset
         innerX:=border_thickness+offset
-        innerY:=border_thickness+offset
+        innerY:=border_thickness
         innerX2:=w-border_thickness-offset
         innerY2:=h-border_thickness-offset
         newX:=x
@@ -651,6 +762,7 @@ DrawRect:
         return
     }
 Return
+
 ShellMessage( wParam,lParam ) {
   If (wParam == 5)  ;HSHELL_GETMINRECT
   {            
@@ -715,6 +827,10 @@ IsWindow(hWnd){
     if (szClass = "TApplication") {
         return false
     }
+    WinGetPos,,,,H, ahk_id %hWnd%
+    if (H < 375) {
+        return false
+    }
     return true
 }
 
@@ -722,6 +838,9 @@ IsWindow(hWnd){
 #If moving
 ~RButton::Return
 #If
+
+; ~LButton::
+; Return
 
 #If VolumeHover()
 LButton::
