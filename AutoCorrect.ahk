@@ -30,7 +30,7 @@ Global MinnedWindows := []
 Global cycleCount := 1
 Global startHighlight := False
 Global border_thickness := 3
-Global AccentColorHex := 0x00FF22
+Global AccentColorHex := 0xFF00FF
 Global ShowMinned := False
 Global hitTAB := False
 
@@ -100,7 +100,7 @@ Loop ; WARNING will loop forever until process is killed.
 }
 
 CapsLock:: Send {Delete}
-CapsLock & Space:: Send {Backspace}
+!CapsLock:: Send {Backspace}
 +!i::   SendInput {SHIFT down}{UP}{SHIFT up}
 +!k::   SendInput {SHIFT down}{DOWN}{SHIFT up}
 +!,::   SendInput {SHIFT down}{DOWN}{SHIFT up}
@@ -289,6 +289,112 @@ Return
 Return
 
 ;============================================================================================================================
+FadeInWin1:
+    MouseGetPos, , , lclickHwndId
+
+    If (lclickHwndId != ValidWindows[1])
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+    If (lclickHwndId != ValidWindows[2])
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+    If (lclickHwndId != ValidWindows[3])
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+    
+    WinActivate, % "ahk_id " ValidWindows[3]
+    WinActivate, % "ahk_id " ValidWindows[2]
+    WinActivate, % "ahk_id " ValidWindows[1]
+    
+    WinActivate, % "ahk_id " lclickHwndId
+
+    If (lclickHwndId != ValidWindows[1]) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+    }
+    If (lclickHwndId != ValidWindows[2]) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
+    }
+    If (lclickHwndId != ValidWindows[3]) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
+    }
+    If (ValidWindows.MaxIndex() >= 4 && lclickHwndId != ValidWindows[4]) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
+    }
+Return
+
+FadeInWin2:
+    If (cycleCount != 1)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+    If (cycleCount != 2)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+    If (cycleCount != 3)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+    
+    WinActivate, % "ahk_id " ValidWindows[3]
+    WinActivate, % "ahk_id " ValidWindows[2]
+    WinActivate, % "ahk_id " ValidWindows[1]
+    
+    WinActivate, % "ahk_id " ValidWindows[cycleCount]
+    
+    If (cycleCount != 1) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+    } 
+    If (cycleCount != 2) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
+    }
+    If (cycleCount != 3) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
+    }
+    If (ValidWindows.MaxIndex() >= 4 && cycleCount != 4) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
+    }
+Return
+
 #MaxThreadsPerHotkey 1
 
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
@@ -297,95 +403,15 @@ Return
         Return
         
     If (GetKeyState("Lbutton","P") && cycling && startHighlight && (ValidWindows.length() > 2)) {
-        MouseGetPos, , , lclickHwndId
         GoSub, DrawRect
         Send, {Lbutton Up}
-        If (lclickHwndId != ValidWindows[1])
-            WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-        If (lclickHwndId != ValidWindows[2])
-            WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-        If (lclickHwndId != ValidWindows[3])
-            WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
-        
-        WinActivate, % "ahk_id " ValidWindows[3]
-        WinActivate, % "ahk_id " ValidWindows[2]
-        WinActivate, % "ahk_id " ValidWindows[1]
-        
-        WinActivate, % "ahk_id " lclickHwndId
-
-        If (lclickHwndId != ValidWindows[1]) {
-            WinSet, Transparent, 50, % "ahk_id " ValidWindows[1]
-            sleep 10
-            WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-            sleep 10
-            WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-            sleep 10
-            WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
-        }
-        If (lclickHwndId != ValidWindows[2]) {
-            WinSet, Transparent, 50, % "ahk_id " ValidWindows[2]
-            sleep 10
-            WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-            sleep 10
-            WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-            sleep 10
-            WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
-        }
-        If (lclickHwndId != ValidWindows[3]) {
-            WinSet, Transparent, 50, % "ahk_id " ValidWindows[3]
-            sleep 10
-            WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-            sleep 10
-            WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-            sleep 10
-            WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
-        }
-        
+        GoSub, FadeInWin1
         WinActivate, % "ahk_id " lclickHwndId
     }
     Else {
         If (cycling && startHighlight && (ValidWindows.length() > 2))
         {
-            If (cycleCount != 1)
-                WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-            If (cycleCount != 2)
-                WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-            If (cycleCount != 3)
-                WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
-            
-            WinActivate, % "ahk_id " ValidWindows[3]
-            WinActivate, % "ahk_id " ValidWindows[2]
-            WinActivate, % "ahk_id " ValidWindows[1]
-            
-            WinActivate, % "ahk_id " ValidWindows[cycleCount]
-            
-            If (cycleCount != 1) {
-                WinSet, Transparent, 50, % "ahk_id " ValidWindows[1]
-                sleep 10
-                WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-                sleep 10
-                WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-                sleep 10
-                WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
-            } 
-            If (cycleCount != 2) {
-                WinSet, Transparent, 50, % "ahk_id " ValidWindows[2]
-                sleep 10
-                WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-                sleep 10
-                WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-                sleep 10
-                WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
-            }
-            If (cycleCOunt != 3) {
-                WinSet, Transparent, 50, % "ahk_id " ValidWindows[3]
-                sleep 10
-                WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-                sleep 10
-                WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-                sleep 10
-                WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
-            }
+            GoSub, FadeInWin2
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
         }
         Else If (!cycling && !startHighlight)
@@ -430,6 +456,7 @@ Return
                                 }
                                 Else {
                                     WinActivate, % "ahk_id " hwndID
+                                    GoSub, DrawRect
                                     break
                                 }
                             }
@@ -440,7 +467,26 @@ Return
         }
 
         Critical Off
-        If (ShowMinned) {
+        WinGet, actWndID, ID, A
+        If (ShowMinned && actWndID == ValidWindows[1]) {
+            DetectHiddenWindows, On
+            WinGet, allWindows, List
+            loop % allWindows
+            {   
+                hwndID := allWindows%A_Index%
+                WinGet, state, MinMax, ahk_id %hwndID%
+                If (state == -1) {
+                    WinGetTitle, cTitle, ahk_id %hwndID%
+                    If (cTitle != "") {
+                        desknum := VD.getDesktopNumOfWindow(cTitle)
+                        If (desknum == VD.getCurrentDesktopNum()) {
+                            MinnedWindows.push( "Desktop " desknum " : " cTitle "^" hwndID)
+                        }
+                    }
+                }
+            }
+            DetectHiddenWindows, Off
+            
             Menu, windows, Add
             Menu, windows, deleteAll
             ShowMinned := False
@@ -469,11 +515,12 @@ Return
     }
     
     cycleCount     := 1
-    cycling        := false
     ValidWindows   := []
     MinnedWindows  := []
+    cycling        := false
     startHighlight := False
-    Gui, GUI4Boarder:Hide
+    hitTAB         := False
+    GoSub, ClearRect
     ; Tooltip, 
 return
 
@@ -495,7 +542,7 @@ Cycle(direction)
     If !cycling
     {
         Critical On
-        DetectHiddenWindows, On
+        DetectHiddenWindows, Off
         skipChild := False
         skipFirst := True
         WinGetPos,,,,currActHeight, A
@@ -509,7 +556,6 @@ Cycle(direction)
             If !(GetKeyState("LAlt","P"))
             {
                 Critical Off
-                DetectHiddenWindows, Off
                 Return
             }
             
@@ -532,14 +578,9 @@ Cycle(direction)
                             ValidWindows.push(hwndID)
                             If (ValidWindows.MaxIndex() == 2) {
                                 WinActivate, % "ahk_id " hwndID
+                                GoSub, DrawRect
                                 cycling := true
                             }
-                        }
-                    }
-                    Else If (state == -1) {
-                        desknum := VD.getDesktopNumOfWindow(cTitle)
-                        If (desknum == VD.getCurrentDesktopNum()) {
-                            MinnedWindows.push( "Desktop " desknum " : " cTitle "^" hwndID)
                         }
                     }
                 }
@@ -588,11 +629,85 @@ Cycle(direction)
     If (ValidWindows.length() <= 1)
         Tooltip, Empty!
         
-    DetectHiddenWindows, Off
 }
 
-; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
+ClearRect:
+    sleep 200
+    If hitTAB
+        Return
+    WinSet, Transparent, 225, ahk_id %Highlighter%
+    If hitTAB
+        Return
+    sleep 100
+    WinSet, Transparent, 200, ahk_id %Highlighter%
+    If hitTAB
+        Return
+    sleep 50
+    WinSet, Transparent, 175, ahk_id %Highlighter%
+    If hitTAB
+        Return
+    sleep 50
+    WinSet, Transparent, 150, ahk_id %Highlighter%
+    If hitTAB
+        Return
+    sleep 50
+    WinSet, Transparent, 125, ahk_id %Highlighter%
+    If hitTAB
+        Return
+    sleep 50
+    WinSet, Transparent, 100, ahk_id %Highlighter%
+    If hitTAB
+        Return
+    sleep 50
+    WinSet, Transparent, 50, ahk_id %Highlighter%
+    If hitTAB
+        Return
+    sleep 50
+    WinSet, Region, 0-0 w0 h0
+    Gui, GUI4Boarder: Hide
+Return
 
+; https://www.autohotkey.com/boards/viewtopic.php?t=110505
+DrawRect:
+    WinSet, Transparent, 255, ahk_id %Highlighter%
+    ; Get the current window's position 
+    WinGetPos, x, y, w, h, A
+    ; To avoid the error message
+    if (x="")
+        return
+    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop +ToolWindow +E0x08000000 +E0x20 -Caption +Owner hWndHighlighter
+    ; set the background for the GUI window 
+    Gui, GUI4Boarder: Color, %AccentColorHex%
+    ; remove thick window border of the GUI window
+    Gui, GUI4Boarder: -Caption
+    ; Retrieves the minimized/maximized state for a window.
+    WinGet, notMedium , MinMax, A
+    if (notMedium==0){
+    ; 0: The window is neither minimized nor maximized.
+        offset:=7
+        outerX:=offset
+        outerY:=0
+        outerX2:=w-offset
+        outerY2:=h-offset
+        innerX:=border_thickness+offset
+        innerY:=border_thickness
+        innerX2:=w-border_thickness-offset
+        innerY2:=h-border_thickness-offset
+        newX:=x
+        newY:=y
+        newW:=w
+        newH:=h
+        WinSet, Region, %outerX%-%outerY% %outerX2%-%outerY% %outerX2%-%outerY2% %outerX%-%outerY2% %outerX%-%outerY%    %innerX%-%innerY% %innerX2%-%innerY% %innerX2%-%innerY2% %innerX%-%innerY2% %innerX%-%innerY% 
+        Gui, GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NoActivate,
+        WinSet, Transparent, 255, ahk_id %Highlighter%
+        return
+    } else {
+        WinSet, Region, 0-0 w0 h0
+        return
+    }
+Return
+
+; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
 InputBox, UserInput, Find and focus running windows, Type part of a window title to display a menu with all possible matches.., , 300, 140,
 if ErrorLevel
@@ -725,43 +840,6 @@ ActivateWindow:
         WinActivate, %fulltitle%
     }
 return
-
-DrawRect:
-    ; Get the current window's position 
-    WinGetPos, x, y, w, h, A
-    ; To avoid the error message
-    if (x="")
-        return
-    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop +ToolWindow +E0x08000000 +E0x20 -Caption +Owner
-    ; set the background for the GUI window 
-    Gui, GUI4Boarder: Color, %AccentColorHex%
-    ; remove thick window border of the GUI window
-    Gui, GUI4Boarder: -Caption
-    ; Retrieves the minimized/maximized state for a window.
-    WinGet, notMedium , MinMax, A
-    if (notMedium==0){
-    ; 0: The window is neither minimized nor maximized.
-        offset:=7
-        outerX:=offset
-        outerY:=0
-        outerX2:=w-offset
-        outerY2:=h-offset
-        innerX:=border_thickness+offset
-        innerY:=border_thickness
-        innerX2:=w-border_thickness-offset
-        innerY2:=h-border_thickness-offset
-        newX:=x
-        newY:=y
-        newW:=w
-        newH:=h
-        WinSet, Region, %outerX%-%outerY% %outerX2%-%outerY% %outerX2%-%outerY2% %outerX%-%outerY2% %outerX%-%outerY%    %innerX%-%innerY% %innerX2%-%innerY% %innerX2%-%innerY2% %innerX%-%innerY2% %innerX%-%innerY% 
-        Gui, GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NoActivate, 
-        return
-    } else {
-        WinSet, Region, 0-0 w0 h0
-        return
-    }
-Return
 
 ShellMessage( wParam,lParam ) {
   If (wParam == 5)  ;HSHELL_GETMINRECT
