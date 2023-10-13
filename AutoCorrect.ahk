@@ -818,11 +818,11 @@ ActivateWindow:
     cdt := VD.getCurrentDesktopNum()
     desknum := VD.getDesktopNumOfWindow(fulltitle)
     WinGetPos, vwx,vwy,vww,, %fulltitle%
-    WinSet, Transparent, 0, %fulltitle%
-    VD.MoveWindowToCurrentDesktop(fulltitle)
     
     if (vwx > 0 && desknum < cdt)
     {
+        WinSet, Transparent, 0, %fulltitle%
+        VD.MoveWindowToCurrentDesktop(fulltitle)
         WinRestore , %fulltitle%
         WinActivate, %fulltitle%
         offscreenX := -1*vww
@@ -842,6 +842,8 @@ ActivateWindow:
     }
     else if (vwx > 0 && desknum > cdt)
     {
+        WinSet, Transparent, 0, %fulltitle%
+        VD.MoveWindowToCurrentDesktop(fulltitle)
         WinRestore , %fulltitle%
         WinActivate, %fulltitle%
         offscreenX := A_ScreenWidth
