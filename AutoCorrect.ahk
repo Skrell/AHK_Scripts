@@ -811,7 +811,7 @@ ActivateWindow:
     DetectHiddenWindows, On
     Gui, ShadowFrFull2: Hide
     SetTitleMatchMode, 3
-    splitEntry := StrSplit(A_ThisMenuItem , "-", , 2)
+    splitEntry := StrSplit(A_ThisMenuItem , ":", , 2)
     fulltitle := splitEntry[2]
     fulltitle := Trim(fulltitle)
     
