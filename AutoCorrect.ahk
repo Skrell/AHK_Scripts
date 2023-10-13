@@ -818,53 +818,71 @@ ActivateWindow:
     cdt := VD.getCurrentDesktopNum()
     desknum := VD.getDesktopNumOfWindow(fulltitle)
     WinGetPos, vwx,vwy,vww,, %fulltitle%
+    WinGet, vState, MinMax, %fulltitle%
     
-    if (vwx > 0 && desknum < cdt)
+    if (desknum < cdt)
     {
         WinSet, Transparent, 0, %fulltitle%
         VD.MoveWindowToCurrentDesktop(fulltitle)
-        WinRestore , %fulltitle%
-        WinActivate, %fulltitle%
-        offscreenX := -1*vww
-        
-        WinMove, %fulltitle%,, %offscreenX%, , , ,
-       
-        WinSet, Transparent, 255, %fulltitle%
-        loopCount := (vwx+abs(offscreenX))/100
+        if (vState > -1) {
+            WinRestore , %fulltitle%
+            WinActivate, %fulltitle%
+            offscreenX := -1*vww
+            
+            WinMove, %fulltitle%,, %offscreenX%, , , ,
+           
+            WinSet, Transparent, 255, %fulltitle%
+            loopCount := (vwx+abs(offscreenX))/100
 
-        loop, %loopCount%
-        {
-            offscreenX := offscreenX + 100
-            WinMove, %fulltitle%,, offscreenX, , , , 
-            sleep 1
+            loop, %loopCount%
+            {
+                offscreenX := offscreenX + 100
+                WinMove, %fulltitle%,, offscreenX, , , , 
+                sleep 1
+            }
+            WinMove, %fulltitle%,, vwx, , , , 
         }
-        WinMove, %fulltitle%,, vwx, , , , 
+        else {
+            WinSet, Transparent, 255, %fulltitle%
+            sleep 500
+            WinRestore , %fulltitle%
+            WinActivate, %fulltitle%
+        }
     }
-    else if (vwx > 0 && desknum > cdt)
+    else if (desknum > cdt)
     {
         WinSet, Transparent, 0, %fulltitle%
         VD.MoveWindowToCurrentDesktop(fulltitle)
-        WinRestore , %fulltitle%
-        WinActivate, %fulltitle%
-        offscreenX := A_ScreenWidth
-        
-        WinMove, %fulltitle%,, %offscreenX%, , , ,
-        
-        WinSet, Transparent, 255, %fulltitle%
-        loopCount := (A_ScreenWidth-vwx)/100
-        ; tooltip, %loopCount%
-        loop, %loopCount%
-        {
-            offscreenX := offscreenX - 100
-            WinMove, %fulltitle%,, offscreenX, , , , 
-            sleep 1
+        if (vState > -1) {
+            WinRestore , %fulltitle%
+            WinActivate, %fulltitle%
+            offscreenX := A_ScreenWidth
+            
+            WinMove, %fulltitle%,, %offscreenX%, , , ,
+            
+            WinSet, Transparent, 255, %fulltitle%
+            loopCount := (A_ScreenWidth-vwx)/100
+            ; tooltip, %loopCount%
+            loop, %loopCount%
+            {
+                offscreenX := offscreenX - 100
+                WinMove, %fulltitle%,, offscreenX, , , , 
+                sleep 1
+            }
+            WinMove, %fulltitle%,, vwx, , , , 
         }
-        WinMove, %fulltitle%,, vwx, , , , 
+        else {
+            WinSet, Transparent, 255, %fulltitle%
+            sleep 500
+            WinRestore , %fulltitle%
+            WinActivate, %fulltitle%
+        }
     }
     else
     {
-        VD.MoveWindowToCurrentDesktop(fulltitle)
-        WinRestore , %fulltitle%
+        ; VD.MoveWindowToCurrentDesktop(fulltitle)
+        if (vState == -1)
+            WinRestore , %fulltitle%
         WinActivate, %fulltitle%
     }
     DetectHiddenWindows, Off
