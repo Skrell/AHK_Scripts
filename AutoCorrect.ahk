@@ -882,7 +882,6 @@ ActivateWindow:
     }
     else
     {
-        VD.MoveWindowToCurrentDesktop(fulltitle)
         if (vState == -1) {
             WinRestore , %fulltitle%
         }
