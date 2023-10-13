@@ -480,7 +480,7 @@ Return
                     If (cTitle != "") {
                         desknum := VD.getDesktopNumOfWindow(cTitle)
                         If (desknum == VD.getCurrentDesktopNum()) {
-                            MinnedWindows.push( "Desktop " desknum " : " cTitle "^" hwndID)
+                            MinnedWindows.push( "Desktop " desknum " - " cTitle "^" hwndID)
                         }
                     }
                 }
@@ -744,6 +744,7 @@ else
     {
         this_ID := id%A_Index%
         WinGetTitle, title, ahk_id %this_ID%
+        WinGet, procName, ProcessName , ahk_id %this_ID%
         
         If (title = "" || title = "Microsoft Text Input Application")
             continue            
@@ -754,7 +755,7 @@ else
         desknum := VD.getDesktopNumOfWindow(title)
         If desknum < 0
             continue
-        finalTitle := % "Desktop " desknum " : " title "^" this_ID
+        finalTitle := % "Desktop " desknum " / " procName " / " title "^" this_ID
         winArray.Push(finalTitle)
     }
     
@@ -770,15 +771,22 @@ else
     
     For k, ft in winArraySort
     {
-        splitEntry := StrSplit(ft , "^")
-        entry := splitEntry[1]
-        ahkid := splitEntry[2]
-        Menu, windows, Add, %entry%, ActivateWindow 
+        splitEntry1 := StrSplit(ft , "^")
+        entry := splitEntry1[1]
+        ahkid := splitEntry1[2]
+        
+        splitEntry2  := StrSplit(entry, "/")
+        desktopEntry := splitEntry2[1]
+        procEntry    := splitEntry2[2]
+        titleEntry   := splitEntry2[3]
+        
+        finalEntry   := % desktopEntry " - " titleEntry
+        Menu, windows, Add, %finalEntry%, ActivateWindow 
         WinGet, Path, ProcessPath, ahk_id %ahkid%
         Try 
-            Menu, windows, Icon, %entry%, %Path%,, 0
+            Menu, windows, Icon, %finalEntry%, %Path%,, 0
         Catch 
-            Menu, windows, Icon, %entry%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
+            Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
     }
     CoordMode, Mouse, Screen
     MouseGetPos, Xm, Xy
@@ -800,27 +808,30 @@ else
 return
 
 ActivateWindow:
+    DetectHiddenWindows, On
     Gui, ShadowFrFull2: Hide
     SetTitleMatchMode, 3
-    splitEntry := StrSplit(A_ThisMenuItem , ":", , 2)
+    splitEntry := StrSplit(A_ThisMenuItem , "-", , 2)
     fulltitle := splitEntry[2]
     fulltitle := Trim(fulltitle)
-    WinGetPos, vwx,vwy,vww,, %fulltitle%
     
     cdt := VD.getCurrentDesktopNum()
     desknum := VD.getDesktopNumOfWindow(fulltitle)
-   
+    WinGetPos, vwx,vwy,vww,, %fulltitle%
+    WinSet, Transparent, 0, %fulltitle%
+    VD.MoveWindowToCurrentDesktop(fulltitle)
+    
     if (vwx > 0 && desknum < cdt)
     {
-        WinSet, Transparent, 0, %fulltitle%
-        VD.MoveWindowToCurrentDesktop(fulltitle)
         WinRestore , %fulltitle%
         WinActivate, %fulltitle%
         offscreenX := -1*vww
+        
         WinMove, %fulltitle%,, %offscreenX%, , , ,
+       
         WinSet, Transparent, 255, %fulltitle%
         loopCount := (vwx+abs(offscreenX))/100
-        ; tooltip, %loopCount%
+
         loop, %loopCount%
         {
             offscreenX := offscreenX + 100
@@ -831,12 +842,12 @@ ActivateWindow:
     }
     else if (vwx > 0 && desknum > cdt)
     {
-        WinSet, Transparent, 0, %fulltitle%
-        VD.MoveWindowToCurrentDesktop(fulltitle)
         WinRestore , %fulltitle%
         WinActivate, %fulltitle%
         offscreenX := A_ScreenWidth
+        
         WinMove, %fulltitle%,, %offscreenX%, , , ,
+        
         WinSet, Transparent, 255, %fulltitle%
         loopCount := (A_ScreenWidth-vwx)/100
         ; tooltip, %loopCount%
@@ -854,6 +865,7 @@ ActivateWindow:
         WinRestore , %fulltitle%
         WinActivate, %fulltitle%
     }
+    DetectHiddenWindows, Off
 return
 
 ShellMessage( wParam,lParam ) {
@@ -921,7 +933,8 @@ IsWindow(hWnd){
         return false
     }
     WinGetPos,,,,H, ahk_id %hWnd%
-    if (H < 375) {
+    WinGet, state, MinMax, ahk_id %hWnd%
+    if (H < 375 && state > -1) {
         return false
     }
     return true
