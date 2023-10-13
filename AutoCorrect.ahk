@@ -480,7 +480,7 @@ Return
                     If (cTitle != "") {
                         desknum := VD.getDesktopNumOfWindow(cTitle)
                         If (desknum == VD.getCurrentDesktopNum()) {
-                            MinnedWindows.push( "Desktop " desknum " - " cTitle "^" hwndID)
+                            MinnedWindows.push( "Desktop " desknum " : " cTitle "^" hwndID)
                         }
                     }
                 }
@@ -780,7 +780,7 @@ else
         procEntry    := splitEntry2[2]
         titleEntry   := splitEntry2[3]
         
-        finalEntry   := % desktopEntry " - " titleEntry
+        finalEntry   := % desktopEntry " : " titleEntry
         Menu, windows, Add, %finalEntry%, ActivateWindow 
         WinGet, Path, ProcessPath, ahk_id %ahkid%
         Try 
