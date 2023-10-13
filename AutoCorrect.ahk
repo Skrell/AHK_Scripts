@@ -843,8 +843,9 @@ ActivateWindow:
             WinMove, %fulltitle%,, vwx, , , , 
         }
         else {
-            WinSet, Transparent, 255, %fulltitle%
             sleep 500
+            WinMinimize, %fulltitle% 
+            WinSet, Transparent, 255, %fulltitle%
             WinRestore , %fulltitle%
             WinActivate, %fulltitle%
         }
@@ -872,8 +873,9 @@ ActivateWindow:
             WinMove, %fulltitle%,, vwx, , , , 
         }
         else {
-            WinSet, Transparent, 255, %fulltitle%
             sleep 500
+            WinMinimize, %fulltitle% 
+            WinSet, Transparent, 255, %fulltitle%
             WinRestore , %fulltitle%
             WinActivate, %fulltitle%
         }
