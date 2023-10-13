@@ -880,9 +880,10 @@ ActivateWindow:
     }
     else
     {
-        ; VD.MoveWindowToCurrentDesktop(fulltitle)
-        if (vState == -1)
+        VD.MoveWindowToCurrentDesktop(fulltitle)
+        if (vState == -1) {
             WinRestore , %fulltitle%
+        }
         WinActivate, %fulltitle%
     }
     DetectHiddenWindows, Off
