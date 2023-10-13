@@ -395,7 +395,7 @@ FadeInWin2:
     }
 Return
 
-#MaxThreadsPerHotkey 1
+; #MaxThreadsPerHotkey 1
 
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
@@ -631,37 +631,52 @@ Cycle(direction)
         
 }
 
+; #MaxThreadsPerHotkey 2
 ClearRect:
     sleep 200
     If hitTAB
         Return
     WinSet, Transparent, 225, ahk_id %Highlighter%
-    If hitTAB
+    If hitTAB {
+        Gui, GUI4Boarder: Hide
         Return
+    }
     sleep 100
     WinSet, Transparent, 200, ahk_id %Highlighter%
-    If hitTAB
+    If hitTAB {
+        Gui, GUI4Boarder: Hide
         Return
+    }
     sleep 50
     WinSet, Transparent, 175, ahk_id %Highlighter%
-    If hitTAB
+    If hitTAB {
+        Gui, GUI4Boarder: Hide
         Return
+    }
     sleep 50
     WinSet, Transparent, 150, ahk_id %Highlighter%
-    If hitTAB
+    If hitTAB {
+        Gui, GUI4Boarder: Hide
         Return
+    }
     sleep 50
     WinSet, Transparent, 125, ahk_id %Highlighter%
-    If hitTAB
+    If hitTAB {
+        Gui, GUI4Boarder: Hide
         Return
+    }
     sleep 50
     WinSet, Transparent, 100, ahk_id %Highlighter%
-    If hitTAB
+    If hitTAB {
+        Gui, GUI4Boarder: Hide
         Return
+    }
     sleep 50
     WinSet, Transparent, 50, ahk_id %Highlighter%
-    If hitTAB
+    If hitTAB {
+        Gui, GUI4Boarder: Hide
         Return
+    }
     sleep 50
     WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
