@@ -403,10 +403,13 @@ Return
         Return
         
     If (GetKeyState("Lbutton","P") && cycling && startHighlight && (ValidWindows.length() > 2)) {
+        BlockInput, MouseMove
         GoSub, DrawRect
         Send, {Lbutton Up}
         GoSub, FadeInWin1
         WinActivate, % "ahk_id " lclickHwndId
+        Send, {Lbutton Down}
+        BlockInput, MouseMoveOff
     }
     Else {
         If (cycling && startHighlight && (ValidWindows.length() > 2))
