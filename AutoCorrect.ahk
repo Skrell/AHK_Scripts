@@ -24,7 +24,7 @@ Global ComboActive := False
 Global skipCheck := False
 Global hwndVD
 Global forward := true
-Global cycling := false
+Global cycling := False
 Global ValidWindows := []
 Global MinnedWindows := []
 Global cycleCount := 1
@@ -33,6 +33,7 @@ Global border_thickness := 3
 Global AccentColorHex := 0xFF00FF
 Global ShowMinned := False
 Global hitTAB := False
+Global cancelAltTab := False
 
 Process, Priority,, High
 Menu, Tray, Icon
@@ -101,6 +102,7 @@ Loop ; WARNING will loop forever until process is killed.
 
 CapsLock:: Send {Delete}
 !CapsLock:: Send {Backspace}
+!;:: Send, {end}
 +!i::   SendInput {SHIFT down}{UP}{SHIFT up}
 +!k::   SendInput {SHIFT down}{DOWN}{SHIFT up}
 +!,::   SendInput {SHIFT down}{DOWN}{SHIFT up}
@@ -124,7 +126,7 @@ If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300) {
 }
 Return
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
-#MaxThreadsPerHotkey 2
+#MaxThreadsPerHotkey 3
 !1::
   HideTrayTip() 
   If GetKeyState("Lbutton", "P")
@@ -395,6 +397,16 @@ FadeInWin2:
     }
 Return
 
+ResetWins:
+    If (ValidWindows.MaxIndex() >= 4)
+        WinActivate, % "ahk_id " ValidWindows[4]
+    If (ValidWindows.MaxIndex() >= 3)
+        WinActivate, % "ahk_id " ValidWindows[3]
+    If (ValidWindows.MaxIndex() >= 2)
+        WinActivate, % "ahk_id " ValidWindows[2]
+    If (ValidWindows.MaxIndex() >= 1)    
+        WinActivate, % "ahk_id " ValidWindows[1]
+Return
 ; #MaxThreadsPerHotkey 1
 
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
@@ -407,12 +419,88 @@ Return
         GoSub, DrawRect
         Send, {Lbutton Up}
         GoSub, FadeInWin1
-        WinActivate, % "ahk_id " lclickHwndId
-        Send, {Lbutton Down}
+
         BlockInput, MouseMoveOff
     }
     Else {
-        If (cycling && startHighlight && (ValidWindows.length() > 2))
+          WinGet, actWndID, ID, A
+          If (GetKeyState("x","P") || (ShowMinned && actWndID == ValidWindows[1]) || (ValidWindows.length() <= 1)) {
+            
+            winAssoc     := {}
+            winArraySort := []
+    
+            GoSub, ResetWins
+            GoSub, ClearRect
+           
+            Critical, On
+            DetectHiddenWindows, On
+            WinGet, allWindows, List
+            loop % allWindows
+            {   
+                hwndID := allWindows%A_Index%
+                WinGet, state, MinMax, ahk_id %hwndID%
+                If (state == -1) {
+                    WinGetPos, x, y, w, h, ahk_id %hwndID%
+                    WinGetTitle, cTitle, ahk_id %hwndID%
+                    If (cTitle != "") {
+                        desknum := VD.getDesktopNumOfWindow(cTitle)
+                        If desknum <= 0
+                            continue
+                        If (desknum == VD.getCurrentDesktopNum()) {
+                            WinGet, procName, ProcessName , ahk_id %hwndID%
+                            finalTitle := % "Desktop " desknum " / " procName " / " cTitle "^" hwndID
+                            MinnedWindows.push(finalTitle)
+                        }
+                    }
+                }
+            }
+            DetectHiddenWindows, Off
+            
+            For k, v in MinnedWindows 
+            {
+                winAssoc[v] := k
+            }
+            
+            For k, v in winAssoc
+            {
+                winArraySort.Push(k)
+            }
+            
+            Menu, windows, Add
+            Menu, windows, deleteAll
+            ShowMinned := False
+            For k, ft in winArraySort
+            {
+                splitEntry1 := StrSplit(ft , "^")
+                entry := splitEntry1[1]
+                ahkid := splitEntry1[2]
+                
+                splitEntry2  := StrSplit(entry, "/")
+                desktopEntry := splitEntry2[1]
+                procEntry    := splitEntry2[2]
+                titleEntry   := splitEntry2[3]
+                
+                finalEntry   := % desktopEntry " : " titleEntry
+        
+                Menu, windows, Add, %finalEntry%, ActivateWindow 
+                WinGet, Path, ProcessPath, ahk_id %ahkid%
+                Try 
+                    Menu, windows, Icon, %finalEntry%, %Path%,, 32
+                Catch 
+                    Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
+            }
+            CoordMode, Mouse, Screen
+            MouseGetPos, Xm, Xy
+            CoordMode, Menu, Screen
+            ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
+            DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+            drawX := A_ScreenWidth/2
+            drawY := A_ScreenHeight/2
+            Critical, Off
+            ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
+            Menu, windows, Delete
+        }
+        Else If (cycling && startHighlight && (ValidWindows.length() > 2))
         {
             GoSub, FadeInWin2
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
@@ -447,7 +535,8 @@ Return
                         WinGetTitle, cTitle, ahk_id %hwndID%
                         If (cTitle != "") {
                             desknum := VD.getDesktopNumOfWindow(cTitle)
-                                
+                            If desknum <= 0
+                                continue   
                             If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
                                 If skipChild {
                                     skipChild := False
@@ -467,65 +556,40 @@ Return
                     }
                 }
             }
-        }
-
-        Critical Off
-        WinGet, actWndID, ID, A
-        If (ShowMinned && actWndID == ValidWindows[1]) {
-            DetectHiddenWindows, On
-            WinGet, allWindows, List
-            loop % allWindows
-            {   
-                hwndID := allWindows%A_Index%
-                WinGet, state, MinMax, ahk_id %hwndID%
-                If (state == -1) {
-                    WinGetTitle, cTitle, ahk_id %hwndID%
-                    If (cTitle != "") {
-                        desknum := VD.getDesktopNumOfWindow(cTitle)
-                        If (desknum == VD.getCurrentDesktopNum()) {
-                            MinnedWindows.push( "Desktop " desknum " : " cTitle "^" hwndID)
-                        }
-                    }
-                }
-            }
-            DetectHiddenWindows, Off
-            
-            Menu, windows, Add
-            Menu, windows, deleteAll
-            ShowMinned := False
-            For k, ft in MinnedWindows
-            {
-                splitEntry := StrSplit(ft , "^")
-                entry := splitEntry[1]
-                ahkid := splitEntry[2]
-                Menu, windows, Add, %entry%, ActivateWindow 
-                WinGet, Path, ProcessPath, ahk_id %ahkid%
-                Try 
-                    Menu, windows, Icon, %entry%, %Path%,, 0
-                Catch 
-                    Menu, windows, Icon, %entry%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
-            }
-            CoordMode, Mouse, Screen
-            MouseGetPos, Xm, Xy
-            CoordMode, Menu, Screen
-            ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
-            DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-            drawX := A_ScreenWidth/2
-            drawY := A_ScreenHeight/2
-            ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
-            Menu, windows, Delete
+            Critical Off
         }
     }
     
     cycleCount     := 1
     ValidWindows   := []
     MinnedWindows  := []
-    cycling        := false
+    cycling        := False
     startHighlight := False
+    KeyWait, x, U
     hitTAB         := False
+    cancelAltTab   := False
     GoSub, ClearRect
-    ; Tooltip, 
+    Tooltip, 
 return
+
+#If hitTAB
+!x::
+    Tooltip, Cancelled!
+    cancelAltTab := True
+    GoSub, ClearRect
+Return
+#If
+
+#If hitTAB
+x::
+Return
+#If
+
+#If hitTAB
+~!LButton::
+    GoSub, DrawRect
+Return
+#If
 
 !Tab::Cycle(forward)
 !+Tab::Cycle(!forward)
@@ -558,7 +622,7 @@ Cycle(direction)
         {
             If !(GetKeyState("LAlt","P"))
             {
-                Critical Off
+                ; Critical Off
                 Return
             }
             
@@ -578,6 +642,8 @@ Cycle(direction)
                     If (state > -1) {
                         desknum := VD.getDesktopNumOfWindow(cTitle)
                         If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
+                            If desknum <= 0
+                                continue
                             ValidWindows.push(hwndID)
                             If (ValidWindows.MaxIndex() == 2) {
                                 WinActivate, % "ahk_id " hwndID
@@ -596,7 +662,7 @@ Cycle(direction)
             cycleCount += 1
     }
         
-    Critical Off
+    ; Critical Off
     
     If (cycleCount >= 2)
         startHighlight := True
@@ -629,55 +695,48 @@ Cycle(direction)
         }
     }
     
-    If (ValidWindows.length() <= 1)
-        Tooltip, Empty!
+    ; If (ValidWindows.length() <= 1)
+        ; Tooltip, Empty!
         
 }
 
 ; #MaxThreadsPerHotkey 2
 ClearRect:
-    sleep 200
-    If hitTAB
+    sleep 400
+    If hitTAB && !cancelAltTab
         Return
     WinSet, Transparent, 225, ahk_id %Highlighter%
-    If hitTAB {
-        Gui, GUI4Boarder: Hide
+    If hitTAB && !cancelAltTab {
         Return
     }
     sleep 100
     WinSet, Transparent, 200, ahk_id %Highlighter%
-    If hitTAB {
-        Gui, GUI4Boarder: Hide
+    If hitTAB && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 175, ahk_id %Highlighter%
-    If hitTAB {
-        Gui, GUI4Boarder: Hide
+    If hitTAB && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 150, ahk_id %Highlighter%
-    If hitTAB {
-        Gui, GUI4Boarder: Hide
+    If hitTAB && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 125, ahk_id %Highlighter%
-    If hitTAB {
-        Gui, GUI4Boarder: Hide
+    If hitTAB && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 100, ahk_id %Highlighter%
-    If hitTAB {
-        Gui, GUI4Boarder: Hide
+    If hitTAB && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 50, ahk_id %Highlighter%
-    If hitTAB {
-        Gui, GUI4Boarder: Hide
+    If hitTAB && !cancelAltTab {
         Return
     }
     sleep 50
@@ -693,14 +752,14 @@ DrawRect:
     ; To avoid the error message
     if (x="")
         return
-    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop +ToolWindow +E0x08000000 +E0x20 -Caption +Owner hWndHighlighter
+    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop +ToolWindow +E0x08000000 +E0x20 +Owner hWndHighlighter
     ; set the background for the GUI window 
     Gui, GUI4Boarder: Color, %AccentColorHex%
     ; remove thick window border of the GUI window
     Gui, GUI4Boarder: -Caption
     ; Retrieves the minimized/maximized state for a window.
     WinGet, notMedium , MinMax, A
-    if (notMedium==0){
+    if (notMedium > -1){
     ; 0: The window is neither minimized nor maximized.
         offset:=7
         outerX:=offset
@@ -740,8 +799,6 @@ else
     winAssoc := {}
     winArraySort := []
 
-    Menu, windows, Add
-    Menu, windows, deleteAll
     WinGet, id, list
     Loop, %id%
     {
@@ -756,7 +813,7 @@ else
         If !InStr(title, UserInput)
             continue
         desknum := VD.getDesktopNumOfWindow(title)
-        If desknum < 0
+        If desknum <= 0
             continue
         finalTitle := % "Desktop " desknum " / " procName " / " title "^" this_ID
         winArray.Push(finalTitle)
@@ -772,6 +829,8 @@ else
         winArraySort.Push(k)
     }
     
+    Menu, windows, Add
+    Menu, windows, deleteAll
     For k, ft in winArraySort
     {
         splitEntry1 := StrSplit(ft , "^")
@@ -784,12 +843,13 @@ else
         titleEntry   := splitEntry2[3]
         
         finalEntry   := % desktopEntry " : " titleEntry
+        
         Menu, windows, Add, %finalEntry%, ActivateWindow 
         WinGet, Path, ProcessPath, ahk_id %ahkid%
         Try 
-            Menu, windows, Icon, %finalEntry%, %Path%,, 0
+            Menu, windows, Icon, %finalEntry%, %Path%,, 32
         Catch 
-            Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 0 
+            Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
     }
     CoordMode, Mouse, Screen
     MouseGetPos, Xm, Xy
@@ -811,6 +871,7 @@ else
 return
 
 ActivateWindow:
+    GoSub, ClearRect
     DetectHiddenWindows, On
     Gui, ShadowFrFull2: Hide
     SetTitleMatchMode, 3
@@ -820,11 +881,10 @@ ActivateWindow:
     
     cdt := VD.getCurrentDesktopNum()
     desknum := VD.getDesktopNumOfWindow(fulltitle)
-    WinGetPos, vwx,vwy,vww,, %fulltitle%
     WinGet, vState, MinMax, %fulltitle%
-    
     if (desknum < cdt)
     {
+        WinGetPos, vwx,vwy,vww,, %fulltitle%
         WinSet, Transparent, 0, %fulltitle%
         VD.MoveWindowToCurrentDesktop(fulltitle)
         if (vState > -1) {
@@ -855,6 +915,7 @@ ActivateWindow:
     }
     else if (desknum > cdt)
     {
+        WinGetPos, vwx,vwy,vww,, %fulltitle%
         WinSet, Transparent, 0, %fulltitle%
         VD.MoveWindowToCurrentDesktop(fulltitle)
         if (vState > -1) {
@@ -947,20 +1008,20 @@ ShowMenu(hMenu, MenuLoop:=0, X:=0, Y:=0, Flags:=0) {            ; Ver 0.61 by SK
 IsWindow(hWnd){
     WinGet, dwStyle, Style, ahk_id %hWnd%
     if ((dwStyle&0x08000000) || !(dwStyle&0x10000000)) {
-        return false
+        return False
     }
     WinGet, dwExStyle, ExStyle, ahk_id %hWnd%
     if (dwExStyle & 0x00000080) {
-        return false
+        return False
     }
     WinGetClass, szClass, ahk_id %hWnd%
     if (szClass = "TApplication") {
-        return false
+        return False
     }
-    WinGetPos,,,,H, ahk_id %hWnd%
+    WinGetPos,,,W,H, ahk_id %hWnd%
     WinGet, state, MinMax, ahk_id %hWnd%
-    if (H < 375 && state > -1) {
-        return false
+    if (H < 375 && state > -1 || W < 290 && state > -1) {
+        return False
     }
     return true
 }
@@ -1073,7 +1134,7 @@ RButton & LButton::
 */
 ; Extracts the application title from the window's full title
 ExtractAppTitle(FullTitle) {
-    return SubStr(FullTitle, InStr(FullTitle, " ", false, -1) + 1)
+    return SubStr(FullTitle, InStr(FullTitle, " ", False, -1) + 1)
 }
 
 ; Switch a "Chrome App or Chrome Website Shortcut" open windows based on the same application title
@@ -1372,8 +1433,11 @@ track() {
         If (lastMon != currentMon 
             && WinExist("ahk_id " . LastActiveWinHwnd) 
             && State != -1 
-            && !GetKeyState("Lbutton", "P"))
-            WinActivate, ahk_id %LastActiveWinHwnd%
+            && !GetKeyState("Lbutton", "P")) {
+                WinActivate, ahk_id %LastActiveWinHwnd%
+                GoSub, DrawRect
+                GoSub, ClearRect
+            }
     }
 }
 
