@@ -126,7 +126,7 @@ If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300) {
 }
 Return
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
-#MaxThreadsPerHotkey 3
+#MaxThreadsPerHotkey 4
 !1::
   HideTrayTip() 
   If GetKeyState("Lbutton", "P")
@@ -430,7 +430,9 @@ Return
             winArraySort := []
     
             GoSub, ResetWins
-            GoSub, ClearRect
+            
+            WinSet, Region, 0-0 w0 h0
+            Gui, GUI4Boarder: Hide
            
             Critical, On
             DetectHiddenWindows, On
@@ -493,11 +495,17 @@ Return
             MouseGetPos, Xm, Xy
             CoordMode, Menu, Screen
             ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
-            DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+            DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
             drawX := A_ScreenWidth/2
             drawY := A_ScreenHeight/2
             Critical, Off
+            Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
+            Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
+            
             ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
+            
+            Gui, ShadowFrFull:  Hide
+            Gui, ShadowFrFull2: Hide
             Menu, windows, Delete
         }
         Else If (cycling && startHighlight && (ValidWindows.length() > 2))
@@ -784,6 +792,7 @@ DrawRect:
     }
 Return
 
+#MaxThreadsPerHotkey, 1
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
 InputBox, UserInput, Find and focus running windows, Type part of a window title to display a menu with all possible matches.., , 300, 140,
@@ -818,6 +827,7 @@ else
         finalTitle := % "Desktop " desknum " / " procName " / " title "^" this_ID
         winArray.Push(finalTitle)
     }
+    DetectHiddenWindows, Off
     
     For k, v in winArray 
     {
@@ -854,19 +864,20 @@ else
     CoordMode, Mouse, Screen
     MouseGetPos, Xm, Xy
     CoordMode, Menu, Screen
-    ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
-    DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+    ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
     drawX := A_ScreenWidth/2
     drawY := A_ScreenHeight/2
-    Gui, ShadowFrFull: Show, x%drawX% y%drawY% h1 y1
-    WinSet, TransColor, FF00FF 254, ahk_id %IGUIF% 
+    Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
     Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
-    WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2% 
+    
+    ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
+    DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+    
     ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
-    Menu, windows, Delete
-    Gui, ShadowFrFull: Hide
+    
+    Gui, ShadowFrFull:  Hide
     Gui, ShadowFrFull2: Hide
-    DetectHiddenWindows, Off
+    Menu, windows, Delete
 }
 return
 
@@ -980,15 +991,40 @@ ShellMessage( wParam,lParam ) {
 MyTimer() {
    Global IGUIF
    Global IGUIF2
-   DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1)
+   DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2)
+   
    run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
    WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
    WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh, 
    WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh, 
+   
+   WinSet, TransColor, FF00FF 254, ahk_id %IGUIF% 
+   WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2% 
    ; Gui, ShadowFrFull: Show, x%menux% w%menuw% h%menuh% y%menuy%
    WinSet, AlwaysOnTop, on,  ahk_class #32768
 }
 
+MyFader() {
+    DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1)
+    tooltip, waiting...
+    WinWait, ahk_class #32768, , 5
+    WinSet, Transparent, 0, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 50, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 100, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 125, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 150, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 200, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 225, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 255, ahk_class #32768
+    tooltip, done
+}
 ;-----------------------------------------------------------------
 ; Check whether the target window is activation target
 ;-----------------------------------------------------------------
@@ -1002,6 +1038,7 @@ ShowMenu(hMenu, MenuLoop:=0, X:=0, Y:=0, Flags:=0) {            ; Ver 0.61 by SK
       R := DllCall("TrackPopupMenu", "Ptr",hMenu, "Int",Flags, "Int",X, "Int",Y, "Int",0
                  , "Ptr",A_ScriptHwnd, "Ptr",0, "UInt"),                     OnMessage(0x211,Fn, 0)
       DllCall("PostMessage", "Ptr",A_ScriptHwnd, "Int",0, "Ptr",0, "Ptr",0)
+
     Return R
 }
 
