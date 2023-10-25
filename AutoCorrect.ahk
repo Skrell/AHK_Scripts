@@ -5,6 +5,8 @@
 ; r = raw output
 
 #include %A_ScriptDir%\_VD.ahk
+; #include %A_ScriptDir%\AhkDllThread.ahk
+
 dummyFunction1() {
     static dummyStatic1 := VD.init()
     }
@@ -29,7 +31,7 @@ Global ValidWindows := []
 Global MinnedWindows := []
 Global cycleCount := 1
 Global startHighlight := False
-Global border_thickness := 3
+Global border_thickness := 4
 Global AccentColorHex := 0xFF00FF
 Global ShowMinned := False
 Global hitTAB := False
@@ -121,10 +123,13 @@ CapsLock:: Send {Delete}
 !l:: SendInput {LCtrl down}{RIGHT}{LCtrl up}
 
 ~Esc::
-If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300) {
-    WinClose, A
-}
+    MouseGetPos, , , escHwndID
+    If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300 && escHwndID == escHwndID_old) {
+        WinClose, A
+    }
+    escHwndID_old := escHwndID
 Return
+
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
 #MaxThreadsPerHotkey 4
 !1::
@@ -849,13 +854,14 @@ else
         
         splitEntry2  := StrSplit(entry, "/")
         desktopEntry := splitEntry2[1]
-        procEntry    := splitEntry2[2]
+        procEntry    := LTrim(splitEntry2[2])
+        procEntry    := RTrim(procEntry)
         titleEntry   := splitEntry2[3]
         
+        WinGet, Path, ProcessPath, ahk_exe %procEntry%
         finalEntry   := % desktopEntry " : " titleEntry
         
         Menu, windows, Add, %finalEntry%, ActivateWindow 
-        WinGet, Path, ProcessPath, ahk_id %ahkid%
         Try 
             Menu, windows, Icon, %finalEntry%, %Path%,, 32
         Catch 
