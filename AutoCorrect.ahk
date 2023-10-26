@@ -975,13 +975,13 @@ else
         desktopEntry := splitEntry2[1]
         procEntry    := LTrim(splitEntry2[2])
         procEntry    := RTrim(procEntry)
-        titleEntry   := splitEntry2[3]
+        titleEntry   := LTrim(splitEntry2[3])
         
         WinGet, Path, ProcessPath, ahk_exe %procEntry%
         If (minState > -1)
-            finalEntry   := % desktopEntry " : " LTrim(titleEntry)
-        Else
-            finalEntry   := % desktopEntry " : [" LTrim(titleEntry) "]"
+            finalEntry   := % desktopEntry " : " titleEntry
+        Else If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
+            finalEntry   := % desktopEntry " : [" titleEntry "]"
         
         Menu, windows, Add, %finalEntry%, ActivateWindow 
         Try 
