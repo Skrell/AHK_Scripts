@@ -430,7 +430,7 @@ GenerateMinMenu:
             If (state == -1) {
                 WinGetPos, x, y, w, h, ahk_id %hwndID%
                 WinGetTitle, cTitle, ahk_id %hwndID%
-                If (cTitle != "") {
+                If (IsAltTabWindow(hwndID)) {
                     desknum := VD.getDesktopNumOfWindow(cTitle)
                     If desknum <= 0
                         continue
@@ -513,11 +513,13 @@ GenerateFullMenuForVD:
         WinGet, procName, ProcessName , ahk_id %this_ID%
         WinGet, mmState, MinMax , ahk_id %this_ID%
         
-        If (title = "" || title = "Microsoft Text Input Application")
-            continue            
-        If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
-            continue
-        If !InStr(title, UserInput)
+        ; If (title = "" || title = "Microsoft Text Input Application")
+            ; continue            
+        ; If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
+            ; continue
+        ; If !InStr(title, UserInput)
+            ; continue
+         If !IsAltTabWindow(this_ID)
             continue
         desknum := VD.getDesktopNumOfWindow(title)
         If (desknum <= 0 || desknum != VD.getCurrentDesktopNum())
@@ -653,24 +655,24 @@ Return
                     WinGet, state, MinMax, ahk_id %hwndID%
                     If (state > -1) {
                         WinGetTitle, cTitle, ahk_id %hwndID%
-                        If (cTitle != "") {
+                        If (IsAltTabWindow(actWndID)) {
                             desknum := VD.getDesktopNumOfWindow(cTitle)
                             If desknum <= 0
                                 continue   
-                            If (desknum == VD.getCurrentDesktopNum() && IsWindow(hwndID)) {
-                                If skipChild {
-                                    skipChild := False
-                                    continue
-                                }
-                                If skipFirst {
-                                    skipFirst := False
-                                    continue
-                                }
-                                Else {
+                            If (desknum == VD.getCurrentDesktopNum()) {
+                                ; If skipChild {
+                                    ; skipChild := False
+                                    ; continue
+                                ; }
+                                ; If skipFirst {
+                                    ; skipFirst := False
+                                    ; continue
+                                ; }
+                                ; Else {
                                     WinActivate, % "ahk_id " hwndID
                                     GoSub, DrawRect
                                     break
-                                }
+                                ; }
                             }
                         }
                     }
@@ -937,12 +939,15 @@ else
         WinGetTitle, title, ahk_id %this_ID%
         WinGet, procName, ProcessName , ahk_id %this_ID%
         
-        If (title = "" || title = "Microsoft Text Input Application")
-            continue            
-        If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
-            continue
+        ; If (title = "" || title = "Microsoft Text Input Application")
+            ; continue            
+        ; If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
+            ; continue
         If !InStr(title, UserInput)
             continue
+        If !IsAltTabWindow(this_ID)
+            continue
+            
         desknum := VD.getDesktopNumOfWindow(title)
         If desknum <= 0
             continue
@@ -1090,6 +1095,103 @@ ActivateWindow:
         WinActivate, %fulltitle%
     }
 return
+; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399&sid=0996ce194ed9cce5e02f5e156bc3bb61
+IsAltTabWindow(hWnd)
+{
+   static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
+   if (VirtualDesktopExist = "")
+   {
+      OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
+      if (OSbuildNumber < 14393)
+         VirtualDesktopExist := 0
+      else
+         VirtualDesktopExist := 1
+   }
+   if !DllCall("IsWindowVisible", "uptr", hWnd)
+      return
+   DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
+   if (cloaked = DWM_CLOAKED_SHELL)
+      return
+   if (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
+      return
+   WinGetClass, winClass, ahk_id %hWnd%
+   if (winClass = "Windows.UI.Core.CoreWindow")
+      return
+   if (winClass = "ApplicationFrameWindow")
+   {
+      varsetcapacity(ApplicationViewCloakType, 4, 0)
+      DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
+      if (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
+         return
+   }
+   ; if !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test if window is shown on any monitor. alt-tab shows any window even if window is out of monitor.
+   ;   return
+   WinGet, exStyles, ExStyle, ahk_id %hWnd%
+   if (exStyles & WS_EX_APPWINDOW)
+   {
+      if DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
+         return
+      if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
+         return true
+      else
+         return
+   }
+   if (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)
+      return
+   loop
+   {
+      hwndPrev := hwnd
+      hwnd := DllCall("GetWindow", "uptr", hwnd, "uint", GW_OWNER, "ptr")
+      if !hwnd
+      {
+         if DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
+            return
+         if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
+            return true
+         else
+            return
+      }
+      if DllCall("IsWindowVisible", "uptr", hwnd)
+         return
+      WinGet, exStyles, ExStyle, ahk_id %hwnd%
+      if ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
+         return
+   }
+}
+
+GetLastActivePopup(hwnd)
+{
+   static GA_ROOTOWNER := 3
+   hwnd := DllCall("GetAncestor", "uptr", hwnd, "uint", GA_ROOTOWNER, "ptr")
+   hwnd := DllCall("GetLastActivePopup", "uptr", hwnd, "ptr")
+   return hwnd
+}
+
+IsWindowOnCurrentVirtualDesktop(hwnd)
+{
+   static IVirtualDesktopManager
+   if !IVirtualDesktopManager
+      IVirtualDesktopManager := ComObjCreate(CLSID_VirtualDesktopManager := "{AA509086-5CA9-4C25-8F95-589D3C07B48A}", IID_IVirtualDesktopManager := "{A5CD92FF-29BE-454C-8D04-D82879FB3F1B}")
+   DllCall(NumGet(NumGet(IVirtualDesktopManager+0), 3*A_PtrSize), "ptr", IVirtualDesktopManager, "uptr", hwnd, "int*", onCurrentDesktop)   ; IsWindowOnCurrentVirtualDesktop
+   return onCurrentDesktop
+}
+
+PropEnumProcEx(hWnd, lpszString, hData, dwData)
+{
+   if (strget(lpszString, "UTF-16") = "ApplicationViewCloakType")
+   {
+      numput(hData, dwData+0, 0, "int")
+      return false
+   }
+   return true
+}
+
+realHwnd(hwnd)
+{
+   varsetcapacity(var, 8, 0)
+   numput(hwnd, var, 0, "uint64")
+   return numget(var, 0, "uint")
+}
 
 ShellMessage( wParam,lParam ) {
   If (wParam == 5)  ;HSHELL_GETMINRECT
@@ -2172,8 +2274,8 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :*:tyr::try
 :*:cmakel::CMakeLists.txt
 :*:cmaket::CMakeLists.txt
-:*:unfo::unfortunately `
-:*:Unfo::Unfortunately `
+:*:unfo::unfortunately`
+:*:Unfo::Unfortunately`
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
