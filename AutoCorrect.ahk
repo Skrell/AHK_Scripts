@@ -36,6 +36,7 @@ Global AccentColorHex := 0xFF00FF
 Global hitTAB := False
 Global hitCAPS := False
 Global cancelAltTab := False
+Global SearchingWindows := False
 
 Process, Priority,, High
 Menu, Tray, Icon
@@ -124,6 +125,7 @@ CapsLock:: Send {Delete}
 !j:: Send {LCtrl down}{LEFT}{LCtrl up}
 !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
 
+#If !SearchingWindows
 ~Esc::
     MouseGetPos, , , escHwndID
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300 && escHwndID == escHwndID_old) {
@@ -131,6 +133,7 @@ CapsLock:: Send {Delete}
     }
     escHwndID_old := escHwndID
 Return
+#If
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
 #MaxThreadsPerHotkey 4
@@ -601,6 +604,7 @@ GenerateFullMenuForVD:
     Menu, windows, Delete
 Return
 
+#If !SearchingWindows
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
     If !hitTAB
@@ -693,6 +697,7 @@ Return
     GoSub, ClearRect
     Tooltip, 
 return
+#If 
 
 #If hitTAB
 !x::
@@ -756,7 +761,7 @@ CycleMin(direction)
                         If (MinnedWindows.MaxIndex() == 2) {
                             cycling := True
                             WinRestore, % "ahk_id " hwndID
-                            ; WinActivate,% "ahk_id " hwndID
+                            WinActivate,% "ahk_id " hwndID
                             GoSub, DrawRect
                         }
                     }
@@ -783,7 +788,7 @@ CycleMin(direction)
                 
             WinMinimize,% "ahk_id " MinnedWindows[PrevCount]
             WinRestore, % "ahk_id " MinnedWindows[cycleCount]
-            ; WinActivate,% "ahk_id " MinnedWindows[cycleCount]
+            WinActivate,% "ahk_id " MinnedWindows[cycleCount]
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
@@ -802,7 +807,7 @@ CycleMin(direction)
                 
             WinMinimize,% "ahk_id " MinnedWindows[PrevCount]
             WinRestore, % "ahk_id " MinnedWindows[cycleCount]
-            ; WinActivate,% "ahk_id " MinnedWindows[cycleCount]
+            WinActivate,% "ahk_id " MinnedWindows[cycleCount]
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
@@ -1003,102 +1008,139 @@ DrawRect:
     }
 Return
 
-#MaxThreadsPerHotkey, 1
-; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
-!`::
-InputBox, UserInput, Find and focus running windows, Type part of a window title to display a menu with all possible matches.., , 300, 140,
-if ErrorLevel
-{
-    return
-}   
-else
-{
-    DetectHiddenWindows, On
-    list := ""
-    winArray := []
-    winAssoc := {}
-    winArraySort := []
+UpdateInputBoxTitle:
+    If WinExist("Type Up to 3 Letters of a Window Title to Search") {
+        WinActivate, Type Up to 3 Letters of a Window Title to Search
+        WinSet, AlwaysOnTop, On, Type Up to 3 Letters of a Window Title to Search
+    }
+        
+    ControlGetText, memotext, Edit1, Type Up to 3 Letters of a Window Title to Search
+    StringLen, memolength, memotext
+    
+    if (memolength >= 3 || InStr(memotext, " ")) {
+        UserInput := ""
+        Send, {ENTER}
+    }
+return
 
-    WinGet, id, list
-    Loop, %id%
+#If SearchingWindows
+Esc::
+    Send, {ENTER}
+Return
+#If
+
+#MaxThreadsPerHotkey 1
+; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
+$!`::
+    Send, {LAlt}{up}
+    SearchingWindows := True
+    SetTimer, UpdateInputBoxTitle, 100
+    InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100
+    SetTimer, UpdateInputBoxTitle, off
+    SearchingWindows := False
+    
+    if ErrorLevel
     {
-        this_ID := id%A_Index%
-        WinGetTitle, title, ahk_id %this_ID%
-        WinGet, procName, ProcessName , ahk_id %this_ID%
-        
-        ; If (title = "" || title = "Microsoft Text Input Application")
-            ; continue            
-        ; If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
-            ; continue
-        If !InStr(title, UserInput)
-            continue
-        If !IsAltTabWindow(this_ID)
-            continue
+        return
+    }   
+    else
+    {
+        DetectHiddenWindows, On
+        list := ""
+        winArray := []
+        winAssoc := {}
+        winArraySort := []
+
+        WinGet, id, list
+        Loop, %id%
+        {
+            this_ID := id%A_Index%
+            WinGetTitle, title, ahk_id %this_ID%
+            WinGet, procName, ProcessName , ahk_id %this_ID%
             
-        desknum := VD.getDesktopNumOfWindow(title)
-        If desknum <= 0
-            continue
-        finalTitle := % "Desktop " desknum " / " procName " / " title "^" this_ID
-        winArray.Push(finalTitle)
-    }
-    
-    For k, v in winArray 
-    {
-        winAssoc[v] := k
-    }
-    
-    For k, v in winAssoc
-    {
-        winArraySort.Push(k)
-    }
-    
-    Menu, windows, Add
-    Menu, windows, deleteAll
-    For k, ft in winArraySort
-    {
-        splitEntry1 := StrSplit(ft , "^")
-        entry := splitEntry1[1]
-        ahkid := splitEntry1[2]
+            ; If (title = "" || title = "Microsoft Text Input Application")
+                ; continue            
+            ; If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
+                ; continue
+
+            If !IsAltTabWindow(this_ID)
+                continue
+                
+            desknum := VD.getDesktopNumOfWindow(title)
+            If desknum <= 0
+                continue
+            finalTitle := % "Desktop " desknum " / " procName " / " title "^" this_ID
+            winArray.Push(finalTitle)
+        }
         
-        WinGet, minState, MinMax, ahk_id %ahkid%
+        For k, v in winArray 
+        {
+            winAssoc[v] := k
+        }
         
-        splitEntry2  := StrSplit(entry, "/")
-        desktopEntry := splitEntry2[1]
-        procEntry    := LTrim(splitEntry2[2])
-        procEntry    := RTrim(procEntry)
-        titleEntry   := LTrim(splitEntry2[3])
+        For k, v in winAssoc
+        {
+            winArraySort.Push(k)
+        }
         
-        WinGet, Path, ProcessPath, ahk_exe %procEntry%
-        If (minState > -1)
-            finalEntry   := % desktopEntry " : " titleEntry
-        Else If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
-            finalEntry   := % desktopEntry " : [" titleEntry "]"
+        desktopEntryLast := ""
         
-        Menu, windows, Add, %finalEntry%, ActivateWindow 
-        Try 
-            Menu, windows, Icon, %finalEntry%, %Path%,, 32
-        Catch 
-            Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
+        Menu, windows, Add
+        Menu, windows, deleteAll
+        For k, ft in winArraySort
+        {
+            splitEntry1 := StrSplit(ft , "^")
+            entry := splitEntry1[1]
+            ahkid := splitEntry1[2]
+            
+            WinGet, minState, MinMax, ahk_id %ahkid%
+            
+            splitEntry2  := StrSplit(entry, "/")
+            desktopEntry := splitEntry2[1]
+            procEntry    := LTrim(splitEntry2[2])
+            procEntry    := RTrim(procEntry)
+            titleEntry   := LTrim(splitEntry2[3])
+            
+            WinGet, Path, ProcessPath, ahk_exe %procEntry%
+            If (minState > -1 && VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
+                finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
+            Else 
+                finalEntry   := % desktopEntry " : " titleEntry " (" procEntry ")"
+            
+            If (!InStr(finalEntry, UserInput))
+                continue
+            
+            If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
+                Menu, windows, Add
+            }
+            If (finalEntry != "") {
+                Menu, windows, Add, %finalEntry%, ActivateWindow 
+                Try 
+                    Menu, windows, Icon, %finalEntry%, %Path%,, 32
+                Catch 
+                    Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
+            }
+            desktopEntryLast := desktopEntry
+        }
+        
+        CoordMode, Mouse, Screen
+        MouseGetPos, Xm, Xy
+        CoordMode, Menu, Screen
+        ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
+        drawX := A_ScreenWidth/2
+        drawY := A_ScreenHeight/2
+        Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
+        Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
+        
+        ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
+        DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+        
+        ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
+        
+        Gui, ShadowFrFull:  Hide
+        Gui, ShadowFrFull2: Hide
+        Menu, windows, Delete
     }
-    DetectHiddenWindows, Off
-    CoordMode, Mouse, Screen
-    MouseGetPos, Xm, Xy
-    CoordMode, Menu, Screen
-    ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
-    drawX := A_ScreenWidth/2
-    drawY := A_ScreenHeight/2
-    Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
-    Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
-    
-    ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
-    DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-    
-    ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
-    
-    Gui, ShadowFrFull:  Hide
-    Gui, ShadowFrFull2: Hide
-    Menu, windows, Delete
-}
 return
 
 ActivateWindow:
@@ -1107,6 +1149,8 @@ ActivateWindow:
     SetTitleMatchMode, 3
     splitEntry := StrSplit(A_ThisMenuItem , ":", , 2)
     fulltitle := splitEntry[2]
+    splitEntry := StrSplit(fulltitle, "(", , 2)
+    fulltitle := splitEntry[1]
     fulltitle := Trim(fulltitle,"[] ")
     
     cdt := VD.getCurrentDesktopNum()
@@ -1912,7 +1956,7 @@ MWAGetMonitorMouseIsIn() ; we didn't actually need the "Monitor = 0"
 ;------------------------------------------------------------------------------
 #NoEnv ; For security
 #SingleInstance force
-
+SetTitleMatchMode, 2
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.
 ; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
@@ -1937,60 +1981,60 @@ Return
 ;------------------------------------------------------------------------------
 ; Win+H to enter misspelling correction.  It will be added to this script.
 ;------------------------------------------------------------------------------
-LWin & h::
-; Get the selected text. The clipboard is used instead of "ControlGet Selected"
-; as it works in more editors and word processors, java apps, etc. Save the
-; current clipboard contents to be restored later.
-AutoTrim On  ; Delete any leading and trailing whitespace on the clipboard.  Why would you want this?
-ClipboardOld = %ClipboardAll%
-Clipboard =  ; Must start off blank for detection to work.
-Send ^c
-ClipWait 1
-if ErrorLevel  ; ClipWait timed out.
-    return
-; Replace CRLF and/or LF with `n for use in a "send-raw" hotstring:
-; The same is done for any other characters that might otherwise
-; be a problem in raw mode:
-StringReplace, Hotstring, Clipboard, ``, ````, All  ; Do this replacement first to avoid interfering with the others below.
-StringReplace, Hotstring, Hotstring, `r`n, ``r, All  ; Using `r works better than `n in MS Word, etc.
-StringReplace, Hotstring, Hotstring, `n, ``r, All
-StringReplace, Hotstring, Hotstring, %A_Tab%, ``t, All
-StringReplace, Hotstring, Hotstring, `;, ```;, All
-Clipboard = %ClipboardOld%  ; Restore previous contents of clipboard.
-; This will move the InputBox's caret to a more friendly position:
-SetTimer, MoveCaret, 10
-; Show the InputBox, providing the default hotstring:
-InputBox, Hotstring, New Hotstring, Provide the corrected word on the right side. You can also edit the left side if you wish.`n`nExample entry:`n::teh::the,,,,,,,, ::%Hotstring%::%Hotstring%
+; LWin & h::
+    ; ; Get the selected text. The clipboard is used instead of "ControlGet Selected"
+    ; ; as it works in more editors and word processors, java apps, etc. Save the
+    ; ; current clipboard contents to be restored later.
+    ; AutoTrim On  ; Delete any leading and trailing whitespace on the clipboard.  Why would you want this?
+    ; ClipboardOld = %ClipboardAll%
+    ; Clipboard =  ; Must start off blank for detection to work.
+    ; Send ^c
+    ; ClipWait 1
+    ; if ErrorLevel  ; ClipWait timed out.
+        ; return
+    ; ; Replace CRLF and/or LF with `n for use in a "send-raw" hotstring:
+    ; ; The same is done for any other characters that might otherwise
+    ; ; be a problem in raw mode:
+    ; StringReplace, Hotstring, Clipboard, ``, ````, All  ; Do this replacement first to avoid interfering with the others below.
+    ; StringReplace, Hotstring, Hotstring, `r`n, ``r, All  ; Using `r works better than `n in MS Word, etc.
+    ; StringReplace, Hotstring, Hotstring, `n, ``r, All
+    ; StringReplace, Hotstring, Hotstring, %A_Tab%, ``t, All
+    ; StringReplace, Hotstring, Hotstring, `;, ```;, All
+    ; Clipboard = %ClipboardOld%  ; Restore previous contents of clipboard.
+    ; ; This will move the InputBox's caret to a more friendly position:
+    ; SetTimer, MoveCaret, 10
+    ; ; Show the InputBox, providing the default hotstring:
+    ; InputBox, Hotstring, New Hotstring, Provide the corrected word on the right side. You can also edit the left side if you wish.`n`nExample entry:`n::teh::the,,,,,,,, ::%Hotstring%::%Hotstring%
 
-if ErrorLevel <> 0  ; The user pressed Cancel.
-    return
-; Otherwise, add the hotstring and reload the script:
-FileAppend, `n%Hotstring%, %A_ScriptFullPath%  ; Put a `n at the beginning in case file lacks a blank line at its end.
-; it would be best if it overwrote the string you had highlighted with the replacement you just typed in
-Reload
-Sleep 3000 ; If successful, the reload will close this instance during the Sleep, so the line below will never be reached.
-MsgBox, 4,, The hotstring just added appears to be improperly formatted.  Would you like to open the script for editing? Note that the bad hotstring is at the bottom of the script.
-IfMsgBox, Yes, Edit
-return
+    ; if ErrorLevel <> 0  ; The user pressed Cancel.
+        ; return
+    ; ; Otherwise, add the hotstring and reload the script:
+    ; FileAppend, `n%Hotstring%, %A_ScriptFullPath%  ; Put a `n at the beginning in case file lacks a blank line at its end.
+    ; ; it would be best if it overwrote the string you had highlighted with the replacement you just typed in
+    ; Reload
+    ; Sleep 3000 ; If successful, the reload will close this instance during the Sleep, so the line below will never be reached.
+    ; MsgBox, 4,, The hotstring just added appears to be improperly formatted.  Would you like to open the script for editing? Note that the bad hotstring is at the bottom of the script.
+    ; IfMsgBox, Yes, Edit
+    ; return
 
-MoveCaret:
-IfWinNotActive, New Hotstring
-    return
-; Otherwise, move the InputBox's insertion point to where the user will type the abbreviation.
-Send {HOME}
-Loop % StrLen(Hotstring) + 4
-    SendInput {Right}
-SetTimer, MoveCaret, Off
-return
+; MoveCaret:
+    ; IfWinNotActive, New Hotstring
+        ; return
+    ; ; Otherwise, move the InputBox's insertion point to where the user will type the abbreviation.
+    ; Send {HOME}
+    ; Loop % StrLen(Hotstring) + 4
+        ; SendInput {Right}e
+    ; SetTimer, MoveCaret, Off
+; return
 
-SetTitleMatchMode, 2
 #If !WinActive("ahk_exe notepad++.exe") 
         && !WinActive("ahk_exe Code.exe") 
         && !WinActive("ahk_exe cmd.exe") 
         && !WinActive("ahk_exe Everything.exe") 
         && !WinActive("ahk_exe Conhost.exe") 
         && !WinActive("ahk_exe bash.exe") 
-        && !WinActive("ahk_exe mintty.exe") 
+        && !WinActive("ahk_exe mintty.exe")
+        && !SearchingWindows
 #Hotstring EndChars ()[]{}:;"/\,?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 ;------------------------------------------------------------------------------
@@ -6892,6 +6936,9 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::wya::way
 ::wayword::wayward
 ::we;d::we'd
+::we;re::we're
+::wer'e::we're
+::w'ere::we're
 ::weaponary::weaponry
 ;::wether::weather   ; ambiguous: leave uncorrected
 ::wendsay::Wednesday
