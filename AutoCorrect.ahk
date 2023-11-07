@@ -1085,7 +1085,7 @@ Return
 $!`::
     Send, {LAlt}{up}
     SearchingWindows := True
-    SetTimer, UpdateInputBoxTitle, 100
+    SetTimer, UpdateInputBoxTitle, 50
     InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100
     SetTimer, UpdateInputBoxTitle, off
     SearchingWindows := False
