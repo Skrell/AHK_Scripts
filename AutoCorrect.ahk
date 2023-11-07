@@ -39,6 +39,8 @@ Global hitTAB := False
 Global hitCAPS := False
 Global cancelAltTab := False
 Global SearchingWindows := False
+Global UserInputTrimmed := ""
+Global memotext := ""
 
 Process, Priority,, High
 Menu, Tray, Icon
@@ -1059,7 +1061,7 @@ UpdateInputBoxTitle:
         WinActivate, Type Up to 3 Letters of a Window Title to Search
         WinSet, AlwaysOnTop, On, Type Up to 3 Letters of a Window Title to Search
     }
-        
+         
     ControlGetText, memotext, Edit1, Type Up to 3 Letters of a Window Title to Search
     StringLen, memolength, memotext
     
@@ -1067,8 +1069,8 @@ UpdateInputBoxTitle:
         UserInputTrimmed := Trim(memotext)
         Send, {ENTER}
     }
-    if (memolength == 0) {
-        UserInputTrimmed := ""
+    else {
+        UserInputTrimmed := UserInput
     }
 return
 
