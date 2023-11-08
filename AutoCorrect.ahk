@@ -41,7 +41,9 @@ Global cancelAltTab := False
 Global SearchingWindows := False
 Global UserInputTrimmed := ""
 Global memotext := ""
-
+Global totalMenuItemCount := 0
+Global onlyTitleFound := ""
+        
 Process, Priority,, High
 Menu, Tray, Icon
 Menu, Tray, NoStandard
@@ -1097,6 +1099,7 @@ $!`::
     else
     {
         DetectHiddenWindows, On
+        Critical, On
         totalMenuItemCount := 0
         onlyTitleFound := ""
         winArray := []
@@ -1149,9 +1152,9 @@ $!`::
             
             splitEntry2    := StrSplit(entry, "/")
             desktopEntry   := splitEntry2[1]
-            procEntry      := LTrim(splitEntry2[2])
-            procEntry      := RTrim(procEntry)
-            titleEntry     := LTrim(splitEntry2[3])
+            procEntry      := Trim(splitEntry2[2])
+            ; procEntry      := RTrim(procEntry)
+            titleEntry     := Trim(splitEntry2[3])
             
             WinGet, Path, ProcessPath, ahk_exe %procEntry%
             If (minState > -1 && VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
@@ -1167,7 +1170,7 @@ $!`::
             }
             If (finalEntry != "" && titleEntry != "") {
                 totalMenuItemCount := totalMenuItemCount + 1
-                onlyTitleFound := titleEntry
+                onlyTitleFound := finalEntry
                 
                 Menu, windows, Add, %finalEntry%, ActivateWindow 
                 Try 
@@ -1177,9 +1180,9 @@ $!`::
             }
             desktopEntryLast := desktopEntry
         }
-
+        Critical, Off
         If (totalMenuItemCount == 1 && onlyTitleFound != "") {
-            WinActivate, %onlyTitleFound%
+            GoSub, ActivateWindow
         }
         Else {
             CoordMode, Mouse, Screen
@@ -1205,8 +1208,15 @@ return
 ActivateWindow:
     DetectHiddenWindows, On
     Gui, ShadowFrFull2: Hide
+    thisMenuItem := ""
+    
+    If (totalMenuItemCount == 1 && onlyTitleFound != "")
+        thisMenuItem := onlyTitleFound
+    Else
+        thisMenuItem := A_ThisMenuItem
+        
     SetTitleMatchMode, 3
-    splitEntry := StrSplit(A_ThisMenuItem , ":", , 2)
+    splitEntry := StrSplit(thisMenuItem , ":", , 2)
     fulltitle := splitEntry[2]
     splitEntry := StrSplit(fulltitle, "(", , 2)
     fulltitle := splitEntry[1]
@@ -1283,6 +1293,8 @@ ActivateWindow:
             WinRestore , %fulltitle%
         }
         WinActivate, %fulltitle%
+        GoSub, DrawRect
+        GoSub, ClearRect
     }
 return
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399&sid=0996ce194ed9cce5e02f5e156bc3bb61
