@@ -27,6 +27,7 @@ Global skipCheck := False
 Global hwndVD
 Global forward := True
 Global cycling := False
+Global cyclingMin := False
 Global ValidWindows := []
 Global MinnedWindows := []
 Global PrevActiveWindows := []
@@ -110,7 +111,9 @@ Loop ; WARNING will loop forever until process is killed.
 	}
 }
 
+#If !hitCAPS || !hitTAB
 CapsLock:: Send {Delete}
+#If
 !a:: Send, {home}
 +!a:: Send, {SHIFT down}{home}{SHIFT up}
 !;:: Send, {end}
@@ -470,6 +473,16 @@ ResetWins:
         {
             WinMinimize, % "ahk_id " MinnedWindows[k]
         }
+        If hitTAB {
+            If (ValidWindows.MaxIndex() >= 4)
+                WinActivate, % "ahk_id " ValidWindows[4]
+            If (ValidWindows.MaxIndex() >= 3)
+                WinActivate, % "ahk_id " ValidWindows[3]
+            If (ValidWindows.MaxIndex() >= 2)
+                WinActivate, % "ahk_id " ValidWindows[2]
+            If (ValidWindows.MaxIndex() >= 1)    
+                WinActivate, % "ahk_id " ValidWindows[1]        
+        }
     }
     Else {
         If (ValidWindows.MaxIndex() >= 4)
@@ -662,7 +675,7 @@ Return
 #If !SearchingWindows
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
-    If !hitTAB
+    If !hitTAB && !hitCAPS
         Return
     
     WinGet, actWndID, ID, A
@@ -670,7 +683,6 @@ Return
         If ((actWndID == ValidWindows[1]) || (ValidWindows.length() <= 1)) {
             WinSet, Region, 0-0 w0 h0
             Gui, GUI4Boarder: Hide
-            ; GoSub, GenerateFullMenuForVD
         }
         Else If (startHighlight) {
             BlockInput, MouseMove
@@ -688,7 +700,19 @@ Return
                 Gui, GUI4Boarder: Hide
                 GoSub, ResetWins
             }
-            ; GoSub, GenerateFullMenuForVD
+        }
+        Else If (hitTAB && hitCAPS) {
+            WinGet, actMinID, ID, A
+            
+            If (ValidWindows.MaxIndex() >= 4)
+                WinActivate, % "ahk_id " ValidWindows[4]
+            If (ValidWindows.MaxIndex() >= 3)
+                WinActivate, % "ahk_id " ValidWindows[3]
+            If (ValidWindows.MaxIndex() >= 2)
+                WinActivate, % "ahk_id " ValidWindows[2]
+            If (ValidWindows.MaxIndex() >= 1)    
+                WinActivate, % "ahk_id " ValidWindows[1]
+            WinActivate, % "ahk_id " actMinID
         }
         Else If (cycling && startHighlight && (ValidWindows.length() > 2))
         {
@@ -737,6 +761,7 @@ Return
     ValidWindows   := []
     MinnedWindows  := []
     cycling        := False
+    cyclingMin     := False
     startHighlight := False
     KeyWait, x, U
     hitTAB         := False
@@ -747,7 +772,7 @@ Return
 return
 #If 
 
-#If hitTAB
+#If hitTAB || hitCAPS
 !x::
     Tooltip, Cancelled!
     cancelAltTab := True
@@ -755,7 +780,7 @@ return
 Return
 #If
 
-#If hitTAB
+#If hitTAB || hitCAPS
 x::
 Return
 #If
@@ -768,22 +793,21 @@ Return
 
 !CapsLock::CycleMin(forward)
 !+CapsLock::CycleMin(!forward)
+
 CycleMin(direction)
 {
-    Global cycling
+    Global cyclingMin
     Global cycleCount
     Global ValidWindows
     Global MonCount
     Global startHighlight
-    Global hitTAB
     Global hitCAPS
             
     WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
             
-    hitTAB := True
     hitCAPS := True
-    If !cycling
+    If !cyclingMin
     {
         Critical On
             
@@ -807,12 +831,7 @@ CycleMin(direction)
                         If desknum <= 0
                             continue
                         MinnedWindows.push(hwndID)
-                        ; If (MinnedWindows.MaxIndex() == 1) {
-                            ; cycling := True
-                            ; WinRestore, % "ahk_id " hwndID
-                            ; WinActivate,% "ahk_id " hwndID
-                            ; GoSub, DrawRect
-                        ; }
+                        cyclingMin := True
                     }
                 }
             }
@@ -822,7 +841,7 @@ CycleMin(direction)
     
     startHighlight := True
     
-    If (MinnedWindows.length() >= 2) 
+    If (MinnedWindows.length() >= 1) 
     {
         If direction
         {
@@ -967,50 +986,50 @@ Cycle(direction)
 ; #MaxThreadsPerHotkey 2
 ClearRect:
     sleep 100
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P")
+    If (hitTAB || hitCAPS) && !cancelAltTab
         Return
     sleep 100
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P")
+    If (hitTAB || hitCAPS) && !cancelAltTab
         Return
     sleep 100
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P")
+    If (hitTAB || hitCAPS) && !cancelAltTab
         Return
     sleep 100
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P")
+    If (hitTAB || hitCAPS) && !cancelAltTab
         Return
         
     WinSet, Transparent, 225, ahk_id %Highlighter%
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P") {
+    If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
     sleep 100
     WinSet, Transparent, 200, ahk_id %Highlighter%
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P") {
+    If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 175, ahk_id %Highlighter%
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P") {
+    If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 150, ahk_id %Highlighter%
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P") {
+    If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 125, ahk_id %Highlighter%
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P") {
+    If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 100, ahk_id %Highlighter%
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P") {
+    If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
     sleep 50
     WinSet, Transparent, 50, ahk_id %Highlighter%
-    If hitTAB && !cancelAltTab && GetKeyState("LAlt","P") {
+    If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
     sleep 50
@@ -1206,8 +1225,9 @@ $!`::
 return
 
 ActivateWindow:
-    DetectHiddenWindows, On
+    Gui, ShadowFrFull:  Hide
     Gui, ShadowFrFull2: Hide
+    DetectHiddenWindows, On
     thisMenuItem := ""
     
     If (totalMenuItemCount == 1 && onlyTitleFound != "")
@@ -1297,13 +1317,42 @@ ActivateWindow:
         GoSub, ClearRect
     }
 return
-; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399&sid=0996ce194ed9cce5e02f5e156bc3bb61
+
+; https://www.autohotkey.com/boards/viewtopic.php?p=96016#p96016
+ProcessIsElevated(vPID)
+{
+	;PROCESS_QUERY_LIMITED_INFORMATION := 0x1000
+	if !(hProc := DllCall("kernel32\OpenProcess", "UInt",0x1000, "Int",0, "UInt",vPID, "Ptr"))
+		return -1
+	;TOKEN_QUERY := 0x8
+	hToken := 0
+	if !(DllCall("advapi32\OpenProcessToken", "Ptr",hProc, "UInt",0x8, "Ptr*",hToken))
+	{
+		DllCall("kernel32\CloseHandle", "Ptr",hProc)
+		return -1
+	}
+	;TokenElevation := 20
+	vIsElevated := vSize := 0
+	vRet := (DllCall("advapi32\GetTokenInformation", "Ptr",hToken, "Int",20, "UInt*",vIsElevated, "UInt",4, "UInt*",vSize))
+	DllCall("kernel32\CloseHandle", "Ptr",hToken)
+	DllCall("kernel32\CloseHandle", "Ptr",hProc)
+	return vRet ? vIsElevated : -1
+}
+
+; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
 IsAltTabWindow(hWnd)
 {
    DetectHiddenWindows, On
+   
    WinGetTitle, tit, ahk_id %hWnd%
+   WinGet, vPID, PID, % "ahk_id " hWnd
+   
    if (tit == "")
       return
+      
+   if (ProcessIsElevated(vPID))
+      return
+      
    static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
    if (VirtualDesktopExist = "")
    {
@@ -2270,6 +2319,7 @@ Return
 :?:.php::
 :?:.py::
 :?:.rss::
+:?:.pri::
 :?:.xhtml::
 :?:.key::
 :?:.odp::
