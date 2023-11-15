@@ -33,6 +33,7 @@ Global MinnedWindows := []
 Global PrevActiveWindows := []
 Global InitializeActWins := False
 Global cycleCount := 1
+Global cycleCountMin := 1
 Global startHighlight := False
 Global border_thickness := 4
 Global AccentColorHex := 0xFF00FF
@@ -758,6 +759,7 @@ Return
     }
     
     cycleCount     := 1
+    cycleCountMin  := 1
     ValidWindows   := []
     MinnedWindows  := []
     cycling        := False
@@ -797,7 +799,7 @@ Return
 CycleMin(direction)
 {
     Global cyclingMin
-    Global cycleCount
+    Global cycleCountMin
     Global ValidWindows
     Global MonCount
     Global startHighlight
@@ -845,18 +847,18 @@ CycleMin(direction)
     {
         If direction
         {
-            If (cycleCount == MinnedWindows.MaxIndex())
-                cycleCount := 1
+            If (cycleCountMin == MinnedWindows.MaxIndex())
+                cycleCountMin := 1
             Else
-                cycleCount += 1
+                cycleCountMin += 1
             
-            PrevCount := cycleCount-1
+            PrevCount := cycleCountMin-1
             If (PrevCount <= 0)
                 PrevCount := MinnedWindows.MaxIndex()
                 
             WinMinimize,% "ahk_id " MinnedWindows[PrevCount]
-            WinRestore, % "ahk_id " MinnedWindows[cycleCount]
-            WinActivate,% "ahk_id " MinnedWindows[cycleCount]
+            WinRestore, % "ahk_id " MinnedWindows[cycleCountMin]
+            WinActivate,% "ahk_id " MinnedWindows[cycleCountMin]
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
@@ -864,18 +866,18 @@ CycleMin(direction)
         }
         Else
         {
-            If (cycleCount == 1)
-                cycleCount := MinnedWindows.MaxIndex()
+            If (cycleCountMin == 1)
+                cycleCountMin := MinnedWindows.MaxIndex()
             Else
-                cycleCount -= 1
+                cycleCountMin -= 1
             
-            PrevCount := cycleCount+1
+            PrevCount := cycleCountMin+1
             If (PrevCount > MinnedWindows.MaxIndex())
                 PrevCount := 1
                 
             WinMinimize,% "ahk_id " MinnedWindows[PrevCount]
-            WinRestore, % "ahk_id " MinnedWindows[cycleCount]
-            WinActivate,% "ahk_id " MinnedWindows[cycleCount]
+            WinRestore, % "ahk_id " MinnedWindows[cycleCountMin]
+            WinActivate,% "ahk_id " MinnedWindows[cycleCountMin]
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
@@ -1176,7 +1178,7 @@ $!`::
             titleEntry     := Trim(splitEntry2[3])
             
             WinGet, Path, ProcessPath, ahk_exe %procEntry%
-            If (minState > -1 && VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
+            If (minState == -1 && VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
                 finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
             Else 
                 finalEntry   := % desktopEntry " : " titleEntry " (" procEntry ")"
