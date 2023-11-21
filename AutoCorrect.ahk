@@ -45,6 +45,7 @@ Global UserInputTrimmed := ""
 Global memotext := ""
 Global totalMenuItemCount := 0
 Global onlyTitleFound := ""
+Global nil
         
 Process, Priority,, High
 Menu, Tray, Icon
@@ -79,9 +80,9 @@ Gui, ShadowFrFull2: +AlwaysOnTop +ToolWindow -DPIScale +E0x08000000 +E0x20 -Capt
 Gui, ShadowFrFull2: Color, FF00FF
 FrameShadow(IGUIF2)
    
-Gui +LastFound
-hWnd := WinExist()
-DllCall( "RegisterShellHookWindow", UInt,hWnd )
+; Gui +LastFound
+; hWnd := WinExist()
+; DllCall( "RegisterShellHookWindow", UInt, A_ScriptHwnd )
 ; MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
 ; OnMessage( MsgNum, "ShellMessage" )
 Return
@@ -90,27 +91,27 @@ Return
 ; For AHK v1.1.31+
 ; By kunkel321, help from Mikeyww, Rohwedder, Others.
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=118807
-CaseArr := [] ; Create the array.
-Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
-Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
-EndKeys := "abcdefghijklmnopqrstuvwxyz{Bs}{Space}{Enter}{Tab}=+-_,.?/\&1234567890{{}{}}()[]<>|"
-ccih := InputHook("V I2 E", EndKeys)
-Loop ; WARNING will loop forever until process is killed.
-{
-	ccih.Start() ; Start the hook.
-	ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
-	CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
-	If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
-		CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
-		;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
-	If (inStr(Uppers,CaseArr[1],True) && inStr(Uppers,CaseArr[2],True) && inStr(Lowers,CaseArr[3],True)) && (CaseArr[3] > 0) { ; "True" makes inStr() case-sensitive.
-		Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
-		StringLower, Last2, Last2 
-		Send, {Backspace 2} ; Do actual correction.
-		Send, %Last2%
-		;SoundBeep
-	}
-}
+; CaseArr := [] ; Create the array.
+; Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
+; Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
+; EndKeys := "abcdefghijklmnopqrstuvwxyz{Bs}{Space}{Enter}{Tab}=+-_,.?/\&1234567890{{}{}}()[]<>|"
+; ccih := InputHook("V I2 E", EndKeys)
+; Loop ; WARNING will loop forever until process is killed.
+; {
+	; ccih.Start() ; Start the hook.
+	; ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
+	; CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
+	; If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
+		; CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
+		; ;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
+	; If (inStr(Uppers,CaseArr[1],True) && inStr(Uppers,CaseArr[2],True) && inStr(Lowers,CaseArr[3],True)) && (CaseArr[3] > 0) { ; "True" makes inStr() case-sensitive.
+		; Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
+		; StringLower, Last2, Last2 
+		; Send, {Backspace 2} ; Do actual correction.
+		; Send, %Last2%
+		; ;SoundBeep
+	; }
+; }
 
 #If !hitCAPS || !hitTAB
 CapsLock:: Send {Delete}
@@ -1109,7 +1110,7 @@ $!`::
     Send, {LAlt}{up}
     SearchingWindows := True
     SetTimer, UpdateInputBoxTitle, 50
-    InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100
+    InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
     SetTimer, UpdateInputBoxTitle, off
     SearchingWindows := False
     
@@ -1209,15 +1210,17 @@ $!`::
             CoordMode, Mouse, Screen
             CoordMode, Menu, Screen
             ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
-            drawX := A_ScreenWidth/2
-            drawY := A_ScreenHeight/2
+            ; drawX := A_ScreenWidth/2
+            ; drawY := A_ScreenHeight/2
+            drawX := CoordXCenterScreen()
+            drawY := CoordYCenterScreen()
             Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
             Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
             
             ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
             DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
             
-            ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
+            ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
             
             Gui, ShadowFrFull:  Hide
             Gui, ShadowFrFull2: Hide
@@ -1315,10 +1318,46 @@ ActivateWindow:
             WinRestore , %fulltitle%
         }
         WinActivate, %fulltitle%
+        WinGet, hwndId, ID, A
+        currentMon := MWAGetMonitorMouseIsIn()
+        currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+        If !currentMonHasActWin {
+            Send, {LWin down}{LShift down}{Left}{LShift up}{LWin up}
+            sleep, 150
+         }
         GoSub, DrawRect
         GoSub, ClearRect
     }
 return
+
+; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=31716
+GetCurrentMonitorIndex(){
+    CoordMode, Mouse, Screen
+    MouseGetPos, mx, my
+    SysGet, monitorsCount, 80
+
+    Loop %monitorsCount%{
+        SysGet, monitor, Monitor, %A_Index%
+        if (monitorLeft <= mx && mx <= monitorRight && monitorTop <= my && my <= monitorBottom){
+            Return A_Index
+            }
+        }
+        Return 1
+}
+
+CoordXCenterScreen()
+{
+    ScreenNumber := GetCurrentMonitorIndex()
+    SysGet, Mon1, Monitor, %ScreenNumber%
+    return (( Mon1Right-Mon1Left ) / 2) + Mon1Left
+}
+
+CoordYCenterScreen()
+{
+    ScreenNumber := GetCurrentMonitorIndex()
+    SysGet, Mon1, Monitor, %ScreenNumber%
+    return ((Mon1Bottom-Mon1Top - 30) / 2) + Mon1Top
+}
 
 ; https://www.autohotkey.com/boards/viewtopic.php?p=96016#p96016
 ProcessIsElevated(vPID)
@@ -1455,25 +1494,44 @@ realHwnd(hwnd)
 }
 
 ShellMessage( wParam,lParam ) {
-  If (wParam == 5)  ;HSHELL_GETMINRECT
-  {            
-      hwnd := NumGet( lParam+0 ) 
-      WinGet, status, MinMax, ahk_id %hwnd%
-      if (status == -1)
-      {
-          ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
-          ; sleep 50
-          ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
-          ;https://www.autohotkey.com/boards/viewtopic.php?t=59047
-          WinGet oldxs, ExStyle, ahk_id %hwnd%
-          newxs := (oldxs & ~0x40000) | 0x80
-          if (newxs != oldxs)
-          {
-             WinSet ExStyle, % newxs, ahk_id %hwnd%
-             WinSet ExStyle, % oldxs, ahk_id %hwnd%
-          }
-      }
-   }
+  Global nil
+  ; If (wParam == 5)  ;HSHELL_GETMINRECT
+  ; {            
+      ; hwnd := NumGet( lParam+0 ) 
+      ; WinGet, status, MinMax, ahk_id %hwnd%
+      ; if (status == -1)
+      ; {
+          ; ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
+          ; ; sleep 50
+          ; ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
+          ; ;https://www.autohotkey.com/boards/viewtopic.php?t=59047
+          ; WinGet oldxs, ExStyle, ahk_id %hwnd%
+          ; newxs := (oldxs & ~0x40000) | 0x80
+          ; if (newxs != oldxs)
+          ; {
+             ; WinSet ExStyle, % newxs, ahk_id %hwnd%
+             ; WinSet ExStyle, % oldxs, ahk_id %hwnd%
+          ; }
+      ; }
+   ; }
+   If (wParam=1) ;  HSHELL_WINDOWCREATED := 1
+	{
+        ID:=lParam
+        WinGetTitle, title, Ahk_id %ID%
+        if (title == "Title of the program") ; Enter the program title between quotes
+        {
+            nil = %ID%
+            MsgBox, %ID% opened.
+        }
+    }
+    If (wParam=2) ;  HSHELL_WINDOWDESTROYED := 2 
+    {
+        ID:=lParam  
+        if (nil == ID)
+        {
+            MsgBox, %ID% closed.
+        }
+     }
 }
       
 ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
