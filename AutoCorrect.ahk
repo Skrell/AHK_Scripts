@@ -141,6 +141,8 @@ CapsLock:: Send {Delete}
 ~Esc::
     MouseGetPos, , , escHwndID
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300 && escHwndID == escHwndID_old) {
+        GoSub, DrawRect
+        GoSub, ClearRect
         WinClose, A
     }
     escHwndID_old := escHwndID
@@ -779,7 +781,7 @@ return
 !x::
     Tooltip, Cancelled!
     cancelAltTab := True
-    GoSub, ClearRect
+    SetTimer, ClearRect, -50
 Return
 #If
 
@@ -790,7 +792,7 @@ Return
 
 #If hitTAB
 ~!LButton::
-    GoSub, DrawRect
+    SetTimer, DrawRect, -50
 Return
 #If
 
