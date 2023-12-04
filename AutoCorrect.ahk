@@ -42,6 +42,7 @@ Global hitTAB := False
 Global hitCAPS := False
 Global cancelAltTab := False
 Global SearchingWindows := False
+Global ReverseSearch    := False
 Global UserInputTrimmed := ""
 Global memotext := ""
 Global totalMenuItemCount := 0
@@ -764,9 +765,9 @@ Return
     
     cycleCount     := 1
     cycleCountMin  := 0
-    ValidWindows   := []
-    MinnedWindows  := []
-    RevMinnedWindows  := []
+    ValidWindows   := {}
+    MinnedWindows  := {}
+    RevMinnedWindows  := {}
     cycling        := False
     cyclingMin     := False
     startHighlight := False
@@ -846,33 +847,42 @@ CycleMin(direction)
             }
             Tooltip, 
         }
-        RevMinnedWindows := {}
-       
-        brr := MinnedWindows.clone()
-        for k in MinnedWindows.clone()
-            RevMinnedWindows[k] := brr.pop()
-            
-        ; Tooltip % join(MinnedWindows) "-" join(RevMinnedWindows)
+        
+        If ReverseSearch {
+            RevMinnedWindows := {}
+           
+            brr := MinnedWindows.clone()
+            for k in MinnedWindows.clone()
+                RevMinnedWindows[k] := brr.pop()
+        }
+        Else {
+            RevMinnedWindows := MinnedWindows
+        }
     }
     
     startHighlight := True
+    
+    If (cycleCountMin == 2)
+        ReverseSearch := True
+    Else
+        ReverseSearch := False
     
     If (RevMinnedWindows.length() >= 1) 
     {
         If direction
         {
-            If (cycleCountMin == RevMinnedWindows.MaxIndex())
+            If (cycleCountMin > RevMinnedWindows.MaxIndex())
                 cycleCountMin := 1
             Else
                 cycleCountMin += 1
             
             PrevCount := cycleCountMin-1
-            If (PrevCount <= 0)
+            If (PrevCount < 1)
                 PrevCount := RevMinnedWindows.MaxIndex()
                 
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
             WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
-            WinActivate,% "ahk_id " RevMinnedWindows[cycleCountMin]
+            WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
@@ -880,7 +890,7 @@ CycleMin(direction)
         }
         Else
         {
-            If (cycleCountMin == 1)
+            If (cycleCountMin < 1)
                 cycleCountMin := RevMinnedWindows.MaxIndex()
             Else
                 cycleCountMin -= 1
@@ -891,7 +901,7 @@ CycleMin(direction)
                 
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
             WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
-            WinActivate,% "ahk_id " RevMinnedWindows[cycleCountMin]
+            WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
