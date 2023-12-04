@@ -30,6 +30,7 @@ Global cycling := False
 Global cyclingMin := False
 Global ValidWindows := []
 Global MinnedWindows := []
+Global RevMinnedWindows := []
 Global PrevActiveWindows := []
 Global InitializeActWins := False
 Global cycleCount := 1
@@ -473,9 +474,9 @@ Return
 
 ResetWins:
     If hitCAPS {
-        For k, v in MinnedWindows 
+        For k, v in RevMinnedWindows 
         {
-            WinMinimize, % "ahk_id " MinnedWindows[k]
+            WinMinimize, % "ahk_id " RevMinnedWindows[k]
         }
         If hitTAB {
             If (ValidWindows.MaxIndex() >= 4)
@@ -762,9 +763,10 @@ Return
     }
     
     cycleCount     := 1
-    cycleCountMin  := 1
+    cycleCountMin  := 0
     ValidWindows   := []
     MinnedWindows  := []
+    RevMinnedWindows  := []
     cycling        := False
     cyclingMin     := False
     startHighlight := False
@@ -807,6 +809,8 @@ CycleMin(direction)
     Global MonCount
     Global startHighlight
     Global hitCAPS
+    Global RevMinnedWindows
+    Global MinnedWindows
             
     WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
@@ -833,7 +837,7 @@ CycleMin(direction)
                 If (state == -1) {
                     desknum := VD.getDesktopNumOfWindow(cTitle)
                     If (desknum == VD.getCurrentDesktopNum()) {
-                        If desknum <= 0
+                        If (desknum <= 0)
                             continue
                         MinnedWindows.push(hwndID)
                         cyclingMin := True
@@ -842,49 +846,56 @@ CycleMin(direction)
             }
             Tooltip, 
         }
+        RevMinnedWindows := {}
+       
+        brr := MinnedWindows.clone()
+        for k in MinnedWindows.clone()
+            RevMinnedWindows[k] := brr.pop()
+            
+        ; Tooltip % join(MinnedWindows) "-" join(RevMinnedWindows)
     }
     
     startHighlight := True
     
-    If (MinnedWindows.length() >= 1) 
+    If (RevMinnedWindows.length() >= 1) 
     {
         If direction
         {
-            If (cycleCountMin == MinnedWindows.MaxIndex())
+            If (cycleCountMin == RevMinnedWindows.MaxIndex())
                 cycleCountMin := 1
             Else
                 cycleCountMin += 1
             
             PrevCount := cycleCountMin-1
             If (PrevCount <= 0)
-                PrevCount := MinnedWindows.MaxIndex()
+                PrevCount := RevMinnedWindows.MaxIndex()
                 
-            WinMinimize,% "ahk_id " MinnedWindows[PrevCount]
-            WinRestore, % "ahk_id " MinnedWindows[cycleCountMin]
-            WinActivate,% "ahk_id " MinnedWindows[cycleCountMin]
+            WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
+            WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
+            WinActivate,% "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
-                }
+            }
         }
         Else
         {
             If (cycleCountMin == 1)
-                cycleCountMin := MinnedWindows.MaxIndex()
+                cycleCountMin := RevMinnedWindows.MaxIndex()
             Else
                 cycleCountMin -= 1
             
             PrevCount := cycleCountMin+1
-            If (PrevCount > MinnedWindows.MaxIndex())
+            If (PrevCount > RevMinnedWindows.MaxIndex())
                 PrevCount := 1
                 
-            WinMinimize,% "ahk_id " MinnedWindows[PrevCount]
-            WinRestore, % "ahk_id " MinnedWindows[cycleCountMin]
-            WinActivate,% "ahk_id " MinnedWindows[cycleCountMin]
+            WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
+            WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
+            WinActivate,% "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
-                }
+            }
         }
     }
     Critical Off
@@ -1123,7 +1134,7 @@ $!`::
     else
     {
         DetectHiddenWindows, On
-        Critical, On
+        ; Critical, On
         totalMenuItemCount := 0
         onlyTitleFound := ""
         winArray := []
@@ -1148,7 +1159,7 @@ $!`::
             desknum := VD.getDesktopNumOfWindow(title)
             If desknum <= 0
                 continue
-            finalTitle := % "Desktop " desknum " / " procName " / " title "^" this_ID
+            finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
             winArray.Push(finalTitle)
         }
         
@@ -1174,7 +1185,7 @@ $!`::
             
             WinGet, minState, MinMax, ahk_id %ahkid%
             
-            splitEntry2    := StrSplit(entry, "/")
+            splitEntry2    := StrSplit(entry, "↑")
             desktopEntry   := splitEntry2[1]
             procEntry      := Trim(splitEntry2[2])
             ; procEntry      := RTrim(procEntry)
@@ -1204,7 +1215,7 @@ $!`::
             }
             desktopEntryLast := desktopEntry
         }
-        Critical, Off
+        ; Critical, Off
         If (totalMenuItemCount == 1 && onlyTitleFound != "") {
             GoSub, ActivateWindow
         }
@@ -1243,11 +1254,20 @@ ActivateWindow:
         thisMenuItem := A_ThisMenuItem
         
     SetTitleMatchMode, 3
-    splitEntry := StrSplit(thisMenuItem , ":", , 2)
-    fulltitle := splitEntry[2]
-    splitEntry := StrSplit(fulltitle, "(", , 2)
-    fulltitle := splitEntry[1]
-    fulltitle := Trim(fulltitle,"[] ")
+    
+    
+    fulltitle := RegExReplace(thisMenuItem, "\(\S+\)$", "")
+    fulltitle := Trim(fulltitle)
+    ; msgbox, %fulltitle%
+    fulltitle := RegExReplace(fulltitle, "^.*\:\s", "")
+    fulltitle := Trim(fulltitle)
+    ; msgbox, %fulltitle%
+    fulltitle := RegExReplace(fulltitle, "^\[?", "")
+    fulltitle := Trim(fulltitle)
+    ; msgbox, %fulltitle%
+    fulltitle := RegExReplace(fulltitle, "\]?$", "")
+    fulltitle := Trim(fulltitle)
+    ; msgbox, %fulltitle%
     
     cdt := VD.getCurrentDesktopNum()
     desknum := VD.getDesktopNumOfWindow(fulltitle)
@@ -2081,6 +2101,15 @@ MWAGetMonitorMouseIsIn() ; we didn't actually need the "Monitor = 0"
     }
     return ActiveMon
 }
+
+
+join( strArray )
+{
+  s := ""
+  for i,v in strArray
+    s .= ", " . v
+  return substr(s, 3)
+}
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
@@ -2455,6 +2484,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::IPs::IPs
 ::vmware::VMware
 ::VMware::VMware
+::ie::i.e.
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
