@@ -34,7 +34,8 @@ Global RevMinnedWindows := []
 Global PrevActiveWindows := []
 Global InitializeActWins := False
 Global cycleCount := 1
-Global cycleCountMin := 1
+Global cycleCountMin := 0
+Global totalCycleCountMin := 0
 Global startHighlight := False
 Global border_thickness := 4
 Global AccentColorHex := 0xFF00FF
@@ -765,6 +766,12 @@ Return
     
     cycleCount     := 1
     cycleCountMin  := 0
+    If (totalCycleCountMin == 2)
+        ReverseSearch := True
+    Else
+        ReverseSearch := False
+        
+    totalCycleCountMin  := 0
     ValidWindows   := {}
     MinnedWindows  := {}
     RevMinnedWindows  := {}
@@ -806,6 +813,7 @@ CycleMin(direction)
 {
     Global cyclingMin
     Global cycleCountMin
+    Global totalCycleCountMin
     Global ValidWindows
     Global MonCount
     Global startHighlight
@@ -861,11 +869,8 @@ CycleMin(direction)
     }
     
     startHighlight := True
+    totalCycleCountMin += 1
     
-    If (cycleCountMin == 2)
-        ReverseSearch := True
-    Else
-        ReverseSearch := False
     
     If (RevMinnedWindows.length() >= 1) 
     {
@@ -923,8 +928,18 @@ Cycle(direction)
     Global MonCount
     Global startHighlight
     Global hitTAB
+    Global RevMinnedWindows
     
     hitTAB := True
+    
+    If hitCAPS {
+        For k, v in RevMinnedWindows 
+        {
+            WinMinimize, % "ahk_id " RevMinnedWindows[k]
+        }
+        hitCAPS := False
+    }
+    
     If !cycling
     {
         Critical On
@@ -1011,16 +1026,17 @@ Cycle(direction)
 
 ; #MaxThreadsPerHotkey 2
 ClearRect:
-    sleep 100
+
+    sleep 75
     If (hitTAB || hitCAPS) && !cancelAltTab
         Return
-    sleep 100
+    sleep 75
     If (hitTAB || hitCAPS) && !cancelAltTab
         Return
-    sleep 100
+    sleep 75
     If (hitTAB || hitCAPS) && !cancelAltTab
         Return
-    sleep 100
+    sleep 75
     If (hitTAB || hitCAPS) && !cancelAltTab
         Return
         
@@ -1028,39 +1044,40 @@ ClearRect:
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 100
+    sleep 60
     WinSet, Transparent, 200, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 50
+    sleep 40
     WinSet, Transparent, 175, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 50
+    sleep 40
     WinSet, Transparent, 150, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 50
+    sleep 40
     WinSet, Transparent, 125, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 50
+    sleep 40
     WinSet, Transparent, 100, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 50
+    sleep 40
     WinSet, Transparent, 50, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 50
+    sleep 40
     WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
+
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
