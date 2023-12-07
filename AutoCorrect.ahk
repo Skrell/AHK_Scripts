@@ -14,12 +14,16 @@ dummyFunction1() {
 #WinActivateForce
 #InstallMouseHook
 #InstallKeybdHook
+#KeyHistory 0
+#WinActivateForce
+#NoEnv
+#SingleInstance
+
+
 SetBatchLines -1
 SetWinDelay   -1
 SetControlDelay -1
 SetKeyDelay, 0
-#KeyHistory 0
-#WinActivateForce
 
 Global moving := False
 Global ComboActive := False
@@ -67,8 +71,8 @@ SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
 SysGet, MonCount, MonitorCount
 
-Tooltip, %MonCount%
-sleep 1000
+Tooltip, Total Number of Monitors is %MonCount%
+sleep 1500
 Tooltip,
 
 Gui, ShadowFrFull: New
@@ -503,181 +507,6 @@ ResetWins:
     }
 Return
 
-GenerateMinMenu:
-        winAssoc     := {}
-        winArraySort := []
-
-        WinSet, Region, 0-0 w0 h0
-        Gui, GUI4Boarder: Hide
-       
-        Critical, On
-        DetectHiddenWindows, On
-        WinGet, allWindows, List
-        loop % allWindows
-        {   
-            hwndID := allWindows%A_Index%
-            WinGet, state, MinMax, ahk_id %hwndID%
-            If (state == -1) {
-                WinGetPos, x, y, w, h, ahk_id %hwndID%
-                WinGetTitle, cTitle, ahk_id %hwndID%
-                If (IsAltTabWindow(hwndID)) {
-                    desknum := VD.getDesktopNumOfWindow(cTitle)
-                    If desknum <= 0
-                        continue
-                    If (desknum == VD.getCurrentDesktopNum()) {
-                        WinGet, procName, ProcessName , ahk_id %hwndID%
-                        finalTitle := % "Desktop " desknum " / " procName " / " cTitle "^" hwndID
-                        MinnedWindows.push(finalTitle)
-                    }
-                }
-            }
-        }
-        
-        For k, v in MinnedWindows 
-        {
-            winAssoc[v] := k
-        }
-        
-        For k, v in winAssoc
-        {
-            winArraySort.Push(k)
-        }
-        
-        Menu, windows, Add
-        Menu, windows, deleteAll
-        For k, ft in winArraySort
-        {
-            splitEntry1 := StrSplit(ft , "^")
-            entry := splitEntry1[1]
-            ahkid := splitEntry1[2]
-            
-            splitEntry2  := StrSplit(entry, "/")
-            desktopEntry := splitEntry2[1]
-            procEntry    := splitEntry2[2]
-            titleEntry   := splitEntry2[3]
-            
-            finalEntry   := % desktopEntry " : " titleEntry
-    
-            Menu, windows, Add, %finalEntry%, ActivateWindow 
-            WinGet, Path, ProcessPath, ahk_id %ahkid%
-            Try 
-                Menu, windows, Icon, %finalEntry%, %Path%,, 32
-            Catch 
-                Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
-        }
-        DetectHiddenWindows, Off
-        CoordMode, Mouse, Screen
-        CoordMode, Menu, Screen
-        ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
-        DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-        drawX := A_ScreenWidth/2
-        drawY := A_ScreenHeight/2
-        Critical, Off
-        Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
-        Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
-        
-        ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
-        
-        Gui, ShadowFrFull:  Hide
-        Gui, ShadowFrFull2: Hide
-        Menu, windows, Delete
-Return
-
-GenerateFullMenuForVD:
-    DetectHiddenWindows, On
-    list := ""
-    winArray := []
-    winAssoc := {}
-    winArraySort := []
-    WinGet, actHwnd, ID, A
-    WinGet, id, list
-    Loop, %id%
-    {
-        this_ID := id%A_Index%
-        If (this_ID == actHwnd)
-            continue
-        
-        WinGetTitle, title, ahk_id %this_ID%
-        WinGet, procName, ProcessName , ahk_id %this_ID%
-        WinGet, mmState, MinMax , ahk_id %this_ID%
-        
-        ; If (title = "" || title = "Microsoft Text Input Application")
-            ; continue            
-        ; If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
-            ; continue
-        ; If !InStr(title, UserInput)
-            ; continue
-         If !IsAltTabWindow(this_ID)
-            continue
-        desknum := VD.getDesktopNumOfWindow(title)
-        If (desknum <= 0 || desknum != VD.getCurrentDesktopNum())
-            continue
-        If (mmState > -1 && MonCount > 1) {
-            currentMon := MWAGetMonitorMouseIsIn()
-            currentMonHasActWin := GetFocusWindowMonitorIndex(this_ID, currentMon)
-            If (!currentMonHasActWin)
-                continue
-        }
-        finalTitle := % "Desktop " desknum " / " procName " / " title "^" this_ID
-        winArray.Push(finalTitle)
-    }
-    DetectHiddenWindows, Off
-    
-    For k, v in winArray 
-    {
-        winAssoc[v] := k
-    }
-    
-    For k, v in winAssoc
-    {
-        winArraySort.Push(k)
-    }
-    
-    Menu, windows, Add
-    Menu, windows, deleteAll
-    For k, ft in winArraySort
-    {
-        splitEntry1 := StrSplit(ft , "^")
-        entry := splitEntry1[1]
-        ahkid := splitEntry1[2]
-        
-        WinGet, minState, MinMax, ahk_id %ahkid%
-        
-        splitEntry2  := StrSplit(entry, "/")
-        desktopEntry := splitEntry2[1]
-        procEntry    := LTrim(splitEntry2[2])
-        procEntry    := RTrim(procEntry)
-        titleEntry   := splitEntry2[3]
-        
-        WinGet, Path, ProcessPath, ahk_exe %procEntry%
-        If (minState > -1)
-            finalEntry   := % desktopEntry " : " LTrim(titleEntry)
-        Else
-            finalEntry   := % desktopEntry " : [" LTrim(titleEntry) "]"
-        
-        Menu, windows, Add, %finalEntry%, ActivateWindow 
-        Try 
-            Menu, windows, Icon, %finalEntry%, %Path%,, 32
-        Catch 
-            Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
-    }
-    CoordMode, Mouse, Screen
-    CoordMode, Menu, Screen
-    ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
-    drawX := A_ScreenWidth/2
-    drawY := A_ScreenHeight/2
-    Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
-    Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
-    
-    ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
-    DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-    
-    ShowMenu(MenuGetHandle("windows"), False, A_ScreenWidth/2, A_ScreenHeight/2, 0x14)
-    
-    Gui, ShadowFrFull:  Hide
-    Gui, ShadowFrFull2: Hide
-    Menu, windows, Delete
-Return
 
 #If !SearchingWindows
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
@@ -1161,7 +990,7 @@ $!`::
     else
     {
         DetectHiddenWindows, On
-        ; Critical, On
+        ; Critical On
         totalMenuItemCount := 0
         onlyTitleFound := ""
         winArray := []
@@ -1242,7 +1071,7 @@ $!`::
             }
             desktopEntryLast := desktopEntry
         }
-        ; Critical, Off
+        ; Critical Off
         If (totalMenuItemCount == 1 && onlyTitleFound != "") {
             GoSub, ActivateWindow
         }
@@ -1679,6 +1508,7 @@ LButton::
     y_coord := MonitorWorkAreaBottom - 30
     CoordMode, Pixel, Screen
     sleep 300
+    Critical On
     loop
     {
         PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
@@ -1690,6 +1520,7 @@ LButton::
         Else
             break
     }
+    Critical Off
 Return
 #If 
 
@@ -2351,6 +2182,8 @@ Return
 ::owe::
 ::lag::
 ::i.e.::
+::mma::
+::MMA::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
