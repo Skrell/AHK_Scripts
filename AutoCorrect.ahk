@@ -150,9 +150,21 @@ CapsLock:: Send {Delete}
     prevChromeTab()
     {
         send ^+a
-        SetKeyDelay, 100
-        send {BackSpace}
-        send {Enter}
+        loop {
+            WinGet, allwindows, List
+            loop, %allwindows%
+            {
+                this_id := "ahk_id " . allwindows%A_Index%
+                WinGet, procName, ProcessName, %this_id%
+                WinGetTitle, titID, %this_id%
+                If (titID == "" && procName == "chrome.exe" && WinActive(this_id))
+                {
+                    send {BackSpace}
+                    send {Enter}
+                    Return
+                }
+            }
+        }
     }
     ^Tab::prevChromeTab()
     return
@@ -1525,27 +1537,21 @@ IsWindow(hWnd){
 
 #If !VolumeHover()
 ~LButton::
-   if (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() )
-      Send !{Up}
+   MouseGetPos, X, Y
+   PixelGetColor, HexColor, %X%, %Y%, RGB
+   if (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() && HexColor == 0xFFFFFF)
+   { 
+        Send !{Up}
+   }
    Return
 #If
-
-; IsEmptySpace() {
-    ; MouseGetPos, x_coord, y_coord
-    ; PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
-    ; ; tooltip, %HexColor%
-    ; If (HexColor == 0xFFFFFF)
-        ; Return True
-    ; Else
-        ; Return False
-; }
 
 IsEmptySpace() {
    static ROLE_SYSTEM_LIST := 0x21
    CoordMode, Mouse
    MouseGetPos, X, Y
    AccObj := AccObjectFromPoint(idChild, X, Y)
-   Return AccObj.accRole(0) = ROLE_SYSTEM_LIST
+   Return (AccObj.accRole(0) == ROLE_SYSTEM_LIST)
 }
 
 AccObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
