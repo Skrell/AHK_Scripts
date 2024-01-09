@@ -53,6 +53,8 @@ Global memotext := ""
 Global totalMenuItemCount := 0
 Global onlyTitleFound := ""
 Global nil
+Global CancelClose := False
+Global lastWinMinHwndId
         
 Process, Priority,, High
 Menu, Tray, Icon
@@ -87,11 +89,11 @@ Gui, ShadowFrFull2: +AlwaysOnTop +ToolWindow -DPIScale +E0x08000000 +E0x20 -Capt
 Gui, ShadowFrFull2: Color, FF00FF
 FrameShadow(IGUIF2)
    
-; Gui +LastFound
-; hWnd := WinExist()
-; DllCall( "RegisterShellHookWindow", UInt, A_ScriptHwnd )
-; MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
-; OnMessage( MsgNum, "ShellMessage" )
+Gui +LastFound
+hWnd := WinExist()
+DllCall( "RegisterShellHookWindow", UInt, A_ScriptHwnd )
+MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
+OnMessage( MsgNum, "ShellMessage" )
 Return
 
 ;############### CAse COrrector ######################
@@ -143,16 +145,36 @@ CapsLock:: Send {Delete}
 !,:: Send {DOWN}
 !j:: Send {LCtrl down}{LEFT}{LCtrl up}
 !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
+; Ctl+Tab in chrome to goto recent
+#If WinActive("ahk_exe Chrome.exe")
+    prevChromeTab()
+    {
+        send ^+a
+        SetKeyDelay, 100
+        send {BackSpace}
+        send {Enter}
+    }
+    ^Tab::prevChromeTab()
+    return
+#If
 
 #If !SearchingWindows
 ~Esc::
     MouseGetPos, , , escHwndID
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300 && escHwndID == escHwndID_old) {
         GoSub, DrawRect
+        KeyWait, Esc, U T10
         GoSub, ClearRect
-        WinClose, A
+        If !CancelClose
+            WinClose, A
+        Else
+            CancelClose := False
     }
     escHwndID_old := escHwndID
+Return
+
+Esc & x::
+CancelClose := True
 Return
 #If
 
@@ -595,7 +617,7 @@ Return
     
     cycleCount     := 1
     cycleCountMin  := 0
-    If (totalCycleCountMin == 2)
+    If (totalCycleCountMin >= 2)
         ReverseSearch := True
     Else
         ReverseSearch := False
@@ -700,6 +722,7 @@ CycleMin(direction)
     startHighlight := True
     totalCycleCountMin += 1
     
+    Critical Off
     
     If (RevMinnedWindows.length() >= 1) 
     {
@@ -715,6 +738,7 @@ CycleMin(direction)
                 PrevCount := RevMinnedWindows.MaxIndex()
                 
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
+            sleep, 200
             WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
@@ -734,6 +758,7 @@ CycleMin(direction)
                 PrevCount := 1
                 
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
+            sleep, 200
             WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
@@ -742,7 +767,7 @@ CycleMin(direction)
             }
         }
     }
-    Critical Off
+    
     Return
 }
 
@@ -821,7 +846,7 @@ Cycle(direction)
         }
     }
     
-    ; Critical Off
+    Critical Off
     
     If (cycleCount >= 2)
         startHighlight := True
@@ -849,7 +874,7 @@ Cycle(direction)
                 GoSub, DrawRect
         }
     }
-    Critical Off
+
     Return
 }
 
@@ -1098,6 +1123,8 @@ $!`::
     }
 return
 
+#MaxThreadsPerHotkey 4
+
 ActivateWindow:
     Gui, ShadowFrFull:  Hide
     Gui, ShadowFrFull2: Hide
@@ -1265,8 +1292,9 @@ IsAltTabWindow(hWnd)
    
    WinGetTitle, tit, ahk_id %hWnd%
    WinGet, vPID, PID, % "ahk_id " hWnd
+   WinGet, vProc, ProcessName, ahk_id %hWnd%
    
-   if (tit == "")
+   if (tit == "" or vProc == "qrivi_ssam.exe")
       return
       
    if (ProcessIsElevated(vPID))
@@ -1372,17 +1400,19 @@ realHwnd(hwnd)
 }
 
 ShellMessage( wParam,lParam ) {
-  Global nil
-  ; If (wParam == 5)  ;HSHELL_GETMINRECT
-  ; {            
-      ; hwnd := NumGet( lParam+0 ) 
-      ; WinGet, status, MinMax, ahk_id %hwnd%
-      ; if (status == -1)
-      ; {
-          ; ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
-          ; ; sleep 50
-          ; ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
-          ; ;https://www.autohotkey.com/boards/viewtopic.php?t=59047
+  Global nil, lastWinMinHwndId
+  If (wParam == 5)  ;HSHELL_GETMINRECT
+  {            
+      hwnd := NumGet( lParam+0 ) 
+      WinGet, status, MinMax, ahk_id %hwnd%
+      if (status == -1)
+      {
+          lastWinMinHwndId := hwnd
+          
+          ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
+          ; sleep 50
+          ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
+          ;https://www.autohotkey.com/boards/viewtopic.php?t=59047
           ; WinGet oldxs, ExStyle, ahk_id %hwnd%
           ; newxs := (oldxs & ~0x40000) | 0x80
           ; if (newxs != oldxs)
@@ -1390,26 +1420,26 @@ ShellMessage( wParam,lParam ) {
              ; WinSet ExStyle, % newxs, ahk_id %hwnd%
              ; WinSet ExStyle, % oldxs, ahk_id %hwnd%
           ; }
-      ; }
-   ; }
-   If (wParam=1) ;  HSHELL_WINDOWCREATED := 1
-	{
-        ID:=lParam
-        WinGetTitle, title, Ahk_id %ID%
-        if (title == "Title of the program") ; Enter the program title between quotes
-        {
-            nil = %ID%
-            MsgBox, %ID% opened.
-        }
-    }
-    If (wParam=2) ;  HSHELL_WINDOWDESTROYED := 2 
-    {
-        ID:=lParam  
-        if (nil == ID)
-        {
-            MsgBox, %ID% closed.
-        }
-     }
+      }
+   }
+   ; If (wParam=1) ;  HSHELL_WINDOWCREATED := 1
+	; {
+        ; ID:=lParam
+        ; WinGetTitle, title, Ahk_id %ID%
+        ; if (title == "Title of the program") ; Enter the program title between quotes
+        ; {
+            ; nil = %ID%
+            ; MsgBox, %ID% opened.
+        ; }
+    ; }
+    ; If (wParam=2) ;  HSHELL_WINDOWDESTROYED := 2 
+    ; {
+        ; ID:=lParam  
+        ; if (nil == ID)
+        ; {
+            ; MsgBox, %ID% closed.
+        ; }
+     ; }
 }
       
 ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
@@ -1493,8 +1523,39 @@ IsWindow(hWnd){
 ~RButton::Return
 #If
 
-; ~LButton::
-; Return
+#If !VolumeHover()
+~LButton::
+   if (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() )
+      Send !{Up}
+   Return
+#If
+
+; IsEmptySpace() {
+    ; MouseGetPos, x_coord, y_coord
+    ; PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
+    ; ; tooltip, %HexColor%
+    ; If (HexColor == 0xFFFFFF)
+        ; Return True
+    ; Else
+        ; Return False
+; }
+
+IsEmptySpace() {
+   static ROLE_SYSTEM_LIST := 0x21
+   CoordMode, Mouse
+   MouseGetPos, X, Y
+   AccObj := AccObjectFromPoint(idChild, X, Y)
+   Return AccObj.accRole(0) = ROLE_SYSTEM_LIST
+}
+
+AccObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
+   static VT_DISPATCH := 9, F_OWNVALUE := 1, h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
+
+   (x = "" || y = "") ? DllCall("GetCursorPos", "Int64P", pt) : pt := x & 0xFFFFFFFF | y << 32
+   VarSetCapacity(varChild, 8 + 2*A_PtrSize, 0)
+   if DllCall("oleacc\AccessibleObjectFromPoint", "Int64", pt, "PtrP", pAcc, "Ptr", &varChild) = 0
+      Return ComObject(VT_DISPATCH, pAcc, F_OWNVALUE), _idChild_ := NumGet(varChild, 8, "UInt")
+}
 
 #If VolumeHover()
 LButton::
@@ -2026,6 +2087,7 @@ join( strArray )
 #NoEnv ; For security
 #SingleInstance force
 SetTitleMatchMode, 2
+#MaxThreadsPerHotkey 1
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.
 ; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
@@ -2104,7 +2166,7 @@ Return
         && !WinActive("ahk_exe bash.exe") 
         && !WinActive("ahk_exe mintty.exe")
         && !SearchingWindows
-#Hotstring EndChars ()[]{}:;"/\,?!`n `t
+#Hotstring EndChars ()[]{};"/\,?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 ;------------------------------------------------------------------------------
 ; Fix for -ign instead of -ing.
