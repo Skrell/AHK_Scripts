@@ -54,7 +54,7 @@ Global totalMenuItemCount := 0
 Global onlyTitleFound := ""
 Global nil
 Global CancelClose := False
-Global lastWinMinHwndId
+Global lastWinMinHwndId := 99
         
 Process, Priority,, High
 Menu, Tray, Icon
@@ -423,8 +423,8 @@ FadeInWin1:
     WinActivate, % "ahk_id " lclickHwndId
 
     If (lclickHwndId != ValidWindows[1]) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        sleep 10
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        ; sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
         sleep 10
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
@@ -432,8 +432,8 @@ FadeInWin1:
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
     }
     If (lclickHwndId != ValidWindows[2]) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        sleep 10
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        ; sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
         sleep 10
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
@@ -441,23 +441,23 @@ FadeInWin1:
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
     }
     If (lclickHwndId != ValidWindows[3]) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        sleep 10
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        ; sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
         sleep 10
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
     }
-    If (ValidWindows.MaxIndex() >= 4 && lclickHwndId != ValidWindows[4]) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
-    }
+    ; If (ValidWindows.MaxIndex() >= 4 && lclickHwndId != ValidWindows[4]) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
+    ; }
 Return
 
 FadeInWin2:
@@ -475,8 +475,8 @@ FadeInWin2:
     WinActivate, % "ahk_id " ValidWindows[cycleCount]
     
     If (cycleCount != 1) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        sleep 10
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        ; sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
         sleep 10
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
@@ -484,8 +484,8 @@ FadeInWin2:
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
     } 
     If (cycleCount != 2) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        sleep 10
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        ; sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
         sleep 10
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
@@ -493,23 +493,23 @@ FadeInWin2:
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
     }
     If (cycleCount != 3) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        sleep 10
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        ; sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
         sleep 10
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
     }
-    If (ValidWindows.MaxIndex() >= 4 && cycleCount != 4) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
-    }
+    ; If (ValidWindows.MaxIndex() >= 4 && cycleCount != 4) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
+    ; }
 Return
 
 ResetWins:
@@ -641,7 +641,7 @@ Return
     cycling        := False
     cyclingMin     := False
     startHighlight := False
-    KeyWait, x, U
+    KeyWait, x, U T1
     hitTAB         := False
     hitCAPS        := False
     cancelAltTab   := False
@@ -683,11 +683,11 @@ CycleMin(direction)
     Global hitCAPS
     Global RevMinnedWindows
     Global MinnedWindows
+    Global ReverseSearch
             
     WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
             
-    hitCAPS := True
     If !cyclingMin
     {
         Critical On
@@ -729,6 +729,14 @@ CycleMin(direction)
         Else {
             RevMinnedWindows := MinnedWindows
         }
+        
+        loop % RevMinnedWindows
+        {
+            If lastWinMinHwndId == RevMinnedWindows%A_Index%
+                break
+            Else
+                cycleCountMin += 1
+        }
     }
     
     startHighlight := True
@@ -750,7 +758,8 @@ CycleMin(direction)
                 PrevCount := RevMinnedWindows.MaxIndex()
                 
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
-            sleep, 200
+            If hitCAPS
+                sleep, 200
             WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
@@ -770,7 +779,8 @@ CycleMin(direction)
                 PrevCount := 1
                 
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
-            sleep, 200
+            If hitCAPS
+                sleep, 200
             WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
@@ -779,6 +789,7 @@ CycleMin(direction)
             }
         }
     }
+    hitCAPS := True
     
     Return
 }
@@ -893,9 +904,6 @@ Cycle(direction)
 ; #MaxThreadsPerHotkey 2
 ClearRect:
 
-    sleep 75
-    If (hitTAB || hitCAPS) && !cancelAltTab
-        Return
     sleep 75
     If (hitTAB || hitCAPS) && !cancelAltTab
         Return
@@ -1542,6 +1550,7 @@ IsWindow(hWnd){
    if (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() && HexColor == 0xFFFFFF)
    { 
         Send !{Up}
+        sleep, 200
    }
    Return
 #If
