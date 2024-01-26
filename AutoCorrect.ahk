@@ -19,7 +19,6 @@ dummyFunction1() {
 #NoEnv
 #SingleInstance
 
-
 SetBatchLines -1
 SetWinDelay   -1
 SetControlDelay -1
@@ -362,7 +361,9 @@ CheckForNewWinSpawn:
     loop % allWindows
     {
         hwndID := allWindows%A_Index%
-        If (IsAltTabWindow(hwndID)) {
+        WinGet, procStr, ProcessName, ahk_id %hwndID%
+        WinGetClass, classStr, ahk_id %hwndID%
+        If (IsAltTabWindow(hwndID) || (procStr == "OUTLOOK.EXE" && classStr == "#32770")) {
             If (MonCount > 1 && !InitializeActWins) {
                 PrevActiveWindows.push(hwndID)
                 continue
@@ -375,14 +376,16 @@ CheckForNewWinSpawn:
             If (state > -1) {
                 WinGetTitle, cTitle, ahk_id %hwndID%
                 desknum := VD.getDesktopNumOfWindow(cTitle)
-                If (desknum == VD.getCurrentDesktopNum() && IsAltTabWindow(hwndID)) {
+                If (desknum == VD.getCurrentDesktopNum()) {
                     If desknum <= 0
                         continue
                     If (!HasVal(PrevActiveWindows, hwndID)) {
                         currentMon := MWAGetMonitorMouseIsIn()
                         currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
-                        If !currentMonHasActWin
+                        If !currentMonHasActWin {
+                            WinActivate, ahk_id %hwndID%
                             Send, {LWin down}{LShift down}{Left}{LShift up}{LWin up}
+                        }
                         PrevActiveWindows.push(hwndID)
                     }
                 }
@@ -933,22 +936,22 @@ ClearRect:
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 40
+    sleep 20
     WinSet, Transparent, 125, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 40
+    sleep 20
     WinSet, Transparent, 100, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 40
+    sleep 20
     WinSet, Transparent, 50, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 40
+    sleep 20
     WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
 
@@ -1635,6 +1638,18 @@ RButton & WheelUp::
 Return
 #If
 
+~$WheelUp::
+    Hotkey, $WheelUp, Off
+    MouseGetPos, , , wuID
+    WinGetClass, wuClass, ahk_id %wuID%
+    If (wuClass == "Shell_TrayWnd" && !moving)
+    {
+        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+        sleep, 750
+    }
+    Hotkey, $WheelUp, On
+Return
+
 #If !moving
 RButton & WheelDown::
     ComboActive := True
@@ -1643,6 +1658,18 @@ RButton & WheelDown::
     Send {PgDn}
 Return
 #If
+
+~$WheelDown::
+    Hotkey, $WheelDown, Off
+    MouseGetPos, , , wdID
+    WinGetClass, wdClass, ahk_id %wdID%
+    If (wdClass == "Shell_TrayWnd" && !moving)
+    {
+        Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+        sleep, 750
+    }
+    Hotkey, $WheelDown, On
+Return
 
 /* ;
 ***********************************
@@ -1920,29 +1947,29 @@ track() {
             Critical Off
         }
     }
-    Else
-    {
-        If (MonCount == 1 && x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3 )
-        {
-            sleep 250
-            MouseGetPos x, y, hwndId
-            If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
-            {   
-                Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
-                sleep 700
-            }
-        }
-        Else If (MonCount == 1 && x <= 3 && y >= A_ScreenHeight-3 )
-        {
-            sleep 250
-            MouseGetPos x, y, hwndId
-            If (x <= 3 && y >= A_ScreenHeight-3)
-            {
-                Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
-                sleep 700
-            }
-        }
-    }
+    ; Else
+    ; {
+        ; If (MonCount == 1 && x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3 )
+        ; {
+            ; sleep 250
+            ; MouseGetPos x, y, hwndId
+            ; If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
+            ; {   
+                ; Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+                ; sleep 700
+            ; }
+        ; }
+        ; Else If (MonCount == 1 && x <= 3 && y >= A_ScreenHeight-3 )
+        ; {
+            ; sleep 250
+            ; MouseGetPos x, y, hwndId
+            ; If (x <= 3 && y >= A_ScreenHeight-3)
+            ; {
+                ; Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+                ; sleep 700
+            ; }
+        ; }
+    ; }
     
     If (MonCount == 1 &&  x > 3 && y > 3 && x < A_ScreenWidth-3 && y < A_ScreenHeight-3)
     {
@@ -2411,7 +2438,6 @@ Return
 return  ; This makes the above hotstrings do nothing so that they override the ign->ing rule below.
 
 #Hotstring B T C k-1 ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).; Turn back on automatic backspacing for all subsequent hotstrings.
-:?:ign::ing
 ::vms::VMs
 ::VMs::VMs
 ::VMware::VMware
@@ -2565,6 +2591,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :*:cmaket::CMakeLists.txt
 :*:unfo::unfortunately`
 :*:Unfo::Unfortunately`
+:*:priv::privilege`
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
