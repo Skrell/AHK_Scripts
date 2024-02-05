@@ -18,6 +18,7 @@ dummyFunction1() {
 #WinActivateForce
 #NoEnv
 #SingleInstance
+#MaxHotkeysPerInterval 500
 
 SetBatchLines -1
 SetWinDelay   -1
@@ -401,10 +402,10 @@ CheckForNewWinSpawn:
 Return
 
 HasVal(haystack, needle) {
-	if !(IsObject(haystack)) || (haystack.Length() = 0)
+	If !(IsObject(haystack)) || (haystack.Length() = 0)
 		return 0
 	for index, value in haystack
-		if (value = needle)
+		If (value = needle)
 			return index
 	return 0
 }
@@ -763,7 +764,7 @@ CycleMin(direction)
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
             If hitCAPS
                 sleep, 200
-            WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
+            ; WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
                 sleep 100
@@ -784,7 +785,7 @@ CycleMin(direction)
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
             If hitCAPS
                 sleep, 200
-            WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
+            ; WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
             If (startHighlight) {
                 sleep 100
@@ -963,7 +964,7 @@ DrawRect:
     ; Get the current window's position 
     WinGetPos, x, y, w, h, A
     ; To avoid the error message
-    if (x="")
+    If (x="")
         return
     Gui, GUI4Boarder: +Lastfound +AlwaysOnTop +ToolWindow +E0x08000000 +E0x20 +Owner hWndHighlighter
     ; set the background for the GUI window 
@@ -972,7 +973,7 @@ DrawRect:
     Gui, GUI4Boarder: -Caption
     ; Retrieves the minimized/maximized state for a window.
     WinGet, notMedium , MinMax, A
-    if (notMedium > -1){
+    If (notMedium > -1){
     ; 0: The window is neither minimized nor maximized.
         offset:=7
         outerX:=offset
@@ -1006,7 +1007,7 @@ UpdateInputBoxTitle:
     ControlGetText, memotext, Edit1, Type Up to 3 Letters of a Window Title to Search
     StringLen, memolength, memotext
     
-    if (memolength >= 3 || InStr(memotext, " ")) {
+    If (memolength >= 3 || InStr(memotext, " ")) {
         UserInputTrimmed := Trim(memotext)
         Send, {ENTER}
     }
@@ -1031,7 +1032,7 @@ $!`::
     SetTimer, UpdateInputBoxTitle, off
     SearchingWindows := False
     
-    if ErrorLevel
+    If ErrorLevel
     {
         return
     }   
@@ -1162,10 +1163,10 @@ ActivateWindow:
     SetTitleMatchMode, 3
     
     
-    fulltitle := RegExReplace(thisMenuItem, "\(\S+\)$", "")
+    fulltitle := RegExReplace(thisMenuItem, "\(\S+\.\S+\)$", "")
     fulltitle := Trim(fulltitle)
     ; msgbox, %fulltitle%
-    fulltitle := RegExReplace(fulltitle, "^.*\:\s", "")
+    fulltitle := RegExReplace(fulltitle, "^Desktop\s\d+\s*\:\s?", "")
     fulltitle := Trim(fulltitle)
     ; msgbox, %fulltitle%
     fulltitle := RegExReplace(fulltitle, "^\[?", "")
@@ -1178,13 +1179,13 @@ ActivateWindow:
     cdt := VD.getCurrentDesktopNum()
     desknum := VD.getDesktopNumOfWindow(fulltitle)
     WinGet, vState, MinMax, %fulltitle%
-    if (desknum < cdt)
+    If (desknum < cdt)
     {
         WinGetPos, vwx,vwy,vww,, %fulltitle%
         WinSet, Transparent, 0, %fulltitle%
         VD.MoveWindowToCurrentDesktop(fulltitle)
-        if (vState > -1) {
-            WinRestore , %fulltitle%
+        If (vState > -1) {
+            ; WinRestore , %fulltitle%
             WinActivate, %fulltitle%
             offscreenX := -1*vww
             
@@ -1205,17 +1206,17 @@ ActivateWindow:
             sleep 500
             WinMinimize, %fulltitle% 
             WinSet, Transparent, 255, %fulltitle%
-            WinRestore , %fulltitle%
+            ; WinRestore , %fulltitle%
             WinActivate, %fulltitle%
         }
     }
-    else if (desknum > cdt)
+    else If (desknum > cdt)
     {
         WinGetPos, vwx,vwy,vww,, %fulltitle%
         WinSet, Transparent, 0, %fulltitle%
         VD.MoveWindowToCurrentDesktop(fulltitle)
-        if (vState > -1) {
-            WinRestore , %fulltitle%
+        If (vState > -1) {
+            ; WinRestore , %fulltitle%
             WinActivate, %fulltitle%
             offscreenX := A_ScreenWidth
             
@@ -1236,15 +1237,15 @@ ActivateWindow:
             sleep 500
             WinMinimize, %fulltitle% 
             WinSet, Transparent, 255, %fulltitle%
-            WinRestore , %fulltitle%
+            ; WinRestore , %fulltitle%
             WinActivate, %fulltitle%
         }
     }
     else
     {
-        if (vState == -1) {
-            WinRestore , %fulltitle%
-        }
+        ; If (vState == -1) {
+            ; WinRestore , %fulltitle%
+        ; }
         WinActivate, %fulltitle%
         WinGet, hwndId, ID, A
         currentMon := MWAGetMonitorMouseIsIn()
@@ -1266,7 +1267,7 @@ GetCurrentMonitorIndex(){
 
     Loop %monitorsCount%{
         SysGet, monitor, Monitor, %A_Index%
-        if (monitorLeft <= mx && mx <= monitorRight && monitorTop <= my && my <= monitorBottom){
+        If (monitorLeft <= mx && mx <= monitorRight && monitorTop <= my && my <= monitorBottom){
             Return A_Index
             }
         }
@@ -1291,11 +1292,11 @@ CoordYCenterScreen()
 ProcessIsElevated(vPID)
 {
 	;PROCESS_QUERY_LIMITED_INFORMATION := 0x1000
-	if !(hProc := DllCall("kernel32\OpenProcess", "UInt",0x1000, "Int",0, "UInt",vPID, "Ptr"))
+	If !(hProc := DllCall("kernel32\OpenProcess", "UInt",0x1000, "Int",0, "UInt",vPID, "Ptr"))
 		return -1
 	;TOKEN_QUERY := 0x8
 	hToken := 0
-	if !(DllCall("advapi32\OpenProcessToken", "Ptr",hProc, "UInt",0x8, "Ptr*",hToken))
+	If !(DllCall("advapi32\OpenProcessToken", "Ptr",hProc, "UInt",0x8, "Ptr*",hToken))
 	{
 		DllCall("kernel32\CloseHandle", "Ptr",hProc)
 		return -1
@@ -1317,73 +1318,73 @@ IsAltTabWindow(hWnd)
    WinGet, vPID, PID, % "ahk_id " hWnd
    WinGet, vProc, ProcessName, ahk_id %hWnd%
    
-   if (tit == "" or vProc == "qrivi_ssam.exe")
+   If (tit == "" or vProc == "qrivi_ssam.exe")
       return
       
-   if (ProcessIsElevated(vPID))
+   If (ProcessIsElevated(vPID))
       return
       
    static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
-   if (VirtualDesktopExist = "")
+   If (VirtualDesktopExist = "")
    {
       OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
-      if (OSbuildNumber < 14393)
+      If (OSbuildNumber < 14393)
          VirtualDesktopExist := 0
       else
          VirtualDesktopExist := 1
    }
-   if !DllCall("IsWindowVisible", "uptr", hWnd)
+   If !DllCall("IsWindowVisible", "uptr", hWnd)
       return
    DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
-   ; if (cloaked = DWM_CLOAKED_SHELL)
+   ; If (cloaked = DWM_CLOAKED_SHELL)
    ; return
-   if (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
+   If (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
       return
    WinGetClass, winClass, ahk_id %hWnd%
-   if (winClass = "Windows.UI.Core.CoreWindow")
+   If (winClass = "Windows.UI.Core.CoreWindow")
       return
-   if (winClass = "ApplicationFrameWindow")
+   If (winClass = "ApplicationFrameWindow")
    {
       varsetcapacity(ApplicationViewCloakType, 4, 0)
       DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
-      if (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
+      If (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
          return
    }
-   ; if !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test if window is shown on any monitor. alt-tab shows any window even if window is out of monitor.
+   ; If !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test If window is shown on any monitor. alt-tab shows any window even If window is out of monitor.
    ;   return
    WinGet, exStyles, ExStyle, ahk_id %hWnd%
-   if (exStyles & WS_EX_APPWINDOW)
+   If (exStyles & WS_EX_APPWINDOW)
    {
-      if DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
+      If DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
          return
-      if (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
+      If (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
          return true
-      else if (VD.getDesktopNumOfWindow(tit) > 0)
+      else If (VD.getDesktopNumOfWindow(tit) > 0)
             return true
       else
          return
    }
-   if (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)
+   If (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)
       return
    loop
    {
       hwndPrev := hwnd
       hwnd := DllCall("GetWindow", "uptr", hwnd, "uint", GW_OWNER, "ptr")
-      if !hwnd
+      If !hwnd
       {
-         if DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
+         If DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
             return
-         if (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
+         If (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
             return true
-         else if (VD.getDesktopNumOfWindow(tit) > 0)
+         else If (VD.getDesktopNumOfWindow(tit) > 0)
             return true
          else
             return
       }
-      if DllCall("IsWindowVisible", "uptr", hwnd)
+      If DllCall("IsWindowVisible", "uptr", hwnd)
          return
       WinGet, exStyles, ExStyle, ahk_id %hwnd%
-      if ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
+      If ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
          return
    }
 }
@@ -1399,7 +1400,7 @@ GetLastActivePopup(hwnd)
 IsWindowOnCurrentVirtualDesktop(hwnd)
 {
    static IVirtualDesktopManager
-   if !IVirtualDesktopManager
+   If !IVirtualDesktopManager
       IVirtualDesktopManager := ComObjCreate(CLSID_VirtualDesktopManager := "{AA509086-5CA9-4C25-8F95-589D3C07B48A}", IID_IVirtualDesktopManager := "{A5CD92FF-29BE-454C-8D04-D82879FB3F1B}")
    DllCall(NumGet(NumGet(IVirtualDesktopManager+0), 3*A_PtrSize), "ptr", IVirtualDesktopManager, "uptr", hwnd, "int*", onCurrentDesktop)   ; IsWindowOnCurrentVirtualDesktop
    return onCurrentDesktop
@@ -1407,7 +1408,7 @@ IsWindowOnCurrentVirtualDesktop(hwnd)
 
 PropEnumProcEx(hWnd, lpszString, hData, dwData)
 {
-   if (strget(lpszString, "UTF-16") = "ApplicationViewCloakType")
+   If (strget(lpszString, "UTF-16") = "ApplicationViewCloakType")
    {
       numput(hData, dwData+0, 0, "int")
       return false
@@ -1428,7 +1429,7 @@ ShellMessage( wParam,lParam ) {
   {            
       hwnd := NumGet( lParam+0 ) 
       WinGet, status, MinMax, ahk_id %hwnd%
-      if (status == -1)
+      If (status == -1)
       {
           lastWinMinHwndId := hwnd
           
@@ -1438,7 +1439,7 @@ ShellMessage( wParam,lParam ) {
           ;https://www.autohotkey.com/boards/viewtopic.php?t=59047
           ; WinGet oldxs, ExStyle, ahk_id %hwnd%
           ; newxs := (oldxs & ~0x40000) | 0x80
-          ; if (newxs != oldxs)
+          ; If (newxs != oldxs)
           ; {
              ; WinSet ExStyle, % newxs, ahk_id %hwnd%
              ; WinSet ExStyle, % oldxs, ahk_id %hwnd%
@@ -1449,7 +1450,7 @@ ShellMessage( wParam,lParam ) {
 	; {
         ; ID:=lParam
         ; WinGetTitle, title, Ahk_id %ID%
-        ; if (title == "Title of the program") ; Enter the program title between quotes
+        ; If (title == "Title of the program") ; Enter the program title between quotes
         ; {
             ; nil = %ID%
             ; MsgBox, %ID% opened.
@@ -1458,7 +1459,7 @@ ShellMessage( wParam,lParam ) {
     ; If (wParam=2) ;  HSHELL_WINDOWDESTROYED := 2 
     ; {
         ; ID:=lParam  
-        ; if (nil == ID)
+        ; If (nil == ID)
         ; {
             ; MsgBox, %ID% closed.
         ; }
@@ -1522,20 +1523,20 @@ ShowMenu(hMenu, MenuLoop:=0, X:=0, Y:=0, Flags:=0) {            ; Ver 0.61 by SK
 
 IsWindow(hWnd){
     WinGet, dwStyle, Style, ahk_id %hWnd%
-    if ((dwStyle&0x08000000) || !(dwStyle&0x10000000)) {
+    If ((dwStyle&0x08000000) || !(dwStyle&0x10000000)) {
         return False
     }
     WinGet, dwExStyle, ExStyle, ahk_id %hWnd%
-    if (dwExStyle & 0x00000080) {
+    If (dwExStyle & 0x00000080) {
         return False
     }
     WinGetClass, szClass, ahk_id %hWnd%
-    if (szClass = "TApplication") {
+    If (szClass = "TApplication") {
         return False
     }
     WinGetPos,,,W,H, ahk_id %hWnd%
     WinGet, state, MinMax, ahk_id %hWnd%
-    if (H < 375 && state > -1 || W < 290 && state > -1) {
+    If (H < 375 && state > -1 || W < 290 && state > -1) {
         return False
     }
     return True
@@ -1550,11 +1551,13 @@ IsWindow(hWnd){
 ~LButton::
    MouseGetPos, X, Y
    PixelGetColor, HexColor, %X%, %Y%, RGB
-   if (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() && HexColor == 0xFFFFFF)
+   If (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() && HexColor == 0xFFFFFF)
    { 
         Send !{Up}
         sleep, 200
    }
+   WinSet, Region, 0-0 w0 h0
+   Gui, GUI4Boarder: Hide
    Return
 #If
 
@@ -1571,7 +1574,7 @@ AccObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
 
    (x = "" || y = "") ? DllCall("GetCursorPos", "Int64P", pt) : pt := x & 0xFFFFFFFF | y << 32
    VarSetCapacity(varChild, 8 + 2*A_PtrSize, 0)
-   if DllCall("oleacc\AccessibleObjectFromPoint", "Int64", pt, "PtrP", pAcc, "Ptr", &varChild) = 0
+   If DllCall("oleacc\AccessibleObjectFromPoint", "Int64", pt, "PtrP", pAcc, "Ptr", &varChild) = 0
       Return ComObject(VT_DISPATCH, pAcc, F_OWNVALUE), _idChild_ := NumGet(varChild, 8, "UInt")
 }
 
@@ -1680,13 +1683,14 @@ Return
 
 ; Alt + ` - hotkey to activate NEXT Window of same type of the current App or Chrome Website Shortcut
 #If !moving
+#MaxThreadsPerHotkey 1
 RButton & LButton::
     ComboActive := True
     MouseGetPos, , , belowID
     WinGet, activeProcessName, ProcessName, ahk_id %belowID%
     WinGetTitle, FullTitle, ahk_id %belowID%
     WinGetClass, FullClass, ahk_id %belowID%
-    if (activeProcessName = "chrome.exe") {
+    If (activeProcessName = "chrome.exe") {
         HandleChromeWindowsWithSameTitle(FullTitle)
     } else {
         HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
@@ -1706,60 +1710,159 @@ ExtractAppTitle(FullTitle) {
 
 ; Switch a "Chrome App or Chrome Website Shortcut" open windows based on the same application title
 HandleChromeWindowsWithSameTitle(title := "") {
+    currentMon := MWAGetMonitorMouseIsIn()
     AppTitle := ExtractAppTitle(title)
     SetTitleMatchMode, 2
     WinGet, windowsWithSameTitleList, List, %AppTitle%
     counter := 2
-    WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
+    
     numWindows := windowsWithSameTitleList
+    tooltip, %numWindows% found!
+    
+    hwndId := windowsWithSameTitleList%counter%
+    loop  {
+        If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+            counter++
+            If (counter > numWindows)
+            {
+                counter := 1
+            }
+            hwndId := windowsWithSameTitleList%counter%
+        }
+        Else
+            break
+    }
+    If (counter > numWindows)
+    {
+        counter := 1
+    }
+    WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
+    
     KeyWait, LButton, U
+    
     counter++
+    
+    hwndId := windowsWithSameTitleList%counter%
+    loop  {
+        If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+            counter++
+            If (counter > numWindows)
+            {
+                counter := 1
+            }
+            hwndId := windowsWithSameTitleList%counter%
+        }
+        Else
+            break
+    }
+    If (counter > numWindows)
+    {
+        counter := 1
+    }
     loop
     {
         KeyWait, LButton, D T0.25
-        if !ErrorLevel
+        If !ErrorLevel
         {
+            tooltip, Windows # %counter%
             WinActivate, % "ahk_id " windowsWithSameTitleList%counter%    
             KeyWait, LButton, U T0.25
-            counter++
-        }
-        if (counter > numWindows)
-        {
-            counter := 1
+            If !ErrorLevel
+            {
+                counter++
+                hwndId := windowsWithSameTitleList%counter%
+                loop  {
+                    If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+                        counter++
+                        If (counter > numWindows)
+                        {
+                            counter := 1
+                        }
+                        hwndId := windowsWithSameTitleList%counter%
+                    }
+                    Else
+                        break
+                }
+                If (counter > numWindows)
+                {
+                    counter := 1
+                }
+            }
         }
     }
     until (!GetKeyState("RButton", "P"))
+    tooltip,
 }
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    SetTitleMatchMode, 2
+    currentMon := MWAGetMonitorMouseIsIn()
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
     counter := 2
+    
     WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
     numWindows := windowsListWithSameProcessAndClass
+    
+    tooltip, %numWindows% found!
     KeyWait, LButton, U
+    
     counter++
+    
+    hwndId := windowsListWithSameProcessAndClass%counter%
+    loop  {
+        If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+            counter++
+            If (counter > numWindows)
+            {
+                counter := 1
+            }
+            hwndId := windowsListWithSameProcessAndClass%counter%
+        }
+        Else
+            break
+    }
+    If (counter > numWindows)
+    {
+        counter := 1
+    }
     loop
     {
-        KeyWait, LButton, D T0.25
-        if !ErrorLevel
+        KeyWait, LButton, D T.25
+        If !ErrorLevel
         {
+            tooltip, Windows # %counter%
             WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%    
-            KeyWait, LButton, U T0.25
-            counter++
-        }
-        if (counter > numWindows)
-        {
-            counter := 1
+            KeyWait, LButton, U T.25
+            If !ErrorLevel 
+            {
+                counter++
+                hwndId := windowsListWithSameProcessAndClass%counter%    
+                loop  {
+                    If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+                        counter++
+                        If (counter > numWindows)
+                        {
+                            counter := 1
+                        }
+                        hwndId := windowsListWithSameProcessAndClass%counter%
+                    }
+                    Else
+                        break
+                }
+                If (counter > numWindows)
+                {
+                    counter := 1
+                }
+            }
         }
     }
     until (!GetKeyState("RButton", "P"))
+    tooltip,
 }
 
 FrameShadow(HGui) {
-	DllCall("dwmapi\DwmIsCompositionEnabled","IntP",_ISENABLED) ; Get if DWM Manager is Enabled
-	if !_ISENABLED ; if DWM is not enabled, Make Basic Shadow
+	DllCall("dwmapi\DwmIsCompositionEnabled","IntP",_ISENABLED) ; Get If DWM Manager is Enabled
+	If !_ISENABLED ; If DWM is not enabled, Make Basic Shadow
 		DllCall("SetClassLong","UInt",HGui,"Int",-26,"Int",DllCall("GetClassLong","UInt",HGui,"Int",-26)|0x20000)
 	else {
 		VarSetCapacity(_MARGINS,16)
@@ -1775,7 +1878,7 @@ FrameShadow(HGui) {
 ; Copy this function into your script to use it.
 HideTrayTip() {
     TrayTip  ; Attempt to hide it the normal way.
-    if SubStr(A_OSVersion,1,3) = "10." {
+    If SubStr(A_OSVersion,1,3) = "10." {
         Menu Tray, NoIcon
         Sleep 200  ; It may be necessary to adjust this sleep.
         Menu Tray, Icon
@@ -2019,11 +2122,16 @@ MouseIsOverTitleBar() {
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
 GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
+    WinGet, state, MinMax, ahk_id %thisWindowHwnd% 
+    If (state == -1)
+        return True
+    
     ;Get number of monitor
     SysGet, monCount, MonitorCount
     
     ;Iterate through each monitor
     Loop %monCount%{
+        Critical, On
         ;Get Monitor working area
         SysGet, workArea, Monitor, % A_Index
         
@@ -2031,14 +2139,16 @@ GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
         WinGetPos, X, Y, W, , ahk_id %thisWindowHwnd%
         X += floor(W/2)
         Y += 8
-        ;Check if the focus window in on the current monitor index
-        if ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
+        ;Check If the focus window in on the current monitor index
+        If ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
             ; tooltip, %X%  %Y% %workAreaLeft% %workAreaTop% %workAreaBottom% %workAreaRight%
             ;Return the monitor index since it's within that monitors borders.
             ; return % A_Index
+            Critical, Off
             return True
         }
     }
+    Critical, Off
     return False
 }
 
@@ -2054,7 +2164,7 @@ MWAGetMonitorMouseIsIn() ; we didn't actually need the "Monitor = 0"
     {
         SysGet, mon%A_Index%, Monitor, %A_Index%    ; "Monitor" will get the total desktop space of the monitor, including taskbars
 
-        if ( Mx >= mon%A_Index%left ) && ( Mx < mon%A_Index%right ) && ( My >= mon%A_Index%top ) && ( My < mon%A_Index%bottom )
+        If ( Mx >= mon%A_Index%left ) && ( Mx < mon%A_Index%right ) && ( My >= mon%A_Index%top ) && ( My < mon%A_Index%bottom )
         {
             ActiveMon := A_Index
             break
@@ -2136,20 +2246,20 @@ SetTitleMatchMode, 2
 ; To enable it, remove the /*..*/ symbols around it.
 ; From Laszlo's script at http://www.autohotkey.com/forum/topic9689.html
 ;------------------------------------------------------------------------------
-/*
+
 ; The first line of code below is the set of letters, digits, and/or symbols
-; that are eligible for this type of correction.  Customize if you wish:
+; that are eligible for this type of correction.  Customize If you wish:
 keys = abcdefghijklmnopqrstuvwxyz
 Loop Parse, keys
     HotKey ~+%A_LoopField%, Hoty
 Hoty:
     CapCount := SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 ? CapCount+1 : 1
-    if CapCount = 2
+    If CapCount = 2
         SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
-    else if CapCount = 3
+    else If CapCount = 3
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
 Return
-*/
+
 
 ;------------------------------------------------------------------------------
 ; Win+H to enter misspelling correction.  It will be added to this script.
@@ -2163,7 +2273,7 @@ Return
     ; Clipboard =  ; Must start off blank for detection to work.
     ; Send ^c
     ; ClipWait 1
-    ; if ErrorLevel  ; ClipWait timed out.
+    ; If ErrorLevel  ; ClipWait timed out.
         ; return
     ; ; Replace CRLF and/or LF with `n for use in a "send-raw" hotstring:
     ; ; The same is done for any other characters that might otherwise
@@ -2177,13 +2287,13 @@ Return
     ; ; This will move the InputBox's caret to a more friendly position:
     ; SetTimer, MoveCaret, 10
     ; ; Show the InputBox, providing the default hotstring:
-    ; InputBox, Hotstring, New Hotstring, Provide the corrected word on the right side. You can also edit the left side if you wish.`n`nExample entry:`n::teh::the,,,,,,,, ::%Hotstring%::%Hotstring%
+    ; InputBox, Hotstring, New Hotstring, Provide the corrected word on the right side. You can also edit the left side If you wish.`n`nExample entry:`n::teh::the,,,,,,,, ::%Hotstring%::%Hotstring%
 
-    ; if ErrorLevel <> 0  ; The user pressed Cancel.
+    ; If ErrorLevel <> 0  ; The user pressed Cancel.
         ; return
     ; ; Otherwise, add the hotstring and reload the script:
     ; FileAppend, `n%Hotstring%, %A_ScriptFullPath%  ; Put a `n at the beginning in case file lacks a blank line at its end.
-    ; ; it would be best if it overwrote the string you had highlighted with the replacement you just typed in
+    ; ; it would be best If it overwrote the string you had highlighted with the replacement you just typed in
     ; Reload
     ; Sleep 3000 ; If successful, the reload will close this instance during the Sleep, so the line below will never be reached.
     ; MsgBox, 4,, The hotstring just added appears to be improperly formatted.  Would you like to open the script for editing? Note that the bad hotstring is at the bottom of the script.
@@ -2497,6 +2607,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :?:iaion::iation
 :?:cims::cisms
 :?:lyl::lly
+:?:/::?
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -2592,6 +2703,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :*:unfo::unfortunately`
 :*:Unfo::Unfortunately`
 :*:priv::privilege`
+:*:envi::environment`
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
@@ -2609,6 +2721,9 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::http:\\::http://
 ::httpL::http:
 ::herf::href
+::deprication::deprecation
+::depricated::deprecated
+::depricate::deprecate
 
 ::avengence::a vengeance
 ::adbandon::abandon
@@ -4190,12 +4305,15 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::doccuments::documents
 ::docuement::documents
 ::documnets::documents
-::doens::does
+::doens::doesn't
 ::doese::does
 ::doe snot::does not ; *could* be legitimate... but very unlikely!
+::does't::doesn't
+::doest::doesn't
 ::doens't::doesn't
 ::doesnt::doesn't
 ::dosen't::doesn't
+::doenst::doesn't
 ::dosn't::doesn't
 ::doign::doing
 ::doimg::doing
@@ -7553,7 +7671,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::machien::machine
 ::i::I
 ::fo::of
-::fi::if
+::fi::If
 ::awhiel::awhile
 ::emial::email
 ::btter::better
