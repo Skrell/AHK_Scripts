@@ -42,7 +42,7 @@ Global cycleCountMin := 0
 Global totalCycleCountMin := 0
 Global startHighlight := False
 Global border_thickness := 4
-Global AccentColorHex := 0xFF00FF
+Global border_color := 0xFF00FF
 Global hitTAB := False
 Global hitCAPS := False
 Global cancelAltTab := False
@@ -91,9 +91,10 @@ FrameShadow(IGUIF2)
    
 Gui +LastFound
 hWnd := WinExist()
-DllCall( "RegisterShellHookWindow", UInt, A_ScriptHwnd )
-MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
+DllCall( "RegisterShellHookWindow", UInt, hWnd )
+MsgNum := DllCall( "RegisterWindowMessage", Str, "SHELLHOOK" )
 OnMessage( MsgNum, "ShellMessage" )
+
 Return
 
 ;############### CAse COrrector ######################
@@ -107,19 +108,19 @@ Return
 ; ccih := InputHook("V I2 E", EndKeys)
 ; Loop ; WARNING will loop forever until process is killed.
 ; {
-	; ccih.Start() ; Start the hook.
-	; ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
-	; CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
-	; If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
-		; CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
-		; ;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
-	; If (inStr(Uppers,CaseArr[1],True) && inStr(Uppers,CaseArr[2],True) && inStr(Lowers,CaseArr[3],True)) && (CaseArr[3] > 0) { ; "True" makes inStr() case-sensitive.
-		; Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
-		; StringLower, Last2, Last2 
-		; Send, {Backspace 2} ; Do actual correction.
-		; Send, %Last2%
-		; ;SoundBeep
-	; }
+    ; ccih.Start() ; Start the hook.
+    ; ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
+    ; CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
+    ; If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
+        ; CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
+        ; ;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
+    ; If (inStr(Uppers,CaseArr[1],True) && inStr(Uppers,CaseArr[2],True) && inStr(Lowers,CaseArr[3],True)) && (CaseArr[3] > 0) { ; "True" makes inStr() case-sensitive.
+        ; Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
+        ; StringLower, Last2, Last2 
+        ; Send, {Backspace 2} ; Do actual correction.
+        ; Send, %Last2%
+        ; ;SoundBeep
+    ; }
 ; }
 
 #If !hitCAPS || !hitTAB
@@ -402,12 +403,12 @@ CheckForNewWinSpawn:
 Return
 
 HasVal(haystack, needle) {
-	If !(IsObject(haystack)) || (haystack.Length() = 0)
-		return 0
-	for index, value in haystack
-		If (value = needle)
-			return index
-	return 0
+    If !(IsObject(haystack)) || (haystack.Length() = 0)
+        return 0
+    for index, value in haystack
+        If (value = needle)
+            return index
+    return 0
 }
 ;============================================================================================================================
 FadeInWin1:
@@ -907,7 +908,6 @@ Cycle(direction)
 
 ; #MaxThreadsPerHotkey 2
 ClearRect:
-
     sleep 75
     If (hitTAB || hitCAPS) && !cancelAltTab
         Return
@@ -927,76 +927,119 @@ ClearRect:
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 40
+    sleep 50
     WinSet, Transparent, 175, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 40
+    sleep 50
     WinSet, Transparent, 150, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 20
+    sleep 50
     WinSet, Transparent, 125, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 20
+    sleep 50
     WinSet, Transparent, 100, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 20
+    sleep 50
     WinSet, Transparent, 50, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
-    sleep 20
-    WinSet, Region, 0-0 w0 h0
+    sleep 50
+    ; WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
 
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
-    WinSet, Transparent, 255, ahk_id %Highlighter%
-    ; Get the current window's position 
-    WinGetPos, x, y, w, h, A
-    ; To avoid the error message
-    If (x="")
+    ; WinGetPos, x, y, w, h, A
+    WinGet, activeWin, ID, A
+    WinGetPosEx(activeWin, x, y, w, h)
+    
+    if (x="")
         return
-    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop +ToolWindow +E0x08000000 +E0x20 +Owner hWndHighlighter
-    ; set the background for the GUI window 
-    Gui, GUI4Boarder: Color, %AccentColorHex%
-    ; remove thick window border of the GUI window
-    Gui, GUI4Boarder: -Caption
-    ; Retrieves the minimized/maximized state for a window.
-    WinGet, notMedium , MinMax, A
-    If (notMedium > -1){
-    ; 0: The window is neither minimized nor maximized.
-        offset:=7
-        outerX:=offset
+    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop +Toolwindow hWndHighlighter
+
+    borderType:="inside"                ; set to inside, outside, or both
+
+    if (borderType="outside") { 
+        outerX:=0
         outerY:=0
+        outerX2:=w+2*border_thickness
+        outerY2:=h+2*border_thickness
+
+        innerX:=border_thickness
+        innerY:=border_thickness
+        innerX2:=border_thickness+w
+        innerY2:=border_thickness+h
+
+        newX:=x-border_thickness
+        newY:=y-border_thickness
+        newW:=w+2*border_thickness
+        newH:=h+2*border_thickness
+
+    } else if (borderType="inside") {   
+        WinGet, myState, MinMax, A
+        ; if (myState == 1)
+            ; offset:=8
+        ; else 
+            offset:=0
+
+        outerX:=offset
+        outerY:=offset
         outerX2:=w-offset
         outerY2:=h-offset
+
         innerX:=border_thickness+offset
-        innerY:=border_thickness
+        innerY:=border_thickness+offset
         innerX2:=w-border_thickness-offset
         innerY2:=h-border_thickness-offset
+
         newX:=x
         newY:=y
         newW:=w
         newH:=h
-        WinSet, Region, %outerX%-%outerY% %outerX2%-%outerY% %outerX2%-%outerY2% %outerX%-%outerY2% %outerX%-%outerY%    %innerX%-%innerY% %innerX2%-%innerY% %innerX2%-%innerY2% %innerX%-%innerY2% %innerX%-%innerY% 
-        Gui, GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NoActivate,
-        WinSet, Transparent, 255, ahk_id %Highlighter%
-        return
-    } else {
-        WinSet, Region, 0-0 w0 h0
-        return
+
+
+
+    } else if (borderType="both") { 
+        outerX:=0
+        outerY:=0
+        outerX2:=w+2*border_thickness
+        outerY2:=h+2*border_thickness
+
+        innerX:=border_thickness*2
+        innerY:=border_thickness*2
+        innerX2:=w
+        innerY2:=h
+
+        newX:=x-border_thickness
+        newY:=y-border_thickness
+        newW:=w+4*border_thickness
+        newH:=h+4*border_thickness
     }
-Return
+
+
+
+    Gui, GUI4Boarder: Color, %border_color%
+    Gui, GUI4Boarder: -Caption
+
+    ;WinSet, Region, 0-0 %w%-0 %w%-%h% 0-%h% 0-0 %border_thickness%-%border_thickness% %iw%-%border_thickness% %iw%-%ih% %border_thickness%-%ih% %border_thickness%-%border_thickness%
+     WinSet, Region, %outerX%-%outerY% %outerX2%-%outerY% %outerX2%-%outerY2% %outerX%-%outerY2% %outerX%-%outerY%    %innerX%-%innerY% %innerX2%-%innerY% %innerX2%-%innerY2% %innerX%-%innerY2% %innerX%-%innerY% 
+
+
+    ;Gui, Show, w%w% h%h% x%x% y%y% NoActivate, Table awaiting Action
+    Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NoActivate, Table awaiting Action
+    WinSet, Transparent, off, ahk_id %Highlighter%
+return
 
 UpdateInputBoxTitle:
     If WinExist("Type Up to 3 Letters of a Window Title to Search") {
@@ -1291,22 +1334,22 @@ CoordYCenterScreen()
 ; https://www.autohotkey.com/boards/viewtopic.php?p=96016#p96016
 ProcessIsElevated(vPID)
 {
-	;PROCESS_QUERY_LIMITED_INFORMATION := 0x1000
-	If !(hProc := DllCall("kernel32\OpenProcess", "UInt",0x1000, "Int",0, "UInt",vPID, "Ptr"))
-		return -1
-	;TOKEN_QUERY := 0x8
-	hToken := 0
-	If !(DllCall("advapi32\OpenProcessToken", "Ptr",hProc, "UInt",0x8, "Ptr*",hToken))
-	{
-		DllCall("kernel32\CloseHandle", "Ptr",hProc)
-		return -1
-	}
-	;TokenElevation := 20
-	vIsElevated := vSize := 0
-	vRet := (DllCall("advapi32\GetTokenInformation", "Ptr",hToken, "Int",20, "UInt*",vIsElevated, "UInt",4, "UInt*",vSize))
-	DllCall("kernel32\CloseHandle", "Ptr",hToken)
-	DllCall("kernel32\CloseHandle", "Ptr",hProc)
-	return vRet ? vIsElevated : -1
+    ;PROCESS_QUERY_LIMITED_INFORMATION := 0x1000
+    If !(hProc := DllCall("kernel32\OpenProcess", "UInt",0x1000, "Int",0, "UInt",vPID, "Ptr"))
+        return -1
+    ;TOKEN_QUERY := 0x8
+    hToken := 0
+    If !(DllCall("advapi32\OpenProcessToken", "Ptr",hProc, "UInt",0x8, "Ptr*",hToken))
+    {
+        DllCall("kernel32\CloseHandle", "Ptr",hProc)
+        return -1
+    }
+    ;TokenElevation := 20
+    vIsElevated := vSize := 0
+    vRet := (DllCall("advapi32\GetTokenInformation", "Ptr",hToken, "Int",20, "UInt*",vIsElevated, "UInt",4, "UInt*",vSize))
+    DllCall("kernel32\CloseHandle", "Ptr",hToken)
+    DllCall("kernel32\CloseHandle", "Ptr",hProc)
+    return vRet ? vIsElevated : -1
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
@@ -1423,48 +1466,6 @@ realHwnd(hwnd)
    return numget(var, 0, "uint")
 }
 
-ShellMessage( wParam,lParam ) {
-  Global nil, lastWinMinHwndId
-  If (wParam == 5)  ;HSHELL_GETMINRECT
-  {            
-      hwnd := NumGet( lParam+0 ) 
-      WinGet, status, MinMax, ahk_id %hwnd%
-      If (status == -1)
-      {
-          lastWinMinHwndId := hwnd
-          
-          ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
-          ; sleep 50
-          ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
-          ;https://www.autohotkey.com/boards/viewtopic.php?t=59047
-          ; WinGet oldxs, ExStyle, ahk_id %hwnd%
-          ; newxs := (oldxs & ~0x40000) | 0x80
-          ; If (newxs != oldxs)
-          ; {
-             ; WinSet ExStyle, % newxs, ahk_id %hwnd%
-             ; WinSet ExStyle, % oldxs, ahk_id %hwnd%
-          ; }
-      }
-   }
-   ; If (wParam=1) ;  HSHELL_WINDOWCREATED := 1
-	; {
-        ; ID:=lParam
-        ; WinGetTitle, title, Ahk_id %ID%
-        ; If (title == "Title of the program") ; Enter the program title between quotes
-        ; {
-            ; nil = %ID%
-            ; MsgBox, %ID% opened.
-        ; }
-    ; }
-    ; If (wParam=2) ;  HSHELL_WINDOWDESTROYED := 2 
-    ; {
-        ; ID:=lParam  
-        ; If (nil == ID)
-        ; {
-            ; MsgBox, %ID% closed.
-        ; }
-     ; }
-}
       
 ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
 MyTimer() {
@@ -1556,7 +1557,6 @@ IsWindow(hWnd){
         Send !{Up}
         sleep, 200
    }
-   WinSet, Region, 0-0 w0 h0
    Gui, GUI4Boarder: Hide
    Return
 #If
@@ -1607,7 +1607,7 @@ Return
 #If 
 
 VolumeHover() {
-	ControlGetText, toolText,, ahk_class tooltips_class32
+    ControlGetText, toolText,, ahk_class tooltips_class32
     If (InStr(toolText, "Speakers") || InStr(toolText, "Headphones"))
         Return True
     Else
@@ -1861,18 +1861,18 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 }
 
 FrameShadow(HGui) {
-	DllCall("dwmapi\DwmIsCompositionEnabled","IntP",_ISENABLED) ; Get If DWM Manager is Enabled
-	If !_ISENABLED ; If DWM is not enabled, Make Basic Shadow
-		DllCall("SetClassLong","UInt",HGui,"Int",-26,"Int",DllCall("GetClassLong","UInt",HGui,"Int",-26)|0x20000)
-	else {
-		VarSetCapacity(_MARGINS,16)
-		NumPut(1,&_MARGINS,0,"UInt")
-		NumPut(1,&_MARGINS,4,"UInt")
-		NumPut(1,&_MARGINS,8,"UInt")
-		NumPut(1,&_MARGINS,12,"UInt")
-		DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", HGui, "UInt", 2, "Int*", 2, "UInt", 4)
-		DllCall("dwmapi\DwmExtendFrameIntoClientArea", "Ptr", HGui, "Ptr", &_MARGINS)
-	}
+    DllCall("dwmapi\DwmIsCompositionEnabled","IntP",_ISENABLED) ; Get If DWM Manager is Enabled
+    If !_ISENABLED ; If DWM is not enabled, Make Basic Shadow
+        DllCall("SetClassLong","UInt",HGui,"Int",-26,"Int",DllCall("GetClassLong","UInt",HGui,"Int",-26)|0x20000)
+    else {
+        VarSetCapacity(_MARGINS,16)
+        NumPut(1,&_MARGINS,0,"UInt")
+        NumPut(1,&_MARGINS,4,"UInt")
+        NumPut(1,&_MARGINS,8,"UInt")
+        NumPut(1,&_MARGINS,12,"UInt")
+        DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", HGui, "UInt", 2, "Int*", 2, "UInt", 4)
+        DllCall("dwmapi\DwmExtendFrameIntoClientArea", "Ptr", HGui, "Ptr", &_MARGINS)
+    }
 }
 
 ; Copy this function into your script to use it.
@@ -2113,11 +2113,11 @@ track() {
 
 ;https://www.autohotkey.com/boards/search.php?author_id=139004&sr=posts&sid=13343c88f1a3953143867b71b22fdafc
 MouseIsOverTitleBar() {
-	CoordMode, Mouse, Screen 
-	MouseGetPos, xPos, yPos, WindowUnderMouseID
-	WinGetClass, class, ahk_id %WindowUnderMouseID%
-	SendMessage, 0x84, , ( yPos << 16 )|xPos, , ahk_id %WindowUnderMouseID%
-	return (class <> "Shell_TrayWnd") && (ErrorLevel = 2)
+    CoordMode, Mouse, Screen 
+    MouseGetPos, xPos, yPos, WindowUnderMouseID
+    WinGetClass, class, ahk_id %WindowUnderMouseID%
+    SendMessage, 0x84, , ( yPos << 16 )|xPos, , ahk_id %WindowUnderMouseID%
+    return (class <> "Shell_TrayWnd") && (ErrorLevel = 2)
 }
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
@@ -2180,6 +2180,201 @@ join( strArray )
   for i,v in strArray
     s .= ", " . v
   return substr(s, 3)
+}
+
+ShellMessage( wParam,lParam )
+{
+    Global nil, lastWinMinHwndId
+    If (wParam == 5)  ;HSHELL_GETMINRECT
+    {            
+         hwnd := NumGet( lParam+0 ) 
+         WinGet, status, MinMax, ahk_id %hwnd%
+         If (status == -1)
+         {
+             lastWinMinHwndId := hwnd
+             
+             ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
+             ; sleep 50
+             ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
+             ;https://www.autohotkey.com/boards/viewtopic.php?t=59047
+             ; WinGet oldxs, ExStyle, ahk_id %hwnd%
+             ; newxs := (oldxs & ~0x40000) | 0x80
+             ; If (newxs != oldxs)
+             ; {
+                ; WinSet ExStyle, % newxs, ahk_id %hwnd%
+                ; WinSet ExStyle, % oldxs, ahk_id %hwnd%
+             ; }
+         }
+    }
+    ; If (wParam=1) ;  HSHELL_WINDOWCREATED := 1
+     ; {
+         ; ID:=lParam
+         ; WinGetTitle, title, Ahk_id %ID%
+         ; If (title == "Title of the program") ; Enter the program title between quotes
+         ; {
+             ; nil = %ID%
+             ; MsgBox, %ID% opened.
+         ; }
+     ; }
+     ; If (wParam=2) ;  HSHELL_WINDOWDESTROYED := 2 
+     ; {
+         ; ID:=lParam  
+         ; If (nil == ID)
+         ; {
+             ; MsgBox, %ID% closed.
+         ; }
+    ; }
+}
+
+;------------------------------
+;
+; Function: WinGetPosEx
+;
+; Description:
+;
+;   Gets the position, size, and offset of a window. See the *Remarks* section
+;   for more information.
+;
+; Parameters:
+;
+;   hWindow - Handle to the window.
+;
+;   X, Y, Width, Height - Output variables. [Optional] If defined, these
+;       variables contain the coordinates of the window relative to the
+;       upper-left corner of the screen (X and Y), and the Width and Height of
+;       the window.
+;
+;   Offset_X, Offset_Y - Output variables. [Optional] Offset, in pixels, of the
+;       actual position of the window versus the position of the window as
+;       reported by GetWindowRect.  If moving the window to specific
+;       coordinates, add these offset values to the appropriate coordinate
+;       (X and/or Y) to reflect the true size of the window.
+;
+; Returns:
+;
+;   If successful, the address of a RECTPlus structure is returned.  The first
+;   16 bytes contains a RECT structure that contains the dimensions of the
+;   bounding rectangle of the specified window.  The dimensions are given in
+;   screen coordinates that are relative to the upper-left corner of the screen.
+;   The next 8 bytes contain the X and Y offsets (4-byte integer for X and
+;   4-byte integer for Y).
+;
+;   Also if successful (and if defined), the output variables (X, Y, Width,
+;   Height, Offset_X, and Offset_Y) are updated.  See the *Parameters* section
+;   for more more information.
+;
+;   If not successful, FALSE is returned.
+;
+; Requirement:
+;
+;   Windows 2000+
+;
+; Remarks, Observations, and Changes:
+;
+; * Starting with Windows Vista, Microsoft includes the Desktop Window Manager
+;   (DWM) along with Aero-based themes that use DWM.  Aero themes provide new
+;   features like a translucent glass design with subtle window animations.
+;   Unfortunately, the DWM doesn't always conform to the OS rules for size and
+;   positioning of windows.  If using an Aero theme, many of the windows are
+;   actually larger than reported by Windows when using standard commands (Ex:
+;   WinGetPos, GetWindowRect, etc.) and because of that, are not positioned
+;   correctly when using standard commands (Ex: gui Show, WinMove, etc.).  This
+;   function was created to 1) identify the true position and size of all
+;   windows regardless of the window attributes, desktop theme, or version of
+;   Windows and to 2) identify the appropriate offset that is needed to position
+;   the window if the window is a different size than reported.
+;
+; * The true size, position, and offset of a window cannot be determined until
+;   the window has been rendered.  See the example script for an example of how
+;   to use this function to position a new window.
+;
+; * 20150906: The "dwmapi\DwmGetWindowAttribute" function can return odd errors
+;   if DWM is not enabled.  One error I've discovered is a return code of
+;   0x80070006 with a last error code of 6, i.e. ERROR_INVALID_HANDLE or "The
+;   handle is invalid."  To keep the function operational during this types of
+;   conditions, the function has been modified to assume that all unexpected
+;   return codes mean that DWM is not available and continue to process without
+;   it.  When DWM is a possibility (i.e. Vista+), a developer-friendly messsage
+;   will be dumped to the debugger when these errors occur.
+;
+; Credit:
+;
+;   Idea and some code from *KaFu* (AutoIt forum)
+;
+; Author:
+;
+;    jballi
+;
+; Forum Link:
+;
+;    https://autohotkey.com/boards/viewtopic.php?t=3392
+;-------------------------------------------------------------------------------
+WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef Offset_X="",ByRef Offset_Y="") {
+    Static Dummy5693
+          ,RECTPlus
+          ,S_OK:=0x0
+          ,DWMWA_EXTENDED_FRAME_BOUNDS:=9
+
+    ;-- Workaround for AutoHotkey Basic
+    PtrType:=(A_PtrSize=8) ? "Ptr":"UInt"
+
+    ;-- Get the window's dimensions
+    ;   Note: Only the first 16 bytes of the RECTPlus structure are used by the
+    ;   DwmGetWindowAttribute and GetWindowRect functions.
+    VarSetCapacity(RECTPlus,24,0)
+    DWMRC:=DllCall("dwmapi\DwmGetWindowAttribute"
+        ,PtrType,hWindow                                ;-- hwnd
+        ,"UInt",DWMWA_EXTENDED_FRAME_BOUNDS             ;-- dwAttribute
+        ,PtrType,&RECTPlus                              ;-- pvAttribute
+        ,"UInt",16)                                     ;-- cbAttribute
+
+    if (DWMRC<>S_OK)
+        {
+        if ErrorLevel in -3,-4  ;-- Dll or function not found (older than Vista)
+            {
+            ;-- Do nothing else (for now)
+            }
+         else
+            outputdebug,
+               (ltrim join`s
+                Function: %A_ThisFunc% -
+                Unknown error calling "dwmapi\DwmGetWindowAttribute".
+                RC=%DWMRC%,
+                ErrorLevel=%ErrorLevel%,
+                A_LastError=%A_LastError%.
+                "GetWindowRect" used instead.
+               )
+
+        ;-- Collect the position and size from "GetWindowRect"
+        DllCall("GetWindowRect",PtrType,hWindow,PtrType,&RECTPlus)
+        }
+
+    ;-- Populate the output variables
+    X:=Left :=NumGet(RECTPlus,0,"Int")
+    Y:=Top  :=NumGet(RECTPlus,4,"Int")
+    Right   :=NumGet(RECTPlus,8,"Int")
+    Bottom  :=NumGet(RECTPlus,12,"Int")
+    Width   :=Right-Left
+    Height  :=Bottom-Top
+    OffSet_X:=0
+    OffSet_Y:=0
+
+    ;-- If DWM is not used (older than Vista or DWM not enabled), we're done
+    if (DWMRC<>S_OK)
+        Return &RECTPlus
+
+    ;-- Collect dimensions via GetWindowRect
+    VarSetCapacity(RECT,16,0)
+    DllCall("GetWindowRect",PtrType,hWindow,PtrType,&RECT)
+    GWR_Width :=NumGet(RECT,8,"Int")-NumGet(RECT,0,"Int")
+        ;-- Right minus Left
+    GWR_Height:=NumGet(RECT,12,"Int")-NumGet(RECT,4,"Int")
+        ;-- Bottom minus Top
+
+    ;-- Calculate offsets and update output variables
+    NumPut(Offset_X:=(Width-GWR_Width)//2,RECTPlus,16,"Int")
+    NumPut(Offset_Y:=(Height-GWR_Height)//2,RECTPlus,20,"Int")
+    Return &RECTPlus
 }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
@@ -2249,6 +2444,7 @@ SetTitleMatchMode, 2
 
 ; The first line of code below is the set of letters, digits, and/or symbols
 ; that are eligible for this type of correction.  Customize If you wish:
+/*
 keys = abcdefghijklmnopqrstuvwxyz
 Loop Parse, keys
     HotKey ~+%A_LoopField%, Hoty
@@ -2259,6 +2455,7 @@ Hoty:
     else If CapCount = 3
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
 Return
+*/
 
 
 ;------------------------------------------------------------------------------
