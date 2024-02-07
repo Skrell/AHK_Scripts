@@ -1915,7 +1915,11 @@ track() {
     Global MonCount
     
     CoordMode Mouse
-    lastX := x, lastY := y, lastMon := currentMon
+    lastX := x, lastY := y, 
+    
+    If (currentMon > 0)
+        lastMon := currentMon
+    
     MouseGetPos x, y, hwndId
     WinGetClass, classId, ahk_id %hwndId%
     WinGet, hwndId, ID, A
@@ -2081,33 +2085,35 @@ track() {
     }
     
     If (MonCount > 1) {
-        currentMon := MWAGetMonitorMouseIsIn()
-        currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
-        
-        If (currentMon == 1 && currentMonHasActWin) {
-            LastActiveWinHwnd1 := hwndId
-        }
-        Else If (currentMon == 2 && currentMonHasActWin) {
-            LastActiveWinHwnd2 := hwndId
-        }
-        Else If (currentMon == 3 && currentMonHasActWin) {
-            LastActiveWinHwnd3 := hwndId
-        }
-        Else If (currentMon == 4 && currentMonHasActWin) {
-            LastActiveWinHwnd4 := hwndId
-        }
-        
-        LastActiveWinHwnd := LastActiveWinHwnd%currentMon%
-        WinGet, State, MinMax, ahk_id %LastActiveWinHwnd%
-        ; tooltip, %LastActiveWinHwnd% "-" %hwndId%
-        If (lastMon != currentMon 
-            && WinExist("ahk_id " . LastActiveWinHwnd) 
-            && State != -1 
-            && !GetKeyState("Lbutton", "P")) {
-                WinActivate, ahk_id %LastActiveWinHwnd%
-                GoSub, DrawRect
-                GoSub, ClearRect
+        currentMon := MWAGetMonitorMouseIsIn(40)
+        If (currentMon > 0) {
+            currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+            
+            If (currentMon == 1 && currentMonHasActWin) {
+                LastActiveWinHwnd1 := hwndId
             }
+            Else If (currentMon == 2 && currentMonHasActWin) {
+                LastActiveWinHwnd2 := hwndId
+            }
+            Else If (currentMon == 3 && currentMonHasActWin) {
+                LastActiveWinHwnd3 := hwndId
+            }
+            Else If (currentMon == 4 && currentMonHasActWin) {
+                LastActiveWinHwnd4 := hwndId
+            }
+            
+            LastActiveWinHwnd := LastActiveWinHwnd%currentMon%
+            WinGet, State, MinMax, ahk_id %LastActiveWinHwnd%
+            ; tooltip, %LastActiveWinHwnd% "-" %hwndId%
+            If (lastMon != currentMon 
+                && WinExist("ahk_id " . LastActiveWinHwnd) 
+                && State != -1 
+                && !GetKeyState("Lbutton", "P")) {
+                    WinActivate, ahk_id %LastActiveWinHwnd%
+                    GoSub, DrawRect
+                    GoSub, ClearRect
+                }
+        }
     }
 }
 
@@ -2153,18 +2159,19 @@ GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
 }
 
 ;https://www.autohotkey.com/boards/viewtopic.php?f=6&t=54557
-MWAGetMonitorMouseIsIn() ; we didn't actually need the "Monitor = 0"
+MWAGetMonitorMouseIsIn(buffer := 0) ; we didn't actually need the "Monitor = 0"
 {
     ; get the mouse coordinates first
     Coordmode, Mouse, Screen    ; use Screen, so we can compare the coords with the sysget information`
     MouseGetPos, Mx, My
+    ActiveMon := 0
 
     SysGet, MonitorCount, 80    ; monitorcount, so we know how many monitors there are, and the number of loops we need to do
     Loop, %MonitorCount%
     {
         SysGet, mon%A_Index%, Monitor, %A_Index%    ; "Monitor" will get the total desktop space of the monitor, including taskbars
 
-        If ( Mx >= mon%A_Index%left ) && ( Mx < mon%A_Index%right ) && ( My >= mon%A_Index%top ) && ( My < mon%A_Index%bottom )
+        If ( Mx >= (mon%A_Index%left + buffer) ) && ( Mx < (mon%A_Index%right - buffer) ) && ( My >= (mon%A_Index%top + buffer) ) && ( My < (mon%A_Index%bottom - buffer) )
         {
             ActiveMon := A_Index
             break
