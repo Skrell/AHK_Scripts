@@ -55,6 +55,7 @@ Global onlyTitleFound := ""
 Global nil
 Global CancelClose := False
 Global lastWinMinHwndId := 99
+Global DrawingRect := False
         
 Process, Priority,, High
 Menu, Tray, Icon
@@ -546,7 +547,6 @@ ResetWins:
     }
 Return
 
-
 #If !SearchingWindows
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
@@ -577,6 +577,7 @@ Return
             }
         }
         Else If (hitTAB && hitCAPS) {
+            Critical On
             WinGet, actMinID, ID, A
             
             If (ValidWindows.MaxIndex() >= 4)
@@ -588,6 +589,7 @@ Return
             If (ValidWindows.MaxIndex() >= 1)    
                 WinActivate, % "ahk_id " ValidWindows[1]
             WinActivate, % "ahk_id " actMinID
+            Critical Off
         }
         Else If (cycling && startHighlight && (ValidWindows.length() > 2))
         {
@@ -647,11 +649,13 @@ Return
     cyclingMin     := False
     startHighlight := False
     KeyWait, x, U T1
+    while (DrawingRect == True) {
+        sleep, 100
+    }
+    SetTimer, ClearRect, -1
     hitTAB         := False
     hitCAPS        := False
     cancelAltTab   := False
-    GoSub, ClearRect
-    Tooltip, 
 return
 #If 
 
@@ -826,12 +830,8 @@ Cycle(direction)
     {
         Critical On
         DetectHiddenWindows, Off
-        skipChild := False
         skipFirst := True
         WinGetPos,,,,currActHeight, A
-        If (currActHeight < 375) {
-            skipChild := True
-        }
             
         WinGet, allWindows, List
         loop % allWindows
@@ -857,24 +857,27 @@ Cycle(direction)
                     WinGet, state, MinMax, ahk_id %hwndID%
                     If (state > -1) {
                         desknum := VD.getDesktopNumOfWindow(cTitle)
-                        If (desknum == VD.getCurrentDesktopNum() && IsAltTabWindow(hwndID)) {
+                        If (desknum == VD.getCurrentDesktopNum()) {
                             If desknum <= 0
                                 continue
                             ValidWindows.push(hwndID)
                             If (ValidWindows.MaxIndex() == 2) {
                                 cycling := True
                                 WinActivate, % "ahk_id " hwndID
-                                GoSub, DrawRect
+                                ; WinGetTitle, tit1, % "ahk_id " ValidWindows[1]
+                                ; WinGetTitle, tit2, % "ahk_id " ValidWindows[2]
+                                ; tooltip, %tit1%  `n %tit2%
+                                SetTimer, DrawRect, -1
                             }
                         }
                     }
                 }
             }
-            Tooltip, 
+            ; Tooltip, 
         }
+        Critical Off
     }
     
-    Critical Off
     
     If (cycleCount >= 2)
         startHighlight := True
@@ -889,7 +892,7 @@ Cycle(direction)
                 cycleCount += 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
             If (startHighlight)
-                GoSub, DrawRect
+                SetTimer, DrawRect, -1
         }
         Else
         {
@@ -899,14 +902,13 @@ Cycle(direction)
                 cycleCount -= 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
             If (startHighlight)
-                GoSub, DrawRect
+                SetTimer, DrawRect, -1
         }
     }
 
     Return
 }
 
-; #MaxThreadsPerHotkey 2
 ClearRect:
     sleep 75
     If (hitTAB || hitCAPS) && !cancelAltTab
@@ -933,17 +935,7 @@ ClearRect:
         Return
     }
     sleep 50
-    WinSet, Transparent, 150, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !cancelAltTab {
-        Return
-    }
-    sleep 50
     WinSet, Transparent, 125, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !cancelAltTab {
-        Return
-    }
-    sleep 50
-    WinSet, Transparent, 100, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
         Return
     }
@@ -955,11 +947,11 @@ ClearRect:
     sleep 50
     ; WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
-
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
+    DrawingRect := True
     ; WinGetPos, x, y, w, h, A
     WinGet, activeWin, ID, A
     WinGetPosEx(activeWin, x, y, w, h)
@@ -1039,6 +1031,7 @@ DrawRect:
     ;Gui, Show, w%w% h%h% x%x% y%y% NoActivate, Table awaiting Action
     Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NoActivate, Table awaiting Action
     WinSet, Transparent, off, ahk_id %Highlighter%
+    DrawingRect := False
 return
 
 UpdateInputBoxTitle:
@@ -1302,6 +1295,219 @@ ActivateWindow:
     }
 return
 
+#If moving
+~RButton::Return
+#If
+
+#If !VolumeHover()
+~LButton::
+   MouseGetPos, X, Y
+   PixelGetColor, HexColor, %X%, %Y%, RGB
+   If (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() && HexColor == 0xFFFFFF)
+   { 
+        Send !{Up}
+        sleep, 200
+   }
+   Gui, GUI4Boarder: Hide
+   Return
+#If
+
+#If VolumeHover()
+LButton::
+    Run, C:\Windows\System32\SndVol.exe
+    WinWait, ahk_exe SndVol.exe
+    WinGetPos, sx, sy, sw, sh, ahk_exe SndVol.exe
+    sw := sw + 200
+    WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, MonitorWorkAreaBottom-sh, sw
+    WinActivate, ahk_exe SndVol.exe
+    x_coord := A_ScreenWidth - floor((sx+sw)/2)
+    y_coord := MonitorWorkAreaBottom - 30
+    CoordMode, Pixel, Screen
+    sleep 300
+    Critical On
+    loop
+    {
+        PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
+        ; msgbox, %HexColor% - %x_coord% - %y_coord%
+        newX := A_ScreenWidth-sw-(10*A_Index)
+        newW := sw + (10*A_Index)
+        If (HexColor == 0xCDCDCD || HexColor == 0xF0F0F0)
+            WinMove, ahk_exe SndVol.exe, , %newX%, , %newW% 
+        Else
+            break
+    }
+    Critical Off
+Return
+#If 
+
+#If !moving
+$RButton::
+    ComboActive := False
+    loop {
+        If !(GetKeyState("RButton", "P"))
+        {
+            break
+        }
+        sleep 20
+    }
+    If !ComboActive
+    {
+        Send, {Click, Right}
+        ComboActive := False
+    }
+Return
+#If
+
+#If !moving
+RButton & WheelUp::
+    ComboActive := True
+    MouseGetPos, , , target
+    WinActivate, ahk_id %target%
+    Send {PgUp}
+Return
+#If
+
+~$WheelUp::
+    Hotkey, $WheelUp, Off
+    MouseGetPos, , , wuID
+    WinGetClass, wuClass, ahk_id %wuID%
+    If (wuClass == "Shell_TrayWnd" && !moving)
+    {
+        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+        sleep, 750
+    }
+    Hotkey, $WheelUp, On
+Return
+
+#If !moving
+RButton & WheelDown::
+    ComboActive := True
+    MouseGetPos, , , target
+    WinActivate, ahk_id %target%
+    Send {PgDn}
+Return
+#If
+
+~$WheelDown::
+    Hotkey, $WheelDown, Off
+    MouseGetPos, , , wdID
+    WinGetClass, wdClass, ahk_id %wdID%
+    If (wdClass == "Shell_TrayWnd" && !moving)
+    {
+        Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+        sleep, 750
+    }
+    Hotkey, $WheelDown, On
+Return
+
+/* ;
+***********************************
+***** SHORTCUTS CONFIGURATION *****
+***** https://github.com/JuanmaMenendez/AutoHotkey-script-Open-Show-Apps/blob/master/Switch-opened-windows-of-same-App.ahk ****
+***********************************
+*/
+VolumeHover() {
+    ControlGetText, toolText,, ahk_class tooltips_class32
+    If (InStr(toolText, "Speakers") || InStr(toolText, "Headphones"))
+        Return True
+    Else
+        Return False
+}
+
+IsEmptySpace() {
+   static ROLE_SYSTEM_LIST := 0x21
+   CoordMode, Mouse
+   MouseGetPos, X, Y
+   AccObj := AccObjectFromPoint(idChild, X, Y)
+   Return (AccObj.accRole(0) == ROLE_SYSTEM_LIST)
+}
+
+AccObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
+   static VT_DISPATCH := 9, F_OWNVALUE := 1, h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
+
+   (x = "" || y = "") ? DllCall("GetCursorPos", "Int64P", pt) : pt := x & 0xFFFFFFFF | y << 32
+   VarSetCapacity(varChild, 8 + 2*A_PtrSize, 0)
+   If DllCall("oleacc\AccessibleObjectFromPoint", "Int64", pt, "PtrP", pAcc, "Ptr", &varChild) = 0
+      Return ComObject(VT_DISPATCH, pAcc, F_OWNVALUE), _idChild_ := NumGet(varChild, 8, "UInt")
+}
+
+;-----------------------------------------------------------------
+; Check whether the target window is activation target
+;-----------------------------------------------------------------
+; https://www.autohotkey.com/boards/viewtopic.php?t=81064
+ShowMenu(hMenu, MenuLoop:=0, X:=0, Y:=0, Flags:=0) {            ; Ver 0.61 by SKAN on D39F/D39G
+    Local                                                           ;            @ tiny.cc/showmenu
+      If (hMenu="WM_ENTERMENULOOP")
+        Return True
+      Fn := Func("ShowMenu").Bind("WM_ENTERMENULOOP"), n := MenuLoop=0 ? 0 : OnMessage(0x211,Fn,-1)
+      DllCall("SetForegroundWindow","Ptr",A_ScriptHwnd)     
+      R := DllCall("TrackPopupMenu", "Ptr",hMenu, "Int",Flags, "Int",X, "Int",Y, "Int",0
+                 , "Ptr",A_ScriptHwnd, "Ptr",0, "UInt"),                     OnMessage(0x211,Fn, 0)
+      DllCall("PostMessage", "Ptr",A_ScriptHwnd, "Int",0, "Ptr",0, "Ptr",0)
+
+    Return R
+}
+
+IsWindow(hWnd){
+    WinGet, dwStyle, Style, ahk_id %hWnd%
+    If ((dwStyle&0x08000000) || !(dwStyle&0x10000000)) {
+        return False
+    }
+    WinGet, dwExStyle, ExStyle, ahk_id %hWnd%
+    If (dwExStyle & 0x00000080) {
+        return False
+    }
+    WinGetClass, szClass, ahk_id %hWnd%
+    If (szClass = "TApplication") {
+        return False
+    }
+    WinGetPos,,,W,H, ahk_id %hWnd%
+    WinGet, state, MinMax, ahk_id %hWnd%
+    If (H < 375 && state > -1 || W < 290 && state > -1) {
+        return False
+    }
+    return True
+}
+
+; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
+MyTimer() {
+   Global IGUIF
+   Global IGUIF2
+   DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2)
+   
+   run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
+   WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
+   WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh, 
+   WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh, 
+   
+   WinSet, TransColor, FF00FF 254, ahk_id %IGUIF% 
+   WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2% 
+   ; Gui, ShadowFrFull: Show, x%menux% w%menuw% h%menuh% y%menuy%
+   WinSet, AlwaysOnTop, on,  ahk_class #32768
+}
+
+MyFader() {
+    DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1)
+    tooltip, waiting...
+    WinWait, ahk_class #32768, , 5
+    WinSet, Transparent, 0, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 50, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 100, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 125, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 150, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 200, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 225, ahk_class #32768
+    sleep 50
+    WinSet, Transparent, 255, ahk_class #32768
+    tooltip, done
+}
+
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=31716
 GetCurrentMonitorIndex(){
     CoordMode, Mouse, Screen
@@ -1466,220 +1672,6 @@ realHwnd(hwnd)
    return numget(var, 0, "uint")
 }
 
-      
-; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
-MyTimer() {
-   Global IGUIF
-   Global IGUIF2
-   DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2)
-   
-   run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
-   WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
-   WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh, 
-   WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh, 
-   
-   WinSet, TransColor, FF00FF 254, ahk_id %IGUIF% 
-   WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2% 
-   ; Gui, ShadowFrFull: Show, x%menux% w%menuw% h%menuh% y%menuy%
-   WinSet, AlwaysOnTop, on,  ahk_class #32768
-}
-
-MyFader() {
-    DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1)
-    tooltip, waiting...
-    WinWait, ahk_class #32768, , 5
-    WinSet, Transparent, 0, ahk_class #32768
-    sleep 50
-    WinSet, Transparent, 50, ahk_class #32768
-    sleep 50
-    WinSet, Transparent, 100, ahk_class #32768
-    sleep 50
-    WinSet, Transparent, 125, ahk_class #32768
-    sleep 50
-    WinSet, Transparent, 150, ahk_class #32768
-    sleep 50
-    WinSet, Transparent, 200, ahk_class #32768
-    sleep 50
-    WinSet, Transparent, 225, ahk_class #32768
-    sleep 50
-    WinSet, Transparent, 255, ahk_class #32768
-    tooltip, done
-}
-;-----------------------------------------------------------------
-; Check whether the target window is activation target
-;-----------------------------------------------------------------
-; https://www.autohotkey.com/boards/viewtopic.php?t=81064
-ShowMenu(hMenu, MenuLoop:=0, X:=0, Y:=0, Flags:=0) {            ; Ver 0.61 by SKAN on D39F/D39G
-    Local                                                           ;            @ tiny.cc/showmenu
-      If (hMenu="WM_ENTERMENULOOP")
-        Return True
-      Fn := Func("ShowMenu").Bind("WM_ENTERMENULOOP"), n := MenuLoop=0 ? 0 : OnMessage(0x211,Fn,-1)
-      DllCall("SetForegroundWindow","Ptr",A_ScriptHwnd)     
-      R := DllCall("TrackPopupMenu", "Ptr",hMenu, "Int",Flags, "Int",X, "Int",Y, "Int",0
-                 , "Ptr",A_ScriptHwnd, "Ptr",0, "UInt"),                     OnMessage(0x211,Fn, 0)
-      DllCall("PostMessage", "Ptr",A_ScriptHwnd, "Int",0, "Ptr",0, "Ptr",0)
-
-    Return R
-}
-
-IsWindow(hWnd){
-    WinGet, dwStyle, Style, ahk_id %hWnd%
-    If ((dwStyle&0x08000000) || !(dwStyle&0x10000000)) {
-        return False
-    }
-    WinGet, dwExStyle, ExStyle, ahk_id %hWnd%
-    If (dwExStyle & 0x00000080) {
-        return False
-    }
-    WinGetClass, szClass, ahk_id %hWnd%
-    If (szClass = "TApplication") {
-        return False
-    }
-    WinGetPos,,,W,H, ahk_id %hWnd%
-    WinGet, state, MinMax, ahk_id %hWnd%
-    If (H < 375 && state > -1 || W < 290 && state > -1) {
-        return False
-    }
-    return True
-}
-
-
-#If moving
-~RButton::Return
-#If
-
-#If !VolumeHover()
-~LButton::
-   MouseGetPos, X, Y
-   PixelGetColor, HexColor, %X%, %Y%, RGB
-   If (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() && HexColor == 0xFFFFFF)
-   { 
-        Send !{Up}
-        sleep, 200
-   }
-   Gui, GUI4Boarder: Hide
-   Return
-#If
-
-IsEmptySpace() {
-   static ROLE_SYSTEM_LIST := 0x21
-   CoordMode, Mouse
-   MouseGetPos, X, Y
-   AccObj := AccObjectFromPoint(idChild, X, Y)
-   Return (AccObj.accRole(0) == ROLE_SYSTEM_LIST)
-}
-
-AccObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
-   static VT_DISPATCH := 9, F_OWNVALUE := 1, h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
-
-   (x = "" || y = "") ? DllCall("GetCursorPos", "Int64P", pt) : pt := x & 0xFFFFFFFF | y << 32
-   VarSetCapacity(varChild, 8 + 2*A_PtrSize, 0)
-   If DllCall("oleacc\AccessibleObjectFromPoint", "Int64", pt, "PtrP", pAcc, "Ptr", &varChild) = 0
-      Return ComObject(VT_DISPATCH, pAcc, F_OWNVALUE), _idChild_ := NumGet(varChild, 8, "UInt")
-}
-
-#If VolumeHover()
-LButton::
-    Run, C:\Windows\System32\SndVol.exe
-    WinWait, ahk_exe SndVol.exe
-    WinGetPos, sx, sy, sw, sh, ahk_exe SndVol.exe
-    sw := sw + 200
-    WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, MonitorWorkAreaBottom-sh, sw
-    WinActivate, ahk_exe SndVol.exe
-    x_coord := A_ScreenWidth - floor((sx+sw)/2)
-    y_coord := MonitorWorkAreaBottom - 30
-    CoordMode, Pixel, Screen
-    sleep 300
-    Critical On
-    loop
-    {
-        PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
-        ; msgbox, %HexColor% - %x_coord% - %y_coord%
-        newX := A_ScreenWidth-sw-(10*A_Index)
-        newW := sw + (10*A_Index)
-        If (HexColor == 0xCDCDCD || HexColor == 0xF0F0F0)
-            WinMove, ahk_exe SndVol.exe, , %newX%, , %newW% 
-        Else
-            break
-    }
-    Critical Off
-Return
-#If 
-
-VolumeHover() {
-    ControlGetText, toolText,, ahk_class tooltips_class32
-    If (InStr(toolText, "Speakers") || InStr(toolText, "Headphones"))
-        Return True
-    Else
-        Return False
-}
-
-#If !moving
-$RButton::
-    ComboActive := False
-    loop {
-        If !(GetKeyState("RButton", "P"))
-        {
-            break
-        }
-        sleep 20
-    }
-    If !ComboActive
-    {
-        Send, {Click, Right}
-        ComboActive := False
-    }
-Return
-#If
-
-#If !moving
-RButton & WheelUp::
-    ComboActive := True
-    MouseGetPos, , , target
-    WinActivate, ahk_id %target%
-    Send {PgUp}
-Return
-#If
-
-~$WheelUp::
-    Hotkey, $WheelUp, Off
-    MouseGetPos, , , wuID
-    WinGetClass, wuClass, ahk_id %wuID%
-    If (wuClass == "Shell_TrayWnd" && !moving)
-    {
-        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
-        sleep, 750
-    }
-    Hotkey, $WheelUp, On
-Return
-
-#If !moving
-RButton & WheelDown::
-    ComboActive := True
-    MouseGetPos, , , target
-    WinActivate, ahk_id %target%
-    Send {PgDn}
-Return
-#If
-
-~$WheelDown::
-    Hotkey, $WheelDown, Off
-    MouseGetPos, , , wdID
-    WinGetClass, wdClass, ahk_id %wdID%
-    If (wdClass == "Shell_TrayWnd" && !moving)
-    {
-        Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
-        sleep, 750
-    }
-    Hotkey, $WheelDown, On
-Return
-
-/* ;
-***********************************
-***** SHORTCUTS CONFIGURATION *****
-***** https://github.com/JuanmaMenendez/AutoHotkey-script-Open-Show-Apps/blob/master/Switch-opened-windows-of-same-App.ahk ****
-***********************************
-*/
 
 ; Alt + ` - hotkey to activate NEXT Window of same type of the current App or Chrome Website Shortcut
 #If !moving
@@ -1703,6 +1695,8 @@ RButton & LButton::
 ***** UTILITY FUNCTIONS *****
 *****************************
 */
+
+
 ; Extracts the application title from the window's full title
 ExtractAppTitle(FullTitle) {
     return SubStr(FullTitle, InStr(FullTitle, " ", False, -1) + 1)
@@ -2089,16 +2083,16 @@ track() {
         If (currentMon > 0) {
             currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
             
-            If (currentMon == 1 && currentMonHasActWin) {
+            If (currentMon == 1 && currentMonHasActWin && IsAltTabWindow(hwndId)) {
                 LastActiveWinHwnd1 := hwndId
             }
-            Else If (currentMon == 2 && currentMonHasActWin) {
+            Else If (currentMon == 2 && currentMonHasActWin && IsAltTabWindow(hwndId)) {
                 LastActiveWinHwnd2 := hwndId
             }
-            Else If (currentMon == 3 && currentMonHasActWin) {
+            Else If (currentMon == 3 && currentMonHasActWin && IsAltTabWindow(hwndId)) {
                 LastActiveWinHwnd3 := hwndId
             }
-            Else If (currentMon == 4 && currentMonHasActWin) {
+            Else If (currentMon == 4 && currentMonHasActWin && IsAltTabWindow(hwndId)) {
                 LastActiveWinHwnd4 := hwndId
             }
             
@@ -2522,6 +2516,9 @@ Return
         && !WinActive("ahk_exe bash.exe") 
         && !WinActive("ahk_exe mintty.exe")
         && !SearchingWindows
+        && !hitCAPS
+        && !hitTAB
+        
 #Hotstring EndChars ()[]{};"/\,?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 ;------------------------------------------------------------------------------
@@ -2904,10 +2901,11 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :*:tyr::try
 :*:cmakel::CMakeLists.txt
 :*:cmaket::CMakeLists.txt
-:*:unfo::unfortunately`
-:*:Unfo::Unfortunately`
-:*:priv::privilege`
-:*:envi::environment`
+:*:unfo::unfortunately, `
+:*:Unfo::Unfortunately, `
+:*:priv::privilege `
+:*:envi::environment `
+:*:simult::simultaneously `
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
