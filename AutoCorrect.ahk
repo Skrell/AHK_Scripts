@@ -193,9 +193,14 @@ Return
 #If
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
-#MaxThreadsPerHotkey 4
+#MaxThreadsPerHotkey 1
+#MaxThreadsBuffer On
+
 !1::
   HideTrayTip() 
+If (VD.getCurrentDesktopNum() == 1)
+     Return
+     
   If GetKeyState("Lbutton", "P")
   {
       BlockInput, MouseMove
@@ -234,9 +239,13 @@ Return
   Else
   {
       WinActivate, ahk_class Shell_TrayWnd
-      Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
-      sleep 250
-      Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+      If (VD.getCurrentDesktopNum() == 3) {
+          Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
+          sleep 250
+          Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
+      }
+      Else If (VD.getCurrentDesktopNum() == 2)
+          Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
       sleep 250
       WinMinimize, ahk_class Shell_TrayWnd
       WinSet, Transparent, off, ahk_id %hwndVD%
@@ -295,7 +304,7 @@ Return
       If (VD.getCurrentDesktopNum() == 1)
         Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
       Else If (VD.getCurrentDesktopNum() == 3)
-        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+        Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
       sleep 250
       WinMinimize, ahk_class Shell_TrayWnd
       WinSet, Transparent, off, ahk_id %hwndVD%
@@ -307,6 +316,9 @@ Return
 
 !3::
   HideTrayTip() 
+  If (VD.getCurrentDesktopNum() == 3)
+     Return
+    
   If GetKeyState("Lbutton", "P")
   {
       BlockInput, MouseMove
@@ -345,10 +357,16 @@ Return
   else
   {
       WinActivate, ahk_class Shell_TrayWnd
-      Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
+      If (VD.getCurrentDesktopNum() == 1) {
+          Send {LWin down}{LCtrl down}{Right}{LCtrl up}{LWin up}
+          sleep, 250
+          Send {LWin down}{LCtrl down}{Right}{LCtrl up}{LWin up}
+      }
+      Else {
+          Send {LWin down}{LCtrl down}{Right}{LCtrl up}{LWin up}
+      }
       sleep, 250
-      Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-      sleep, 250
+      
       WinMinimize, ahk_class Shell_TrayWnd
       WinSet, Transparent, off, ahk_id %hwndVD%
   }
@@ -403,14 +421,7 @@ CheckForNewWinSpawn:
     InitializeActWins := True
 Return
 
-HasVal(haystack, needle) {
-    If !(IsObject(haystack)) || (haystack.Length() = 0)
-        return 0
-    for index, value in haystack
-        If (value = needle)
-            return index
-    return 0
-}
+
 ;============================================================================================================================
 FadeInWin1:
     MouseGetPos, , , lclickHwndId
@@ -547,6 +558,10 @@ ResetWins:
     }
 Return
 
+#MaxThreadsBuffer Off
+
+#MaxThreadsPerHotkey 2
+
 #If !SearchingWindows
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
@@ -649,13 +664,13 @@ Return
     cyclingMin     := False
     startHighlight := False
     KeyWait, x, U T1
-    while (DrawingRect == True) {
-        sleep, 100
-    }
-    SetTimer, ClearRect, -1
     hitTAB         := False
     hitCAPS        := False
     cancelAltTab   := False
+    while (DrawingRect == True) {
+        sleep, 100
+    }
+    Gosub, ClearRect
 return
 #If 
 
@@ -746,12 +761,12 @@ CycleMin(direction)
             Else
                 cycleCountMin += 1
         }
+        Critical Off
     }
     
     startHighlight := True
     totalCycleCountMin += 1
     
-    Critical Off
     
     If (RevMinnedWindows.length() >= 1) 
     {
@@ -867,7 +882,7 @@ Cycle(direction)
                                 ; WinGetTitle, tit1, % "ahk_id " ValidWindows[1]
                                 ; WinGetTitle, tit2, % "ahk_id " ValidWindows[2]
                                 ; tooltip, %tit1%  `n %tit2%
-                                SetTimer, DrawRect, -1
+                                GoSub, DrawRect
                             }
                         }
                     }
@@ -892,7 +907,7 @@ Cycle(direction)
                 cycleCount += 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
             If (startHighlight)
-                SetTimer, DrawRect, -1
+                GoSub, DrawRect
         }
         Else
         {
@@ -902,7 +917,7 @@ Cycle(direction)
                 cycleCount -= 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
             If (startHighlight)
-                SetTimer, DrawRect, -1
+                GoSub, DrawRect
         }
     }
 
@@ -911,37 +926,48 @@ Cycle(direction)
 
 ClearRect:
     sleep 75
-    If (hitTAB || hitCAPS) && !cancelAltTab
+    If (hitTAB || hitCAPS) && !cancelAltTab {
+        Gui, GUI4Boarder: Hide
         Return
+    }
     sleep 75
-    If (hitTAB || hitCAPS) && !cancelAltTab
+    If (hitTAB || hitCAPS) && !cancelAltTab {
+        Gui, GUI4Boarder: Hide
         Return
+    }
     sleep 75
-    If (hitTAB || hitCAPS) && !cancelAltTab
+    If (hitTAB || hitCAPS) && !cancelAltTab {
+        Gui, GUI4Boarder: Hide
         Return
+    }
         
     WinSet, Transparent, 225, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
+        Gui, GUI4Boarder: Hide
         Return
     }
     sleep 60
     WinSet, Transparent, 200, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
+        Gui, GUI4Boarder: Hide
         Return
     }
     sleep 50
     WinSet, Transparent, 175, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
+        Gui, GUI4Boarder: Hide
         Return
     }
     sleep 50
     WinSet, Transparent, 125, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
+        Gui, GUI4Boarder: Hide
         Return
     }
     sleep 50
     WinSet, Transparent, 50, ahk_id %Highlighter%
     If (hitTAB || hitCAPS) && !cancelAltTab {
+        Gui, GUI4Boarder: Hide
         Return
     }
     sleep 50
@@ -1057,6 +1083,7 @@ Esc::
     Send, {ENTER}
 Return
 #If
+
 
 #MaxThreadsPerHotkey 1
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
@@ -1183,8 +1210,6 @@ $!`::
     }
 return
 
-#MaxThreadsPerHotkey 4
-
 ActivateWindow:
     Gui, ShadowFrFull:  Hide
     Gui, ShadowFrFull2: Hide
@@ -1299,6 +1324,14 @@ return
 ~RButton::Return
 #If
 
+; !^LButton::
+; loop 100
+; {
+    ; Tooltip, %A_Index%
+    ; sleep, 500
+; }
+; Return
+
 #If !VolumeHover()
 ~LButton::
    MouseGetPos, X, Y
@@ -1309,6 +1342,7 @@ return
         sleep, 200
    }
    Gui, GUI4Boarder: Hide
+   DrawingRect := False
    Return
 #If
 
@@ -1675,7 +1709,6 @@ realHwnd(hwnd)
 
 ; Alt + ` - hotkey to activate NEXT Window of same type of the current App or Chrome Website Shortcut
 #If !moving
-#MaxThreadsPerHotkey 1
 RButton & LButton::
     ComboActive := True
     MouseGetPos, , , belowID
@@ -2227,6 +2260,14 @@ ShellMessage( wParam,lParam )
     ; }
 }
 
+HasVal(haystack, needle) {
+    If !(IsObject(haystack)) || (haystack.Length() = 0)
+        return 0
+    for index, value in haystack
+        If (value = needle)
+            return index
+    return 0
+}
 ;------------------------------
 ;
 ; Function: WinGetPosEx
@@ -2435,7 +2476,6 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
 #NoEnv ; For security
 #SingleInstance force
 SetTitleMatchMode, 2
-#MaxThreadsPerHotkey 1
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.
 ; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
