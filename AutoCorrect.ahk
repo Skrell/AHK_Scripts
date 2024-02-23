@@ -562,11 +562,11 @@ Return
 
 #MaxThreadsPerHotkey 2
 
-#If !SearchingWindows
+#If !SearchingWindows && (hitTAB || hitCAPS)
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
-    If !hitTAB && !hitCAPS
-        Return
+    ; If !hitTAB && !hitCAPS
+        ; Return
     
     WinGet, actWndID, ID, A
     If (GetKeyState("Lbutton","P") && cycling && (ValidWindows.length() > 2)) {
@@ -667,9 +667,9 @@ Return
     hitTAB         := False
     hitCAPS        := False
     cancelAltTab   := False
-    while (DrawingRect == True) {
-        sleep, 100
-    }
+    ; while (DrawingRect == True) {
+        ; sleep, 100
+    ; }
     Gosub, ClearRect
 return
 #If 
