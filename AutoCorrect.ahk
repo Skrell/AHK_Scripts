@@ -125,28 +125,31 @@ Return
 ; }
 
 #If !hitCAPS || !hitTAB
-CapsLock:: Send {Delete}
+    CapsLock:: Send {Delete}
+    !a:: Send, {home}
+    +!a:: Send, {SHIFT down}{home}{SHIFT up}
+    !;:: Send, {end}
+    +!;:: Send, {SHIFT down}{end}{SHIFT up}
+    +!i::   Send {SHIFT down}{UP}{SHIFT up}
+    +!k::   Send {SHIFT down}{DOWN}{SHIFT up}
+    +!,::   Send {SHIFT down}{DOWN}{SHIFT up}
+    +!j::   Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
+    +!l::   Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
+    <^!j::  Send {LCtrl down}{LEFT}{LCtrl up}
+    <^!l::  Send {LCtrl down}{RIGHT}{LCtrl up}
+    <^!i::  Send {LCtrl down}{UP}{LCtrl up}
+    <^!k::  Send {LCtrl down}{DOWN}{LCtrl up}
+    <^+!j:: Send {LCtrl down}{LShift down}{LEFT}{LShift up}{LCtrl up}
+    <^+!l:: Send {LCtrl down}{LShift down}{RIGHT}{LShift up}{LCtrl up}
+    !i:: Send {UP}
+    !k:: Send {DOWN}
+    !,:: Send {DOWN}
+    !j:: Send {LCtrl down}{LEFT}{LCtrl up}
+    !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
 #If
-!a:: Send, {home}
-+!a:: Send, {SHIFT down}{home}{SHIFT up}
-!;:: Send, {end}
-+!;:: Send, {SHIFT down}{end}{SHIFT up}
-+!i::   Send {SHIFT down}{UP}{SHIFT up}
-+!k::   Send {SHIFT down}{DOWN}{SHIFT up}
-+!,::   Send {SHIFT down}{DOWN}{SHIFT up}
-+!j::   Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
-+!l::   Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
-<^!j::  Send {LCtrl down}{LEFT}{LCtrl up}
-<^!l::  Send {LCtrl down}{RIGHT}{LCtrl up}
-<^!i::  Send {LCtrl down}{UP}{LCtrl up}
-<^!k::  Send {LCtrl down}{DOWN}{LCtrl up}
-<^+!j:: Send {LCtrl down}{LShift down}{LEFT}{LShift up}{LCtrl up}
-<^+!l:: Send {LCtrl down}{LShift down}{RIGHT}{LShift up}{LCtrl up}
-!i:: Send {UP}
-!k:: Send {DOWN}
-!,:: Send {DOWN}
-!j:: Send {LCtrl down}{LEFT}{LCtrl up}
-!l:: Send {LCtrl down}{RIGHT}{LCtrl up}
+
+
+
 ; Ctl+Tab in chrome to goto recent
 #If WinActive("ahk_exe Chrome.exe")
     prevChromeTab()
@@ -172,7 +175,7 @@ CapsLock:: Send {Delete}
     return
 #If
 
-#If !SearchingWindows
+#If !SearchingWindows && !hitTAB && !hitCAPS
 ~Esc::
     MouseGetPos, , , escHwndID
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300 && escHwndID == escHwndID_old) {
@@ -674,7 +677,7 @@ Return
 return
 #If 
 
-#If hitTAB || hitCAPS
+#If (hitTAB || hitCAPS)
 !x::
     Tooltip, Cancelled!
     cancelAltTab := True
@@ -682,7 +685,7 @@ return
 Return
 #If
 
-#If hitTAB || hitCAPS
+#If (hitTAB || hitCAPS)
 x::
 Return
 #If
@@ -1324,14 +1327,6 @@ return
 ~RButton::Return
 #If
 
-; !^LButton::
-; loop 100
-; {
-    ; Tooltip, %A_Index%
-    ; sleep, 500
-; }
-; Return
-
 #If !VolumeHover()
 ~LButton::
    MouseGetPos, X, Y
@@ -1346,7 +1341,13 @@ return
    Return
 #If
 
+LWin & WheelUp::send {Volume_Up}
+LWin & WheelDown::send {Volume_Down}
+
 #If VolumeHover()
+WheelUp::send {Volume_Up}
+WheelDown::send {Volume_Down}
+
 LButton::
     Run, C:\Windows\System32\SndVol.exe
     WinWait, ahk_exe SndVol.exe
@@ -1401,18 +1402,6 @@ RButton & WheelUp::
 Return
 #If
 
-~$WheelUp::
-    Hotkey, $WheelUp, Off
-    MouseGetPos, , , wuID
-    WinGetClass, wuClass, ahk_id %wuID%
-    If (wuClass == "Shell_TrayWnd" && !moving)
-    {
-        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
-        sleep, 750
-    }
-    Hotkey, $WheelUp, On
-Return
-
 #If !moving
 RButton & WheelDown::
     ComboActive := True
@@ -1422,17 +1411,31 @@ RButton & WheelDown::
 Return
 #If
 
+~$WheelUp::
+    Hotkey, $WheelUp, Off
+    MouseGetPos, , , wuID
+    WinGetClass, wuClass, ahk_id %wuID%
+    If (wuClass == "Shell_TrayWnd" && !moving && !VolumeHover())
+    {
+        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+        sleep, 750
+    }
+    Hotkey, $WheelUp, On
+Return
+
 ~$WheelDown::
     Hotkey, $WheelDown, Off
     MouseGetPos, , , wdID
     WinGetClass, wdClass, ahk_id %wdID%
-    If (wdClass == "Shell_TrayWnd" && !moving)
+    If (wdClass == "Shell_TrayWnd" && !moving && !VolumeHover())
     {
         Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
         sleep, 750
     }
     Hotkey, $WheelDown, On
 Return
+
+
 
 /* ;
 ***********************************
@@ -2849,6 +2852,8 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :?:cims::cisms
 :?:lyl::lly
 :?:/::?
+:?:aingin::aining
+:?:ainign::aining
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -3312,6 +3317,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::anomolous::anomalous
 ::anomoly::anomaly
 ::anonimity::anonymity
+::aanother::another
 ::anohter::another
 ::anotehr::another
 ::anothe::another
