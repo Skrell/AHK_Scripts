@@ -56,8 +56,13 @@ Global nil
 Global CancelClose := False
 Global lastWinMinHwndId := 99
 Global DrawingRect := False
+Global v1 := 0
+Global v2 := 0
+Global v3 := 0
+Global v4 := 0
         
 Process, Priority,, High
+
 Menu, Tray, Icon
 Menu, Tray, NoStandard
 Menu, Tray, Add, Run at startup, Startup
@@ -68,7 +73,7 @@ Menu, Tray, Default, &Suspend
 Menu, Tray, Click, 1
 
 SetTimer track, 50
-SetTimer CheckForNewWinSpawn, 300
+; SetTimer CheckForNewWinSpawn, 300
 
 SysGet, MonNum, MonitorPrimary 
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
@@ -427,6 +432,7 @@ Return
 
 ;============================================================================================================================
 FadeInWin1:
+    Critical, On
     MouseGetPos, , , lclickHwndId
 
     If (lclickHwndId != ValidWindows[1])
@@ -443,30 +449,30 @@ FadeInWin1:
     WinActivate, % "ahk_id " lclickHwndId
 
     If (lclickHwndId != ValidWindows[1]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        ; sleep 10
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        sleep 20
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
     }
     If (lclickHwndId != ValidWindows[2]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        ; sleep 10
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        sleep 20
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
     }
     If (lclickHwndId != ValidWindows[3]) {
         ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        ; sleep 10
+        ; sleep 20
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
     }
     ; If (ValidWindows.MaxIndex() >= 4 && lclickHwndId != ValidWindows[4]) {
@@ -478,9 +484,11 @@ FadeInWin1:
         ; sleep 10
         ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
     ; }
+    Critical, Off
 Return
 
 FadeInWin2:
+    Critical, On
     If (cycleCount != 1)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
     If (cycleCount != 2)
@@ -495,30 +503,30 @@ FadeInWin2:
     WinActivate, % "ahk_id " ValidWindows[cycleCount]
     
     If (cycleCount != 1) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        ; sleep 10
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        sleep 20
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
     } 
     If (cycleCount != 2) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        ; sleep 10
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        sleep 20
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
     }
     If (cycleCount != 3) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        ; sleep 10
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        sleep 20
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-        sleep 10
+        sleep 20
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
     }
     ; If (ValidWindows.MaxIndex() >= 4 && cycleCount != 4) {
@@ -530,6 +538,7 @@ FadeInWin2:
         ; sleep 10
         ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
     ; }
+    Critical, Off
 Return
 
 ResetWins:
@@ -568,9 +577,6 @@ Return
 #If !SearchingWindows && (hitTAB || hitCAPS)
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
-    ; If !hitTAB && !hitCAPS
-        ; Return
-    
     WinGet, actWndID, ID, A
     If (GetKeyState("Lbutton","P") && cycling && (ValidWindows.length() > 2)) {
         If ((actWndID == ValidWindows[1]) || (ValidWindows.length() <= 1)) {
@@ -581,6 +587,57 @@ Return
             BlockInput, MouseMove
             GoSub, DrawRect
             Send, {Lbutton Up}
+            ; v1 := ValidWindows[1]
+            ; v2 := ValidWindows[2]
+            ; v3 := ValidWindows[3]
+            ; MouseGetPos, , , lclickHwndId
+            
+            ; script =
+            ; (
+                ; #NoTrayIcon
+                ; Process, Priority,, High
+                ; If (%lclickHwndId% != %v1%)
+                    ; WinSet, Transparent, 0, ahk_id %v1%
+                ; If (%lclickHwndId% != %v2%)
+                    ; WinSet, Transparent, 0, ahk_id %v2%
+                ; If (%lclickHwndId% != %v3%)
+                    ; WinSet, Transparent, 0, ahk_id %v3%
+                
+                ; WinActivate, ahk_id %v3%
+                ; WinActivate, ahk_id %v2%
+                ; WinActivate, ahk_id %v1%
+                
+                ; WinActivate, ahk_id %lclickHwndId%
+
+                ; If (%lclickHwndId% != %v1%) {
+                    ; WinSet, Transparent, 50,  ahk_id %v1%
+                    ; sleep 20
+                    ; WinSet, Transparent, 100, ahk_id %v1%
+                    ; sleep 20                        
+                    ; WinSet, Transparent, 200, ahk_id %v1%
+                    ; sleep 20                        
+                    ; WinSet, Transparent, 255, ahk_id %v1%
+                ; }
+                ; If (%lclickHwndId% != %v2%) {
+                    ; WinSet, Transparent, 50,  ahk_id %v2%
+                    ; sleep 20
+                    ; WinSet, Transparent, 100, ahk_id %v2%
+                    ; sleep 20                         
+                    ; WinSet, Transparent, 200, ahk_id %v2%
+                    ; sleep 20                         
+                    ; WinSet, Transparent, 255, ahk_id %v2%
+                ; }
+                ; If (%lclickHwndId% != %v3%) {
+                    ; WinSet, Transparent, 50,  ahk_id %v3%
+                    ; sleep 20
+                    ; WinSet, Transparent, 100, ahk_id %v3%
+                    ; sleep 20                         
+                    ; WinSet, Transparent, 200, ahk_id %v3%
+                    ; sleep 20                         
+                    ; WinSet, Transparent, 255, ahk_id %v3%
+                ; }
+            ; )
+            ; DynaRun(script, dynaRunName)
             GoSub, FadeInWin1
 
             BlockInput, MouseMoveOff
@@ -2221,7 +2278,7 @@ join( strArray )
 
 ShellMessage( wParam,lParam )
 {
-    Global nil, lastWinMinHwndId
+    Global nil, lastWinMinHwndId, PrevActiveWindows, VD, MonCount
     If (wParam == 5)  ;HSHELL_GETMINRECT
     {            
          hwnd := NumGet( lParam+0 ) 
@@ -2243,16 +2300,37 @@ ShellMessage( wParam,lParam )
              ; }
          }
     }
-    ; If (wParam=1) ;  HSHELL_WINDOWCREATED := 1
-     ; {
-         ; ID:=lParam
-         ; WinGetTitle, title, Ahk_id %ID%
-         ; If (title == "Title of the program") ; Enter the program title between quotes
-         ; {
-             ; nil = %ID%
-             ; MsgBox, %ID% opened.
-         ; }
-     ; }
+    If (wParam=1) ;  HSHELL_WINDOWCREATED := 1
+     {
+         ID:=lParam
+         WinGetTitle, title, Ahk_id %ID%
+         WinGet, procStr, ProcessName, Ahk_id %ID%
+         WinGet, hwndID, ID, Ahk_id %ID%
+         WinGetClass, classStr, Ahk_id %ID%
+         If (IsAltTabWindow(hwndID) || (procStr == "OUTLOOK.EXE" && classStr == "#32770")) {
+             If (MonCount > 1) {
+                 PrevActiveWindows.push(hwndID)
+             }
+             Else If (MonCount == 1) {
+                 Return
+             }
+             
+             WinGet, state, MinMax, Ahk_id %ID%
+             If (state > -1) {
+                 desknum := VD.getDesktopNumOfWindow(title)
+                 If (desknum == VD.getCurrentDesktopNum()) {
+                     If desknum <= 0
+                         Return
+                         currentMon := MWAGetMonitorMouseIsIn()
+                         currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+                         If !currentMonHasActWin {
+                             WinActivate, Ahk_id %ID%
+                             Send, {LWin down}{LShift down}{Left}{LShift up}{LWin up}
+                     }
+                 }
+             }
+         }
+     }
      ; If (wParam=2) ;  HSHELL_WINDOWDESTROYED := 2 
      ; {
          ; ID:=lParam  
@@ -2422,6 +2500,30 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
     Return &RECTPlus
 }
 ;------------------------------------------------------------------------------
+DynaRun(TempScript, pipename="")
+{
+   static _:="uint",@:="Ptr"
+   If pipename =
+      name := "AHK" A_TickCount
+   Else
+      name := pipename
+   __PIPE_GA_ := DllCall("CreateNamedPipe","str","\\.\pipe\" name,_,2,_,0,_,255,_,0,_,0,@,0,@,0)
+   __PIPE_    := DllCall("CreateNamedPipe","str","\\.\pipe\" name,_,2,_,0,_,255,_,0,_,0,@,0,@,0)
+   if (__PIPE_=-1 or __PIPE_GA_=-1)
+      Return 0
+   Run, %A_AhkPath% "\\.\pipe\%name%",,UseErrorLevel HIDE, PID
+   If ErrorLevel
+      MsgBox, 262144, ERROR,% "Could not open file:`n" __AHK_EXE_ """\\.\pipe\" name """"
+   DllCall("ConnectNamedPipe",@,__PIPE_GA_,@,0)
+   DllCall("CloseHandle",@,__PIPE_GA_)
+   DllCall("ConnectNamedPipe",@,__PIPE_,@,0)
+   script := (A_IsUnicode ? chr(0xfeff) : (chr(239) . chr(187) . chr(191))) TempScript
+   if !DllCall("WriteFile",@,__PIPE_,"str",script,_,(StrLen(script)+1)*(A_IsUnicode ? 2 : 1),_ "*",0,@,0)
+        Return A_LastError,DllCall("CloseHandle",@,__PIPE_)
+   DllCall("CloseHandle",@,__PIPE_)
+   Return PID
+}
+;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
 ; Sep 13 2007: Added more misspellings.
@@ -2561,6 +2663,7 @@ Return
         && !SearchingWindows
         && !hitCAPS
         && !hitTAB
+        && !GetKeyState("LAlt","P")
         
 #Hotstring EndChars ()[]{};"/\,?!`n `t
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
@@ -7386,6 +7489,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::uise::use
 ::usefull::useful
 ::usefuly::usefully
+::usiing::using
 ::useing::using
 ::usally::usually
 ::usualy::usually
@@ -8016,6 +8120,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::serach::search
 ::aroudn::around
 ::a the::at the
+::ist he::is the
 ::htan::than
 ::theres::there's
 ::hwoever::however
@@ -8026,6 +8131,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::thye::they
 ::dicussions::discussions
 ::Techncially::Technically
+::tehcncailly::technically
 ::spreadhsset::spreadsheet
 ::confirmmed::confirmed
 ::implmeneted::implemented
