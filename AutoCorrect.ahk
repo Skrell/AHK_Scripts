@@ -985,52 +985,55 @@ Cycle(direction)
 }
 
 ClearRect:
-    sleep 75
-    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-        Gui, GUI4Boarder: Hide
-        Return
-    }
-    sleep 75
-    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-        Gui, GUI4Boarder: Hide
-        Return
-    }
-    sleep 75
-    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-        Gui, GUI4Boarder: Hide
-        Return
+
+    loop 25 {
+        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
+            Gui, GUI4Boarder: Hide
+            Return
+        }
+        sleep, 10
     }
         
     WinSet, Transparent, 225, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-        Gui, GUI4Boarder: Hide
-        Return
+    loop 6 {
+        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
+            Gui, GUI4Boarder: Hide
+            Return
+        }
+        sleep 10
     }
-    sleep 60
     WinSet, Transparent, 200, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-        Gui, GUI4Boarder: Hide
-        Return
+    loop 5 {
+        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
+            Gui, GUI4Boarder: Hide
+            Return
+        }
+        sleep 10
     }
-    sleep 50
     WinSet, Transparent, 175, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-        Gui, GUI4Boarder: Hide
-        Return
+    loop 5 {
+        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
+            Gui, GUI4Boarder: Hide
+            Return
+        }
+        sleep 10
     }
-    sleep 50
     WinSet, Transparent, 125, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-        Gui, GUI4Boarder: Hide
-        Return
+    loop 5 {
+        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
+            Gui, GUI4Boarder: Hide
+            Return
+        }
+        sleep 10
     }
-    sleep 50
     WinSet, Transparent, 50, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-        Gui, GUI4Boarder: Hide
-        Return
+    loop 5 {
+        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
+            Gui, GUI4Boarder: Hide
+            Return
+        }
+        sleep 10
     }
-    sleep 50
     Gui, GUI4Boarder: Hide
 Return
 
