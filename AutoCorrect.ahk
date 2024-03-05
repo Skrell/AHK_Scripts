@@ -986,57 +986,57 @@ Cycle(direction)
 
 ClearRect:
     sleep 75
-    If (hitTAB || hitCAPS) && !cancelAltTab {
+    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
         Gui, GUI4Boarder: Hide
         Return
     }
     sleep 75
-    If (hitTAB || hitCAPS) && !cancelAltTab {
+    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
         Gui, GUI4Boarder: Hide
         Return
     }
     sleep 75
-    If (hitTAB || hitCAPS) && !cancelAltTab {
+    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
         Gui, GUI4Boarder: Hide
         Return
     }
         
     WinSet, Transparent, 225, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !cancelAltTab {
+    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
         Gui, GUI4Boarder: Hide
         Return
     }
     sleep 60
     WinSet, Transparent, 200, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !cancelAltTab {
+    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
         Gui, GUI4Boarder: Hide
         Return
     }
     sleep 50
     WinSet, Transparent, 175, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !cancelAltTab {
+    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
         Gui, GUI4Boarder: Hide
         Return
     }
     sleep 50
     WinSet, Transparent, 125, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !cancelAltTab {
+    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
         Gui, GUI4Boarder: Hide
         Return
     }
     sleep 50
     WinSet, Transparent, 50, ahk_id %Highlighter%
-    If (hitTAB || hitCAPS) && !cancelAltTab {
+    If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
         Gui, GUI4Boarder: Hide
         Return
     }
     sleep 50
-    ; WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
+    Critical, On
     DrawingRect := True
     ; WinGetPos, x, y, w, h, A
     WinGet, activeWin, ID, A
@@ -1086,8 +1086,6 @@ DrawRect:
         newW:=w
         newH:=h
 
-
-
     } else if (borderType="both") { 
         outerX:=0
         outerY:=0
@@ -1105,19 +1103,17 @@ DrawRect:
         newH:=h+4*border_thickness
     }
 
-
-
     Gui, GUI4Boarder: Color, %border_color%
     Gui, GUI4Boarder: -Caption
 
     ;WinSet, Region, 0-0 %w%-0 %w%-%h% 0-%h% 0-0 %border_thickness%-%border_thickness% %iw%-%border_thickness% %iw%-%ih% %border_thickness%-%ih% %border_thickness%-%border_thickness%
      WinSet, Region, %outerX%-%outerY% %outerX2%-%outerY% %outerX2%-%outerY2% %outerX%-%outerY2% %outerX%-%outerY%    %innerX%-%innerY% %innerX2%-%innerY% %innerX2%-%innerY2% %innerX%-%innerY2% %innerX%-%innerY% 
 
-
     ;Gui, Show, w%w% h%h% x%x% y%y% NoActivate, Table awaiting Action
     Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NoActivate, Table awaiting Action
     WinSet, Transparent, off, ahk_id %Highlighter%
     DrawingRect := False
+    Critical, Off
 return
 
 UpdateInputBoxTitle:
