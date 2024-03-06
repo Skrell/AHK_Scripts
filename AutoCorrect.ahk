@@ -953,13 +953,13 @@ Cycle(direction)
                                 continue
                             ValidWindows.push(hwndID)
                             If (ValidWindows.MaxIndex() == 2) {
-                                cycling := True
                                 WinActivate, % "ahk_id " hwndID
                                 ; WinGetTitle, tit1, % "ahk_id " ValidWindows[1]
                                 ; WinGetTitle, tit2, % "ahk_id " ValidWindows[2]
                                 ; tooltip, %tit1%  `n %tit2%
                                 GoSub, DrawRect
                             }
+                            cycling := True
                         }
                     }
                 }
@@ -969,7 +969,13 @@ Cycle(direction)
         Critical Off
     }
     
-    
+    If (ValidWindows.length() == 1) {
+        tooltip, % "Only " ValidWindows.length() " Window to Show..." 
+        sleep, 1000
+        tooltip,
+        Return
+    }
+        
     If (cycleCount >= 2)
         startHighlight := True
     
@@ -996,7 +1002,6 @@ Cycle(direction)
                 GoSub, DrawRect
         }
     }
-
     Return
 }
 
