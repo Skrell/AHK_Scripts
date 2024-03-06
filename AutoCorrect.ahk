@@ -45,7 +45,6 @@ Global border_thickness := 4
 Global border_color := 0xFF00FF
 Global hitTAB := False
 Global hitCAPS := False
-Global cancelAltTab := False
 Global SearchingWindows := False
 Global ReverseSearch    := False
 Global UserInputTrimmed := ""
@@ -54,7 +53,7 @@ Global totalMenuItemCount := 0
 Global onlyTitleFound := ""
 Global nil
 Global CancelClose := False
-Global lastWinMinHwndId := 99
+Global lastWinMinHwndId := 0x999999
 Global DrawingRect := False
 Global v1 := 0
 Global v2 := 0
@@ -187,6 +186,7 @@ Return
         GoSub, DrawRect
         KeyWait, Esc, U T10
         GoSub, ClearRect
+        Gui, GUI4Boarder: Hide
         If !CancelClose
             WinClose, A
         Else
@@ -467,8 +467,8 @@ FadeInWin1:
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
     }
     If (lclickHwndId != ValidWindows[3]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        ; sleep 20
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        sleep 20
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
         sleep 20
         WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
@@ -577,140 +577,140 @@ Return
 #If !SearchingWindows && (hitTAB || hitCAPS)
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
-    WinGet, actWndID, ID, A
-    If (GetKeyState("Lbutton","P") && cycling && (ValidWindows.length() > 2)) {
-        If ((actWndID == ValidWindows[1]) || (ValidWindows.length() <= 1)) {
-            WinSet, Region, 0-0 w0 h0
-            Gui, GUI4Boarder: Hide
-        }
-        Else If (startHighlight) {
-            BlockInput, MouseMove
-            GoSub, DrawRect
-            Send, {Lbutton Up}
-            ; v1 := ValidWindows[1]
-            ; v2 := ValidWindows[2]
-            ; v3 := ValidWindows[3]
-            ; MouseGetPos, , , lclickHwndId
-            
-            ; script =
-            ; (
-                ; #NoTrayIcon
-                ; Process, Priority,, High
-                ; If (%lclickHwndId% != %v1%)
-                    ; WinSet, Transparent, 0, ahk_id %v1%
-                ; If (%lclickHwndId% != %v2%)
-                    ; WinSet, Transparent, 0, ahk_id %v2%
-                ; If (%lclickHwndId% != %v3%)
-                    ; WinSet, Transparent, 0, ahk_id %v3%
-                
-                ; WinActivate, ahk_id %v3%
-                ; WinActivate, ahk_id %v2%
-                ; WinActivate, ahk_id %v1%
-                
-                ; WinActivate, ahk_id %lclickHwndId%
-
-                ; If (%lclickHwndId% != %v1%) {
-                    ; WinSet, Transparent, 50,  ahk_id %v1%
-                    ; sleep 20
-                    ; WinSet, Transparent, 100, ahk_id %v1%
-                    ; sleep 20                        
-                    ; WinSet, Transparent, 200, ahk_id %v1%
-                    ; sleep 20                        
-                    ; WinSet, Transparent, 255, ahk_id %v1%
-                ; }
-                ; If (%lclickHwndId% != %v2%) {
-                    ; WinSet, Transparent, 50,  ahk_id %v2%
-                    ; sleep 20
-                    ; WinSet, Transparent, 100, ahk_id %v2%
-                    ; sleep 20                         
-                    ; WinSet, Transparent, 200, ahk_id %v2%
-                    ; sleep 20                         
-                    ; WinSet, Transparent, 255, ahk_id %v2%
-                ; }
-                ; If (%lclickHwndId% != %v3%) {
-                    ; WinSet, Transparent, 50,  ahk_id %v3%
-                    ; sleep 20
-                    ; WinSet, Transparent, 100, ahk_id %v3%
-                    ; sleep 20                         
-                    ; WinSet, Transparent, 200, ahk_id %v3%
-                    ; sleep 20                         
-                    ; WinSet, Transparent, 255, ahk_id %v3%
-                ; }
-            ; )
-            ; DynaRun(script, dynaRunName)
-            GoSub, FadeInWin1
-
-            BlockInput, MouseMoveOff
-        }
-    }
-    Else {
-        If (GetKeyState("x","P") || (actWndID == ValidWindows[1]) || (ValidWindows.length() <= 1)) {
-            If (GetKeyState("x","P")) {
-                WinSet, Region, 0-0 w0 h0
+    If !(hitCAPS && !hitTAB) {
+        WinGet, actWndID, ID, A
+        If (GetKeyState("Lbutton","P") && cycling && (ValidWindows.length() > 2)) {
+            If ((actWndID == ValidWindows[1]) || (ValidWindows.length() <= 1)) {
                 Gui, GUI4Boarder: Hide
-                GoSub, ResetWins
+            }
+            Else If (startHighlight) {
+                BlockInput, MouseMove
+                GoSub, DrawRect
+                Send, {Lbutton Up}
+                ; v1 := ValidWindows[1]
+                ; v2 := ValidWindows[2]
+                ; v3 := ValidWindows[3]
+                ; MouseGetPos, , , lclickHwndId
+                
+                ; script =
+                ; (
+                    ; #NoTrayIcon
+                    ; Process, Priority,, High
+                    ; If (%lclickHwndId% != %v1%)
+                        ; WinSet, Transparent, 0, ahk_id %v1%
+                    ; If (%lclickHwndId% != %v2%)
+                        ; WinSet, Transparent, 0, ahk_id %v2%
+                    ; If (%lclickHwndId% != %v3%)
+                        ; WinSet, Transparent, 0, ahk_id %v3%
+                    
+                    ; WinActivate, ahk_id %v3%
+                    ; WinActivate, ahk_id %v2%
+                    ; WinActivate, ahk_id %v1%
+                    
+                    ; WinActivate, ahk_id %lclickHwndId%
+
+                    ; If (%lclickHwndId% != %v1%) {
+                        ; WinSet, Transparent, 50,  ahk_id %v1%
+                        ; sleep 20
+                        ; WinSet, Transparent, 100, ahk_id %v1%
+                        ; sleep 20                        
+                        ; WinSet, Transparent, 200, ahk_id %v1%
+                        ; sleep 20                        
+                        ; WinSet, Transparent, 255, ahk_id %v1%
+                    ; }
+                    ; If (%lclickHwndId% != %v2%) {
+                        ; WinSet, Transparent, 50,  ahk_id %v2%
+                        ; sleep 20
+                        ; WinSet, Transparent, 100, ahk_id %v2%
+                        ; sleep 20                         
+                        ; WinSet, Transparent, 200, ahk_id %v2%
+                        ; sleep 20                         
+                        ; WinSet, Transparent, 255, ahk_id %v2%
+                    ; }
+                    ; If (%lclickHwndId% != %v3%) {
+                        ; WinSet, Transparent, 50,  ahk_id %v3%
+                        ; sleep 20
+                        ; WinSet, Transparent, 100, ahk_id %v3%
+                        ; sleep 20                         
+                        ; WinSet, Transparent, 200, ahk_id %v3%
+                        ; sleep 20                         
+                        ; WinSet, Transparent, 255, ahk_id %v3%
+                    ; }
+                ; )
+                ; DynaRun(script, dynaRunName)
+                GoSub, FadeInWin1
+
+                BlockInput, MouseMoveOff
             }
         }
-        Else If (hitTAB && hitCAPS) {
-            Critical On
-            WinGet, actMinID, ID, A
-            
-            If (ValidWindows.MaxIndex() >= 4)
-                WinActivate, % "ahk_id " ValidWindows[4]
-            If (ValidWindows.MaxIndex() >= 3)
-                WinActivate, % "ahk_id " ValidWindows[3]
-            If (ValidWindows.MaxIndex() >= 2)
-                WinActivate, % "ahk_id " ValidWindows[2]
-            If (ValidWindows.MaxIndex() >= 1)    
-                WinActivate, % "ahk_id " ValidWindows[1]
-            WinActivate, % "ahk_id " actMinID
-            Critical Off
-        }
-        Else If (cycling && startHighlight && (ValidWindows.length() > 2))
-        {
-            GoSub, FadeInWin2
-            WinActivate, % "ahk_id " ValidWindows[cycleCount]
-        }
-        Else If (!cycling && !startHighlight)
-        {
-            Critical On
-            WinGet, allWindows, List
-            loop % allWindows
-            {
-                hwndID := allWindows%A_Index%
+        Else {
+            If (GetKeyState("x","P") || (actWndID == ValidWindows[1]) || (ValidWindows.length() <= 1)) {
+                If (GetKeyState("x","P")) {
+                    Gui, GUI4Boarder: Hide
+                    GoSub, ResetWins
+                }
+            }
+            Else If (hitTAB && hitCAPS) {
+                Critical On
+                WinGet, actMinID, ID, A
                 
-                If (A_Index > 10)
-                    break
-                If (MonCount > 1) {
-                    currentMon := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
-                }
-                Else {
-                    currentMonHasActWin := True
-                }
-                If (currentMonHasActWin) {
-                    WinGet, state, MinMax, ahk_id %hwndID%
-                    If (state > -1) {
-                        WinGetTitle, cTitle, ahk_id %hwndID%
-                        If (IsAltTabWindow(actWndID)) {
-                            desknum := VD.getDesktopNumOfWindow(cTitle)
-                            If desknum <= 0
-                                continue   
-                            If (desknum == VD.getCurrentDesktopNum()) {
-                                WinActivate, % "ahk_id " hwndID
-                                GoSub, DrawRect
-                                break
+                If (ValidWindows.MaxIndex() >= 4)
+                    WinActivate, % "ahk_id " ValidWindows[4]
+                If (ValidWindows.MaxIndex() >= 3)
+                    WinActivate, % "ahk_id " ValidWindows[3]
+                If (ValidWindows.MaxIndex() >= 2)
+                    WinActivate, % "ahk_id " ValidWindows[2]
+                If (ValidWindows.MaxIndex() >= 1)    
+                    WinActivate, % "ahk_id " ValidWindows[1]
+                WinActivate, % "ahk_id " actMinID
+                Critical Off
+            }
+            Else If (cycling && startHighlight && (ValidWindows.length() > 2))
+            {
+                GoSub, FadeInWin2
+                WinActivate, % "ahk_id " ValidWindows[cycleCount]
+            }
+            Else If (!cycling && !startHighlight)
+            {
+                Critical On
+                WinGet, allWindows, List
+                loop % allWindows
+                {
+                    hwndID := allWindows%A_Index%
+                    
+                    If (A_Index > 10)
+                        break
+                    If (MonCount > 1) {
+                        currentMon := MWAGetMonitorMouseIsIn()
+                        currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+                    }
+                    Else {
+                        currentMonHasActWin := True
+                    }
+                    If (currentMonHasActWin) {
+                        WinGet, state, MinMax, ahk_id %hwndID%
+                        If (state > -1) {
+                            WinGetTitle, cTitle, ahk_id %hwndID%
+                            If (IsAltTabWindow(actWndID)) {
+                                desknum := VD.getDesktopNumOfWindow(cTitle)
+                                If desknum <= 0
+                                    continue   
+                                If (desknum == VD.getCurrentDesktopNum()) {
+                                    WinActivate, % "ahk_id " hwndID
+                                    GoSub, DrawRect
+                                    break
+                                }
                             }
                         }
                     }
                 }
+                Critical Off
             }
-            Critical Off
         }
     }
     
     cycleCount     := 1
-    cycleCountMin  := 0
+    cycleCountMin  := 1
     If (totalCycleCountMin >= 2)
         ReverseSearch := True
     Else
@@ -722,23 +722,27 @@ Return
     RevMinnedWindows  := {}
     cycling        := False
     cyclingMin     := False
-    startHighlight := False
     KeyWait, x, U T1
     hitTAB         := False
     hitCAPS        := False
-    cancelAltTab   := False
     ; while (DrawingRect == True) {
         ; sleep, 100
     ; }
     Gosub, ClearRect
+    startHighlight := False
+    Gui, GUI4Boarder: Hide
 return
 #If 
 
 #If (hitTAB || hitCAPS)
 !x::
     Tooltip, Cancelled!
-    cancelAltTab := True
     SetTimer, ClearRect, -50
+    Gui, GUI4Boarder: Hide
+    If (!hitTAB && hitCAPS)
+        GoSub, ResetWins
+    sleep, 3000
+    Tooltip
 Return
 #If
 
@@ -761,15 +765,16 @@ CycleMin(direction)
     Global cyclingMin
     Global cycleCountMin
     Global totalCycleCountMin
-    Global ValidWindows
     Global MonCount
     Global startHighlight
     Global hitCAPS
     Global RevMinnedWindows
     Global MinnedWindows
     Global ReverseSearch
+    Global lastWinMinHwndId
+    
+    hitCAPS := True
             
-    WinSet, Region, 0-0 w0 h0
     Gui, GUI4Boarder: Hide
             
     If !cyclingMin
@@ -804,7 +809,6 @@ CycleMin(direction)
         }
         
         If ReverseSearch {
-            RevMinnedWindows := {}
            
             brr := MinnedWindows.clone()
             for k in MinnedWindows.clone()
@@ -813,22 +817,31 @@ CycleMin(direction)
         Else {
             RevMinnedWindows := MinnedWindows
         }
-        
-        loop % RevMinnedWindows
+        ; tooltip, % join(RevMinnedWindows)
+        loop % RevMinnedWindows.length()
         {
-            If lastWinMinHwndId == RevMinnedWindows%A_Index%
+            currentVal := RevMinnedWindows[A_Index]
+            ; tooltip, %lastWinMinHwndId% vs %currentVal%
+            If (lastWinMinHwndId == currentVal) {
+                ; tooltip, found it %currentVal%
+                WinActivate, % "ahk_id " lastWinMinHwndId
+                sleep 100
+                startHighlight := True
+                GoSub, DrawRect
                 break
-            Else
+            }
+            Else {
                 cycleCountMin += 1
+                currentVal := RevMinnedWindows[cycleCountMin]
+            }
+            ; sleep, 1000
         }
         Critical Off
     }
     
-    startHighlight := True
     totalCycleCountMin += 1
     
-    
-    If (RevMinnedWindows.length() >= 1) 
+    If ((RevMinnedWindows.length() >= 1 && totalCycleCountMin > 1) || (RevMinnedWindows.length() >= 1 && !startHighlight))
     {
         If direction
         {
@@ -842,10 +855,12 @@ CycleMin(direction)
                 PrevCount := RevMinnedWindows.MaxIndex()
                 
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
+            lastWinMinHwndId := RevMinnedWindows[PrevCount]
             If hitCAPS
                 sleep, 200
             ; WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
+            startHighlight := True
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
@@ -863,17 +878,18 @@ CycleMin(direction)
                 PrevCount := 1
                 
             WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
+            lastWinMinHwndId := RevMinnedWindows[PrevCount]
             If hitCAPS
                 sleep, 200
             ; WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
+            startHighlight := True
             If (startHighlight) {
                 sleep 100
                 GoSub, DrawRect
             }
         }
     }
-    hitCAPS := True
     
     Return
 }
@@ -987,8 +1003,9 @@ Cycle(direction)
 ClearRect:
 
     loop 25 {
-        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-            Gui, GUI4Boarder: Hide
+        If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
+            ; Gui, GUI4Boarder: Hide
+            WinSet, Transparent, 255, ahk_id %Highlighter%
             Return
         }
         sleep, 10
@@ -996,40 +1013,45 @@ ClearRect:
         
     WinSet, Transparent, 225, ahk_id %Highlighter%
     loop 6 {
-        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-            Gui, GUI4Boarder: Hide
+        If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
+            ; Gui, GUI4Boarder: Hide
+            WinSet, Transparent, 255, ahk_id %Highlighter%
             Return
         }
         sleep 10
     }
     WinSet, Transparent, 200, ahk_id %Highlighter%
     loop 5 {
-        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-            Gui, GUI4Boarder: Hide
+        If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
+            ; Gui, GUI4Boarder: Hide
+            WinSet, Transparent, 255, ahk_id %Highlighter%
             Return
         }
         sleep 10
     }
     WinSet, Transparent, 175, ahk_id %Highlighter%
     loop 5 {
-        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-            Gui, GUI4Boarder: Hide
+        If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
+            ; Gui, GUI4Boarder: Hide
+            WinSet, Transparent, 255, ahk_id %Highlighter%
             Return
         }
         sleep 10
     }
     WinSet, Transparent, 125, ahk_id %Highlighter%
     loop 5 {
-        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-            Gui, GUI4Boarder: Hide
+        If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
+            ; Gui, GUI4Boarder: Hide
+            WinSet, Transparent, 255, ahk_id %Highlighter%
             Return
         }
         sleep 10
     }
     WinSet, Transparent, 50, ahk_id %Highlighter%
     loop 5 {
-        If (hitTAB || hitCAPS) && !GetKeyState("LAlt", "P") {
-            Gui, GUI4Boarder: Hide
+        If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
+            ; Gui, GUI4Boarder: Hide
+            WinSet, Transparent, 255, ahk_id %Highlighter%
             Return
         }
         sleep 10
@@ -1376,6 +1398,7 @@ ActivateWindow:
          }
         GoSub, DrawRect
         GoSub, ClearRect
+        Gui, GUI4Boarder: Hide
     }
 return
 
@@ -2198,6 +2221,7 @@ track() {
                     WinActivate, ahk_id %LastActiveWinHwnd%
                     GoSub, DrawRect
                     GoSub, ClearRect
+                    Gui, GUI4Boarder: Hide
                 }
         }
     }
@@ -2282,10 +2306,11 @@ ShellMessage( wParam,lParam )
     {            
          hwnd := NumGet( lParam+0 ) 
          WinGet, status, MinMax, ahk_id %hwnd%
+         WinGetClass, cl, ahk_id %hwnd%
          If (status == -1)
          {
-             lastWinMinHwndId := hwnd
-             
+             lastWinMinHwndId := Format("0x{1:x}",hwnd)
+             ; tooltip, minimized %lastWinMinHwndId%
              ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
              ; sleep 50
              ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
