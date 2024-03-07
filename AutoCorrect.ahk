@@ -150,6 +150,7 @@ Return
     !,:: Send {DOWN}
     !j:: Send {LCtrl down}{LEFT}{LCtrl up}
     !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
+    LAlt & LButton:: Send {ENTER}
 #If
 
 
@@ -574,7 +575,7 @@ Return
 
 #MaxThreadsPerHotkey 2
 
-#If !SearchingWindows && (hitTAB || hitCAPS)
+#If !SearchingWindows
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
     If !(hitCAPS && !hitTAB) {
@@ -739,7 +740,7 @@ return
     Tooltip, Cancelled!
     SetTimer, ClearRect, -50
     Gui, GUI4Boarder: Hide
-    If (!hitTAB && hitCAPS)
+    If (hitCAPS && !hitTAB)
         GoSub, ResetWins
     sleep, 3000
     Tooltip
@@ -954,12 +955,12 @@ Cycle(direction)
                             ValidWindows.push(hwndID)
                             If (ValidWindows.MaxIndex() == 2) {
                                 WinActivate, % "ahk_id " hwndID
+                                cycleCount := 2
                                 ; WinGetTitle, tit1, % "ahk_id " ValidWindows[1]
                                 ; WinGetTitle, tit2, % "ahk_id " ValidWindows[2]
                                 ; tooltip, %tit1%  `n %tit2%
                                 GoSub, DrawRect
                             }
-                            cycling := True
                         }
                     }
                 }
@@ -976,10 +977,8 @@ Cycle(direction)
         Return
     }
         
-    If (cycleCount >= 2)
-        startHighlight := True
     
-    If (ValidWindows.length() >= 2) 
+    If (ValidWindows.length() >= 2 && cycling) 
     {
         If direction
         {
@@ -988,8 +987,8 @@ Cycle(direction)
             Else
                 cycleCount += 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
-            If (startHighlight)
-                GoSub, DrawRect
+            ; If (startHighlight)
+            GoSub, DrawRect
         }
         Else
         {
@@ -998,10 +997,13 @@ Cycle(direction)
             Else
                 cycleCount -= 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
-            If (startHighlight)
-                GoSub, DrawRect
+            ; If (startHighlight)
+            GoSub, DrawRect
         }
     }
+    If (cycleCount > 2)
+        startHighlight := True
+    cycling := True
     Return
 }
 
@@ -1026,7 +1028,7 @@ ClearRect:
         sleep 10
     }
     WinSet, Transparent, 200, ahk_id %Highlighter%
-    loop 5 {
+    loop 4 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
@@ -1035,7 +1037,7 @@ ClearRect:
         sleep 10
     }
     WinSet, Transparent, 175, ahk_id %Highlighter%
-    loop 5 {
+    loop 4 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
@@ -1044,7 +1046,7 @@ ClearRect:
         sleep 10
     }
     WinSet, Transparent, 125, ahk_id %Highlighter%
-    loop 5 {
+    loop 4 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
@@ -1053,7 +1055,7 @@ ClearRect:
         sleep 10
     }
     WinSet, Transparent, 50, ahk_id %Highlighter%
-    loop 5 {
+    loop 4 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
@@ -1070,6 +1072,8 @@ DrawRect:
     DrawingRect := True
     ; WinGetPos, x, y, w, h, A
     WinGet, activeWin, ID, A
+    If !IsAltTabWindow(activeWin)
+        Return
     WinGetPosEx(activeWin, x, y, w, h)
     
     if (x="")
@@ -1827,7 +1831,8 @@ HandleChromeWindowsWithSameTitle(title := "") {
     currentMon := MWAGetMonitorMouseIsIn()
     AppTitle := ExtractAppTitle(title)
     SetTitleMatchMode, 2
-    WinGet, windowsWithSameTitleList, List, %AppTitle%
+    ; WinGet, windowsWithSameTitleList, List, %AppTitle%
+    WinGet, windowsWithSameTitleList, List, ahk_exe chrome.exe
     counter := 2
     
     numWindows := windowsWithSameTitleList
