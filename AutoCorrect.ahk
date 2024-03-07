@@ -981,6 +981,7 @@ Cycle(direction)
     
     If (ValidWindows.length() == 1) {
         tooltip, % "Only " ValidWindows.length() " Window to Show..." 
+        cycling := True
         sleep, 1000
         tooltip,
         Return
