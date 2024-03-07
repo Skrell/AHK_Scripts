@@ -709,6 +709,15 @@ Return
             }
         }
     }
+    Else If (hitCAPS && !hitTAB && GetKeyState("x","P")) {
+        Tooltip, Cancelled!
+        SetTimer, ClearRect, -50
+        Gui, GUI4Boarder: Hide
+        If (hitCAPS && !hitTAB)
+            GoSub, ResetWins
+        sleep, 3000
+        Tooltip
+    }
     
     cycleCount     := 1
     cycleCountMin  := 1
@@ -717,13 +726,13 @@ Return
     Else
         ReverseSearch := False
         
+    KeyWait, x, U T1
     totalCycleCountMin  := 0
     ValidWindows   := {}
     MinnedWindows  := {}
     RevMinnedWindows  := {}
     cycling        := False
     cyclingMin     := False
-    KeyWait, x, U T1
     hitTAB         := False
     hitCAPS        := False
     ; while (DrawingRect == True) {
@@ -735,7 +744,7 @@ Return
 return
 #If 
 
-#If (hitTAB || hitCAPS)
+#If (hitCAPS && hitTAB)
 !x::
     Tooltip, Cancelled!
     SetTimer, ClearRect, -50
