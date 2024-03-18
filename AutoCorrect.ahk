@@ -59,6 +59,7 @@ Global v1 := 0
 Global v2 := 0
 Global v3 := 0
 Global v4 := 0
+Global DesktopIconsVisible := False
         
 Process, Priority,, High
 
@@ -98,8 +99,69 @@ Gui +LastFound
 hWnd := WinExist()
 DllCall( "RegisterShellHookWindow", UInt, hWnd )
 MsgNum := DllCall( "RegisterWindowMessage", Str, "SHELLHOOK" )
-OnMessage( MsgNum, "ShellMessage" )
+OnMessage(MsgNum, "ShellMessage")
 
+loop 2
+{
+	ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
+	
+	; Reset trans.
+	if hwndProgman=
+	{
+		if !DoOnce
+		{
+			DoOnce=1
+			WinSet,Trans,OFF, ahk_id %hwndProgman%
+			WinSet,Trans,OFF, ahk_class Progman
+			ControlGet, hwndWorkerW, Hwnd,, SysListView321, ahk_class WorkerW
+			WinSet,Trans,255, ahk_id %hwndWorkerW%
+			WinSet,Trans,OFF, ahk_id %hwndWorkerW%
+			WinSet,Trans,OFF, ahk_class WorkerW
+			Sleep, 3000
+			WinSet,Trans,OFF, ahk_id %hwndProgman%
+			WinSet,Trans,OFF, ahk_class Progman
+			ControlGet, hwndWorkerW, Hwnd,, SysListView321, ahk_class WorkerW
+			WinSet,Trans,255, ahk_id %hwndWorkerW%
+			WinSet,Trans,OFF, ahk_id %hwndWorkerW%
+			WinSet,Trans,OFF, ahk_class WorkerW
+		}
+	}
+	else if (hwndProgman!="" and DoOnce=1)
+    {
+		DoOnce=0
+    }
+    
+    if hwndProgman= 
+    {
+        WinSet, Trans, 200, ahk_class WorkerW
+        sleep, 20
+        WinSet, Trans, 150, ahk_class WorkerW
+        sleep, 20
+        WinSet, Trans, 100, ahk_class WorkerW
+        sleep, 20
+        WinSet, Trans, 75, ahk_class WorkerW
+        sleep, 20
+        WinSet, Trans, 25, ahk_class WorkerW
+        sleep, 20
+        WinSet, Trans, 0, ahk_class WorkerW
+    }
+    else 
+    {
+        WinSet, Trans, 200, ahk_id %hwndProgman%
+        sleep, 20
+        WinSet, Trans, 150, ahk_id %hwndProgman%
+        sleep, 20
+        WinSet, Trans, 100, ahk_id %hwndProgman%
+        sleep, 20
+        WinSet, Trans, 75, ahk_id %hwndProgman%
+        sleep, 20
+        WinSet, Trans, 25, ahk_id %hwndProgman%
+        sleep, 20
+        WinSet, Trans, 0, ahk_id %hwndProgman%
+        sleep, 20
+    }
+    sleep, 250
+}
 Return
 
 ;############### CAse COrrector ######################
@@ -1456,14 +1518,33 @@ return
 ~RButton::Return
 #If
 
-#If !VolumeHover()
+#If !DesktopIconsVisible && IsOverDesktop() && !VolumeHover()
+LButton::
+    DesktopIcons(True)
+    DesktopIconsVisible := True
+Return
+#If
+
+#If !VolumeHover() || DesktopIconsVisible
 ~LButton::
-   MouseGetPos, X, Y
+   MouseGetPos, X, Y, lhwnd
    PixelGetColor, HexColor, %X%, %Y%, RGB
    If (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() && HexColor == 0xFFFFFF)
    { 
         Send !{Up}
         sleep, 200
+   }
+   Else
+   {
+       WinGetClass, lcl, ahk_id %lhwnd%
+       If (!DesktopIconsVisible && (lcl == "WorkerW" || lcl == "ProgMan")) {
+            DesktopIcons(True)
+            DesktopIconsVisible := True
+       }
+       Else If (DesktopIconsVisible && lcl != "WorkerW" && lcl != "ProgMan" && lcl != "#32768" && lcl != "#32770") {
+            DesktopIcons(False)
+            DesktopIconsVisible := False
+       }
    }
    Gui, GUI4Boarder: Hide
    DrawingRect := False
@@ -1473,7 +1554,7 @@ return
 LWin & WheelUp::send {Volume_Up}
 LWin & WheelDown::send {Volume_Down}
 
-#If VolumeHover()
+#If VolumeHover() && !IsOverDesktop()
 WheelUp::send {Volume_Up}
 WheelDown::send {Volume_Down}
 
@@ -1575,6 +1656,15 @@ Return
 VolumeHover() {
     ControlGetText, toolText,, ahk_class tooltips_class32
     If (InStr(toolText, "Speakers") || InStr(toolText, "Headphones"))
+        Return True
+    Else
+        Return False
+}
+
+IsOverDesktop() {
+    MouseGetPos, , , hwndID
+    WinGetClass, cl, ahk_id %hwndID%
+    If (cl == "WorkerW" || cl == "ProgMan")
         Return True
     Else
         Return False
@@ -2420,6 +2510,81 @@ ShellMessage( wParam,lParam )
     ; }
 }
 
+DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
+{
+	ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
+	; Toggle See through icons.
+	if !FadeIn
+	{
+        Critical, On
+		if hwndProgman= 
+        {
+			WinSet, Trans, 200, ahk_class WorkerW
+            sleep, 20
+			WinSet, Trans, 150, ahk_class WorkerW
+            sleep, 20
+			WinSet, Trans, 100, ahk_class WorkerW
+            sleep, 20
+			WinSet, Trans, 75, ahk_class WorkerW
+            sleep, 20
+			WinSet, Trans, 25, ahk_class WorkerW
+            sleep, 20
+            WinSet, Trans, 0, ahk_class WorkerW
+        }
+		else 
+        {
+			WinSet, Trans, 200, ahk_id %hwndProgman%
+            sleep, 20
+			WinSet, Trans, 150, ahk_id %hwndProgman%
+            sleep, 20
+			WinSet, Trans, 100, ahk_id %hwndProgman%
+            sleep, 20
+			WinSet, Trans, 75, ahk_id %hwndProgman%
+            sleep, 20
+			WinSet, Trans, 25, ahk_id %hwndProgman%
+            sleep, 20
+			WinSet, Trans, 0, ahk_id %hwndProgman%
+            sleep, 20
+        }
+        Critical, Off
+	}
+	else
+	{
+        Critical, On
+		if hwndProgman=
+        {
+			WinSet, Trans, OFF, ahk_class WorkerW
+            WinSet, Trans, 25, ahk_class WorkerW
+            sleep, 20
+            WinSet, Trans, 75, ahk_class WorkerW
+            sleep, 20
+            WinSet, Trans, 100, ahk_class WorkerW
+            sleep, 20
+            WinSet, Trans, 150, ahk_class WorkerW
+            sleep, 20
+            WinSet, Trans, 200, ahk_class WorkerW
+            sleep, 20
+            WinSet, Trans, 255, ahk_class WorkerW
+        }
+		else
+        {
+			WinSet, Trans, OFF, ahk_id %hwndProgman%
+            WinSet, Trans, 25, ahk_id %hwndProgman%
+            sleep, 20
+            WinSet, Trans, 75, ahk_id %hwndProgman%
+            sleep, 20
+            WinSet, Trans, 100, ahk_id %hwndProgman%
+            sleep, 20
+            WinSet, Trans, 150, ahk_id %hwndProgman%
+            sleep, 20
+            WinSet, Trans, 200, ahk_id %hwndProgman%
+            sleep, 20
+            WinSet, Trans, 255, ahk_id %hwndProgman%
+        }
+        Critical, Off
+    }
+}
+
 HasVal(haystack, needle) {
     If !(IsObject(haystack)) || (haystack.Length() = 0)
         return 0
@@ -2984,6 +3149,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::vmware::VMware
 ::VMware::VMware
 ::ie::i.e.
+::ni::in
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
@@ -8937,15 +9103,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::dfes::defs
 ::dfse::defs
 ::desf::defs
-::ose::Jose
-::Jse::Jose
-::Jos::Jose
-::oJse::Jose
-::osJe::Jose
-::oseJ::Jose
-::Jsoe::Jose
-::Jseo::Jose
-::Joes::Jose
 ::msked::masked
 ::maked::masked
 ::maskd::masked
@@ -9352,64 +9509,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::drivres::drivers
 ::drivrse::drivers
 ::drivesr::drivers
-::cquisition::acquisition
-::aquisition::acquisition
-::acuisition::acquisition
-::acqisition::acquisition
-::acqusition::acquisition
-::acquiition::acquisition
-::acquistion::acquisition
-::acquisiion::acquisition
-::acquisiton::acquisition
-::acquisitin::acquisition
-::acquisitio::acquisition
-::caquisition::acquisition
-::cqauisition::acquisition
-::cquaisition::acquisition
-::cquiasition::acquisition
-::cquisaition::acquisition
-::cquisiation::acquisition
-::cquisitaion::acquisition
-::cquisitiaon::acquisition
-::cquisitioan::acquisition
-::cquisitiona::acquisition
-::aqcuisition::acquisition
-::aqucisition::acquisition
-::aquicsition::acquisition
-::aquiscition::acquisition
-::aquisiction::acquisition
-::aquisitcion::acquisition
-::aquisiticon::acquisition
-::aquisitiocn::acquisition
-::aquisitionc::acquisition
-::acuqisition::acquisition
-::acuiqsition::acquisition
-::acuisqition::acquisition
-::acuisiqtion::acquisition
-::acuisitqion::acquisition
-::acuisitiqon::acquisition
-::acuisitioqn::acquisition
-::acuisitionq::acquisition
-::acqiusition::acquisition
-::acqisuition::acquisition
-::acqisiution::acquisition
-::acqisituion::acquisition
-::acqisitiuon::acquisition
-::acqisitioun::acquisition
-::acqisitionu::acquisition
-::acqusiition::acquisition
-::acquiistion::acquisition
-::acquiitsion::acquisition
-::acquiitison::acquisition
-::acquiitiosn::acquisition
-::acquiitions::acquisition
-::acquistiion::acquisition
-::acquisiiton::acquisition
-::acquisiiotn::acquisition
-::acquisiiont::acquisition
-::acquisitoin::acquisition
-::acquisitoni::acquisition
-::acquisitino::acquisition
 ::onstruction::construction
 ::cnstruction::construction
 ::costruction::construction
