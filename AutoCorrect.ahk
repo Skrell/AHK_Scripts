@@ -14,7 +14,6 @@ dummyFunction1() {
 #WinActivateForce
 #InstallMouseHook
 #InstallKeybdHook
-#KeyHistory 0
 #WinActivateForce
 #NoEnv
 #SingleInstance
@@ -637,27 +636,33 @@ Return
 
 #MaxThreadsPerHotkey 2
 #If (!hitTAB && !hitCAPS)
-~$Alt::
+~Shift::
     If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < 400 && A_TimeSincePriorHotkey > 0) {
         Gui, GUI4Boarder: Hide
         MouseGetPos, , , belowID
         WinGet, activeProcessName, ProcessName, ahk_id %belowID%
         WinGetTitle, FullTitle, ahk_id %belowID%
         WinGetClass, FullClass, ahk_id %belowID%
-        send, {esc}
         If (activeProcessName = "chrome.exe") {
-            HandleChromeWindowsWithSameTitle(FullTitle)
+            If (TotalExecCount == 0)
+                HandleChromeWindowsWithSameTitle(FullTitle)
+            Else
+                HandleChromeWindowsWithSameTitle(FullTitle, 2+TotalExecCount)
         } else {
-            HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
+            If (TotalExecCount == 0)
+                HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
+            Else
+                HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass, 2+TotalExecCount)
         }
+        TotalExecCount += 1
         GoSub, DrawRect
-        send {esc}
-        KeyWait, LAlt, U T3
+        KeyWait, LShift, U T3
         GoSub, ClearRect
-        send {esc}
-        Return
     }
-    KeyWait, LAlt, U
+    Else {
+        TotalExecCount := 0
+    }
+    
 Return
 #If
 
@@ -881,12 +886,9 @@ CycleMin(direction)
         WinGet, allWindows, List
         loop % allWindows
         {
-            If !(GetKeyState("LAlt","P"))
-            {
-                Critical Off
+            If !GetKeyState("Lalt","P")
                 Return
-            }
-            
+           
             hwndID := allWindows%A_Index%
             
             WinGetTitle, cTitle, ahk_id %hwndID%
@@ -922,7 +924,7 @@ CycleMin(direction)
             If (lastWinMinHwndId == currentVal) {
                 ; tooltip, found it %currentVal%
                 WinActivate, % "ahk_id " lastWinMinHwndId
-                WinWaitActive, % "ahk_id " lastWinMinHwndId
+                WinWaitActive, % "ahk_id " lastWinMinHwndId, , 2
                 sleep 100
                 startHighlight := True
                 GoSub, DrawRect
@@ -958,7 +960,7 @@ CycleMin(direction)
                 sleep, 200
             ; WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
-            WinWaitActive, % "ahk_id " RevMinnedWindows[cycleCountMin]
+            WinWaitActive, % "ahk_id " RevMinnedWindows[cycleCountMin], , 2
             startHighlight := True
             If (startHighlight) {
                 sleep 100
@@ -982,7 +984,7 @@ CycleMin(direction)
                 sleep, 200
             ; WinRestore, % "ahk_id " RevMinnedWindows[cycleCountMin]
             WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
-            WinWaitActive, % "ahk_id " RevMinnedWindows[cycleCountMin]
+            WinWaitActive, % "ahk_id " RevMinnedWindows[cycleCountMin], , 2
             startHighlight := True
             If (startHighlight) {
                 sleep 100
@@ -1022,18 +1024,19 @@ Cycle(direction)
         Critical On
         DetectHiddenWindows, Off
         skipFirst := True
+        failedSwitch := False
+        
+        WinGet, actId, ID, A
         WinGetPos,,,,currActHeight, A
             
         WinGet, allWindows, List
         loop % allWindows
         {
-            If !(GetKeyState("LAlt","P"))
-            {
-                Critical Off
+            If !GetKeyState("Lalt","P")
                 Return
-            }
             
             hwndID := allWindows%A_Index%
+            
             If (MonCount > 1) {
                 currentMon := MWAGetMonitorMouseIsIn()
                 currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
@@ -1054,11 +1057,19 @@ Cycle(direction)
                             ValidWindows.push(hwndID)
                             If (ValidWindows.MaxIndex() == 2) {
                                 WinActivate, % "ahk_id " hwndID
-                                WinWaitActive,  % "ahk_id " hwndID
+                                WinWaitActive,  % "ahk_id " hwndID, , 2
                                 cycleCount := 2
-                                ; WinGetTitle, tit1, % "ahk_id " ValidWindows[1]
-                                ; WinGetTitle, tit2, % "ahk_id " ValidWindows[2]
-                                ; tooltip, %tit1%  `n %tit2%
+                                If (hwndID == actId) {
+                                    failedSwitch := True
+                                }
+                                Else {
+                                    GoSub, DrawRect
+                                }
+                            }
+                            If (ValidWindows.MaxIndex() == 3 && failedSwitch) {
+                                WinActivate, % "ahk_id " hwndID
+                                WinWaitActive,  % "ahk_id " hwndID, , 2
+                                cycleCount := 3
                                 GoSub, DrawRect
                             }
                         }
@@ -1088,8 +1099,7 @@ Cycle(direction)
             Else
                 cycleCount += 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
-            WinWaitActive, % "ahk_id " ValidWindows[cycleCount]
-            ; If (startHighlight)
+            WinWaitActive, % "ahk_id " ValidWindows[cycleCount], , 2
             GoSub, DrawRect
         }
         Else
@@ -1099,8 +1109,7 @@ Cycle(direction)
             Else
                 cycleCount -= 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
-            WinWaitActive, % "ahk_id " ValidWindows[cycleCount]
-            ; If (startHighlight)
+            WinWaitActive, % "ahk_id " ValidWindows[cycleCount], , 2
             GoSub, DrawRect
         }
     }
@@ -1247,8 +1256,10 @@ DrawRect:
      WinSet, Region, %outerX%-%outerY% %outerX2%-%outerY% %outerX2%-%outerY2% %outerX%-%outerY2% %outerX%-%outerY%    %innerX%-%innerY% %innerX2%-%innerY% %innerX2%-%innerY2% %innerX%-%innerY2% %innerX%-%innerY% 
 
     ;Gui, Show, w%w% h%h% x%x% y%y% NoActivate, Table awaiting Action
-    Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NoActivate, Table awaiting Action
+    Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NA, Table awaiting Action
     WinSet, Transparent, off, ahk_id %Highlighter%
+    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    WinActivate, ahk_id %activeWin%
     DrawingRect := False
     Critical, Off
 return
@@ -1933,16 +1944,6 @@ realHwnd(hwnd)
 #If !moving
 RButton & LButton::
     send, {ENTER}
-    ; ComboActive := True
-    ; MouseGetPos, , , belowID
-    ; WinGet, activeProcessName, ProcessName, ahk_id %belowID%
-    ; WinGetTitle, FullTitle, ahk_id %belowID%
-    ; WinGetClass, FullClass, ahk_id %belowID%
-    ; If (activeProcessName = "chrome.exe") {
-        ; HandleChromeWindowsWithSameTitle(FullTitle)
-    ; } else {
-        ; HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
-    ; }
     Return
 #If
 
@@ -1959,13 +1960,13 @@ ExtractAppTitle(FullTitle) {
 }
 
 ; Switch a "Chrome App or Chrome Website Shortcut" open windows based on the same application title
-HandleChromeWindowsWithSameTitle(title := "") {
+HandleChromeWindowsWithSameTitle(title := "", counter := 2) {
     currentMon := MWAGetMonitorMouseIsIn()
     AppTitle := ExtractAppTitle(title)
     SetTitleMatchMode, 2
     ; WinGet, windowsWithSameTitleList, List, %AppTitle%
     WinGet, windowsWithSameTitleList, List, ahk_exe chrome.exe
-    counter := 2
+    ; counter := 2
     
     numWindows := windowsWithSameTitleList
     ; tooltip, %numWindows% found!
@@ -2046,11 +2047,9 @@ HandleChromeWindowsWithSameTitle(title := "") {
 }
 
 ; Switch "App" open windows based on the same process and class
-HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
+HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass, counter := 2) {
     currentMon := MWAGetMonitorMouseIsIn()
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
-    counter := 2
-    
     WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
     numWindows := windowsListWithSameProcessAndClass
     
@@ -2473,8 +2472,11 @@ ShellMessage( wParam,lParam )
          WinGet, procStr, ProcessName, Ahk_id %ID%
          WinGet, hwndID, ID, Ahk_id %ID%
          WinGetClass, classStr, Ahk_id %ID%
-         If (classStr == "OperationStatusWindow" || classStr == "#32770")
-            WinSet, AlwaysOnTop, On, Ahk_id %ID%
+         If (classStr == "OperationStatusWindow" || classStr == "#32770") {
+             sleep 100
+             WinSet, AlwaysOnTop, On, ahk_class %classStr%
+         }
+         
          
          If (IsAltTabWindow(hwndID) || (procStr == "OUTLOOK.EXE" && classStr == "#32770")) {
              If (MonCount > 1) {
