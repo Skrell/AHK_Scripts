@@ -636,13 +636,15 @@ Return
 
 #MaxThreadsPerHotkey 2
 #If (!hitTAB && !hitCAPS)
-~Shift::
+!Shift::
     If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < 400 && A_TimeSincePriorHotkey > 0) {
         Gui, GUI4Boarder: Hide
-        MouseGetPos, , , belowID
-        WinGet, activeProcessName, ProcessName, ahk_id %belowID%
-        WinGetTitle, FullTitle, ahk_id %belowID%
-        WinGetClass, FullClass, ahk_id %belowID%
+        ; MouseGetPos, , , belowID
+        WinGet, activeProcessName, ProcessName, A
+        WinGetTitle, FullTitle, A
+        WinGetClass, FullClass, A
+        WinGet, windowsWithSameTitleList, List, ahk_exe %activeProcessName%
+        
         If (activeProcessName = "chrome.exe") {
             If (TotalExecCount == 0)
                 HandleChromeWindowsWithSameTitle(FullTitle)
@@ -654,14 +656,13 @@ Return
             Else
                 HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass, 2+TotalExecCount)
         }
-        TotalExecCount += 1
-        GoSub, DrawRect
-        KeyWait, LShift, U T3
+        ; TotalExecCount += 1
+        KeyWait, LAlt, U T3
         GoSub, ClearRect
     }
-    Else {
-        TotalExecCount := 0
-    }
+    ; Else {
+        ; TotalExecCount := 0
+    ; }
     
 Return
 #If
@@ -1966,7 +1967,7 @@ HandleChromeWindowsWithSameTitle(title := "", counter := 2) {
     SetTitleMatchMode, 2
     ; WinGet, windowsWithSameTitleList, List, %AppTitle%
     WinGet, windowsWithSameTitleList, List, ahk_exe chrome.exe
-    ; counter := 2
+    counter := 2
     
     numWindows := windowsWithSameTitleList
     ; tooltip, %numWindows% found!
@@ -1989,60 +1990,62 @@ HandleChromeWindowsWithSameTitle(title := "", counter := 2) {
         counter := 1
     }
     WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
+    GoSub, DrawRect
     
-    ; KeyWait, LButton, U
+    KeyWait, Shift, U
     
-    ; counter++
+    counter++
     
-    ; hwndId := windowsWithSameTitleList%counter%
-    ; loop  {
-        ; If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
-            ; counter++
-            ; If (counter > numWindows)
-            ; {
-                ; counter := 1
-            ; }
-            ; hwndId := windowsWithSameTitleList%counter%
-        ; }
-        ; Else
-            ; break
-    ; }
-    ; If (counter > numWindows)
-    ; {
-        ; counter := 1
-    ; }
-    ; loop
-    ; {
-        ; KeyWait, LButton, D T0.25
-        ; If !ErrorLevel
-        ; {
+    hwndId := windowsWithSameTitleList%counter%
+    loop  {
+        If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+            counter++
+            If (counter > numWindows)
+            {
+                counter := 1
+            }
+            hwndId := windowsWithSameTitleList%counter%
+        }
+        Else
+            break
+    }
+    If (counter > numWindows)
+    {
+        counter := 1
+    }
+    loop
+    {
+        KeyWait, Shift, U, D T0.25
+        If !ErrorLevel
+        {
             ; tooltip, Windows # %counter%
-            ; WinActivate, % "ahk_id " windowsWithSameTitleList%counter%    
-            ; KeyWait, LButton, U T0.25
-            ; If !ErrorLevel
-            ; {
-                ; counter++
-                ; hwndId := windowsWithSameTitleList%counter%
-                ; loop  {
-                    ; If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
-                        ; counter++
-                        ; If (counter > numWindows)
-                        ; {
-                            ; counter := 1
-                        ; }
-                        ; hwndId := windowsWithSameTitleList%counter%
-                    ; }
-                    ; Else
-                        ; break
-                ; }
-                ; If (counter > numWindows)
-                ; {
-                    ; counter := 1
-                ; }
-            ; }
-        ; }
-    ; }
-    ; until (!GetKeyState("RButton", "P"))
+            WinActivate, % "ahk_id " windowsWithSameTitleList%counter%    
+            GoSub, DrawRect
+            KeyWait, Shift, U, U T0.25
+            If !ErrorLevel
+            {
+                counter++
+                hwndId := windowsWithSameTitleList%counter%
+                loop  {
+                    If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+                        counter++
+                        If (counter > numWindows)
+                        {
+                            counter := 1
+                        }
+                        hwndId := windowsWithSameTitleList%counter%
+                    }
+                    Else
+                        break
+                }
+                If (counter > numWindows)
+                {
+                    counter := 1
+                }
+            }
+        }
+    }
+    until (!GetKeyState("LAlt", "P"))
     ; tooltip,
 }
 
@@ -2051,62 +2054,64 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass, counter := 
     currentMon := MWAGetMonitorMouseIsIn()
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
     WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
+    GoSub, DrawRect
     numWindows := windowsListWithSameProcessAndClass
     
     ; tooltip, %numWindows% found!
-    ; KeyWait, LButton, U
+    KeyWait, Shift, U
     
-    ; counter++
+    counter++
     
-    ; hwndId := windowsListWithSameProcessAndClass%counter%
-    ; loop  {
-        ; If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
-            ; counter++
-            ; If (counter > numWindows)
-            ; {
-                ; counter := 1
-            ; }
-            ; hwndId := windowsListWithSameProcessAndClass%counter%
-        ; }
-        ; Else
-            ; break
-    ; }
-    ; If (counter > numWindows)
-    ; {
-        ; counter := 1
-    ; }
-    ; loop
-    ; {
-        ; KeyWait, LButton, D T.25
-        ; If !ErrorLevel
-        ; {
+    hwndId := windowsListWithSameProcessAndClass%counter%
+    loop  {
+        If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+            counter++
+            If (counter > numWindows)
+            {
+                counter := 1
+            }
+            hwndId := windowsListWithSameProcessAndClass%counter%
+        }
+        Else
+            break
+    }
+    If (counter > numWindows)
+    {
+        counter := 1
+    }
+    loop
+    {
+        KeyWait, Shift, D T.25
+        If !ErrorLevel
+        {
             ; tooltip, Windows # %counter%
-            ; WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%    
-            ; KeyWait, LButton, U T.25
-            ; If !ErrorLevel 
-            ; {
-                ; counter++
-                ; hwndId := windowsListWithSameProcessAndClass%counter%    
-                ; loop  {
-                    ; If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
-                        ; counter++
-                        ; If (counter > numWindows)
-                        ; {
-                            ; counter := 1
-                        ; }
-                        ; hwndId := windowsListWithSameProcessAndClass%counter%
-                    ; }
-                    ; Else
-                        ; break
-                ; }
-                ; If (counter > numWindows)
-                ; {
-                    ; counter := 1
-                ; }
-            ; }
-        ; }
-    ; }
-    ; until (!GetKeyState("RButton", "P"))
+            WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%   
+            GoSub, DrawRect
+            KeyWait, Shift, U T.25
+            If !ErrorLevel 
+            {
+                counter++
+                hwndId := windowsListWithSameProcessAndClass%counter%    
+                loop  {
+                    If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+                        counter++
+                        If (counter > numWindows)
+                        {
+                            counter := 1
+                        }
+                        hwndId := windowsListWithSameProcessAndClass%counter%
+                    }
+                    Else
+                        break
+                }
+                If (counter > numWindows)
+                {
+                    counter := 1
+                }
+            }
+        }
+    }
+    until (!GetKeyState("LAlt", "P"))
     ; tooltip,
 }
 
@@ -3201,7 +3206,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 :?:iaion::iation
 :?:cims::cisms
 :?:lyl::lly
-:?:/::?
+; :?:/::?
 :?:aingin::aining
 :?:ainign::aining
 ;------------------------------------------------------------------------------
