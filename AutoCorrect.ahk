@@ -53,12 +53,12 @@ Global onlyTitleFound := ""
 Global nil
 Global CancelClose := False
 Global lastWinMinHwndId := 0x999999
-Global DrawingRect := False
 Global v1 := 0
 Global v2 := 0
 Global v3 := 0
 Global v4 := 0
 Global DesktopIconsVisible := False
+Global DrawingRect := False
         
 Process, Priority,, High
 
@@ -189,23 +189,23 @@ Return
     ; }
 ; }
 
-#If !hitCAPS || !hitTAB
+#If (!hitCAPS && !hitTAB)
     CapsLock:: Send {Delete}
     !a:: Send, {home}
     +!a:: Send, {SHIFT down}{home}{SHIFT up}
     !;:: Send, {end}
-    +!;:: Send, {SHIFT down}{end}{SHIFT up}
-    +!i::   Send {SHIFT down}{UP}{SHIFT up}
-    +!k::   Send {SHIFT down}{DOWN}{SHIFT up}
-    +!,::   Send {SHIFT down}{DOWN}{SHIFT up}
-    +!j::   Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
-    +!l::   Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
-    <^!j::  Send {LCtrl down}{LEFT}{LCtrl up}
-    <^!l::  Send {LCtrl down}{RIGHT}{LCtrl up}
-    <^!i::  Send {LCtrl down}{UP}{LCtrl up}
-    <^!k::  Send {LCtrl down}{DOWN}{LCtrl up}
-    <^+!j:: Send {LCtrl down}{LShift down}{LEFT}{LShift up}{LCtrl up}
-    <^+!l:: Send {LCtrl down}{LShift down}{RIGHT}{LShift up}{LCtrl up}
+    !+;:: Send, {SHIFT down}{end}{SHIFT up}
+    !+i::   Send {SHIFT down}{UP}{SHIFT up}
+    !+k::   Send {SHIFT down}{DOWN}{SHIFT up}
+    !+,::   Send {SHIFT down}{DOWN}{SHIFT up}
+    !+j::   Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
+    !+l::   Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
+    ; <^!j::  Send {LCtrl down}{LEFT}{LCtrl up}
+    ; <^!l::  Send {LCtrl down}{RIGHT}{LCtrl up}
+    ; <^!i::  Send {LCtrl down}{UP}{LCtrl up}
+    ; <^!k::  Send {LCtrl down}{DOWN}{LCtrl up}
+    ; <^+!j:: Send {LCtrl down}{LShift down}{LEFT}{LShift up}{LCtrl up}
+    ; <^+!l:: Send {LCtrl down}{LShift down}{RIGHT}{LShift up}{LCtrl up}
     !i:: Send {UP}
     !k:: Send {DOWN}
     !,:: Send {DOWN}
@@ -545,6 +545,7 @@ FadeInWin1:
         ; sleep 10
         ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
     ; }
+    WinActivate, % "ahk_id " lclickHwndId
     Critical, Off
 Return
 
@@ -599,6 +600,7 @@ FadeInWin2:
         ; sleep 10
         ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
     ; }
+    WinActivate, % "ahk_id " ValidWindows[cycleCount]
     Critical, Off
 Return
 
@@ -636,33 +638,22 @@ Return
 
 #MaxThreadsPerHotkey 2
 #If (!hitTAB && !hitCAPS)
-!Shift::
+$~!Shift Up::
     If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < 400 && A_TimeSincePriorHotkey > 0) {
         Gui, GUI4Boarder: Hide
-        ; MouseGetPos, , , belowID
         WinGet, activeProcessName, ProcessName, A
         WinGetTitle, FullTitle, A
         WinGetClass, FullClass, A
         WinGet, windowsWithSameTitleList, List, ahk_exe %activeProcessName%
         
         If (activeProcessName = "chrome.exe") {
-            If (TotalExecCount == 0)
-                HandleChromeWindowsWithSameTitle(FullTitle)
-            Else
-                HandleChromeWindowsWithSameTitle(FullTitle, 2+TotalExecCount)
+            HandleChromeWindowsWithSameTitle(FullTitle)
         } else {
-            If (TotalExecCount == 0)
-                HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
-            Else
-                HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass, 2+TotalExecCount)
+            HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
         }
-        ; TotalExecCount += 1
         KeyWait, LAlt, U T3
         GoSub, ClearRect
     }
-    ; Else {
-        ; TotalExecCount := 0
-    ; }
     
 Return
 #If
@@ -670,6 +661,10 @@ Return
 #If !SearchingWindows && (hitTAB || hitCAPS)
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
+    while (DrawingRect) {
+        sleep 50
+    }
+    
     If !(hitCAPS && !hitTAB) {
         WinGet, actWndID, ID, A
         If (GetKeyState("Lbutton","P") && cycling && (ValidWindows.length() > 2)) {
@@ -678,8 +673,9 @@ Return
             }
             Else If (startHighlight) {
                 BlockInput, MouseMove
-                GoSub, DrawRect
-                Send, {Lbutton Up}
+                ; GoSub, DrawRect
+                ; Send, {Lbutton Up}
+                
                 ; v1 := ValidWindows[1]
                 ; v2 := ValidWindows[2]
                 ; v3 := ValidWindows[3]
@@ -761,44 +757,43 @@ Return
             Else If (cycling && startHighlight && (ValidWindows.length() > 2))
             {
                 GoSub, FadeInWin2
-                WinActivate, % "ahk_id " ValidWindows[cycleCount]
             }
-            Else If (!cycling && !startHighlight)
-            {
-                Critical On
-                WinGet, allWindows, List
-                loop % allWindows
-                {
-                    hwndID := allWindows%A_Index%
+            ; Else If (!cycling && !startHighlight)
+            ; {
+                ; Critical On
+                ; WinGet, allWindows, List
+                ; loop % allWindows
+                ; {
+                    ; hwndID := allWindows%A_Index%
                     
-                    If (A_Index > 10)
-                        break
-                    If (MonCount > 1) {
-                        currentMon := MWAGetMonitorMouseIsIn()
-                        currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
-                    }
-                    Else {
-                        currentMonHasActWin := True
-                    }
-                    If (currentMonHasActWin) {
-                        WinGet, state, MinMax, ahk_id %hwndID%
-                        If (state > -1) {
-                            WinGetTitle, cTitle, ahk_id %hwndID%
-                            If (IsAltTabWindow(actWndID)) {
-                                desknum := VD.getDesktopNumOfWindow(cTitle)
-                                If desknum <= 0
-                                    continue   
-                                If (desknum == VD.getCurrentDesktopNum()) {
-                                    WinActivate, % "ahk_id " hwndID
-                                    GoSub, DrawRect
-                                    break
-                                }
-                            }
-                        }
-                    }
-                }
-                Critical Off
-            }
+                    ; If (A_Index > 10)
+                        ; break
+                    ; If (MonCount > 1) {
+                        ; currentMon := MWAGetMonitorMouseIsIn()
+                        ; currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+                    ; }
+                    ; Else {
+                        ; currentMonHasActWin := True
+                    ; }
+                    ; If (currentMonHasActWin) {
+                        ; WinGet, state, MinMax, ahk_id %hwndID%
+                        ; If (state > -1) {
+                            ; WinGetTitle, cTitle, ahk_id %hwndID%
+                            ; If (IsAltTabWindow(actWndID)) {
+                                ; desknum := VD.getDesktopNumOfWindow(cTitle)
+                                ; If desknum <= 0
+                                    ; continue   
+                                ; If (desknum == VD.getCurrentDesktopNum()) {
+                                    ; WinActivate, % "ahk_id " hwndID
+                                    ; GoSub, DrawRect
+                                    ; break
+                                ; }
+                            ; }
+                        ; }
+                    ; }
+                ; }
+                ; Critical Off
+            ; }
         }
     }
     Else If (hitCAPS && !hitTAB && GetKeyState("x","P")) {
@@ -827,7 +822,6 @@ Return
     cyclingMin     := False
     hitTAB         := False
     hitCAPS        := False
-    ; while (DrawingRect == True) {
         ; sleep, 100
     ; }
     Gosub, ClearRect
@@ -1121,7 +1115,7 @@ Cycle(direction)
 }
 
 ClearRect:
-
+    WinGet, activeWin, ID, A
     loop 25 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
@@ -1132,6 +1126,7 @@ ClearRect:
     }
         
     WinSet, Transparent, 225, ahk_id %Highlighter%
+    WinActivate, ahk_id %activeWin%
     loop 6 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
@@ -1141,6 +1136,7 @@ ClearRect:
         sleep 10
     }
     WinSet, Transparent, 200, ahk_id %Highlighter%
+    WinActivate, ahk_id %activeWin%
     loop 4 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
@@ -1150,6 +1146,7 @@ ClearRect:
         sleep 10
     }
     WinSet, Transparent, 175, ahk_id %Highlighter%
+    WinActivate, ahk_id %activeWin%
     loop 4 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
@@ -1159,6 +1156,7 @@ ClearRect:
         sleep 10
     }
     WinSet, Transparent, 125, ahk_id %Highlighter%
+    WinActivate, ahk_id %activeWin%
     loop 2 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
@@ -1168,6 +1166,7 @@ ClearRect:
         sleep 10
     }
     WinSet, Transparent, 50, ahk_id %Highlighter%
+    WinActivate, ahk_id %activeWin%
     loop 2 {
         If (hitTAB || hitCAPS) || GetKeyState("LAlt", "P") {
             ; Gui, GUI4Boarder: Hide
@@ -1177,13 +1176,14 @@ ClearRect:
         sleep 10
     }
     Gui, GUI4Boarder: Hide
+    WinActivate, ahk_id %activeWin%
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
     Critical, On
     DrawingRect := True
-    ; WinGetPos, x, y, w, h, A
+    ; tooltip, drawing... 
     WinGet, activeWin, ID, A
     If !IsAltTabWindow(activeWin)
         Return
@@ -1261,6 +1261,8 @@ DrawRect:
     WinSet, Transparent, off, ahk_id %Highlighter%
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, ahk_id %activeWin%
+    WinWaitActive, ahk_id %activeWin%, , 2
+    ; tooltip, done
     DrawingRect := False
     Critical, Off
 return
@@ -1559,7 +1561,6 @@ Return
        }
    }
    Gui, GUI4Boarder: Hide
-   DrawingRect := False
    Return
 #If
 
@@ -1961,7 +1962,7 @@ ExtractAppTitle(FullTitle) {
 }
 
 ; Switch a "Chrome App or Chrome Website Shortcut" open windows based on the same application title
-HandleChromeWindowsWithSameTitle(title := "", counter := 2) {
+HandleChromeWindowsWithSameTitle(title := "") {
     currentMon := MWAGetMonitorMouseIsIn()
     AppTitle := ExtractAppTitle(title)
     SetTitleMatchMode, 2
@@ -2015,13 +2016,15 @@ HandleChromeWindowsWithSameTitle(title := "", counter := 2) {
     }
     loop
     {
-        KeyWait, Shift, U, D T0.25
+        ; KeyWait, Shift, U, D T0.25
+        KeyWait, Shift, D T0.25
         If !ErrorLevel
         {
             ; tooltip, Windows # %counter%
             WinActivate, % "ahk_id " windowsWithSameTitleList%counter%    
             GoSub, DrawRect
-            KeyWait, Shift, U, U T0.25
+            ; KeyWait, Shift, U, U T0.25
+            KeyWait, Shift, U T0.25
             If !ErrorLevel
             {
                 counter++
@@ -2050,8 +2053,9 @@ HandleChromeWindowsWithSameTitle(title := "", counter := 2) {
 }
 
 ; Switch "App" open windows based on the same process and class
-HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass, counter := 2) {
+HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     currentMon := MWAGetMonitorMouseIsIn()
+    counter := 2
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
     WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
     GoSub, DrawRect
