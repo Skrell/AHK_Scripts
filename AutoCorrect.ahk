@@ -636,7 +636,6 @@ Return
 #MaxThreadsBuffer Off
 
 
-#MaxThreadsPerHotkey 2
 #If (!hitTAB && !hitCAPS)
 $~!Shift Up::
     If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < 400 && A_TimeSincePriorHotkey > 0) {
@@ -658,6 +657,7 @@ $~!Shift Up::
 Return
 #If
 
+#MaxThreadsPerHotkey 2
 #If !SearchingWindows && (hitTAB || hitCAPS)
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
@@ -1991,6 +1991,7 @@ HandleChromeWindowsWithSameTitle(title := "") {
         counter := 1
     }
     WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
+    WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%
     GoSub, DrawRect
     
     KeyWait, Shift, U
@@ -2017,14 +2018,15 @@ HandleChromeWindowsWithSameTitle(title := "") {
     loop
     {
         ; KeyWait, Shift, U, D T0.25
-        KeyWait, Shift, D T0.25
+        KeyWait, Shift, D  T0.25
         If !ErrorLevel
         {
             ; tooltip, Windows # %counter%
             WinActivate, % "ahk_id " windowsWithSameTitleList%counter%    
+            WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%    
             GoSub, DrawRect
             ; KeyWait, Shift, U, U T0.25
-            KeyWait, Shift, U T0.25
+            KeyWait, Shift, U  T0.25
             If !ErrorLevel
             {
                 counter++
@@ -2058,6 +2060,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     counter := 2
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
     WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
+    WinWaitActive, % "ahk_id " windowsListWithSameProcessAndClass%counter%
     GoSub, DrawRect
     numWindows := windowsListWithSameProcessAndClass
     
@@ -2085,13 +2088,14 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     }
     loop
     {
-        KeyWait, Shift, D T.25
+        KeyWait, Shift, D  T.25
         If !ErrorLevel
         {
             ; tooltip, Windows # %counter%
-            WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%   
+            WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
+            WinWaitActive, % "ahk_id " windowsListWithSameProcessAndClass%counter%
             GoSub, DrawRect
-            KeyWait, Shift, U T.25
+            KeyWait, Shift, U  T.25
             If !ErrorLevel 
             {
                 counter++
