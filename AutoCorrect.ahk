@@ -1530,10 +1530,17 @@ return
 ~RButton::Return
 #If
 
-#If !DesktopIconsVisible && IsOverDesktop() && !VolumeHover()
+#If !DesktopIconsVisible && IsOverDesktop() && !VolumeHover() && !moving
 LButton::
     DesktopIcons(True)
     DesktopIconsVisible := True
+Return
+
+RButton::
+    DesktopIcons(True)
+    DesktopIconsVisible := True
+    sleep, 250
+    send {Click, Right}
 Return
 #If
 
@@ -1596,7 +1603,7 @@ LButton::
 Return
 #If 
 
-#If !moving
+#If !moving && (!IsOverDesktop() || (IsOverDesktop() && DesktopIconsVisible))
 $RButton::
     ComboActive := False
     loop {
@@ -2207,7 +2214,7 @@ track() {
     
     If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
         moving := True
-        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW")
+        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW") && DesktopIconsVisible
             sleep 250
         ; ToolTip Moving
     } Else {
