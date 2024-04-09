@@ -1307,7 +1307,7 @@ $!`::
     else
     {
         DetectHiddenWindows, On
-        ; Critical On
+        Critical On
         totalMenuItemCount := 0
         onlyTitleFound := ""
         winArray := []
@@ -1388,7 +1388,7 @@ $!`::
             }
             desktopEntryLast := desktopEntry
         }
-        ; Critical Off
+        Critical Off
         If (totalMenuItemCount == 1 && onlyTitleFound != "") {
             GoSub, ActivateWindow
         }
@@ -1614,21 +1614,23 @@ $RButton::
 Return
 #If
 
-#If !moving
+#If !moving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelUp::
     ComboActive := True
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
-    Send {PgUp}
+    ; Send {PgUp}
+    Send {LCtrl down}{Home}{LCtrl up}
 Return
 #If
 
-#If !moving
+#If !moving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelDown::
     ComboActive := True
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
-    Send {PgDn}
+    ; Send {PgDn}
+    Send {LCtrl down}{End}{LCtrl up}
 Return
 #If
 
@@ -2171,7 +2173,7 @@ Exit_label:
 Return  
 
 track() {
-    Static x, y, lastX, lastY, lastMon, currentMon, taskview, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
+    Static x, y, lastX, lastY, lastMon, currentMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
     Global MonCount
     
@@ -2231,7 +2233,7 @@ track() {
         skipCheck := True
     }
     Else If (
-            && x >= A_ScreenWidth-3 && y < A_ScreenHeight-200  
+            && x >= A_ScreenWidth-3 && y < A_ScreenHeight-200
             && GetKeyState("Lbutton", "P") 
             && MouseIsOverTitleBar())
     {
@@ -2273,7 +2275,7 @@ track() {
         }
     }
     Else If (
-            && x <= 3 && y < A_ScreenHeight-200  
+            && x <= 3 && y < A_ScreenHeight-200
             && GetKeyState("Lbutton", "P") 
             && MouseIsOverTitleBar())
     {
@@ -2315,29 +2317,13 @@ track() {
             Critical Off
         }
     }
-    ; Else
-    ; {
-        ; If (MonCount == 1 && x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3 )
-        ; {
-            ; sleep 250
-            ; MouseGetPos x, y, hwndId
-            ; If (x >= A_ScreenWidth-3 && y >= A_ScreenHeight-3)
-            ; {   
-                ; Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
-                ; sleep 700
-            ; }
-        ; }
-        ; Else If (MonCount == 1 && x <= 3 && y >= A_ScreenHeight-3 )
-        ; {
-            ; sleep 250
-            ; MouseGetPos x, y, hwndId
-            ; If (x <= 3 && y >= A_ScreenHeight-3)
-            ; {
-                ; Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
-                ; sleep 700
-            ; }
-        ; }
-    ; }
+    Else If (x >= A_ScreenWidth-3 && y <= 3 && !GetKeyState("LButton", "P") ) {
+        run, C:\Windows\System32\SnippingTool.exe
+        WinWaitActive, ahk_class Microsoft-Windows-SnipperToolbar
+        Send, {Lalt down}{Lshift down}{n}{Lshift up}{Lalt up}
+        sleep, 1000
+    }
+    
     
     If (MonCount == 1 &&  x > 3 && y > 3 && x < A_ScreenWidth-3 && y < A_ScreenHeight-3)
     {
@@ -2368,7 +2354,8 @@ track() {
             If (lastMon != currentMon 
                 && WinExist("ahk_id " . LastActiveWinHwnd) 
                 && State != -1 
-                && !GetKeyState("Lbutton", "P")) {
+                && !GetKeyState("Lbutton", "P")
+                && PrevActiveWindHwnd != LastActiveWinHwnd) {
                     WinActivate, ahk_id %LastActiveWinHwnd%
                     GoSub, DrawRect
                     GoSub, ClearRect
@@ -2376,6 +2363,7 @@ track() {
             }
         }
     }
+    PrevActiveWindHwnd := actwndId
 }
 
 ;https://www.autohotkey.com/boards/search.php?author_id=139004&sr=posts&sid=13343c88f1a3953143867b71b22fdafc
