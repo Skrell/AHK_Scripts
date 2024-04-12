@@ -78,7 +78,9 @@ SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
 SysGet, MonCount, MonitorCount
 
-Tooltip, Total Number of Monitors is %MonCount%
+Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum%
+sleep 1500
+Tooltip, % "Current Mon is " GetCurrentMonitorIndex()
 sleep 1500
 Tooltip,
 
@@ -1336,6 +1338,13 @@ $!`::
             winArray.Push(finalTitle)
         }
         
+        If (winArray.length() == 0) {
+            Tooltip, No matches found...
+            Sleep, 1500
+            Tooltip,
+            Return
+        }
+        
         For k, v in winArray 
         {
             winAssoc[v] := k
@@ -1794,9 +1803,9 @@ GetCurrentMonitorIndex(){
         SysGet, monitor, Monitor, %A_Index%
         If (monitorLeft <= mx && mx <= monitorRight && monitorTop <= my && my <= monitorBottom){
             Return A_Index
-            }
         }
-        Return 1
+    }
+    Return 1
 }
 
 CoordXCenterScreen()
@@ -1998,7 +2007,7 @@ HandleChromeWindowsWithSameTitle(title := "") {
         counter := 1
     }
     WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
-    WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%
+    WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%, , 2
     GoSub, DrawRect
     
     KeyWait, q, U
@@ -2030,7 +2039,7 @@ HandleChromeWindowsWithSameTitle(title := "") {
         {
             ; tooltip, Windows # %counter%
             WinActivate, % "ahk_id " windowsWithSameTitleList%counter%    
-            WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%    
+            WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%, , 2
             GoSub, DrawRect
             ; KeyWait, Shift, U, U T0.25
             KeyWait, q, U  T0.25
@@ -2067,7 +2076,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     counter := 2
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
     WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
-    WinWaitActive, % "ahk_id " windowsListWithSameProcessAndClass%counter%
+    WinWaitActive, % "ahk_id " windowsListWithSameProcessAndClass%counter%, , 2
     GoSub, DrawRect
     numWindows := windowsListWithSameProcessAndClass
     
@@ -2100,7 +2109,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         {
             ; tooltip, Windows # %counter%
             WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
-            WinWaitActive, % "ahk_id " windowsListWithSameProcessAndClass%counter%
+            WinWaitActive, % "ahk_id " windowsListWithSameProcessAndClass%counter%, , 2
             GoSub, DrawRect
             KeyWait, q, U  T.25
             If !ErrorLevel 
@@ -2182,7 +2191,7 @@ Return
 track() {
     Static x, y, lastX, lastY, lastMon, currentMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
-    Global MonCount
+    Global MonCount, MonNum
     
     CoordMode Mouse
     lastX := x, lastY := y, 
@@ -2324,11 +2333,14 @@ track() {
             Critical Off
         }
     }
-    Else If (x >= A_ScreenWidth-3 && y <= 3 && !GetKeyState("LButton", "P") ) {
-        run, C:\Windows\System32\SnippingTool.exe
-        WinWaitActive, ahk_class Microsoft-Windows-SnipperToolbar
-        Send, {Lalt down}{Lshift down}{n}{Lshift up}{Lalt up}
-        sleep, 1000
+    
+    If (GetCurrentMonitorIndex() == MonNum) {
+        If  (x >= A_ScreenWidth-3 && y <= 3 && !GetKeyState("LButton", "P") ) {
+            run, C:\Windows\System32\SnippingTool.exe
+            WinWaitActive, ahk_class Microsoft-Windows-SnipperToolbar, , 2
+            Send, {Lalt down}{Lshift down}{n}{Lshift up}{Lalt up}
+            sleep, 1000
+        }
     }
     
     
