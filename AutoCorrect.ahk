@@ -1555,12 +1555,15 @@ Return
 
 #If !VolumeHover() || DesktopIconsVisible
 ~LButton::
-   MouseGetPos, X, Y, lhwnd
-   PixelGetColor, HexColor, %X%, %Y%, RGB
-   If (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass")) && IsEmptySpace() && HexColor == 0xFFFFFF)
+   MouseGetPos, X, Y, lhwnd, lctrlN
+
+   If (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2")))
    { 
-        Send !{Up}
-        sleep, 200
+        
+        If (IsBlankSpace && (HexColor == 0xFFFFFF)) {
+            Send !{Up}
+            sleep, 200
+        }
    }
    Else
    {
@@ -1574,6 +1577,8 @@ Return
             DesktopIconsVisible := False
        }
    }
+   PixelGetColor, HexColor, %X%, %Y%, RGB
+   IsBlankSpace := IsEmptySpace()
    Gui, GUI4Boarder: Hide
    Return
 #If
@@ -1617,6 +1622,10 @@ $RButton::
     ComboActive := False
     loop {
         If !(GetKeyState("RButton", "P"))
+        {
+            break
+        }
+        else if (A_Index > 2000)
         {
             break
         }
@@ -2223,7 +2232,7 @@ track() {
     
     If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
         moving := True
-        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW") && DesktopIconsVisible
+        If (classId == "CabinetWClass" || ((classId == "Progman" || classId == "WorkerW") && DesktopIconsVisible))
             sleep 250
         ; ToolTip Moving
     } Else {
@@ -3172,6 +3181,8 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::VMware::VMware
 ::ie::i.e.
 ::ni::in
+::lossing::losing
+::em::me
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
@@ -3224,6 +3235,7 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ; :?:/::?
 :?:aingin::aining
 :?:ainign::aining
+:?:gni::ing
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -9701,7 +9713,6 @@ return  ; This makes the above hotstrings do nothing so that they override the i
 ::robsut::robust
 ::robstu::robust
 ::robuts::robust
-::EVER::NEVER
 ::NVER::NEVER
 ::NEER::NEVER
 ::NEVR::NEVER
