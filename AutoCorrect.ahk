@@ -656,7 +656,7 @@ $!q::
     Gui, GUI4Boarder: Hide
     finalWindowsList := []
     WinGet, activeProcessName, ProcessName, A
-    WinGetTitle, FullTitle, A
+    ; WinGetTitle, FullTitle, A
     WinGetClass, FullClass, A
     WinGet, windowsWithSameTitleList, List, ahk_exe %activeProcessName%
     
@@ -665,7 +665,6 @@ $!q::
        
         hwndID := windowsWithSameTitleList%A_Index%
         
-        WinGetTitle, cTitle, ahk_id %hwndID%
         If (IsAltTabWindow(hwndID)) {
             finalWindowsList.push(hwndID)
         }
@@ -1591,12 +1590,12 @@ Return
 
 #If (!VolumeHover() || DesktopIconsVisible) && !WinActive("ahk_exe qtcreator.exe")
 ~LButton::
+   CoordMode, Pixel, Screen
    MouseGetPos, X, Y, lhwnd, lctrlN
 
    If (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2")))
    { 
-        
-        If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3 == 0xFFFFFF)) {
+        If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
             Send !{Up}
             sleep, 200
         }
@@ -1613,9 +1612,11 @@ Return
             ; DesktopIconsVisible := False
        ; }
    ; }
-   ; PixelGetColor, HexColor1, %X%, %Y%, RGB
-   ; PixelGetColor, HexColor2, %X%-1, %Y%, RGB
-   ; PixelGetColor, HexColor3, %X%+1, %Y%, RGB
+   PixelGetColor, HexColor1, %X%, %Y%, RGB
+   X -= 1
+   PixelGetColor, HexColor2, %X%, %Y%, RGB
+   X += 2
+   PixelGetColor, HexColor3, %X%, %Y%, RGB
    IsBlankSpace := IsEmptySpace()
    Gui, GUI4Boarder: Hide
    Return
@@ -2127,12 +2128,25 @@ HandleChromeWindowsWithSameTitle(title := "") {
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     currentMon := MWAGetMonitorMouseIsIn()
+    finalWindowsListWithProcAndClass := []
     counter := 2
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
-    WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
-    WinWaitActive, % "ahk_id " windowsListWithSameProcessAndClass%counter%, , 2
+    
+    loop % windowsListWithSameProcessAndClass
+    {
+        
+        hwndID := windowsListWithSameProcessAndClass%A_Index%
+        
+        If (IsAltTabWindow(hwndID)) {
+            finalWindowsListWithProcAndClass.push(hwndID)
+        }
+    }
+    
+    WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+    WinWaitActive, % "ahk_id " finalWindowsListWithProcAndClass[counter], , 2
+    ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
     GoSub, DrawRect
-    numWindows := windowsListWithSameProcessAndClass
+    numWindows := finalWindowsListWithProcAndClass.length()
     
     ; tooltip, %numWindows% found!
     KeyWait, q, U
@@ -2143,7 +2157,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         counter := 1
     }
     
-    hwndId := windowsListWithSameProcessAndClass%counter%
+    hwndId := finalWindowsListWithProcAndClass[counter]
     loop  {
         If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
             counter++
@@ -2151,7 +2165,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             {
                 counter := 1
             }
-            hwndId := windowsListWithSameProcessAndClass%counter%
+            hwndId := finalWindowsListWithProcAndClass[counter]
         }
         Else
             break
@@ -2162,13 +2176,13 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         KeyWait, q, D  T.25
         If !ErrorLevel
         {
-            ; tooltip, Windows # %counter%
-            WinActivate, % "ahk_id " windowsListWithSameProcessAndClass%counter%
-            WinWaitActive, % "ahk_id " windowsListWithSameProcessAndClass%counter%, , 2
-            
+            ; tooltip, Windows # [counter]
+            WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+            WinWaitActive, % "ahk_id " finalWindowsListWithProcAndClass[counter], , 2
+            ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
             GoSub, DrawRect
             
-            KeyWait, q, U  T.25
+            KeyWait, q, U ; T.25
             If !ErrorLevel 
             {
                 counter++
@@ -2176,7 +2190,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                 {
                     counter := 1
                 }
-                hwndId := windowsListWithSameProcessAndClass%counter%    
+                hwndId := finalWindowsListWithProcAndClass[counter]    
                 loop  {
                     If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
                         counter++
@@ -2184,7 +2198,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                         {
                             counter := 1
                         }
-                        hwndId := windowsListWithSameProcessAndClass%counter%
+                        hwndId := finalWindowsListWithProcAndClass[counter]
                     }
                     Else
                         break
