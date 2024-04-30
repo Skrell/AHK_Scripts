@@ -1080,7 +1080,7 @@ Cycle(direction)
             }
             
             If (currentMonHasActWin) {
-                WinGetTitle, cTitle, ahk_id %hwndID%
+                ; WinGetTitle, cTitle, ahk_id %hwndID%
                 If (IsAltTabWindow(hwndID)) {
                     WinGet, state, MinMax, ahk_id %hwndID%
                     If (state > -1) {
@@ -2127,6 +2127,7 @@ HandleChromeWindowsWithSameTitle(title := "") {
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
+    Global MonCount, VD
     currentMon := MWAGetMonitorMouseIsIn()
     finalWindowsListWithProcAndClass := []
     counter := 2
@@ -2134,19 +2135,36 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     
     loop % windowsListWithSameProcessAndClass
     {
-        
         hwndID := windowsListWithSameProcessAndClass%A_Index%
-        
-        If (IsAltTabWindow(hwndID)) {
-            finalWindowsListWithProcAndClass.push(hwndID)
+        If (MonCount > 1) {
+            currentMon := MWAGetMonitorMouseIsIn()
+            currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
         }
+        Else {
+            currentMonHasActWin := True
+        }
+        
+        If (currentMonHasActWin) {
+            WinGetTitle, titleEntry, ahk_id %hwndID%
+            
+            If ((VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum()) && (IsAltTabWindow(hwndID))) {
+                finalWindowsListWithProcAndClass.push(hwndID)
+            }
+        }
+    }
+    
+    numWindows := finalWindowsListWithProcAndClass.length()
+    If (numWindows <= 1) {
+        Tooltip, Only %numWindows% Windows found!
+        sleep, 2000
+        Tooltip,
+        Return
     }
     
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
     WinWaitActive, % "ahk_id " finalWindowsListWithProcAndClass[counter], , 2
     ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
     GoSub, DrawRect
-    numWindows := finalWindowsListWithProcAndClass.length()
     
     ; tooltip, %numWindows% found!
     KeyWait, q, U
