@@ -189,7 +189,7 @@ Return
     ; }
 ; }
 
-#If (!hitCAPS && !hitTAB)
+#If (!hitCAPS && !hitTAB) && !WinActive("ahk_exe qtcreator.exe")
     CapsLock:: Send {Delete}
     !a:: Send, {home}
     +!a:: Send, {SHIFT down}{home}{SHIFT up}
@@ -1593,7 +1593,9 @@ Return
    CoordMode, Pixel, Screen
    MouseGetPos, X, Y, lhwnd, lctrlN
 
-   If (A_PriorHotkey == A_ThisHotkey && A_TimeSincePriorHotkey < 400 && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2")))
+   If (A_PriorHotkey == A_ThisHotkey 
+   && A_TimeSincePriorHotkey < 400 
+   && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
    { 
         If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
             Send !{Up}
@@ -1701,10 +1703,14 @@ Return
     Hotkey, $WheelUp, Off
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
-    If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
+    If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && !WinActive("ahk_exe qtcreator.exe"))
     {
         Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
         sleep, 750
+    }
+    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND3")) {
+        Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+        sleep, 200
     }
     Hotkey, $WheelUp, On
 Return
@@ -1713,14 +1719,17 @@ Return
     Hotkey, $WheelDown, Off
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
-    If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
+    If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && !WinActive("ahk_exe qtcreator.exe"))
     {
         Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
         sleep, 750
     }
+    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND3")) {
+        Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+        sleep, 200
+    }
     Hotkey, $WheelDown, On
 Return
-
 
 
 /* ;
@@ -2006,11 +2015,11 @@ realHwnd(hwnd)
 
 
 ; Alt + ` - hotkey to activate NEXT Window of same type of the current App or Chrome Website Shortcut
-#If !moving
+; #If !moving
 ; RButton & LButton::
     ; send, {ENTER}
     ; Return
-#If
+; #If
 
 /* ;
 *****************************
@@ -3267,6 +3276,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::lossing::losing
 ::em::me
 ::leiu::lieu
+::suck::suck
+::sucks::sucks
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
