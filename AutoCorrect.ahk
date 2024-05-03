@@ -1756,11 +1756,13 @@ IsOverDesktop() {
 }
 
 IsEmptySpace() {
-   static ROLE_SYSTEM_LIST := 0x21
-   CoordMode, Mouse
-   MouseGetPos, X, Y
-   AccObj := AccObjectFromPoint(idChild, X, Y)
-   Return (AccObj.accRole(0) == ROLE_SYSTEM_LIST)
+    static ROLE_SYSTEM_LIST := 0x21
+    If WinActive("ahk_exe explorer.exe") {
+        CoordMode, Mouse
+        MouseGetPos, X, Y
+        AccObj := AccObjectFromPoint(idChild, X, Y)
+        Return (AccObj.accRole(0) == ROLE_SYSTEM_LIST)
+    }
 }
 
 AccObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
@@ -3116,7 +3118,6 @@ Return
 ::IPs::
 ::VMware::
 ::VMs::
-
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
@@ -3272,12 +3273,59 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ips::IPs
 ::vmware::VMware
 ::ie::i.e.
-::ni::in
 ::lossing::losing
-::em::me
 ::leiu::lieu
 ::suck::suck
 ::sucks::sucks
+::appraoch::approach
+::Su::Us
+::Ym::My
+::yB::By
+::tI::It
+::sI::Is
+::eW::We
+::eM::Me
+::oT::To
+::oF::Of
+::nI::In
+::fI::If
+::nO::On
+::pU::Up
+::oN::No
+::oD::Do
+::rO::Or
+::sA::As
+::tA::At
+::nA::An
+::mA::Am
+::eB::Be
+::eH::He
+::oS::So
+::iH::Hi
+::su::us
+::ym::my
+::yb::by
+::ti::it
+::si::is
+::ew::we
+; ::me::me
+::ot::to
+::fo::of
+::ni::in
+::fi::if
+; ::on::on
+::pu::up
+; ::no::no
+::od::do
+::ro::or
+::sa::as
+::ta::at
+::na::an
+::ma::am
+::eb::be
+::eh::he
+; ::so::so
+::ih::hi
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
