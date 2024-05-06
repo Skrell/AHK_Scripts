@@ -308,7 +308,6 @@
 ::handign::handing
 ::et::bet
 ::bt::bet
-::be::bet
 ::ebt::bet
 ::bte::bet
 ::ets::bets
@@ -719,7 +718,6 @@
 ::shoulnd't::shouldn't
 ::should'nt::shouldn't
 ::shouldnt'::shouldn't
-::we::owe
 ::oe::owe
 ::ow::owe
 ::woe::owe
@@ -1580,17 +1578,14 @@
 ::honetsly::honestly
 ::honeslty::honestly
 ::honestyl::honestly
-::he::the
 ::te::the
 ::th::the
 ::hte::the
 ::teh::the
 ::nd::and
 ::ad::and
-::an::and
 ::nad::and
 ::adn::and
-::or::for
 ::fr::for
 ::fo::for
 ::ofr::for
@@ -1620,7 +1615,6 @@
 ::yuo::you
 ::ot::not
 ::nt::not
-::no::not
 ::ont::not
 ::nto::not
 ::re::are
@@ -1659,7 +1653,6 @@
 ::omre::more
 ::mroe::more
 ::moer::more
-::as::was
 ::ws::was
 ::wa::was
 ::aws::was
@@ -1720,7 +1713,6 @@
 ::ur::our
 ::uor::our
 ::oru::our
-::on::one
 ::noe::one
 ::oen::one
 ::ther::other
@@ -1767,7 +1759,6 @@
 ::iste::site
 ::stie::site
 ::siet::site
-::my::may
 ::ma::may
 ::mya::may
 ::wat::what
@@ -1803,7 +1794,6 @@
 ::otu::out
 ::se::use
 ::ue::use
-::us::use
 ::ues::use
 ::ny::any
 ::nay::any
@@ -1822,8 +1812,6 @@
 ::noly::only
 ::olny::only
 ::onyl::only
-::is::his
-::hi::his
 ::ihs::his
 ::hsi::his
 ::hen::when
@@ -1978,7 +1966,6 @@
 ::clcik::click
 ::clikc::click
 ::ts::its
-::it::its
 ::ist::its
 ::ike::like
 ::lke::like
@@ -2030,7 +2017,6 @@
 ::bakc::back
 ::op::top
 ::tp::top
-::to::top
 ::otp::top
 ::tpo::top
 ::eople::people
@@ -2167,7 +2153,6 @@
 ::muisc::music
 ::musci::music
 ::uy::buy
-::by::buy
 ::uby::buy
 ::byu::buy
 ::dta::data
@@ -2893,7 +2878,6 @@
 ::reprot::report
 ::repotr::report
 ::ff::off
-::of::off
 ::fof::off
 ::ember::member
 ::mmber::member
@@ -3852,7 +3836,6 @@
 ::szie::size
 ::siez::size
 ::rt::art
-::at::art
 ::atr::art
 ::ersonal::personal
 ::prsonal::personal
@@ -4758,7 +4741,6 @@
 ::scinece::science
 ::sciecne::science
 ::scienec::science
-::me::men
 ::emn::men
 ::mne::men
 ::ategories::categories
@@ -10593,7 +10575,6 @@
 ::doulbe::double
 ::doubel::double
 ::dg::dog
-::do::dog
 ::odg::dog
 ::dgo::dog
 ::uild::build
@@ -12330,7 +12311,6 @@
 ::edtior::editor
 ::ediotr::editor
 ::editro::editor
-::in::inn
 ::nin::inn
 ::ndustrial::industrial
 ::idustrial::industrial
@@ -14363,7 +14343,6 @@
 ::awys::ways
 ::wyas::ways
 ::wasy::ways
-::so::son
 ::osn::son
 ::sno::son
 ::roviding::providing
@@ -18531,7 +18510,6 @@
 ::ev::dev
 ::edv::dev
 ::dve::dev
-::up::cup
 ::cp::cup
 ::ucp::cup
 ::cpu::cup
@@ -28355,7 +28333,6 @@
 ::reduciton::reduction
 ::reductoin::reduction
 ::reductino::reduction
-::am::aim
 ::iam::aim
 ::ami::aim
 ::bds::bids
@@ -37902,7 +37879,6 @@
 ::cathloic::catholic
 ::cathoilc::catholic
 ::catholci::catholic
-::ok::oak
 ::oa::oak
 ::aok::oak
 ::oka::oak
@@ -75403,7 +75379,6 @@
 ::unliekly::unlikely
 ::unlikley::unlikely
 ::unlikeyl::unlikely
-::if::gif
 ::gf::gif
 ::gi::gif
 ::igf::gif
