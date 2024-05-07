@@ -161,6 +161,7 @@ OnMessage(MsgNum, "ShellMessage")
     ; }
     ; sleep, 250
 ; }
+    SetTimer CheckWindow, 100
 Return
 
 ;############### CAse COrrector ######################
@@ -189,7 +190,22 @@ Return
     ; }
 ; }
 
-#If (!hitCAPS && !hitTAB) && !WinActive("ahk_exe qtcreator.exe")
+
+CheckWindow:
+    IfWinActive ahk_exe qtcreator.exe
+      {
+      Suspend , On
+      Return
+      }
+    ; IfWinActive ahk_class ConsoleWindowClass ;Comand prompt in XP
+      ; {
+      ; Suspend , On
+      ; Return
+      ; }
+    Suspend , Off
+Return
+
+#If (!hitCAPS && !hitTAB)
     CapsLock:: Send {Delete}
     !a:: Send, {home}
     +!a:: Send, {SHIFT down}{home}{SHIFT up}
@@ -212,8 +228,6 @@ Return
     !j:: Send {LCtrl down}{LEFT}{LCtrl up}
     !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
 #If
-
-
 
 ; Ctl+Tab in chrome to goto recent
 #If WinActive("ahk_exe Chrome.exe")
@@ -1568,13 +1582,13 @@ ActivateWindow:
     }
 Return
 
-#If moving && !WinActive("ahk_exe qtcreator.exe")
+#If moving
 ~RButton::
     ComboActive := False
 Return
 #If
 
-; #If !DesktopIconsVisible && IsOverDesktop() && !VolumeHover() && !moving && !WinActive("ahk_exe qtcreator.exe")
+; #If !DesktopIconsVisible && IsOverDesktop() && !VolumeHover() && !moving
 ; LButton::
     ; DesktopIcons(True)
     ; DesktopIconsVisible := True
@@ -1588,7 +1602,7 @@ Return
 ; Return
 ; #If
 
-#If (!VolumeHover() || DesktopIconsVisible) && !WinActive("ahk_exe qtcreator.exe")
+#If (!VolumeHover() || DesktopIconsVisible)
 ~LButton::
    CoordMode, Pixel, Screen
    MouseGetPos, X, Y, lhwnd, lctrlN
@@ -1658,7 +1672,7 @@ LButton::
 Return
 #If 
 
-#If !moving && (!IsOverDesktop() || (IsOverDesktop() && DesktopIconsVisible)) && !WinActive("ahk_exe qtcreator.exe")
+#If !moving && (!IsOverDesktop() || (IsOverDesktop() && DesktopIconsVisible))
 $RButton::
     ComboActive := False
     loop {
@@ -1681,7 +1695,7 @@ $RButton::
 Return
 #If
 
-#If !moving && !VolumeHover() && !IsOverDesktop() && !WinActive("ahk_exe qtcreator.exe")
+#If !moving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelUp::
     ComboActive := True
     MouseGetPos, , , target
@@ -1690,7 +1704,7 @@ RButton & WheelUp::
 Return
 #If
 
-#If !moving && !VolumeHover() && !IsOverDesktop() && !WinActive("ahk_exe qtcreator.exe")
+#If !moving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelDown::
     ComboActive := True
     MouseGetPos, , , target
@@ -1703,7 +1717,7 @@ Return
     Hotkey, $WheelUp, Off
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
-    If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && !WinActive("ahk_exe qtcreator.exe"))
+    If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
     {
         Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
         sleep, 750
@@ -1719,7 +1733,7 @@ Return
     Hotkey, $WheelDown, Off
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
-    If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && !WinActive("ahk_exe qtcreator.exe"))
+    If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
     {
         Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
         sleep, 750
@@ -1757,7 +1771,7 @@ IsOverDesktop() {
 
 IsEmptySpace() {
     static ROLE_SYSTEM_LIST := 0x21
-    If WinActive("ahk_exe explorer.exe") {
+    If WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770") || WinActive("ahk_class #32768") {
         CoordMode, Mouse
         MouseGetPos, X, Y
         AccObj := AccObjectFromPoint(idChild, X, Y)
@@ -2017,11 +2031,11 @@ realHwnd(hwnd)
 
 
 ; Alt + ` - hotkey to activate NEXT Window of same type of the current App or Chrome Website Shortcut
-; #If !moving
-; RButton & LButton::
-    ; send, {ENTER}
-    ; Return
-; #If
+#If !moving
+LButton & RButton::
+    send, {ENTER}
+    Return
+#If
 
 /* ;
 *****************************
@@ -2436,6 +2450,8 @@ track() {
     
     If (GetCurrentMonitorIndex() == MonNum) {
         If  (x >= A_ScreenWidth-3 && y <= 3 && !GetKeyState("LButton", "P") ) {
+            If WinExist(ahk_class Microsoft-Windows-SnipperToolbar)
+                Winclose, ahk_class Microsoft-Windows-SnipperToolbar
             run, C:\Windows\System32\SnippingTool.exe
             WinWaitActive, ahk_class Microsoft-Windows-SnipperToolbar, , 2
             Send, {Lalt down}{Lshift down}{n}{Lshift up}{Lalt up}
@@ -3023,7 +3039,6 @@ Return
         && !WinActive("ahk_exe Conhost.exe") 
         && !WinActive("ahk_exe bash.exe") 
         && !WinActive("ahk_exe mintty.exe")
-        && !WinActive("ahk_exe qtcreator.exe")
         && !SearchingWindows
         && !hitCAPS
         && !hitTAB
@@ -3118,6 +3133,15 @@ Return
 ::IPs::
 ::VMware::
 ::VMs::
+::ah::
+::np::
+::ty::
+::ll::
+::re::
+::ve::
+::go::
+::qt::
+::vs::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
@@ -3326,6 +3350,10 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::eh::he
 ; ::so::so
 ::ih::hi
+::bc::because
+::cb::because
+::qt::Qt::
+::istn::isn't
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
@@ -3375,6 +3403,32 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:iaion::iation
 :?:cims::cisms
 :?:lyl::lly
+:?:A/::A?
+:?:B/::B?
+:?:C/::C?
+:?:D/::D?
+:?:E/::E?
+:?:F/::F?
+:?:G/::G?
+:?:H/::H?
+:?:I/::I?
+:?:J/::J?
+:?:K/::K?
+:?:L/::L?
+:?:M/::M?
+:?:N/::N?
+:?:O/::O?
+:?:P/::P?
+:?:Q/::Q?
+:?:R/::R?
+:?:S/::S?
+:?:T/::T?
+:?:U/::U?
+:?:V/::V?
+:?:W/::W?
+:?:Y/::Y?
+:?:X/::X?
+:?:Z/::Z?
 :?:a/::a?
 :?:b/::b?
 :?:c/::c?
@@ -3404,6 +3458,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:aingin::aining
 :?:ainign::aining
 :?:gni::ing
+:?:ign::ing
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -3957,7 +4012,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::archetecture::architecture
 ::architechture::architecture
 ::architechtures::architectures
-::arn't::aren't
 ::argubly::arguably
 ::arguements::arguments
 ::argumetns::arguments
@@ -4415,7 +4469,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::cheif::chief
 ::childbird::childbirth
 ::childen::children
-::childrens::children's
 ::chilli::chili
 ::choosen::chosen
 ::chrisitan::Christian
@@ -4542,7 +4595,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::comany::company
 ::comapany::company
 ::comapny::company
-::company;s::company's
 ::comparitive::comparative
 ::comparitively::comparatively
 ::comapre::compare
@@ -4789,9 +4841,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::oculd::could
 ::ucould::could
 ::couldthe::could the
-::coudln't::couldn't
-::coudn't::couldn't
-::couldnt::couldn't
 ::coucil::council
 ::counterfiet::counterfeit
 ::counries::countries
@@ -4974,8 +5023,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::diarhea::diarrhoea
 ::dichtomy::dichotomy
 ::didnot::did not
-::didint::didn't
-::didnt::didn't
 ::differance::difference
 ::diferences::differences
 ::differances::differences
@@ -5103,16 +5150,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::doccuments::documents
 ::docuement::documents
 ::documnets::documents
-::doens::doesn't
 ::doese::does
 ::doe snot::does not ; *could* be legitimate... but very unlikely!
-::does't::doesn't
-::doest::doesn't
-::doens't::doesn't
-::doesnt::doesn't
-::dosen't::doesn't
-::doenst::doesn't
-::dosn't::doesn't
 ::doign::doing
 ::doimg::doing
 ::doind::doing
@@ -5121,9 +5160,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::dominent::dominant
 ::dominiant::dominant
 ::dominaton::domination
-::dno't::don't
-::do'nt::don't
-::dont::don't
 ::don't no::don't know
 ::doulbe::double
 ::dowloads::downloads
@@ -5533,7 +5569,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::generaly::generally
 ::generatting::generating
 ::genialia::genitalia
-::gentlemens::gentlemen's
 ::geographicial::geographical
 ::geometrician::geometer
 ::geometricians::geometers
@@ -5642,7 +5677,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::hace::hare
 ::hsa::has
 ::hasbeen::has been
-::hasnt::hasn't
 ::ahev::have
 ::ahve::have
 ::haev::have
@@ -5674,7 +5708,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::hemmorhage::hemorrhage
 ::ehr::her
 ::ehre::here
-::here;s::here's
 ::heridity::heredity
 ::heroe::hero
 ::heros::heroes
@@ -5740,22 +5773,11 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::hypocricy::hypocrisy
 ::hypocrit::hypocrite
 ::hypocrits::hypocrites
-::id'::I'd
-::i;d::I'd
 ::i"d::I'd
-::i'd::I'd
 ::i"m::I'm
-::i'm::I'm
 ::I"m::I'm
-::im::I'm
 ::i"ll::I'll
-::i'll::I'll
 ::i"ve::I've
-::i've::I've
-::iv'e::I've
-::ive::I've
-::its'::it's
-::ti's::it's
 ::ti"s::it's
 ::iconclastic::iconoclastic
 ::idae::idea
@@ -5986,12 +6008,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::iritated::irritated
 ::i snot::is not
 ::isthe::is the
-::isnt::isn't
-::isnt'::isn't
 ::issueing::issuing
 ::itis::it is
 ::itwas::it was
-::it;s::it's
 ::its a::it's a
 ::it snot::it's not
 ::it' snot::it's not
@@ -6066,7 +6085,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::leibnitz::leibniz
 ::liesure::leisure
 ::lenght::length
-::let;s::let's
 ::leathal::lethal
 ::let's him::lets him
 ::let's it::lets it
@@ -7669,9 +7687,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::tyhat::that
 ::thatt he::that the
 ::thatthe::that the
-::thast::that's
-::thats::that's
-::taht's::that's
 ::hte::the
 ::teh::the
 ::tehw::the
@@ -7712,11 +7727,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::htey::they
 ::tehy::they
 ::tyhe::they
-::they;l::they'll
-::theyll::they'll
-::they;r::they're
-::they;v::they've
-::theyve::they've
 ::theif::thief
 ::theives::thieves
 ::hting::thing
@@ -7757,7 +7767,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::tabacco::tobacco
 ::tobbaco::tobacco
 ::todya::today
-::todays::today's
 ::tiogether::together
 ::togehter::together
 ::toghether::together
@@ -8028,13 +8037,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::weas::was
 ::ws::was
 ::wa snot::was not
-::wasnt::wasn't
 ::wya::way
 ::wayword::wayward
-::we;d::we'd
-::we;re::we're
-::wer'e::we're
-::w'ere::we're
 ::weaponary::weaponry
 ;::wether::weather   ; ambiguous: leave uncorrected
 ::wendsay::Wednesday
@@ -8043,16 +8047,13 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::wierd::weird
 ::vell::well
 ::werre::were
-::wern't::weren't
 ::waht::what
 ::whta::what
-::what;s::what's
 ::wehn::when
 ::whn::when
 ::whent he::when the
 ::wehre::where
 ::wherre::where
-::where;s::where's
 ::wereabouts::whereabouts
 ::wheras::whereas
 ::wherease::whereas
@@ -8068,7 +8069,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::whicht he::which the
 ::hwile::while
 ::woh::who
-::who;s::who's
 ::hwole::whole
 ::wohle::whole
 ::wholey::wholly
@@ -8098,8 +8098,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::witheld::withheld
 ::withold::withhold
 ::withing::within
-::womens::women's
-::wo'nt::won't
 ::wonderfull::wonderful
 ::wrod::word
 ::owrk::work
@@ -8116,8 +8114,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::wuould::would
 ::wouldbe::would be
 ::would of::would have
-::woudln't::wouldn't
-::wouldnt::wouldn't
 ::wresters::wrestlers
 ::rwite::write
 ::wriet::write
@@ -8143,8 +8139,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ytou::you
 ::yuo::you
 ::youare::you are
-::youd::you'd
-::youve::you've
 ::yoru::your
 ::yuor::your
 ::youself::yourself
@@ -8453,21 +8447,137 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;-------------------------------------------------------------------------------
 ; Anything below this point was added to the script by the user via the Win+H hotkey.
 ;-------------------------------------------------------------------------------
+::ahven't::haven't
+::ahven;t::haven't
+::ahvent::haven't
+::arent::aren't
+::arn't::aren't
+::cant'::can't
+::cant::can't
+::childrens::children's
+::children;s::children's
+::companys::company's
+::company;s::company's
+::coudln't::couldn't
+::coudln;t::couldn't
+::coudn't::couldn't
+::couldnt::couldn't
+::didint::didn't
+::didnt::didn't
+::didn;t::didn't
+::didtn::didn't
+::dno't::don't
+::dnot::don't
+::do'nt::don't
+::doens't::doesn't
+::doens::doesn't
+::doenst::doesn't
+::does't::doesn't
+::doesnt::doesn't
+::doesn;t::doesn't
+::doest::doesn't
+::doestn::doesn't
+::dont::don't
+::don;t::don't
+::dosen't::doesn't
+::dosn't::doesn't
+::dotn::don't
+::gentlemens::gentlemen's
+::gentlemen;s::gentlemen's
+::hadnt::hadn't
+::hadn;t::hadn't
+::hasnt::hasn't
+::havent::haven't
+::heres::here's
+::here;s::here's
+::hes::he's
+::he;s::he's
+::hsan't::hasn't
+::i'd::I'd
+::i;d::I'd
+::i'll::I'll
+::i;ll::I'll
+::i'm::I'm
+::i;m::I'm
+::i've::I've
+::i;d::I'd
+::id'::I'd
+::im::I'm
+::isnt'::isn't
+::isnt::isn't
+::isn;t::isn't
+::it;s::it's
+::its'::it's
+::iv'e::I've
+::iv;e::I've
+::ive::I've
+::let;s::let's
+::lets::let's
+::odnt::don't
+::taht's::that's
+::thast::that's
+::thats::that's
+::that;s::that's
+::theres::there's
+::there;s::there's
+::they;l::they'll
+::they;r::they're
+::they;v::they've
+::theyd::they'd
+::theyll::they'll
+::they;ll::they'll
+::theyre::they're
+::they;re::they're
+::theyve::they've
+::they;ve::they've
+::ti's::it's
+::todays::today's
+::w'ere::we're
+::wasnt::wasn't
+::wasn;t::wasn't
+::we;d::we'd
+::we;re::we're
+::wer'e::we're
+::wern't::weren't
+::werent::weren't
+::weren;t::weren't
+::what;s::what's
+::whats::what's
+::what;s::what's
+::where;s::where's
+::who;s::who's
+::wnot::won't
+::wo'nt::won't
+::womens::women's
+::wont::won't
+::wotn::won't
+::woudln't::wouldn't
+::woudlnt::wouldn't 
+::woudn't::wouldn't
+::wouldnt::wouldn't
+::yorue::you're
+::you'er::you're
+::youd::you'd
+::you;d::you'd
+::youe'r::you're
+::youer::you're
+::youll::you'll
+::you;ll::you'll
+::your'e::you're
+::youre::you're
+::youv'e::you've
+::youve::you've
+::you;ve::you've
 ::repetative::repetitive
 ::repetetive::repetitive
 ::deterant::deterrent
 ::deterants::deterrents
 ::inprecise::imprecise
-::woudlnt::wouldn't 
-::ti::it
 ::god::God
 ::ram::RAM
 ::defualt::default
 ::rescheulde::reschedule
 ::mintues::minutes
-::theyre::they're
-::theyll::they'll
-::theyd::they'd
 ::machien::machine
 ::i::I
 ::fo::of
@@ -8497,7 +8607,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::cehck::check
 ::instaed::instead
 ::confrim::confirm
-::havent::haven't
 ::ar eyou::are you
 ::quesiton::question
 ::advatnage::advantage
@@ -8523,10 +8632,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::repot::report
 ::licesne::license
 ::pilling::piling
-::wont::won't
 ::resovle::resolve
-::cant::can't
-::cant'::can't
 ::your a::you're a
 ::your an::you're an
 ::your her::you're her
@@ -8537,12 +8643,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::your their::you're their
 ::your your::you're your
 ::you're own::your own
-::youre::you're
-::your'e::you're
-::youe'r::you're
-::you'er::you're
-::youer::you're
-::yorue::you're
 ::Suggetsions::Suggestions
 ::thnaks::thanks
 ::hoep::hope
@@ -8554,8 +8654,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::doc::document
 ::votlages::voltages
 ::deisgn::desIgn
-::youv'e::you've
-::ahvent::haven't
 ::can not::cannot
 ::throough::thorough
 ::si::is
@@ -8571,7 +8669,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::a the::at the
 ::ist he::is the
 ::htan::than
-::theres::there's
 ::hwoever::however
 ::Hoewver::However
 ::insant::instant
@@ -8600,7 +8697,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::coupel::couple
 ::Unfortuantley::Unfortunatley
 ::alogn::along
-::woudn't::wouldn't
 ::thakns::thanks
 ::respresnted::represented
 ::challenege::challenge
@@ -8628,11 +8724,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::palcement::placement
 ::pruposes::purposes
 ::gogin::going
-::werent::weren't
 ::hweover::however
 ::juts::just
 ::curiosu::curious
-::dotn::don't
 ::simualte::simulate
 ::deos::does
 ::ot::to
@@ -8641,14 +8735,12 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::wuold::woyould
 ::hcip::chip
 ::hsoudl::should
-::wnot::won't
 ::stnadard::standard
 ::emif::EMIF
 ::tahnk::thank
 ::evne::even
 ::seomthing::soemthing
 ::pusle::pulse
-::hes::he's
 ::bets::best
 ::fpgas::FPGAs
 ::opinon::opinIon
@@ -8656,7 +8748,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::soluations::solutions
 ::aprt::part
 ::belwo::below
-::dnot::don't
 ::hleping::helping
 ::filse::files
 ::appreacited::appreciated
@@ -8681,7 +8772,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ehlp::help
 ::pathc::patch
 ::awlays::always
-::youll::you'll
 ::Soc::SoC
 ::seotmhing::something
 ::usb::USB
@@ -8695,7 +8785,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::optinos::options
 ::defintinon::definition
 ::requriements::requirements
-::didtn::didn't
 ::contniue::continue
 ::resepct::respect
 ::fof::for
@@ -8705,7 +8794,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::determininstic::deterministic
 ::Hye::Hey
 ::lokoing::looking
-::hsan't::hasn't
 ::bene::been
 ::roled::rolled
 ::noe::one
@@ -8714,18 +8802,15 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::selectino::selection
 ::meteing::meeting
 ::quetsion::question
-::whats::what's
 ::loking::looking
 ::isseus::issues
 ::th e::the
 ::ucstomers::customers
 ::ilnks::links
-::youv'e::you've
 ::brining::bringing
 ::saerch::search
 ::blieve::believe
 ::copule::couple
-::hadnt::hadn't
 ::migth::might
 ::instructino::instruction
 ::hlepful::helpful
@@ -8746,7 +8831,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::haerd::heard
 ::Godo::Good
 ::resopnses::responses
-::lets::let's
 ::reposne::response
 ::tgoether::together
 ::instatiating::instantiating
@@ -8771,7 +8855,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::hwat::what
 ::asap::ASAP
 ::compliation::compilation
-::wotn::won't
 ::ntoes::notes
 ::direcotires::directorIes
 ::sinec::since
@@ -8794,7 +8877,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::shcematics::schematics
 ::hwy::why
 ::adddressing::addressing
-::ahven't::haven't
 ::disucsison::discussion
 ::Produciton::ProductIon
 ::doucments::documents
@@ -8819,7 +8901,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::quesiton::question
 ::quesitons::questions
 ::pgorammer::programmer
-::youv'e::you've
 ::clsoe::close
 ::Antony::Anthony
 ::intenral::internal
@@ -8827,7 +8908,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::implciations::implications
 ::bleieve::believe
 ::begininning::beginning
-::doestn::doesn't
 ::mabye::maybe
 ::moduel::module
 ::apges::pages
@@ -8838,7 +8918,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::discoved::discovered
 ::possiblites::possibIlites
 ::coutner::counter
-::odnt::don't
 ::udpates::updates
 ::prupose::purpose
 ::adantages::advantages
@@ -8915,7 +8994,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::osme::some
 ::sepcfiication::specification
 ::Unfrotuantely::Unfortunately
-::arent::aren't
 ::alst::last
 ::thuoght::thought
 ::cmoe::come
