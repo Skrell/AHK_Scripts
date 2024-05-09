@@ -192,11 +192,13 @@ Return
 
 
 CheckWindow:
-    IfWinActive ahk_exe qtcreator.exe
-      {
+    MouseGetPos, , , targetHoverId
+    WinGet, targetProc, ProcessName, ahk_id %targetHoverId%
+    If (targetProc == "qtcreator.exe")
+    {
       Suspend , On
       Return
-      }
+    }
     ; IfWinActive ahk_class ConsoleWindowClass ;Comand prompt in XP
       ; {
       ; Suspend , On
@@ -1604,39 +1606,56 @@ Return
 
 #If (!VolumeHover() || DesktopIconsVisible)
 ~LButton::
-   CoordMode, Pixel, Screen
-   MouseGetPos, X, Y, lhwnd, lctrlN
+    CoordMode, Pixel, Screen
+    SetTimer, SendCtrlAdd, Off
+    MouseGetPos, X1, Y1, lhwnd, lctrlN
+    WinGetClass, lClass, ahk_id %lhwnd%
 
-   If (A_PriorHotkey == A_ThisHotkey 
-   && A_TimeSincePriorHotkey < 400 
-   && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
-   { 
+    If (A_PriorHotkey == A_ThisHotkey 
+    && A_TimeSincePriorHotkey < 400 
+    && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
+    { 
+        Critical, On
         If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
             Send !{Up}
-            sleep, 200
+            SetTimer, SendCtrlAdd, -300
         }
-   }
-   ; Else
-   ; {
-       ; WinGetClass, lcl, ahk_id %lhwnd%
-       ; If (!DesktopIconsVisible && (lcl == "WorkerW" || lcl == "ProgMan")) {
-            ; DesktopIcons(True)
-            ; DesktopIconsVisible := True
-       ; }
-       ; Else If (DesktopIconsVisible && lcl != "WorkerW" && lcl != "ProgMan" && lcl != "#32768" && lcl != "#32770") {
-            ; DesktopIcons(False)
-            ; DesktopIconsVisible := False
-       ; }
-   ; }
-   PixelGetColor, HexColor1, %X%, %Y%, RGB
-   X -= 1
-   PixelGetColor, HexColor2, %X%, %Y%, RGB
-   X += 2
-   PixelGetColor, HexColor3, %X%, %Y%, RGB
-   IsBlankSpace := IsEmptySpace()
-   Gui, GUI4Boarder: Hide
-   Return
+        Critical, Off
+    }
+    ; Else
+    ; {
+        ; WinGetClass, lcl, ahk_id %lhwnd%
+        ; If (!DesktopIconsVisible && (lcl == "WorkerW" || lcl == "ProgMan")) {
+             ; DesktopIcons(True)
+             ; DesktopIconsVisible := True
+        ; }
+        ; Else If (DesktopIconsVisible && lcl != "WorkerW" && lcl != "ProgMan" && lcl != "#32768" && lcl != "#32770") {
+             ; DesktopIcons(False)
+             ; DesktopIconsVisible := False
+        ; }
+    ; }
+    PixelGetColor, HexColor1, %X1%, %Y1%, RGB
+    X -= 1
+    PixelGetColor, HexColor2, %X1%, %Y1%, RGB
+    X += 2
+    PixelGetColor, HexColor3, %X1%, %Y1%, RGB
+    IsBlankSpace := IsEmptySpace()
+    
+    KeyWait, LButton, U T3
+    MouseGetPos, X2, Y2,
+    If (abs(X1-X2) < 3 && abs(Y1-Y2) < 3) && (lClass != "ProgMan" && lClass != "WorkerW" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND3"))  {
+        ; Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+        SetTimer, SendCtrlAdd, -300
+    }
+    Gui, GUI4Boarder: Hide
+Return
 #If
+
+SendCtrlAdd:
+    WinGetClass, lClassCheck, A
+    If (lClassCheck == lClass)
+        Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+Return
 
 LWin & WheelUp::send {Volume_Up}
 LWin & WheelDown::send {Volume_Down}
@@ -8260,7 +8279,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::fiels::feels, fields, files, phials
 ::firts::flirts, first
 ::fleed::fled, freed
-::fomr::from, form
 ::fontrier::fontier, frontier
 ::fro::for, to and fro, (a)fro
 ::futhroc::futhark, futhorc
