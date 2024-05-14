@@ -131,7 +131,7 @@ OnMessage(MsgNum, "ShellMessage")
     ; }
     
     ; if hwndProgman= 
-    ; {
+        ; {
         ; WinSet, Trans, 200, ahk_class WorkerW
         ; sleep, 20
         ; WinSet, Trans, 150, ahk_class WorkerW
@@ -259,7 +259,7 @@ Return
 #If !SearchingWindows && !hitTAB && !hitCAPS
 ~Esc::
     MouseGetPos, , , escHwndID
-    If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 300 && escHwndID == escHwndID_old) {
+    If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 500 && escHwndID == escHwndID_old) {
         WinGet, activeID, ID, A
         If IsAltTabWindow(activeID) {
             GoSub, DrawRect
@@ -1605,20 +1605,20 @@ Return
 ; #If
 
 #If (!VolumeHover() || DesktopIconsVisible)
-~LButton::
+~*LButton::
     CoordMode, Pixel, Screen
     SetTimer, SendCtrlAdd, Off
     MouseGetPos, X1, Y1, lhwnd, lctrlN
     WinGetClass, lClass, ahk_id %lhwnd%
 
     If (A_PriorHotkey == A_ThisHotkey 
-    && A_TimeSincePriorHotkey < 400 
+    && A_TimeSincePriorHotkey < 500 
     && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
     { 
         Critical, On
         If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
             Send !{Up}
-            SetTimer, SendCtrlAdd, -300
+            SetTimer, SendCtrlAdd, 300
         }
         Critical, Off
     }
@@ -1643,8 +1643,7 @@ Return
     
     KeyWait, LButton, U T3
     MouseGetPos, X2, Y2,
-    If (abs(X1-X2) < 3 && abs(Y1-Y2) < 3) && (lClass != "ProgMan" && lClass != "WorkerW" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND3"))  {
-        ; Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+    If (abs(X1-X2) < 3 && abs(Y1-Y2) < 3) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND3") && !GetKeyState("LCtrl","P") && !GetKeyState("LShift","P"))  {
         SetTimer, SendCtrlAdd, -300
     }
     Gui, GUI4Boarder: Hide
@@ -1653,7 +1652,7 @@ Return
 
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
-    If (lClassCheck == lClass)
+    If (lClassCheck == lClass && !GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ))
         Send, {LCtrl down}{NumpadAdd}{LCtrl up}
 Return
 
@@ -1741,7 +1740,7 @@ Return
         Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
         sleep, 750
     }
-    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND3")) {
+    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND3")) {
         Send, {LCtrl down}{NumpadAdd}{LCtrl up}
         sleep, 200
     }
@@ -1757,7 +1756,7 @@ Return
         Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
         sleep, 750
     }
-    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND3")) {
+    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND3")) {
         Send, {LCtrl down}{NumpadAdd}{LCtrl up}
         sleep, 200
     }
@@ -2467,16 +2466,16 @@ track() {
         }
     }
     
-    If (GetCurrentMonitorIndex() == MonNum) {
-        If  (x >= A_ScreenWidth-3 && y <= 3 && !GetKeyState("LButton", "P") ) {
-            If WinExist(ahk_class Microsoft-Windows-SnipperToolbar)
-                Winclose, ahk_class Microsoft-Windows-SnipperToolbar
-            run, C:\Windows\System32\SnippingTool.exe
-            WinWaitActive, ahk_class Microsoft-Windows-SnipperToolbar, , 2
-            Send, {Lalt down}{Lshift down}{n}{Lshift up}{Lalt up}
-            sleep, 1000
-        }
-    }
+    ; If (GetCurrentMonitorIndex() == MonNum) {
+        ; If  (x >= A_ScreenWidth-3 && y <= 3 && !GetKeyState("LButton", "P") ) {
+            ; If WinExist(ahk_class Microsoft-Windows-SnipperToolbar)
+                ; Winclose, ahk_class Microsoft-Windows-SnipperToolbar
+            ; run, C:\Windows\System32\SnippingTool.exe
+            ; WinWaitActive, ahk_class Microsoft-Windows-SnipperToolbar, , 2
+            ; Send, {Lalt down}{Lshift down}{n}{Lshift up}{Lalt up}
+            ; sleep, 1000
+        ; }
+    ; }
     
     
     If (MonCount == 1 &&  x > 3 && y > 3 && x < A_ScreenWidth-3 && y < A_ScreenHeight-3)
@@ -2545,14 +2544,14 @@ GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
         SysGet, workArea, Monitor, % A_Index
         
         ;Get the position of the focus window
-        WinGetPos, X, Y, W, , ahk_id %thisWindowHwnd%
-        X += floor(W/2)
-        Y += 8
+        ; WinGetPos, X, Y, W, , ahk_id %thisWindowHwnd%
+        WinGetPosEx(thisWindowHwnd, X, Y, W)
+        ; X += floor(W/2)
+        ; Y += 8
         ;Check If the focus window in on the current monitor index
-        If ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
-            ; tooltip, %X%  %Y% %workAreaLeft% %workAreaTop% %workAreaBottom% %workAreaRight%
+        ; If ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
+        If ((A_Index == currentMonNum) && (((X >= workAreaLeft && X < workAreaRight) || (X+W >= workAreaLeft && X+W < workAreaRight)) && (Y >= workAreaTop && Y < workAreaBottom))){
             ;Return the monitor index since it's within that monitors borders.
-            ; Return % A_Index
             Critical, Off
             Return True
         }
@@ -3161,6 +3160,7 @@ Return
 ::go::
 ::qt::
 ::vs::
+::oem::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
