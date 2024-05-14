@@ -58,6 +58,7 @@ Global v3 := 0
 Global v4 := 0
 Global DesktopIconsVisible := False
 Global DrawingRect := False
+Global LclickSelected := False
         
 Process, Priority,, High
 
@@ -710,7 +711,7 @@ Return
         sleep 50
     }
     
-    If !(hitCAPS && !hitTAB) {
+    If !(hitCAPS && !hitTAB) && !LclickSelected {
         WinGet, actWndID, ID, A
         If (GetKeyState("Lbutton","P") && cycling && (ValidWindows.length() > 2)) {
             If ((actWndID == ValidWindows[1]) || (ValidWindows.length() <= 1)) {
@@ -875,6 +876,7 @@ Return
     cyclingMin     := False
     hitTAB         := False
     hitCAPS        := False
+    LclickSelected := False
 
     Gosub, ClearRect
     startHighlight := False
@@ -1349,6 +1351,7 @@ Return
     If hitTAB {
         Gui, GUI4Boarder: Hide
         tooltip, Selecting %actTitle%
+        LclickSelected := True
         GoSub, DrawRect
         KeyWait, Lbutton, U T5
         GoSub, ClearRect
