@@ -900,12 +900,12 @@ x::
 Return
 #If
 
-#If hitTAB
-~!LButton::
-    sleep, 150
-    GoSub, DrawRect
-Return
-#If
+; #If hitTAB
+; ~!LButton::
+    ; sleep, 150
+    ; GoSub, DrawRect
+; Return
+; #If
 
 !CapsLock::CycleMin(forward)
 !+CapsLock::CycleMin(!forward)
@@ -1340,6 +1340,63 @@ Return
 ; Return
 ; #If
 
+#If (!VolumeHover() || DesktopIconsVisible)
+~*LButton::
+    SetTimer, SendCtrlAdd, Off
+    MouseGetPos, X1, Y1, lhwnd, lctrlN
+    WinGetTitle, actTitle, ahk_id %lhwnd%
+    
+    If hitTAB {
+        Gui, GUI4Boarder: Hide
+        tooltip, Selecting %actTitle%
+        GoSub, DrawRect
+        KeyWait, Lbutton, U T5
+        GoSub, ClearRect
+        Return
+    }
+    
+    Gui, GUI4Boarder: Hide
+    WinGetClass, lClass, ahk_id %lhwnd%
+    CoordMode, Pixel, Screen
+
+    If (A_PriorHotkey == A_ThisHotkey 
+    && A_TimeSincePriorHotkey < 500 
+    && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
+    { 
+        Critical, On
+        If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
+            Send !{Up}
+            SetTimer, SendCtrlAdd, 300
+        }
+        Critical, Off
+    }
+    ; Else
+    ; {
+        ; WinGetClass, lcl, ahk_id %lhwnd%
+        ; If (!DesktopIconsVisible && (lcl == "WorkerW" || lcl == "ProgMan")) {
+             ; DesktopIcons(True)
+             ; DesktopIconsVisible := True
+        ; }
+        ; Else If (DesktopIconsVisible && lcl != "WorkerW" && lcl != "ProgMan" && lcl != "#32768" && lcl != "#32770") {
+             ; DesktopIcons(False)
+             ; DesktopIconsVisible := False
+        ; }
+    ; }
+    PixelGetColor, HexColor1, %X1%, %Y1%, RGB
+    X -= 1
+    PixelGetColor, HexColor2, %X1%, %Y1%, RGB
+    X += 2
+    PixelGetColor, HexColor3, %X1%, %Y1%, RGB
+    IsBlankSpace := IsEmptySpace()
+    
+    KeyWait, LButton, U T3
+    MouseGetPos, X2, Y2,
+    If (abs(X1-X2) < 3 && abs(Y1-Y2) < 3) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND3") && !GetKeyState("LCtrl","P") && !GetKeyState("LShift","P"))  {
+        SetTimer, SendCtrlAdd, -300
+    }
+
+Return
+#If
 
 #MaxThreadsPerHotkey 1
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
@@ -1604,51 +1661,6 @@ Return
 ; Return
 ; #If
 
-#If (!VolumeHover() || DesktopIconsVisible)
-~*LButton::
-    CoordMode, Pixel, Screen
-    SetTimer, SendCtrlAdd, Off
-    MouseGetPos, X1, Y1, lhwnd, lctrlN
-    WinGetClass, lClass, ahk_id %lhwnd%
-
-    If (A_PriorHotkey == A_ThisHotkey 
-    && A_TimeSincePriorHotkey < 500 
-    && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
-    { 
-        Critical, On
-        If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
-            Send !{Up}
-            SetTimer, SendCtrlAdd, 300
-        }
-        Critical, Off
-    }
-    ; Else
-    ; {
-        ; WinGetClass, lcl, ahk_id %lhwnd%
-        ; If (!DesktopIconsVisible && (lcl == "WorkerW" || lcl == "ProgMan")) {
-             ; DesktopIcons(True)
-             ; DesktopIconsVisible := True
-        ; }
-        ; Else If (DesktopIconsVisible && lcl != "WorkerW" && lcl != "ProgMan" && lcl != "#32768" && lcl != "#32770") {
-             ; DesktopIcons(False)
-             ; DesktopIconsVisible := False
-        ; }
-    ; }
-    PixelGetColor, HexColor1, %X1%, %Y1%, RGB
-    X -= 1
-    PixelGetColor, HexColor2, %X1%, %Y1%, RGB
-    X += 2
-    PixelGetColor, HexColor3, %X1%, %Y1%, RGB
-    IsBlankSpace := IsEmptySpace()
-    
-    KeyWait, LButton, U T3
-    MouseGetPos, X2, Y2,
-    If (abs(X1-X2) < 3 && abs(Y1-Y2) < 3) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND3") && !GetKeyState("LCtrl","P") && !GetKeyState("LShift","P"))  {
-        SetTimer, SendCtrlAdd, -300
-    }
-    Gui, GUI4Boarder: Hide
-Return
-#If
 
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
