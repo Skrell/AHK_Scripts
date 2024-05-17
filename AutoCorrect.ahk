@@ -230,6 +230,7 @@ Return
     !,:: Send {DOWN}
     !j:: Send {LCtrl down}{LEFT}{LCtrl up}
     !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
+    #+s::Return
 #If
 
 ; Ctl+Tab in chrome to goto recent
@@ -1804,6 +1805,9 @@ IsOverDesktop() {
 
 IsEmptySpace() {
     static ROLE_SYSTEM_LIST := 0x21
+    If MouseIsOverTitleBar()
+        Return
+        
     If WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770") || WinActive("ahk_class #32768") {
         CoordMode, Mouse
         MouseGetPos, X, Y
@@ -2348,6 +2352,10 @@ track() {
     
     MouseGetPos x, y, hwndId
     WinGetClass, classId, ahk_id %hwndId%
+    
+    If classId == "Qt663QWindowIcon"
+        Return
+        
     WinGet, actwndId, ID, A
     currentVD := VD.getCurrentDesktopNum()
     SysGet, MonCount, MonitorCount
@@ -2372,10 +2380,8 @@ track() {
         moving := True
         If (classId == "CabinetWClass" || ((classId == "Progman" || classId == "WorkerW") && DesktopIconsVisible))
             sleep 250
-        ; ToolTip Moving
     } Else {
         moving := False
-        ; ToolTip
     }
     
     If (MonCount == 1 
@@ -2561,11 +2567,12 @@ GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
         ;Get the position of the focus window
         ; WinGetPos, X, Y, W, , ahk_id %thisWindowHwnd%
         WinGetPosEx(thisWindowHwnd, X, Y, W)
+        ; tooltip, %X% %Y% %workAreaLeft% %workAreaTop% %workAreaRight%
         ; X += floor(W/2)
         ; Y += 8
         ;Check If the focus window in on the current monitor index
         ; If ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
-        If ((A_Index == currentMonNum) && (((X >= workAreaLeft && X < workAreaRight) || (X+W >= workAreaLeft && X+W < workAreaRight)) && (Y >= workAreaTop && Y < workAreaBottom))){
+        If ((A_Index == currentMonNum) && (((X >= workAreaLeft-8 && X <= workAreaRight) || (X+W >= workAreaLeft && X+W <= workAreaRight)) && (Y >= workAreaTop-8 && Y <= workAreaBottom))){
             ;Return the monitor index since it's within that monitors borders.
             Critical, Off
             Return True
@@ -3176,6 +3183,7 @@ Return
 ::qt::
 ::vs::
 ::oem::
+::dl::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
