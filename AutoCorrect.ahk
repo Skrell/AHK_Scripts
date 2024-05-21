@@ -163,6 +163,24 @@ OnMessage(MsgNum, "ShellMessage")
     ; sleep, 250
 ; }
     SetTimer CheckWindow, 100
+;------------------------------------------------------------------------------
+; AUto-COrrect TWo COnsecutive CApitals.
+; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
+; To enable it, remove the /*..*/ symbols around it.
+; From Laszlo's script at http://www.autohotkey.com/forum/topic9689.html
+;------------------------------------------------------------------------------
+
+; The first line of code below is the set of letters, digits, and/or symbols
+; that are eligible for this type of correction.  Customize If you wish:
+keys = abcdefghijklmnopqrstuvwxyz
+Loop Parse, keys
+    HotKey ~+%A_LoopField%, Hoty
+Hoty:
+    CapCount := SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 ? CapCount+1 : 1
+    If CapCount = 2
+        SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
+    else If CapCount = 3
+        SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
 Return
 
 ;############### CAse COrrector ######################
@@ -1748,7 +1766,7 @@ Return
 #If
 
 ~$WheelUp::
-    Hotkey, $WheelUp, Off
+    Hotkey, ~$WheelUp, Off
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
     If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
@@ -1760,11 +1778,11 @@ Return
         Send, {LCtrl down}{NumpadAdd}{LCtrl up}
         sleep, 200
     }
-    Hotkey, $WheelUp, On
+    Hotkey, ~$WheelUp, On
 Return
 
 ~$WheelDown::
-    Hotkey, $WheelDown, Off
+    Hotkey, ~$WheelDown, Off
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
     If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
@@ -1776,7 +1794,7 @@ Return
         Send, {LCtrl down}{NumpadAdd}{LCtrl up}
         sleep, 200
     }
-    Hotkey, $WheelDown, On
+    Hotkey, ~$WheelDown, On
 Return
 
 
@@ -3000,28 +3018,6 @@ DynaRun(TempScript, pipename="")
 #NoEnv ; For security
 #SingleInstance force
 SetTitleMatchMode, 2
-;------------------------------------------------------------------------------
-; AUto-COrrect TWo COnsecutive CApitals.
-; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
-; To enable it, remove the /*..*/ symbols around it.
-; From Laszlo's script at http://www.autohotkey.com/forum/topic9689.html
-;------------------------------------------------------------------------------
-
-; The first line of code below is the set of letters, digits, and/or symbols
-; that are eligible for this type of correction.  Customize If you wish:
-/*
-keys = abcdefghijklmnopqrstuvwxyz
-Loop Parse, keys
-    HotKey ~+%A_LoopField%, Hoty
-Hoty:
-    CapCount := SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 ? CapCount+1 : 1
-    If CapCount = 2
-        SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
-    else If CapCount = 3
-        SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
-Return
-*/
-
 
 ;------------------------------------------------------------------------------
 ; Win+H to enter misspelling correction.  It will be added to this script.
@@ -3084,21 +3080,24 @@ Return
         && !hitTAB
         && !GetKeyState("LAlt","P")
         
-#Hotstring EndChars ()[]{};"/\,?!`n `t
+
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
+
 ;------------------------------------------------------------------------------
 ; Fix for -ign instead of -ing.
 ; Words to exclude: (could probably do this by Return without rewrite)
 ; From: http://www.morewords.com/e nds-with/gn/
 ;------------------------------------------------------------------------------
+
 #Hotstring B0  ; Turns off automatic backspacing for the following hotstrings.
+
 ; Can be suffix exceptions, too, but should correct "-aling" without correcting "-align".
 ::align::
 ::antiforeign::
 ::arraign::
 ::assign::
 ::benign::
-:?:campaign:: ; covers "countercampaign". no such words as -campaing
+::campaign:: 
 ::champaign::
 ::codesign::
 ::coign::
@@ -3106,12 +3105,11 @@ Return
 ::consign::
 ::coreign::
 ::cosign::
-;::countercampaign::
 ::countersign::
 ::deign::
 ::deraign::
 ::design::
-::digidesign:: ; Company name
+::digidesign::
 ::eloign::
 ::ensign::
 ::feign::
@@ -3146,11 +3144,8 @@ Return
 ::json::
 ::hell::
 ::hm::
-:*:hm::
 ::ugh::
-:*:ugh::
 ::ggi::
-:?*:_::
 ::i.e::
 ::shit::
 ::gcc::
@@ -3176,9 +3171,6 @@ Return
 ::ah::
 ::np::
 ::ty::
-::ll::
-::re::
-::ve::
 ::go::
 ::qt::
 ::vs::
@@ -3333,7 +3325,7 @@ Return
 ::json::
 Return  ; This makes the above hotstrings do nothing so that they override the ign->ing rule below.
 
-#Hotstring B T C k-1 ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).; Turn back on automatic backspacing for all subsequent hotstrings.
+#Hotstring B T C k-1
 ::vms::VMs
 ::sxe::SXe
 ::ips::IPs
@@ -3374,14 +3366,11 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ti::it
 ::si::is
 ::ew::we
-; ::me::me
 ::ot::to
 ::fo::of
 ::ni::in
 ::fi::if
-; ::on::on
 ::pu::up
-; ::no::no
 ::od::do
 ::ro::or
 ::sa::as
@@ -3390,12 +3379,34 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ma::am
 ::eb::be
 ::eh::he
-; ::so::so
 ::ih::hi
 ::bc::because
 ::cb::because
 ::qt::Qt::
 ::istn::isn't
+::ato::to
+::bto::to
+::cto::to
+::dto::to
+::eto::to
+::fto::to
+::gto::to
+::hto::to
+::ito::to
+::jto::to
+::kto::to
+::lto::to
+::mto::to
+::oto::to
+::qto::to
+::rto::to
+::sto::to
+::tto::to
+::uto::to
+::vto::to
+::wto::to
+::yto::to
+::zto::to
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
@@ -3404,7 +3415,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:blities::bilities
 :?:bilty::bility
 :?:blity::bility
-:?:, btu::, but ; Not just replacing "btu", as that is a unit of heat.
+:?:, btu::, but
 :?:; btu::; but
 :?:n;t::n't
 :?:nt'::n't
@@ -3414,9 +3425,11 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:re'::'re
 :?:;ve::'ve
 :?:ve'::'ve
-::sice::since  ; Must precede the following line!
+:?:;nt::'nt
+:?:;d::'d
+:?:;s::'s
+::sice::since
 :?:sice::sive
-;:?:t eh:: the   ; converts "but eh" to "bu the"
 :?:t hem:: them
 :?:toin::tion
 :?:iotn::tion
@@ -3501,6 +3514,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:ainign::aining
 :?:gni::ing
 :?:ign::ing
+:?:ngi::ing
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -3533,7 +3547,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:critiz::criticiz
 :*:desicant::desiccant
 :*:desicat::desiccat
-::develope::develop  ; Omit asterisk so that it doesn't disrupt the typing of developed/developer.
+::develope::develop
 :*:dissapoint::disappoint
 :*:divsion::division
 :*:dcument::document
@@ -3597,7 +3611,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:Unfo::Unfortunately, `
 :*:priv::privilege `
 :*:envi::environment `
-:*:simult::simultaneously `
+:*:simult::simultaneous`
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
@@ -4207,7 +4221,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::batery::battery
 ::cattleship::battleship
 ::bve::be
-:c:eb::be ; EB is legit?
 ::beachead::beachhead
 ::beatiful::beautiful
 ::beautyfull::beautiful
@@ -5690,7 +5703,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::habaeus::habeas
 ::habeus::habeas
 ::habsbourg::Habsburg
-:c:hda::had
+::hda::had
 ::hadbeen::had been
 ::haemorrage::haemorrhage
 ::hallowean::Halloween
@@ -6071,8 +6084,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::journies::journeys
 ::juadaism::Judaism
 ::juadism::Judaism
-::judgement::judgment ;  "without the -e is preferred in law globally, and in American English"
-::judgements::judgments ;  "without the -e is preferred in law globally, and in American English"
+::judgment::judgement
 ::jugment::judgment
 ::judical::judicial
 ::juducial::judicial
@@ -6291,7 +6303,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::mileau::milieu
 ::mileu::milieu
 ::melieux::milieux
-; ::miliary::military ; miliary dermatitis
+::miliary::military
 ::miliraty::military
 ::millitary::military
 ::miltary::military
@@ -6585,7 +6597,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::origional::original
 ::orginally::originally
 ::origanaly::originally
-; ::originall::originally, original
+::originall::originally
 ::originaly::originally
 ::originially::originally
 ::originnally::originally
@@ -7394,7 +7406,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::smoothe::smooth
 ::smoothes::smooths
 ::sneeks::sneaks
-; ::snese::sneeze ; More likely to be mistyped "sense" than misspelled "sneeze"
+::snese::sneeze
 ::sot hat::so that
 ::soical::social
 ::socalism::socialism
@@ -7466,7 +7478,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::stainlees::stainless
 ::stnad::stand
 ::standars::standards
-; ::strat::start   Stratocaster
+::strat::start
 ::statment::statement
 ::statememts::statements
 ::statments::statements
@@ -7798,7 +7810,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::threee::three
 ::threshhold::threshold
 ::throuhg::through
-;::thru::through       ;used as an alternate spelling in some contexts
 ::thoughout::throughout
 ::througout::throughout
 ::tiget::tiger
@@ -8067,7 +8078,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::whant::want
 ::wnat::want
 ::wan tit::want it
-; ::wanna::want to ;INTENTIONAL
 ::wnated::wanted
 ::whants::wants
 ::wnats::wants
@@ -8082,7 +8092,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::wya::way
 ::wayword::wayward
 ::weaponary::weaponry
-;::wether::weather   ; ambiguous: leave uncorrected
+::wether::weather
 ::wendsay::Wednesday
 ::wensday::Wednesday
 ::wiegh::weigh
@@ -8121,7 +8131,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::wille::will
 ::wiull::will
 ::willbe::will be
-;::will of::will have  ; "will of the voters"
 ::willingless::willingness
 ::windoes::windows
 ::wintery::wintry
@@ -8189,274 +8198,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::sionist::Zionist
 ::sionists::Zionists
 
-;------------------------------------------------------------------------------
-; Ambiguous entries.  Where desired, pick the one that's best for you, edit,
-; and move into the above list or, preferably, the autocorrect user file.
-;------------------------------------------------------------------------------
-/*
-:*:cooperat::coöperat
-::(c)::©
-::(r)::®
-::(tm)::™
-::a gogo::à gogo
-::abbe::abbé
-::accension::accession, ascension
-::achive::achieve, archive
-::achived::achieved, archived
-::ackward::awkward, backward
-::addres::address, adders
-::adress::address, A dress
-::adressing::addressing, dressing
-::afair::affair, afar, Afar (African place), a fair, acronym "as far as I recall"
-::affort::afford, effort
-::agin::again, a gin, aging
-::agina::again, angina
-::ago-go::àgo-go
-::aledge::allege, a ledge
-::alot::a lot, allot
-::alusion::allusion, illusion
-::amature::armature, amateur
-::anu::añu
-::anual::annual, anal
-::anual::annual, manual
-::aparent::apparent, a parent
-::apon::upon, apron
-::appealling::appealing, appalling
-::archaoelogy::archeology, archaeology
-::archaology::archeology, archaeology
-::archeaologist::archeologist, archaeologist
-::archeaologists::archeologists, archaeologists
-::assosication::assassination, association
-::attaindre::attainder, attained
-::attened::attended or attend
-::baout::about, bout
-::beggin::begin, begging
-::behavour::behavior, behaviour
-::belives::believes, beliefs
-::boaut::bout, boat, about
-::Bon::Bön
-
-::assasined::assassinated ; Broken by ":*:assasin::", but no great loss.
-::Bootes::Boötes
-::bric-a-brac::bric-à-brac
-::buring::burying, burning, burin, during
-::busineses::business, businesses
-::cafe::café
-::calaber::caliber, calibre
-::calander::calendar, calender, colander
-::cancelled::canceled  ; commonwealth vs US
-::cancelling::canceling  ; commonwealth vs US
-::canon::cañon
-::cant::cannot, can not, can't
-::carcas::carcass, Caracas
-::carmel::caramel, carmel-by-the-sea
-::Cataline::Catiline, Catalina
-::censur::censor, censure
-::ceratin::certain, keratin
-::cervial::cervical, servile, serval
-::chasr::chaser, chase
-::clera::clear, sclera
-::comander::commander, commandeer
-::competion::competition, completion
-::continuum::continuüm
-::coopt::coöpt
-::coordinat::coördinat
-::coorperation::cooperation, corporation
-::coudl::could, cloud
-::councellor::councillor, counselor, councilor
-::councellors::councillors, counselors, councilors
-::coururier::courier, couturier
-::coverted::converted, covered, coveted
-::cpoy::coy, copy
-::creme::crème
-::dael::deal, dial, dahl
-::deram::dram, dream
-::desparate::desperate, disparate
-::diea::idea, die
-::dieing::dying, dyeing
-::diversed::diverse, diverged
-::divorce::divorcé
-::Dona::Doña
-::doub::doubt, daub
-::dyas::dryas, Dyas (Robert Dyas is a hardware chain), dais
-::efford::effort, afford
-::effords::efforts, affords
-::eigth::eighth, eight
-::electic::eclectic, electric
-::electon::election, electron
-::elite::élite
-::emition::emission, emotion
-::emminent::eminent, imminent
-::empirial::empirical, imperial
-::Enlish::English, enlist
-::erally::orally, really
-::erested::arrested, erected
-::ethose::those, ethos
-::etude::étude
-::expose::exposé
-::extint::extinct, extant
-::eyar::year, eyas
-::eyars::years, eyas
-::eyasr::years, eyas
-::fiel::feel, field, file, phial
-::fiels::feels, fields, files, phials
-::firts::flirts, first
-::fleed::fled, freed
-::fontrier::fontier, frontier
-::fro::for, to and fro, (a)fro
-::futhroc::futhark, futhorc
-::gae::game, Gael, gale
-::gaurd::guard, gourd
-::gogin::going, Gauguin
-::Guaduloupe::Guadalupe, Guadeloupe
-::Guadulupe::Guadalupe, Guadeloupe
-::guerrila::guerilla, guerrilla
-::guerrilas::guerillas, guerrillas
-::haev::have, heave
-::Hallowean::Hallowe'en, Halloween
-::herad::heard, Hera
-::housr::hours, house
-::hten::then, hen, the
-::htere::there, here
-::humer::humor, humour
-::humerous::humorous, humourous, humerus
-::hvea::have, heave
-::idesa::ideas, ides
-::imaginery::imaginary, imagery
-::imanent::eminent, imminent
-::iminent::eminent, imminent, immanent
-::indispensable::indispensible ; commonwealth vs US?
-::indispensible::indispensable ; commonwealth vs US?
-::inheritage::heritage, inheritance
-::inspite::in spite, inspire
-::interbread::interbreed, interbred
-::intered::interred, interned
-::inumerable::enumerable, innumerable
-::israelies::Israelis, Israelites
-::labatory::lavatory, laboratory
-::labled::labelled, labeled
-::lame::lamé
-::leanr::lean, learn, leaner
-::lible::libel, liable
-::liscense::license, licence
-::lisence::license, licence
-::lisense::license, licence
-::lonly::lonely, only
-::maked::marked, made
-::managable::manageable, manageably
-::manoeuver::maneuver ; Commonwealth vs US?
-::manouver::maneuver, manoeuvre
-::manouver::manoeuvre ; Commonwealth vs US?
-::manouverability::maneuverability, manoeuvrability, manoeuverability
-::manouverable::maneuverable, manoeuvrable
-::manouvers::maneuvers, manoeuvres
-::manuever::maneuver, manoeuvre
-::manuevers::maneuvers, manoeuvres
-::mear::wear, mere, mare
-::meranda::veranda, Miranda
-::Metis::Métis
-::mit::mitt, M.I.T., German "with"
-::monestary::monastery, monetary
-::moreso::more, more so
-::muscels::mussels, muscles
-::ne::né
-::neice::niece, nice
-::neigbour::neighbour, neighbor
-::neigbouring::neighbouring, neighboring
-::neigbours::neighbours, neighbors
-::nto:: not ; Replaced with case sensitive for NTO acronym.
-::od::do
-::oging::going, ogling
-::ole::olé
-::onot::note, not
-::opium::opïum
-::ore::öre
-::ore::øre
-::orgin::origin, organ
-::palce::place, palace
-::pate::pâte
-::pate::pâté
-::performes::performed, performs
-::personel::personnel, personal
-::positon::position, positron
-::preëmpt
-::premiere::première
-::premiered::premièred
-::premieres::premières
-::premiering::premièring
-::procede::proceed, precede
-::proceded::proceeded, preceded
-::procedes::proceeds, precedes
-::proceding::proceeding, preceding
-::profesion::profusion, profession
-::progrom::pogrom, program
-::progroms::pogroms, programs
-::prominately::prominently, predominately
-::qtuie::quite, quiet
-::qutie::quite, quiet
-::reenter::reënter
-::relized::realised, realized
-::repatition::repetition, repartition
-::residuum::residuüm
-::restraunt::restraint, restaurant
-::resume::résumé
-::rigeur::rigueur, rigour, rigor
-::role::rôle
-::rose::rosé
-::sasy::says, sassy
-::scholarstic::scholastic, scholarly
-::secceeded::seceded, succeeded
-::seceed::succeed, secede
-::seceeded::succeeded, seceded
-::sepulchure::sepulchre, sepulcher
-::sepulcre::sepulchre, sepulcher
-::shamen::shaman, shamans
-::sheat::sheath, sheet, cheat
-::sieze::seize, size
-::siezed::seized, sized
-::siezing::seizing, sizing
-::sinse::sines, since
-::snese::sneeze, sense
-::sotyr::satyr, story
-::sould::could, should, sold
-::speciallized::specialised, specialized
-::specif::specific, specify
-::spects::aspects, expects
-::strat::start, strata
-::stroy::story, destroy
-::surley::surly, surely
-::surrended::surrounded, surrendered
-::thast::that, that's
-::theather::theater, theatre
-::ther::there, their, the
-::thse::these, those
-::thikning::thinking, thickening
-::throught::thought, through, throughout
-::tiem::time, Tim
-::tiome::time, tome
-::tourch::torch, touch
-::transcripting::transcribing, transcription
-::travelling::traveling   ; commonwealth vs US
-::troups::troupes, troops
-::turnk::turnkey, trunk
-::uber::über
-::unmanouverable::unmaneuverable, unmanoeuvrable
-::unsed::used, unused, unsaid
-::vigeur::vigueur, vigour, vigor
-::villin::villi, villain, villein
-::vistors::visitors, vistas
-::wanna::want to - often deliberate
-::weild::wield, wild
-::wholy::wholly, holy
-::wich::which, witch
-::withdrawl::withdrawal, withdraw
-::woulf::would, wolf
-::ws::was, www.example.ws
-::Yementite::Yemenite, Yemeni
-:?:oology::oölogy
-:?:t he:: the  ; Can't use this. Needs to be cleverer.
-*/
-
 ;-------------------------------------------------------------------------------
 ;  Capitalise dates
 ;-------------------------------------------------------------------------------
@@ -8469,9 +8210,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::sunday::Sunday
 ::january::January
 ::february::February
-; ::march::March  ; Commented out because it matches the common word "march".
 ::april::April
-; ::may::May  ; Commented out because it matches the common word "may".
 ::june::June
 ::july::July
 ::august::August
@@ -8489,23 +8228,18 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ; Anything below this point was added to the script by the user via the Win+H hotkey.
 ;-------------------------------------------------------------------------------
 ::ahven't::haven't
-::ahven;t::haven't
 ::ahvent::haven't
 ::arent::aren't
 ::arn't::aren't
 ::cant'::can't
 ::cant::can't
 ::childrens::children's
-::children;s::children's
 ::companys::company's
-::company;s::company's
 ::coudln't::couldn't
-::coudln;t::couldn't
 ::coudn't::couldn't
 ::couldnt::couldn't
 ::didint::didn't
 ::didnt::didn't
-::didn;t::didn't
 ::didtn::didn't
 ::dno't::don't
 ::dnot::don't
@@ -8515,78 +8249,48 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::doenst::doesn't
 ::does't::doesn't
 ::doesnt::doesn't
-::doesn;t::doesn't
 ::doest::doesn't
 ::doestn::doesn't
 ::dont::don't
-::don;t::don't
 ::dosen't::doesn't
 ::dosn't::doesn't
 ::dotn::don't
 ::gentlemens::gentlemen's
-::gentlemen;s::gentlemen's
 ::hadnt::hadn't
-::hadn;t::hadn't
 ::hasnt::hasn't
 ::havent::haven't
 ::heres::here's
-::here;s::here's
 ::hes::he's
-::he;s::he's
 ::hsan't::hasn't
 ::i'd::I'd
-::i;d::I'd
 ::i'll::I'll
-::i;ll::I'll
 ::i'm::I'm
-::i;m::I'm
 ::i've::I've
-::i;d::I'd
 ::id'::I'd
 ::im::I'm
 ::isnt'::isn't
 ::isnt::isn't
-::isn;t::isn't
-::it;s::it's
 ::its'::it's
 ::iv'e::I've
-::iv;e::I've
 ::ive::I've
-::let;s::let's
 ::lets::let's
 ::odnt::don't
 ::taht's::that's
 ::thast::that's
 ::thats::that's
-::that;s::that's
 ::theres::there's
-::there;s::there's
-::they;l::they'll
-::they;r::they're
-::they;v::they've
 ::theyd::they'd
 ::theyll::they'll
-::they;ll::they'll
 ::theyre::they're
-::they;re::they're
 ::theyve::they've
-::they;ve::they've
 ::ti's::it's
 ::todays::today's
 ::w'ere::we're
 ::wasnt::wasn't
-::wasn;t::wasn't
-::we;d::we'd
-::we;re::we're
 ::wer'e::we're
 ::wern't::weren't
 ::werent::weren't
-::weren;t::weren't
-::what;s::what's
 ::whats::what's
-::what;s::what's
-::where;s::where's
-::who;s::who's
 ::wnot::won't
 ::wo'nt::won't
 ::womens::women's
@@ -8599,16 +8303,13 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::yorue::you're
 ::you'er::you're
 ::youd::you'd
-::you;d::you'd
 ::youe'r::you're
 ::youer::you're
 ::youll::you'll
-::you;ll::you'll
 ::your'e::you're
 ::youre::you're
 ::youv'e::you've
 ::youve::you've
-::you;ve::you've
 ::repetative::repetitive
 ::repetetive::repetitive
 ::deterant::deterrent
@@ -9049,1013 +8750,4 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
 #include %A_ScriptDir%\generatedwords.ahk
-
-
-; custom made based on frequently used
-::ubmodule::submodule
-::sbmodule::submodule
-::sumodule::submodule
-::subodule::submodule
-::submdule::submodule
-::submoule::submodule
-::submodle::submodule
-::submodue::submodule
-::submodul::submodule
-::usbmodule::submodule
-::ubsmodule::submodule
-::ubmsodule::submodule
-::ubmosdule::submodule
-::ubmodsule::submodule
-::ubmodusle::submodule
-::ubmodulse::submodule
-::ubmodules::submodule
-::sbumodule::submodule
-::sbmuodule::submodule
-::sbmoudule::submodule
-::sbmoduule::submodule
-::sumbodule::submodule
-::sumobdule::submodule
-::sumodbule::submodule
-::sumoduble::submodule
-::sumodulbe::submodule
-::sumoduleb::submodule
-::subomdule::submodule
-::subodmule::submodule
-::subodumle::submodule
-::subodulme::submodule
-::subodulem::submodule
-::submdoule::submodule
-::submduole::submodule
-::submduloe::submodule
-::submduleo::submodule
-::submoudle::submodule
-::submoulde::submodule
-::submouled::submodule
-::submodlue::submodule
-::submodleu::submodule
-::submoduel::submodule
-::otepad::notepad
-::ntepad::notepad
-::noepad::notepad
-::notpad::notepad
-::notead::notepad
-::notepd::notepad
-::notepa::notepad
-::ontepad::notepad
-::otnepad::notepad
-::otenpad::notepad
-::otepnad::notepad
-::otepand::notepad
-::otepadn::notepad
-::ntoepad::notepad
-::nteopad::notepad
-::ntepoad::notepad
-::ntepaod::notepad
-::ntepado::notepad
-::noetpad::notepad
-::noeptad::notepad
-::noepatd::notepad
-::noepadt::notepad
-::notpead::notepad
-::notpaed::notepad
-::notpade::notepad
-::noteapd::notepad
-::noteadp::notepad
-::notepda::notepad
-::ompilation::compilation
-::cmpilation::compilation
-::copilation::compilation
-::comilation::compilation
-::complation::compilation
-::compiation::compilation
-::compiltion::compilation
-::compilaion::compilation
-::compilaton::compilation
-::compilatin::compilation
-::compilatio::compilation
-::ocmpilation::compilation
-::omcpilation::compilation
-::ompcilation::compilation
-::ompiclation::compilation
-::ompilcation::compilation
-::ompilaction::compilation
-::ompilatcion::compilation
-::ompilaticon::compilation
-::ompilatiocn::compilation
-::ompilationc::compilation
-::cmopilation::compilation
-::cmpoilation::compilation
-::cmpiolation::compilation
-::cmpiloation::compilation
-::cmpilaotion::compilation
-::cmpilatoion::compilation
-::cmpilatioon::compilation
-::copmilation::compilation
-::copimlation::compilation
-::copilmation::compilation
-::copilamtion::compilation
-::copilatmion::compilation
-::copilatimon::compilation
-::copilatiomn::compilation
-::copilationm::compilation
-::comiplation::compilation
-::comilpation::compilation
-::comilaption::compilation
-::comilatpion::compilation
-::comilatipon::compilation
-::comilatiopn::compilation
-::comilationp::compilation
-::compliation::compilation
-::complaition::compilation
-::complatiion::compilation
-::compialtion::compilation
-::compiatlion::compilation
-::compiatilon::compilation
-::compiatioln::compilation
-::compiationl::compilation
-::compiltaion::compilation
-::compiltiaon::compilation
-::compiltioan::compilation
-::compiltiona::compilation
-::compilaiton::compilation
-::compilaiotn::compilation
-::compilaiont::compilation
-::compilatoin::compilation
-::compilatoni::compilation
-::compilatino::compilation
-::bjects::objects
-::ojects::objects
-::obects::objects
-::objcts::objects
-::objecs::objects
-::bojects::objects
-::bjoects::objects
-::bjeocts::objects
-::bjecots::objects
-::bjectos::objects
-::bjectso::objects
-::ojbects::objects
-::ojebcts::objects
-::ojecbts::objects
-::ojectbs::objects
-::ojectsb::objects
-::obejcts::objects
-::obecjts::objects
-::obectjs::objects
-::obectsj::objects
-::objcets::objects
-::objctes::objects
-::objctse::objects
-::objetcs::objects
-::objetsc::objects
-::objecst::objects
-::truct::struct
-::sruct::struct
-::stuct::struct
-::strct::struct
-::struc::struct
-::tsruct::struct
-::trsuct::struct
-::trusct::struct
-::trucst::struct
-::tructs::struct
-::srtuct::struct
-::srutct::struct
-::sructt::struct
-::sturct::struct
-::stucrt::struct
-::stuctr::struct
-::strcut::struct
-::strctu::struct
-::strutc::struct
-::ypedef::typedef
-::tpedef::typedef
-::tyedef::typedef
-::typdef::typedef
-::typeef::typedef
-::typedf::typedef
-::typede::typedef
-::ytpedef::typedef
-::yptedef::typedef
-::ypetdef::typedef
-::ypedtef::typedef
-::ypedetf::typedef
-::ypedeft::typedef
-::tpyedef::typedef
-::tpeydef::typedef
-::tpedyef::typedef
-::tpedeyf::typedef
-::tpedefy::typedef
-::tyepdef::typedef
-::tyedpef::typedef
-::tyedepf::typedef
-::tyedefp::typedef
-::typdeef::typedef
-::typeedf::typedef
-::typeefd::typedef
-::typedfe::typedef
-::nterrupts::interrupts
-::iterrupts::interrupts
-::inerrupts::interrupts
-::intrrupts::interrupts
-::interupts::interrupts
-::interrpts::interrupts
-::interruts::interrupts
-::interrups::interrupts
-::niterrupts::interrupts
-::ntierrupts::interrupts
-::nteirrupts::interrupts
-::nterirupts::interrupts
-::nterriupts::interrupts
-::nterruipts::interrupts
-::nterrupits::interrupts
-::nterruptis::interrupts
-::nterruptsi::interrupts
-::itnerrupts::interrupts
-::itenrrupts::interrupts
-::iternrupts::interrupts
-::iterrnupts::interrupts
-::iterrunpts::interrupts
-::iterrupnts::interrupts
-::iterruptns::interrupts
-::iterruptsn::interrupts
-::inetrrupts::interrupts
-::inertrupts::interrupts
-::inerrtupts::interrupts
-::inerrutpts::interrupts
-::inerruptts::interrupts
-::intrerupts::interrupts
-::intrreupts::interrupts
-::intrruepts::interrupts
-::intrrupets::interrupts
-::intrruptes::interrupts
-::intrruptse::interrupts
-::interurpts::interrupts
-::interuprts::interrupts
-::interuptrs::interrupts
-::interuptsr::interrupts
-::interrputs::interrupts
-::interrptus::interrupts
-::interrptsu::interrupts
-::interrutps::interrupts
-::interrutsp::interrupts
-::interrupst::interrupts
-::Des::Does
-::Dos::Does
-::Doe::Does
-::oDes::Does
-::oeDs::Does
-::oesD::Does
-::Deos::Does
-::Deso::Does
-::Dose::Does
-::egister::register
-::rgister::register
-::reister::register
-::regster::register
-::regiter::register
-::regiser::register
-::registr::register
-::registe::register
-::ergister::register
-::egrister::register
-::egirster::register
-::egisrter::register
-::egistrer::register
-::egisterr::register
-::rgeister::register
-::rgiester::register
-::rgiseter::register
-::rgisteer::register
-::reigster::register
-::reisgter::register
-::reistger::register
-::reistegr::register
-::reisterg::register
-::regsiter::register
-::regstier::register
-::regsteir::register
-::regsteri::register
-::regitser::register
-::regitesr::register
-::regiters::register
-::regisetr::register
-::regisert::register
-::registre::register
-::sbmodules::submodules
-::sumodules::submodules
-::subodules::submodules
-::submdules::submodules
-::submoules::submodules
-::submodles::submodules
-::submodues::submodules
-::submoduls::submodules
-::usbmodules::submodules
-::ubsmodules::submodules
-::ubmsodules::submodules
-::ubmosdules::submodules
-::ubmodsules::submodules
-::ubmodusles::submodules
-::ubmodulses::submodules
-::ubmoduless::submodules
-::sbumodules::submodules
-::sbmuodules::submodules
-::sbmoudules::submodules
-::sbmoduules::submodules
-::sumbodules::submodules
-::sumobdules::submodules
-::sumodbules::submodules
-::sumodubles::submodules
-::sumodulbes::submodules
-::sumodulebs::submodules
-::sumodulesb::submodules
-::subomdules::submodules
-::subodmules::submodules
-::subodumles::submodules
-::subodulmes::submodules
-::subodulems::submodules
-::subodulesm::submodules
-::submdoules::submodules
-::submduoles::submodules
-::submduloes::submodules
-::submduleos::submodules
-::submduleso::submodules
-::submoudles::submodules
-::submouldes::submodules
-::submouleds::submodules
-::submoulesd::submodules
-::submodlues::submodules
-::submodleus::submodules
-::submodlesu::submodules
-::submoduels::submodules
-::submoduesl::submodules
-::submodulse::submodules
-::ulleted::bulleted
-::blleted::bulleted
-::buleted::bulleted
-::bullted::bulleted
-::bulleed::bulleted
-::bulletd::bulleted
-::bullete::bulleted
-::ublleted::bulleted
-::ulbleted::bulleted
-::ullbeted::bulleted
-::ullebted::bulleted
-::ulletbed::bulleted
-::ulletebd::bulleted
-::ulletedb::bulleted
-::bluleted::bulleted
-::bllueted::bulleted
-::blleuted::bulleted
-::blletued::bulleted
-::blleteud::bulleted
-::blletedu::bulleted
-::bulelted::bulleted
-::buletled::bulleted
-::buleteld::bulleted
-::buletedl::bulleted
-::bullteed::bulleted
-::bulleetd::bulleted
-::bulleedt::bulleted
-::bulletde::bulleted
-::efs::defs
-::dfs::defs
-::edfs::defs
-::efds::defs
-::efsd::defs
-::dfes::defs
-::dfse::defs
-::desf::defs
-::msked::masked
-::maked::masked
-::maskd::masked
-::maske::masked
-::amsked::masked
-::asmked::masked
-::askmed::masked
-::askemd::masked
-::askedm::masked
-::msaked::masked
-::mskaed::masked
-::mskead::masked
-::mskeda::masked
-::maksed::masked
-::makesd::masked
-::makeds::masked
-::masekd::masked
-::masedk::masked
-::maskde::masked
-::reezing::freezing
-::frezing::freezing
-::freezng::freezing
-::freezig::freezing
-::freezin::freezing
-::rfeezing::freezing
-::refezing::freezing
-::reefzing::freezing
-::reezfing::freezing
-::reezifng::freezing
-::reezinfg::freezing
-::reezingf::freezing
-::ferezing::freezing
-::feerzing::freezing
-::feezring::freezing
-::feezirng::freezing
-::feezinrg::freezing
-::feezingr::freezing
-::frezeing::freezing
-::frezieng::freezing
-::frezineg::freezing
-::frezinge::freezing
-::freeizng::freezing
-::freeinzg::freezing
-::freeingz::freezing
-::freeznig::freezing
-::freezngi::freezing
-::freezign::freezing
-::orting::sorting
-::srting::sorting
-::soting::sorting
-::sortng::sorting
-::sortig::sorting
-::sortin::sorting
-::osrting::sorting
-::orsting::sorting
-::ortsing::sorting
-::ortisng::sorting
-::ortinsg::sorting
-::ortings::sorting
-::sroting::sorting
-::srtoing::sorting
-::srtiong::sorting
-::srtinog::sorting
-::srtingo::sorting
-::sotring::sorting
-::sotirng::sorting
-::sotinrg::sorting
-::sotingr::sorting
-::soritng::sorting
-::sorintg::sorting
-::soringt::sorting
-::sortnig::sorting
-::sortngi::sorting
-::sortign::sorting
-::mplitude::amplitude
-::aplitude::amplitude
-::amlitude::amplitude
-::ampitude::amplitude
-::ampltude::amplitude
-::ampliude::amplitude
-::amplitde::amplitude
-::amplitue::amplitude
-::amplitud::amplitude
-::maplitude::amplitude
-::mpalitude::amplitude
-::mplaitude::amplitude
-::mpliatude::amplitude
-::mplitaude::amplitude
-::mplituade::amplitude
-::mplitudae::amplitude
-::mplitudea::amplitude
-::apmlitude::amplitude
-::aplmitude::amplitude
-::aplimtude::amplitude
-::aplitmude::amplitude
-::aplitumde::amplitude
-::aplitudme::amplitude
-::aplitudem::amplitude
-::amlpitude::amplitude
-::amliptude::amplitude
-::amlitpude::amplitude
-::amlitupde::amplitude
-::amlitudpe::amplitude
-::amlitudep::amplitude
-::ampiltude::amplitude
-::ampitlude::amplitude
-::ampitulde::amplitude
-::ampitudle::amplitude
-::ampitudel::amplitude
-::ampltiude::amplitude
-::ampltuide::amplitude
-::ampltudie::amplitude
-::ampltudei::amplitude
-::ampliutde::amplitude
-::ampliudte::amplitude
-::ampliudet::amplitude
-::amplitdue::amplitude
-::amplitdeu::amplitude
-::amplitued::amplitude
-::ttenuation::attenuation
-::atenuation::attenuation
-::attnuation::attenuation
-::atteuation::attenuation
-::attenation::attenuation
-::attenution::attenuation
-::attenuaion::attenuation
-::attenuaton::attenuation
-::attenuatin::attenuation
-::attenuatio::attenuation
-::tatenuation::attenuation
-::ttaenuation::attenuation
-::tteanuation::attenuation
-::ttenauation::attenuation
-::ttenuaation::attenuation
-::atetnuation::attenuation
-::atentuation::attenuation
-::atenutation::attenuation
-::atenuattion::attenuation
-::attneuation::attenuation
-::attnueation::attenuation
-::attnuaetion::attenuation
-::attnuateion::attenuation
-::attnuatieon::attenuation
-::attnuatioen::attenuation
-::attnuatione::attenuation
-::atteunation::attenuation
-::atteuantion::attenuation
-::atteuatnion::attenuation
-::atteuatinon::attenuation
-::atteuationn::attenuation
-::attenaution::attenuation
-::attenatuion::attenuation
-::attenatiuon::attenuation
-::attenatioun::attenuation
-::attenationu::attenuation
-::attenutaion::attenuation
-::attenutiaon::attenuation
-::attenutioan::attenuation
-::attenutiona::attenuation
-::attenuaiton::attenuation
-::attenuaiotn::attenuation
-::attenuaiont::attenuation
-::attenuatoin::attenuation
-::attenuatoni::attenuation
-::attenuatino::attenuation
-::lue::clue
-::cle::clue
-::clu::clue
-::lcue::clue
-::cule::clue
-::cuel::clue
-::cleu::clue
-::nitial::initial
-::iitial::initial
-::intial::initial
-::iniial::initial
-::inital::initial
-::initil::initial
-::initia::initial
-::niitial::initial
-::iintial::initial
-::iitnial::initial
-::iitinal::initial
-::iitianl::initial
-::iitialn::initial
-::intiial::initial
-::iniital::initial
-::iniiatl::initial
-::iniialt::initial
-::initail::initial
-::initali::initial
-::initila::initial
-::emaphors::semaphors
-::smaphors::semaphors
-::seaphors::semaphors
-::semphors::semaphors
-::semahors::semaphors
-::semapors::semaphors
-::semaphrs::semaphors
-::semaphos::semaphors
-::semaphor::semaphors
-::esmaphors::semaphors
-::emsaphors::semaphors
-::emasphors::semaphors
-::emapshors::semaphors
-::emaphsors::semaphors
-::emaphosrs::semaphors
-::emaphorss::semaphors
-::smeaphors::semaphors
-::smaephors::semaphors
-::smapehors::semaphors
-::smapheors::semaphors
-::smaphoers::semaphors
-::smaphores::semaphors
-::smaphorse::semaphors
-::seamphors::semaphors
-::seapmhors::semaphors
-::seaphmors::semaphors
-::seaphomrs::semaphors
-::seaphorms::semaphors
-::seaphorsm::semaphors
-::sempahors::semaphors
-::semphaors::semaphors
-::semphoars::semaphors
-::semphoras::semaphors
-::semphorsa::semaphors
-::semahpors::semaphors
-::semahoprs::semaphors
-::semahorps::semaphors
-::semahorsp::semaphors
-::semapohrs::semaphors
-::semaporhs::semaphors
-::semaporsh::semaphors
-::semaphros::semaphors
-::semaphrso::semaphors
-::semaphosr::semaphors
-::ooks::looks
-::loks::looks
-::oloks::looks
-::oolks::looks
-::ookls::looks
-::ooksl::looks
-::lokos::looks
-::lokso::looks
-::loosk::looks
-::cheduled::scheduled
-::sheduled::scheduled
-::sceduled::scheduled
-::schduled::scheduled
-::schedled::scheduled
-::schedued::scheduled
-::scheduld::scheduled
-::csheduled::scheduled
-::chseduled::scheduled
-::chesduled::scheduled
-::chedsuled::scheduled
-::chedusled::scheduled
-::chedulsed::scheduled
-::chedulesd::scheduled
-::cheduleds::scheduled
-::shceduled::scheduled
-::shecduled::scheduled
-::shedculed::scheduled
-::sheducled::scheduled
-::shedulced::scheduled
-::shedulecd::scheduled
-::sheduledc::scheduled
-::scehduled::scheduled
-::scedhuled::scheduled
-::sceduhled::scheduled
-::scedulhed::scheduled
-::scedulehd::scheduled
-::sceduledh::scheduled
-::schdeuled::scheduled
-::schdueled::scheduled
-::schduleed::scheduled
-::scheudled::scheduled
-::scheulded::scheduled
-::scheuledd::scheduled
-::schedlued::scheduled
-::schedleud::scheduled
-::schedledu::scheduled
-::schedueld::scheduled
-::scheduedl::scheduled
-::schedulde::scheduled
-::Tam::Team
-::Tem::Team
-::Tea::Team
-::eTam::Team
-::eaTm::Team
-::eamT::Team
-::Taem::Team
-::Tame::Team
-::Tema::Team
-::wrte::write
-::wrie::write
-::rwite::write
-::riwte::write
-::ritwe::write
-::ritew::write
-::wirte::write
-::witre::write
-::witer::write
-::wrtie::write
-::wrtei::write
-::wriet::write
-::ets::gets
-::gts::gets
-::ges::gets
-::egts::gets
-::etgs::gets
-::etsg::gets
-::gtes::gets
-::gtse::gets
-::clls::calls
-::cals::calls
-::aclls::calls
-::alcls::calls
-::allcs::calls
-::allsc::calls
-::clals::calls
-::cllas::calls
-::cllsa::calls
-::calsl::calls
-::uon::upon
-::upn::upon
-::puon::upon
-::poun::upon
-::ponu::upon
-::uopn::upon
-::uonp::upon
-::upno::upon
-::teir::their
-::thei::their
-::hteir::their
-::hetir::their
-::heitr::their
-::heirt::their
-::tehir::their
-::teihr::their
-::teirh::their
-::thier::their
-::thire::their
-::theri::their
-::ublic::public
-::pblic::public
-::pulic::public
-::publc::public
-::publi::public
-::upblic::public
-::ubplic::public
-::ublpic::public
-::ublipc::public
-::ublicp::public
-::pbulic::public
-::pbluic::public
-::pbliuc::public
-::pblicu::public
-::pulbic::public
-::pulibc::public
-::pulicb::public
-::pubilc::public
-::pubicl::public
-::publci::public
-::nmes::names
-::naes::names
-::anmes::names
-::amnes::names
-::nmaes::names
-::nmeas::names
-::nmesa::names
-::naems::names
-::naesm::names
-::namse::names
-::suff::stuff
-::stff::stuff
-::stuf::stuff
-::tsuff::stuff
-::tusff::stuff
-::tufsf::stuff
-::sutff::stuff
-::suftf::stuff
-::sufft::stuff
-::stfuf::stuff
-::stffu::stuff
-::drvers::drivers
-::drivrs::drivers
-::rdivers::drivers
-::ridvers::drivers
-::rivders::drivers
-::rivedrs::drivers
-::riverds::drivers
-::riversd::drivers
-::dirvers::drivers
-::divrers::drivers
-::diverrs::drivers
-::drviers::drivers
-::drveirs::drivers
-::drveris::drivers
-::drversi::drivers
-::drievrs::drivers
-::driervs::drivers
-::driersv::drivers
-::drivres::drivers
-::drivrse::drivers
-::drivesr::drivers
-::onstruction::construction
-::cnstruction::construction
-::costruction::construction
-::contruction::construction
-::consruction::construction
-::constuction::construction
-::constrction::construction
-::constrution::construction
-::construcion::construction
-::constructon::construction
-::constructin::construction
-::constructio::construction
-::ocnstruction::construction
-::oncstruction::construction
-::onsctruction::construction
-::onstcruction::construction
-::onstrcuction::construction
-::onstrucction::construction
-::cnostruction::construction
-::cnsotruction::construction
-::cnstoruction::construction
-::cnstrouction::construction
-::cnstruoction::construction
-::cnstrucotion::construction
-::cnstructoion::construction
-::cnstructioon::construction
-::cosntruction::construction
-::costnruction::construction
-::costrnuction::construction
-::costrunction::construction
-::costrucntion::construction
-::costructnion::construction
-::costructinon::construction
-::costructionn::construction
-::contsruction::construction
-::contrsuction::construction
-::contrusction::construction
-::contrucstion::construction
-::contructsion::construction
-::contructison::construction
-::contructiosn::construction
-::contructions::construction
-::consrtuction::construction
-::consrutction::construction
-::consructtion::construction
-::consturction::construction
-::constucrtion::construction
-::constuctrion::construction
-::constuctiron::construction
-::constuctiorn::construction
-::constuctionr::construction
-::constrcution::construction
-::constrctuion::construction
-::constrctiuon::construction
-::constrctioun::construction
-::constrctionu::construction
-::construtcion::construction
-::construticon::construction
-::construtiocn::construction
-::construtionc::construction
-::construciton::construction
-::construciotn::construction
-::construciont::construction
-::constructoin::construction
-::constructoni::construction
-::constructino::construction
-::nless::unless
-::uless::unless
-::uness::unless
-::unlss::unless
-::unles::unless
-::nuless::unless
-::nluess::unless
-::nleuss::unless
-::nlesus::unless
-::nlessu::unless
-::ulness::unless
-::ulenss::unless
-::ulesns::unless
-::ulessn::unless
-::unelss::unless
-::unesls::unless
-::unessl::unless
-::unlses::unless
-::unlsse::unless
-::Aso::Also
-::Alo::Also
-::Als::Also
-::lAso::Also
-::lsAo::Also
-::lsoA::Also
-::Aslo::Also
-::Asol::Also
-::Alos::Also
-::undle::bundle
-::bndle::bundle
-::budle::bundle
-::bunle::bundle
-::bunde::bundle
-::bundl::bundle
-::ubndle::bundle
-::unbdle::bundle
-::undble::bundle
-::undlbe::bundle
-::undleb::bundle
-::bnudle::bundle
-::bndule::bundle
-::bndlue::bundle
-::bndleu::bundle
-::budnle::bundle
-::budlne::bundle
-::budlen::bundle
-::bunlde::bundle
-::bunled::bundle
-::bundel::bundle
-::rpos::repos
-::reos::repos
-::erpos::repos
-::epros::repos
-::epors::repos
-::eposr::repos
-::rpeos::repos
-::rpoes::repos
-::rpose::repos
-::reops::repos
-::reosp::repos
-::repso::repos
-::ource::source
-::surce::source
-::sorce::source
-::souce::source
-::soure::source
-::sourc::source
-::osurce::source
-::ousrce::source
-::oursce::source
-::ourcse::source
-::ources::source
-::suorce::source
-::suroce::source
-::surcoe::source
-::surceo::source
-::soruce::source
-::sorcue::source
-::sorceu::source
-::soucre::source
-::soucer::source
-::sourec::source
-::obust::robust
-::rbust::robust
-::robst::robust
-::robut::robust
-::robus::robust
-::orbust::robust
-::obrust::robust
-::oburst::robust
-::obusrt::robust
-::obustr::robust
-::rboust::robust
-::rbuost::robust
-::rbusot::robust
-::rbusto::robust
-::roubst::robust
-::rousbt::robust
-::roustb::robust
-::robsut::robust
-::robstu::robust
-::robuts::robust
-::NVER::NEVER
-::NEER::NEVER
-::NEVR::NEVER
-::NEVE::NEVER
-::ENVER::NEVER
-::EVNER::NEVER
-::EVENR::NEVER
-::EVERN::NEVER
-::NVEER::NEVER
-::NEEVR::NEVER
-::NEERV::NEVER
-::NEVRE::NEVER
-::eing::being
-::beng::being
-::beig::being
-::ebing::being
-::eibng::being
-::einbg::being
-::eingb::being
-::bieng::being
-::bineg::being
-::benig::being
-::bengi::being
-::beign::being
-::sde::side
-::sie::side
-::isde::side
-::idse::side
-::sdie::side
-::sdei::side
-::sied::side
-::eceiver::receiver
-::rceiver::receiver
-::reeiver::receiver
-::reciver::receiver
-::recever::receiver
-::receier::receiver
-::receivr::receiver
-::erceiver::receiver
-::ecreiver::receiver
-::eceriver::receiver
-::eceirver::receiver
-::eceivrer::receiver
-::eceiverr::receiver
-::rceeiver::receiver
-::reeciver::receiver
-::reeicver::receiver
-::reeivcer::receiver
-::reeivecr::receiver
-::reeiverc::receiver
-::reciever::receiver
-::reciveer::receiver
-::recevier::receiver
-::receveir::receiver
-::receveri::receiver
-::receievr::receiver
-::receierv::receiver
-::receivre::receiver
 #If
