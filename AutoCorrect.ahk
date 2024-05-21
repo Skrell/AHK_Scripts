@@ -231,12 +231,34 @@ Return
     !a:: Send, {home}
     +!a:: Send, {SHIFT down}{home}{SHIFT up}
     !;:: Send, {end}
+    
     !+;:: Send, {SHIFT down}{end}{SHIFT up}
+    Hotstring("EndChars", "()[]{}:;,.?!`n `t") 
+    Return
+    
     !+i::   Send {SHIFT down}{UP}{SHIFT up}
+    Hotstring("EndChars", "()[]{}:;,.?!`n `t") 
+    Return
+    
     !+k::   Send {SHIFT down}{DOWN}{SHIFT up}
-    !+,::   Send {SHIFT down}{DOWN}{SHIFT up}
-    !+j::   Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
-    !+l::   Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
+    Hotstring("EndChars", "()[]{}:;,.?!`n `t") 
+    Return
+    
+    !+,::   
+    Send {SHIFT down}{DOWN}{SHIFT up}
+    Hotstring("EndChars", "()[]{}:;,.?!`n `t") 
+    Return
+    
+    !+j::   
+    Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
+    Hotstring("EndChars", "()[]{}:;,.?!`n `t") 
+    Return
+    
+    !+l::   
+    Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
+    Hotstring("EndChars", "()[]{}:;,.?!`n `t") 
+    Return
+    
     ; <^!j::  Send {LCtrl down}{LEFT}{LCtrl up}
     ; <^!l::  Send {LCtrl down}{RIGHT}{LCtrl up}
     ; <^!i::  Send {LCtrl down}{UP}{LCtrl up}
@@ -8262,6 +8284,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::dno't::don't
 ::dnot::don't
 ::do'nt::don't
+::deosnt::doesn't
 ::doens't::doesn't
 ::doens::doesn't
 ::doenst::doesn't
