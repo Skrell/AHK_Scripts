@@ -243,11 +243,29 @@ Return
     ; <^!k::  Send {LCtrl down}{DOWN}{LCtrl up}
     ; <^+!j:: Send {LCtrl down}{LShift down}{LEFT}{LShift up}{LCtrl up}
     ; <^+!l:: Send {LCtrl down}{LShift down}{RIGHT}{LShift up}{LCtrl up}
-    !i:: Send {UP}
+    !i:: 
+    Hotstring("EndChars", "")
+    Send {UP}
+    Return
+    
     !k:: Send {DOWN}
+    Hotstring("EndChars", "")
+    Return
+    
     !,:: Send {DOWN}
+    Hotstring("EndChars", "")
+    Return
+    
     !j:: Send {LCtrl down}{LEFT}{LCtrl up}
+    Hotstring("EndChars", "")
+    Return
+    
     !l:: Send {LCtrl down}{RIGHT}{LCtrl up}
+    Hotstring("EndChars", "")
+    Return
+    
+    ~SPACE:: Hotstring("EndChars", "()[]{}:;,.?!`n `t") 
+    
     #+s::Return
 #If
 
