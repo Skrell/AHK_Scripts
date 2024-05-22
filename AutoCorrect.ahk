@@ -16,6 +16,7 @@ dummyFunction1() {
 #WinActivateForce
 #NoEnv
 #SingleInstance
+#KeyHistory 0
 #MaxHotkeysPerInterval 500
 
 SetBatchLines -1
@@ -763,7 +764,7 @@ Return
 #If
 
 #MaxThreadsPerHotkey 2
-#If !SearchingWindows && (hitTAB || hitCAPS)
+#If !SearchingWindows && hitTAB
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
     while (DrawingRect) {
@@ -968,8 +969,114 @@ Return
 ; Return
 ; #If
 
-!CapsLock::CycleMin(forward)
-!+CapsLock::CycleMin(!forward)
+!Capslock::
+        ; DetectHiddenWindows, On
+        Critical On
+        hitCAPS := True
+        
+        totalMenuItemCount := 0
+        onlyTitleFound := ""
+        winArray := []
+        winAssoc := {}
+        winArraySort := []
+        
+        WinGet, id, list
+        Loop, %id%
+        {
+            this_ID := id%A_Index%
+            WinGetTitle, title, ahk_id %this_ID%
+            WinGet, procName, ProcessName , ahk_id %this_ID%
+            WinGet, minState, MinMax, ahk_id %this_ID%
+            
+            If !IsAltTabWindow(this_ID)
+                continue
+            
+            If (minState > -1)
+                continue
+                
+            desknum := VD.getDesktopNumOfWindow(title)
+            If desknum <= 0
+                continue
+            finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
+            winArray.Push(finalTitle)
+        }
+        
+        If (winArray.length() == 0) {
+            Tooltip, No matches found...
+            Sleep, 1500
+            Tooltip,
+            Return
+        }
+        
+        For k, v in winArray 
+        {
+            winAssoc[v] := k
+        }
+        
+        For k, v in winAssoc
+        {
+            winArraySort.Push(k)
+        }
+        
+        desktopEntryLast := ""
+
+        Menu, windows, Add
+        Menu, windows, deleteAll
+        For k, ft in winArraySort
+        {
+            splitEntry1 := StrSplit(ft , "^")
+            entry := splitEntry1[1]
+            ahkid := splitEntry1[2]
+            
+            splitEntry2    := StrSplit(entry, "↑")
+            desktopEntry   := splitEntry2[1]
+            procEntry      := Trim(splitEntry2[2])
+            ; procEntry      := RTrim(procEntry)
+            titleEntry     := Trim(splitEntry2[3])
+            
+            If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
+                finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
+            Else
+                continue
+
+            WinGet, Path, ProcessPath, ahk_exe %procEntry%
+            If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
+                Menu, windows, Add
+            }
+            If (finalEntry != "" && titleEntry != "") {
+                totalMenuItemCount := totalMenuItemCount + 1
+                onlyTitleFound := finalEntry
+                
+                Menu, windows, Add, %finalEntry%, ActivateWindow 
+                Try 
+                    Menu, windows, Icon, %finalEntry%, %Path%,, 32
+                Catch 
+                    Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
+            }
+            desktopEntryLast := desktopEntry
+        }
+        Critical Off
+        
+        CoordMode, Mouse, Scree2n
+        CoordMode, Menu, Screen
+        drawX := CoordXCenterScreen()
+        drawY := CoordYCenterScreen()
+        Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
+        Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
+        
+        DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+        
+        ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
+        
+        Gui, ShadowFrFull:  Hide
+        Gui, ShadowFrFull2: Hide
+            
+        Menu, windows, deleteAll
+        hitCAPS := False
+Return
+
+; !CapsLock::CycleMin(forward)
+; !+CapsLock::CycleMin(!forward)
 
 CycleMin(direction)
 {
@@ -1491,11 +1598,6 @@ $!`::
             WinGetTitle, title, ahk_id %this_ID%
             WinGet, procName, ProcessName , ahk_id %this_ID%
             
-            ; If (title = "" || title = "Microsoft Text Input Application")
-                ; continue            
-            ; If (!IsWindow(WinExist("ahk_id" . this_ID)) && !InStr(title, "Inbox")) 
-                ; continue
-
             If !IsAltTabWindow(this_ID)
                 continue
                 
@@ -2613,11 +2715,15 @@ GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
     If (state == -1)
         Return True
     
+    If (state == 1)
+        buffer := 8
+    Else
+        buffer := 0
     ;Get number of monitor
     SysGet, monCount, MonitorCount
     
     ;Iterate through each monitor
-    Loop %monCount%{
+    Loop %monCount% {
         Critical, On
         ;Get Monitor working area
         SysGet, workArea, Monitor, % A_Index
@@ -2625,12 +2731,12 @@ GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
         ;Get the position of the focus window
         ; WinGetPos, X, Y, W, , ahk_id %thisWindowHwnd%
         WinGetPosEx(thisWindowHwnd, X, Y, W)
-        ; tooltip, %X% %Y% %workAreaLeft% %workAreaTop% %workAreaRight%
-        ; X += floor(W/2)
-        ; Y += 8
+        ; If (A_Index == currentMonNum)
+            ; tooltip, % currentMonNum " : " X " " Y " | " workAreaTop-buffer " " workAreaBottom
+
         ;Check If the focus window in on the current monitor index
         ; If ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
-        If ((A_Index == currentMonNum) && (((X >= workAreaLeft-8 && X <= workAreaRight) || (X+W >= workAreaLeft && X+W <= workAreaRight)) && (Y >= workAreaTop-8 && Y <= workAreaBottom))){
+        If ((A_Index == currentMonNum) && (((X >= workAreaLeft-buffer && X <= workAreaRight) || (X+W >= workAreaLeft && X+W <= workAreaRight)) && (Y >= workAreaTop-buffer && Y < workAreaBottom-buffer))) {
             ;Return the monitor index since it's within that monitors borders.
             Critical, Off
             Return True
