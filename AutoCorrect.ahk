@@ -764,7 +764,7 @@ Return
 #If
 
 #MaxThreadsPerHotkey 2
-#If !SearchingWindows && hitTAB
+#If !SearchingWindows && hitTAB && !hitCAPS
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
     while (DrawingRect) {
@@ -864,42 +864,6 @@ Return
             {
                 GoSub, FadeInWin2
             }
-            ; Else If (!cycling && !startHighlight)
-            ; {
-                ; Critical On
-                ; WinGet, allWindows, List
-                ; loop % allWindows
-                ; {
-                    ; hwndID := allWindows%A_Index%
-                    
-                    ; If (A_Index > 10)
-                        ; break
-                    ; If (MonCount > 1) {
-                        ; currentMon := MWAGetMonitorMouseIsIn()
-                        ; currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
-                    ; }
-                    ; Else {
-                        ; currentMonHasActWin := True
-                    ; }
-                    ; If (currentMonHasActWin) {
-                        ; WinGet, state, MinMax, ahk_id %hwndID%
-                        ; If (state > -1) {
-                            ; WinGetTitle, cTitle, ahk_id %hwndID%
-                            ; If (IsAltTabWindow(actWndID)) {
-                                ; desknum := VD.getDesktopNumOfWindow(cTitle)
-                                ; If desknum <= 0
-                                    ; continue   
-                                ; If (desknum == VD.getCurrentDesktopNum()) {
-                                    ; WinActivate, % "ahk_id " hwndID
-                                    ; GoSub, DrawRect
-                                    ; break
-                                ; }
-                            ; }
-                        ; }
-                    ; }
-                ; }
-                ; Critical Off
-            ; }
         }
     }
     Else If (hitCAPS && !hitTAB && GetKeyState("x","P")) {
@@ -968,7 +932,7 @@ Return
     ; GoSub, DrawRect
 ; Return
 ; #If
-
+#If !hitTAB
 !Capslock::
         ; DetectHiddenWindows, On
         Critical On
@@ -1074,7 +1038,7 @@ Return
         Menu, windows, deleteAll
         hitCAPS := False
 Return
-
+#If
 ; !CapsLock::CycleMin(forward)
 ; !+CapsLock::CycleMin(!forward)
 
@@ -1538,6 +1502,7 @@ Return
             SetTimer, SendCtrlAdd, 300
         }
         Critical, Off
+        Return
     }
     ; Else
     ; {
@@ -1560,7 +1525,7 @@ Return
     
     KeyWait, LButton, U T3
     MouseGetPos, X2, Y2,
-    If (abs(X1-X2) < 3 && abs(Y1-Y2) < 3) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND3") && !GetKeyState("LCtrl","P") && !GetKeyState("LShift","P"))  {
+    If (abs(X1-X2) < 3 && abs(Y1-Y2) < 3) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "SysTreeView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3") && !GetKeyState("LCtrl","P") && !GetKeyState("LShift","P"))  {
         SetTimer, SendCtrlAdd, -300
     }
 
@@ -1828,8 +1793,15 @@ Return
 
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
-    If (lClassCheck == lClass && !GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ))
+    If (lClassCheck == lClass && !GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" )) {
+        If (lctrlN == "SysTreeView321")
+            send, {Tab}
+        
         Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+    
+        If (lctrlN == "SysTreeView321")
+            send, +{Tab}
+    }
 Return
 
 LWin & WheelUp::send {Volume_Up}
@@ -3322,6 +3294,7 @@ SetTitleMatchMode, 2
 ::vs::
 ::oem::
 ::dl::
+::huh::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
@@ -3771,6 +3744,11 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::i::I
+::fo::of
+::fi::If
+::ry::try
+::rying::trying
 ::htp:::http:
 ::http:\\::http://
 ::httpL::http:
@@ -8468,9 +8446,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::rescheulde::reschedule
 ::mintues::minutes
 ::machien::machine
-::i::I
-::fo::of
-::fi::If
 ::awhiel::awhile
 ::emial::email
 ::btter::better
