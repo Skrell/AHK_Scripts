@@ -208,6 +208,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ControlGetPos , OutX, OutY, OutWidth, OutHeight, DirectUIHWND2
             ControlGetFocus, focusedCtrl , % "ahk_id " hWnd
             ; Tooltip, %vWinTitle% : %OutX% - %OutputVar2% - %OutputVar3%
+            BlockInput On
             If (OutputVar1 == 1) {
                 ControlFocus , SysListView321, % "ahk_id " hWnd
                 sleep, 50
@@ -227,12 +228,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Send, {Tab}
             }
             Else If (OutputVar2 == 1) {
+                ; Tooltip, %vWinTitle% : %OutputVar1% - %OutputVar2% - %OutputVar3%
                 ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
                 sleep, 50
                 Send, {LCtrl down}{NumpadAdd}{LCtrl up}
             }
             sleep, 50
             ControlFocus , %focusedCtrl%, % "ahk_id " hWnd
+            BlockInput Off
         }
     }
     
@@ -2808,32 +2811,28 @@ ShellMessage( wParam, lParam )
         WinGetClass, classStr, Ahk_id %ID%
         
         WinWaitActive, Ahk_id %ID%, , 3
-        
+        ; tooltip, %classStr%
         If (classStr == "OperationStatusWindow" || classStr == "#32770") {
             sleep 100
             WinSet, AlwaysOnTop, On, ahk_class %classStr%
         }
         
-        If (IsAltTabWindow(hwndID) || (procStr == "OUTLOOK.EXE" && classStr == "#32770")) {
+        ; If (IsAltTabWindow(hwndID) || (procStr == "OUTLOOK.EXE" && classStr == "#32770")) {
             If (MonCount == 1) {
                 Return
             }
             
             WinGet, state, MinMax, Ahk_id %ID%
+            ; tooltip, %classStr% - %currentMonHasActWin%
             If (state > -1) {
-                ; desknum := VD.getDesktopNumOfWindow(title)
-                ; If (desknum == VD.getCurrentDesktopNum()) {
-                    ; If desknum <= 0
-                        ; Return
-                        currentMon := MWAGetMonitorMouseIsIn()
-                        currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
-                        If !currentMonHasActWin {
-                            WinActivate, Ahk_id %ID%
-                            Send, {LWin down}{LShift down}{Left}{LShift up}{LWin up}
-                    }
-                ; }
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+                If !currentMonHasActWin {
+                    WinActivate, Ahk_id %ID%
+                    Send, {LWin down}{LShift down}{Left}{LShift up}{LWin up}
+                }
             }
-        }
+        ; }
     }
     If (wParam = 16)
     {
@@ -3999,11 +3998,11 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:priv::privilege `
 :*:envi::environment `
 :*:simult::simultaneous`
+:*:follwo::follow
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
 :?*:compatab::compatib  ; Covers incompat* and compat*
-:?*:catagor::categor  ; Covers subcatagories and catagories.
 :?*:isgn::sign  ; Covers subcatagories and catagories.
 :?*:sgin::sign  ; Covers subcatagories and catagories.
 :?*:fortuante::fortunate  ; Covers subcatagories and catagories.
@@ -4835,6 +4834,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::casulaty::casualty
 ::categiory::category
 ::ctaegory::category
+::catagory::category  
+::catagories::categories  
 ::catterpilar::caterpillar
 ::catterpilars::caterpillars
 ::cathlic::catholic
