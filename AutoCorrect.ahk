@@ -328,109 +328,64 @@ Return
 
     $!+'::
         Critical, On
-        store := ClipboardAll
-        ClipBoard := "" 
-        Send ^{x}
-        Clipwait
-        selectedText := clipboard
-        ClipBoard := Trim(selectedText)
-        sleep, 50
-        SendRaw, "
-        sleep, 50
-        Send, ^{v}
-        sleep, 100
-        SendRaw, "
-        sleep, 50
-        ClipBoard := store
-        store :=
+        store := Clip()
+        store := Trim(store)
+        store := """" . store . """"
+        Clip(store)
         Critical, Off
     Return
 
     $!+[::
         Critical, On
-        store := ClipboardAll
-        Clipboard := "" 
-        Send ^{x}
-        Clipwait
-        selectedText := clipboard
-        ClipBoard := Trim(selectedText)
-        sleep, 50
-        SendRaw, {
-        sleep, 50
-        Send, ^{v}
-        sleep, 100
-        SendRaw, }
-        sleep, 50
-        Clipboard := store
-        store :=
+        store := Clip()
+        store := Trim(store)
+        store := "{" . store . "}"
+        Clip(store)
         Critical, Off
     Return
 
     $!+]::
         Critical, On
-        store := ClipboardAll
-        Clipboard := "" 
-        Send ^{x}
-        Clipwait
-        selectedText := clipboard
-        ClipBoard := Trim(selectedText)
-        sleep, 50
-        SendRaw, {
-        sleep, 50
-        Send, ^{v}
-        sleep, 100
-        SendRaw, }
-        sleep, 50
-        Clipboard := store
-        store :=
+        store := Clip()
+        store := Trim(store)
+        store := "{" . store . "}"
+        Clip(store)
         Critical, Off
     Return
 
-    ; $!+<::
-    ; Send {right}{>}{left}^{left}{<}
-    ; Return
+    $!+<::
+        Critical, On
+        store := Clip()
+        store := Trim(store)
+        store := "<" . store . ">"
+        Clip(store)
+        Critical, Off
+    Return
 
-    ; $!+>::
-    ; Send {right}{>}{left}^{left}{<}
-    ; Return
+    $!+>::
+        Critical, On
+        store := Clip()
+        store := Trim(store)
+        store := "<" . store . ">"
+        Clip(store)
+        Critical, Off
+    Return
 
     $!+(::
         Critical, On
-        store := ClipboardAll
-        Clipboard := "" 
-        Send ^{x}
-        Clipwait
-        selectedText := clipboard
-        ClipBoard := Trim(selectedText)
-        sleep, 50
-        SendRaw, (
-        sleep, 50
-        Send, ^{v}
-        sleep, 100
-        SendRaw, )
-        sleep, 50
-        Clipboard := store
-        store :=
+        store := Clip()
+        store := Trim(store)
+        store := "(" . store . ")"
+        Clip(store)
         Critical, Off
     Return
 
     $!+)::
         Critical, On
-        store := ClipboardAll
-        Clipboard := "" 
-        Send ^{x}
-        Clipwait
-        selectedText := clipboard
-        ClipBoard := Trim(selectedText)
-        sleep, 50
-        SendRaw, (
-        sleep, 50
-        Send, ^{v}
-        sleep, 100
-        SendRaw, )
-        sleep, 50
-        Clipboard := store
-        store :=
+        store := Clip()
+        store := Trim(store)
+        store := "(" . store . ")"
+        Clip(store)
         Critical, Off
     Return
 
@@ -1626,7 +1581,7 @@ Return
             LbuttonEnabled := True
         }
         Else {
-            SetTimer, SendCtrlAdd, 200
+            SetTimer, SendCtrlAdd, 100
         }
         Return
     }
@@ -1994,6 +1949,7 @@ Return
 
 #If !moving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelUp::
+    SetTimer, SendCtrlAdd, Off
     ComboActive := True
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
@@ -2003,6 +1959,7 @@ Return
 
 #If !moving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelDown::
+    SetTimer, SendCtrlAdd, Off
     ComboActive := True
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
@@ -3109,6 +3066,44 @@ HasVal(haystack, needle) {
             Return index
     Return 0
 }
+
+; Clip() - Send and Retrieve Text Using the Clipboard
+; by berban - updated February 18, 2019
+; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=62156
+Clip(Text="", Reselect="")
+{
+	Static BackUpClip, Stored, LastClip
+	If (A_ThisLabel = A_ThisFunc) {
+		If (Clipboard == LastClip)
+			Clipboard := BackUpClip
+		BackUpClip := LastClip := Stored := ""
+	} Else {
+		If !Stored {
+			Stored := True
+			BackUpClip := ClipboardAll ; ClipboardAll must be on its own line
+		} Else
+			SetTimer, %A_ThisFunc%, Off
+		LongCopy := A_TickCount, Clipboard := "", LongCopy -= A_TickCount ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
+		If (Text = "") {
+			SendInput, ^c
+			ClipWait, LongCopy ? 0.6 : 0.2, True
+		} Else {
+			Clipboard := LastClip := Text
+			ClipWait, 10
+			SendInput, ^v
+		}
+		SetTimer, %A_ThisFunc%, -700
+		Sleep 20 ; Short sleep in case Clip() is followed by more keystrokes such as {Enter}
+		If (Text = "")
+			Return LastClip := Clipboard
+		Else If ReSelect and ((ReSelect = True) or (StrLen(Text) < 3000))
+			SendInput, % "{Shift Down}{Left " StrLen(StrReplace(Text, "`r")) "}{Shift Up}"
+	}
+	Return
+	Clip:
+	Return Clip()
+}
+
 ;------------------------------
 ;
 ; Function: WinGetPosEx
