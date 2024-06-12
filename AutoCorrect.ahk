@@ -2631,7 +2631,12 @@ track() {
         LastKey1 := A_PriorKey
     }
     
-    If (((LastKey1 == "Space" || LastKey1 == "Enter") && LastKey2 == "/") 
+    If (LastKey1 != "Space" && LastKey2 == "/" && LastKey3 != "Space")
+        DisableCheck := True
+    Else
+        DisableCheck := False
+    
+    If !DisableCheck && (((LastKey1 == "Space" || LastKey1 == "Enter") && LastKey2 == "/") 
         && (LastKey3 == "a" 
          || LastKey3 == "b"
          || LastKey3 == "c"
@@ -2666,6 +2671,9 @@ track() {
             Send, {%LastKey1%}
             BlockInput Off
         }
+        
+    If (DisablCheck && A_PriorKey == "Space")
+        DisableCheck := False
         
     WinGet, actwndId, ID, A
     MouseGetPos x, y, hwndId
