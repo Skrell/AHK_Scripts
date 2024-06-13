@@ -182,36 +182,6 @@ SetTimer CheckWindow, 100
 
 OnExit("PreventRecur")
 
-;###########################################################
-;############### CAse COrrector ###################### LText
-; For AHK v1.1.31+ ; 6-30-2023 update
-; By kunkel321, help from Mikeyww, Rohwedder, Others.
-; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=118807
-CaseArr := [] ; Create the array.
-Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
-Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
-EndKeys := "%&()+,-./0123456789:<=>?@[\]_abcdefghijklmnopqrstuvwxyz{Bs}{Enter}{Space}{Tab}{{}{}}|"
-ccih := InputHook("V I2 E", EndKeys)
-Loop ; WARNING will loop forever until process is killed.
-{
-	;IfWinNotActive, SciTE
-	;{
-	ccih.Start() ; Start the hook.
-	ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
-	CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
-	If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
-		CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
-		;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
-	If (inStr(Uppers,CaseArr[1],true) && inStr(Uppers,CaseArr[2],true) && inStr(Lowers,CaseArr[3],true)) && (CaseArr[3] > 0) { ; "true" makes inStr() case-sensitive.
-		Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
-		StringLower, Last2, Last2
-		Send, {Backspace 2} ; Do actual correction.
-		Send, %Last2%
-		;SoundBeep
-	}
-	;}
-}
-
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
@@ -227,6 +197,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ; ToolTip, % vWinTitle " - " prevActiveWindows.length()
 
         If !HasVal(prevActiveWindows, hWnd) {
+            Critical, On
             prevActiveWindows.push(hWnd)
             ShellMessage(1, hWnd)
 
@@ -265,6 +236,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             sleep, 50
             ControlFocus , %focusedCtrl%, % "ahk_id " hWnd
             BlockInput Off
+            Critical, Off
         }
     }
 
@@ -276,6 +248,36 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         else
             ++i
     }
+}
+
+;###########################################################
+;############### CAse COrrector ###################### LText
+; For AHK v1.1.31+ ; 6-30-2023 update
+; By kunkel321, help from Mikeyww, Rohwedder, Others.
+; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=118807
+CaseArr := [] ; Create the array.
+Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
+Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
+EndKeys := "%&()+,-./0123456789:<=>?@[\]_abcdefghijklmnopqrstuvwxyz{Bs}{Enter}{Space}{Tab}{{}{}}|"
+ccih := InputHook("V I2 E", EndKeys)
+Loop ; WARNING will loop forever until process is killed.
+{
+	;IfWinNotActive, SciTE
+	;{
+	ccih.Start() ; Start the hook.
+	ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
+	CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
+	If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
+		CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
+		;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
+	If (inStr(Uppers,CaseArr[1],true) && inStr(Uppers,CaseArr[2],true) && inStr(Lowers,CaseArr[3],true)) && (CaseArr[3] > 0) { ; "true" makes inStr() case-sensitive.
+		Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
+		StringLower, Last2, Last2
+		Send, {Backspace 2} ; Do actual correction.
+		Send, %Last2%
+		;SoundBeep
+	}
+	;}
 }
 Return
 
@@ -317,22 +319,22 @@ CheckWindow:
     Suspend , Off
 Return
 
-EnableHotStrings:
-    HotstringX("\b(\p{Lu})(\p{Lu})(\p{Ll})", "CapsCorrectionFront", 3, , , True)
-    HotstringX("(\p{Ll}+)(\p{Lu})\b", "CapsCorrectionBack", 3, , , True)
-    HotstringX("(\s\w+)/(\s)", "QuestionMarkorrection", 3, , , True)
-Return
+; EnableHotStrings:
+    ; HotstringX("\b(\p{Lu})(\p{Lu})(\p{Ll})", "CapsCorrectionFront", 3, , , True)
+    ; HotstringX("(\p{Ll}+)(\p{Lu})\b", "CapsCorrectionBack", 3, , , True)
+    ; HotstringX("(\s\w+)/(\s)", "QuestionMarkorrection", 3, , , True)
+; Return
 
-DisableHotStrings:
-    HotstringX("\b(\p{Lu})(\p{Lu})(\p{Ll})", "")
-    HotstringX("(\p{Ll}+)(\p{Lu})\b", "")
-    HotstringX("(\s\w+)/(\s)", "")
-Return
+; DisableHotStrings:
+    ; HotstringX("\b(\p{Lu})(\p{Lu})(\p{Ll})", "")
+    ; HotstringX("(\p{Ll}+)(\p{Lu})\b", "")
+    ; HotstringX("(\s\w+)/(\s)", "")
+; Return
 
 #If (!hitCAPS && !hitTAB)
     $CapsLock:: 
-    Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     Send {Delete}
+    Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     Return
 
     $!a:: 
@@ -365,12 +367,12 @@ Return
 
     $!+j::
     Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
-    Hotstring("EndChars", "")
+    Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     Return
 
     $!+l::
     Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
-    Hotstring("EndChars", "")
+    Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     Return
 
     $!+'::
@@ -495,10 +497,15 @@ Return
         If IsAltTabWindow(escHwndID) {
             GoSub, DrawRect
             KeyWait, Esc, U T10
-            SetTimer, ClearRect, -50
-            Gui, GUI4Boarder: Hide
             If !CancelClose {
-                WinClose, A
+                WinClose, ahk_id %escHwndID%
+                loop 500 {
+                    If !WinExist("ahk_id " . escHwndID)
+                        break
+                    sleep, 10
+                }
+                SetTimer, ClearRect, -50
+                Gui, GUI4Boarder: Hide
                 WinGet, allWindows, List
                 loop % allWindows {
                     this_id := "ahk_id " . allWindows%A_Index%
@@ -895,7 +902,7 @@ Return
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
     while (DrawingRect) {
-        sleep 50
+        sleep 100
     }
 
     If !(hitCAPS && !hitTAB) && !LclickSelected {
@@ -1148,7 +1155,7 @@ Return
         }
         Critical Off
 
-        CoordMode, Mouse, Scree2n
+        CoordMode, Mouse, Screen
         CoordMode, Menu, Screen
         drawX := CoordXCenterScreen()
         drawY := CoordYCenterScreen()
@@ -1435,7 +1442,7 @@ ClearRect:
     ClearingRect := True
     ; WinGet, activeWin, ID, A
     loop 25 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
@@ -1446,7 +1453,7 @@ ClearRect:
 
     WinSet, Transparent, 225, ahk_id %Highlighter%
     loop 5 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
@@ -1456,7 +1463,7 @@ ClearRect:
     }
     WinSet, Transparent, 200, ahk_id %Highlighter%
     loop 4 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
@@ -1466,7 +1473,7 @@ ClearRect:
     }
     WinSet, Transparent, 175, ahk_id %Highlighter%
     loop 3 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
@@ -1476,7 +1483,7 @@ ClearRect:
     }
     WinSet, Transparent, 125, ahk_id %Highlighter%
     loop 2 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
@@ -1486,7 +1493,7 @@ ClearRect:
     }
     WinSet, Transparent, 50, ahk_id %Highlighter%
     loop 1 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             ; Gui, GUI4Boarder: Hide
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
@@ -1504,8 +1511,6 @@ DrawRect:
     DrawingRect := True
     ; tooltip, drawing...
     WinGet, activeWin, ID, A
-    If !IsAltTabWindow(activeWin)
-        Return
     WinGetPosEx(activeWin, x, y, w, h)
 
     if (x="")
@@ -1607,8 +1612,10 @@ Return
 
 #MaxThreadsPerHotkey 1
 #If (!VolumeHover() && LbuttonEnabled)
-~*LButton::
+~$LButton::
+    Critical, On
     SetTimer, SendCtrlAdd, Off
+    CoordMode, Mouse, Screen
     MouseGetPos, X1, Y1, lhwnd, lctrlN
     WinGetTitle, actTitle, ahk_id %lhwnd%
 
@@ -1619,16 +1626,16 @@ Return
         GoSub, DrawRect
         KeyWait, Lbutton, U T5
         GoSub, ClearRect
+        Critical, Off
         Return
     }
 
     Gui, GUI4Boarder: Hide
     WinGetClass, lClass, ahk_id %lhwnd%
-    CoordMode, Pixel, Screen
 
     If (A_PriorHotkey == A_ThisHotkey
-    && A_TimeSincePriorHotkey < 500
-    && (hWnd := WinActive("ahk_class CabinetWClass") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (hWnd := WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
+        && A_TimeSincePriorHotkey < 500
+        && (WinActive("ahk_class CabinetWClass") || (WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
     {
         If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
             Send !{Up}
@@ -1641,34 +1648,26 @@ Return
         Else {
             SetTimer, SendCtrlAdd, 100
         }
+        Critical, Off
         Return
     }
-    ; Else
-    ; {
-        ; WinGetClass, lcl, ahk_id %lhwnd%
-        ; If (!DesktopIconsVisible && (lcl == "WorkerW" || lcl == "ProgMan")) {
-             ; DesktopIcons(True)
-             ; DesktopIconsVisible := True
-        ; }
-        ; Else If (DesktopIconsVisible && lcl != "WorkerW" && lcl != "ProgMan" && lcl != "#32768" && lcl != "#32770") {
-             ; DesktopIcons(False)
-             ; DesktopIconsVisible := False
-        ; }
-    ; }
+
+    CoordMode, Pixel, Screen
     PixelGetColor, HexColor1, %X1%, %Y1%, RGB
     X -= 1
     PixelGetColor, HexColor2, %X1%, %Y1%, RGB
     X += 2
     PixelGetColor, HexColor3, %X1%, %Y1%, RGB
     IsBlankSpace := IsEmptySpace()
-
+    CoordMode, Mouse, Screen
+    
     KeyWait, LButton, U T3
     MouseGetPos, X2, Y2,
     ; tooltip, %X1% %X2% %Y1% %Y2% %lClass% %lctrlN%
     If ((abs(X1-X2) < 3 && abs(Y1-Y2) < 3) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "SysTreeView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")))  {
         SetTimer, SendCtrlAdd, -1
     }
-
+    Critical Off
 Return
 #If
 
@@ -1938,7 +1937,7 @@ SendCtrlAdd:
         If (lClassCheck == "CabinetWClass" && lctrlN == "SysTreeView321")
             send, {Tab}
 
-        Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+        Send, ^{NumpadAdd}
 
         If (lClassCheck == "CabinetWClass" && lctrlN == "SysTreeView321")
             send, +{Tab}
@@ -2035,7 +2034,7 @@ Return
         sleep, 750
     }
     Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
-        Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+        Send, ^{NumpadAdd}
         sleep, 200
     }
     Hotkey, ~$WheelUp, On
@@ -2051,7 +2050,7 @@ Return
         sleep, 750
     }
     Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
-        Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+        Send, ^{NumpadAdd}
         sleep, 200
     }
     Hotkey, ~$WheelDown, On
@@ -2622,6 +2621,9 @@ Return
 track() {
     Static x, y, lastX, lastY, lastMon, currentMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
+    Static DisableCheck := False
+    Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
+    Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
     Global MonCount, MonNum, LastKey1, LastKey2, LastKey3
 
     ; tooltip,   %LastKey3% %LastKey2% %LastKey1%
@@ -2629,52 +2631,29 @@ track() {
         LastKey3 := LastKey2
         LastKey2 := LastKey1
         LastKey1 := A_PriorKey
+    
+        If (DisableCheck && A_PriorKey == "Space") {
+            DisableCheck := False
+            LastKey1 := ""
+            LastKey2 := ""
+            LastKey3 := ""
+        }
+        Else If (inStr(Lowers,LastKey1,false) && LastKey2 == "/" && inStr(Lowers,LastKey3,false))
+            DisableCheck := True
+        
+        If (!DisableCheck 
+            && (((LastKey1 == "Space" || LastKey1 == "Enter") && LastKey2 == "/")
+                && (inStr(Uppers,LastKey3,true) || inStr(Lowers,LastKey3,true))))
+            {
+                BlockInput On
+                Send, {BS}{BS}{BS}
+                Send, {%LastKey3%}
+                Send, {?}
+                Send, {%LastKey1%}
+                BlockInput Off
+            }
     }
     
-    If (LastKey1 != "Space" && LastKey2 == "/" && LastKey3 != "Space")
-        DisableCheck := True
-    Else
-        DisableCheck := False
-    
-    If !DisableCheck && (((LastKey1 == "Space" || LastKey1 == "Enter") && LastKey2 == "/") 
-        && (LastKey3 == "a" 
-         || LastKey3 == "b"
-         || LastKey3 == "c"
-         || LastKey3 == "d"
-         || LastKey3 == "e"
-         || LastKey3 == "f"
-         || LastKey3 == "g"
-         || LastKey3 == "h"
-         || LastKey3 == "i"
-         || LastKey3 == "j"
-         || LastKey3 == "k"
-         || LastKey3 == "l"
-         || LastKey3 == "m"
-         || LastKey3 == "n"
-         || LastKey3 == "o"
-         || LastKey3 == "p"
-         || LastKey3 == "q"
-         || LastKey3 == "r"
-         || LastKey3 == "s"
-         || LastKey3 == "t"
-         || LastKey3 == "u"
-         || LastKey3 == "v"
-         || LastKey3 == "w"
-         || LastKey3 == "x"
-         || LastKey3 == "y"
-         || LastKey3 == "z"))
-        {
-            BlockInput On
-            Send, {BS}{BS}{BS}
-            Send, {%LastKey3%}
-            Send, {?}
-            Send, {%LastKey1%}
-            BlockInput Off
-        }
-        
-    If (DisablCheck && A_PriorKey == "Space")
-        DisableCheck := False
-        
     WinGet, actwndId, ID, A
     MouseGetPos x, y, hwndId
     WinGetClass, classId, ahk_id %hwndId%
@@ -3377,178 +3356,6 @@ DynaRun(TempScript, pipename="")
         Return A_LastError,DllCall("CloseHandle",@,__PIPE_)
    DllCall("CloseHandle",@,__PIPE_)
    Return PID
-}
-
-
-/*
-Hotstring(
-	trigger:
-		A string or a regular expression to trigger the hotstring. (If you use a regex here, the mode should be 3 for the regex to work)
-	
-	label:  	
-		A string to replace the trigger / A label to go to / A function to call when the hotstring is triggered.
-		If you used a regular expression as the trigger and mode was set to three, backreferences like $0, $1 would work.
-		If a function name was passed, the function will be called with the phrase that triggered the hotstring(If the trigger was a string)
-			or the Match object(If the trigger was a regex & mode equals 3).
-		If this parameter was a label, the global variable '$' will contain the string/match object.
-		If you wish to remove a hotstring, Pass the trigger with this parameter empty.
-	
-	Mode:	
-		A number between 1 and 3 that determines the properties of the hotstring.
-		If Mode == 1 then the hotstring is case insensitive.
-		If Mode == 2 then the hostrings is case sensitive.
-		If Mode == 3 then you can use regex in the trigger.
-		
-		1 is the defualt.
-	
-	clearTrigger:
-			Determines if the trigger is erased after the hotstring is triggered.
-	
-	cond:
-			A name of a function that allows the conditional trigerring of the hotstring.
-	
-)
-*/
-HotstringX(trigger, label, mode := 1, clearTrigger := 1, cond := "", rebind := False){
-	global $
-	static keysBound := false,hotkeyPrefix := "~$", hotstrings := {}, typed := "", keys := {"symbols": "!""#$%&'()*+,-./:;<=>?@[\]^_``{|}~", "num": "0123456789", "alpha":"abcdefghijklmnopqrstuvwxyz", "other": "BS,Return,Tab,Space", "breakKeys":"Left,Right,Up,Down,Home,End,RButton,LButton,LControl,RControl,LAlt,RAlt,AppsKey,Lwin,Rwin,WheelDown,WheelUp,f1,f2,f3,f4,f5,f6,f7,f8,f9,f6,f7,f9,f10,f11,f12", "numpad":"Numpad0,Numpad1,Numpad2,Numpad3,Numpad4,Numpad5,Numpad6,Numpad7,Numpad8,Numpad9,NumpadDot,NumpadDiv,NumpadMult,NumpadAdd,NumpadSub,NumpadEnter"}, effect := {"Return" : "`n", "Tab":A_Tab, "Space": A_Space, "Enter":"`n", "Dot": ".", "Div":"/", "Mult":"*", "Add":"+", "Sub":"-"}
-	
-    If rebind
-        keysBound := False
-    
-	if (!keysBound){
-		;Binds the keys to watch for triggers.
-		; for k,v in ["symbols", "num", "alpha"]
-		; {
-			; ;alphanumeric/symbols
-			; v := keys[v]
-			; Loop,Parse, v
-				; Hotkey,%hotkeyPrefix%%A_LoopField%,__hotstring
-		; }
-		
-		v := keys.alpha
-		Loop,Parse, v
-			Hotkey, %hotkeyPrefix%+%A_Loopfield%,__hotstring
-		for k,v in ["other", "breakKeys", "numpad"]
-		{
-			;comma separated values
-			v := keys[v]
-			Loop,Parse, v,`,
-				Hotkey,%hotkeyPrefix%%A_LoopField%,__hotstring
-		}
-		keysBound := true ;keysBound is a static varible. Now, the keys won't be bound twice.
-	}
-	if (mode == "CALLBACK"){
-		; Callback for the hotkey.s
-		Hotkey := SubStr(A_ThisHotkey,3)
-		if (StrLen(Hotkey) == 2 && Substr(Hotkey,1,1) == "+" && Instr(keys.alpha, Substr(Hotkey, 2,1))){
-			Hotkey := Substr(Hotkey,2)
-			if (!GetKeyState("Capslock", "T")){
-				StringUpper, Hotkey,Hotkey
-			}
-		}
-		
-		; shiftState := GetKeyState("Shift", "P")
-		; uppercase :=  GetKeyState("Capslock", "T") ? !shiftState : shiftState 
-		;If capslock is down, shift's function is reversed.(ie pressing shift and a key while capslock is on will provide the lowercase key)
-		if (uppercase && Instr(keys.alpha, Hotkey)){
-			StringUpper, Hotkey,Hotkey
-		}
-		if (Instr("," . keys.breakKeys . ",", "," . Hotkey . ",")){
-			typed := ""
-			return
-		} else if Hotkey in Return,Tab,Space
-		{
-			typed .= effect[Hotkey]
-		} else if (Hotkey == "BS"){
-			; trim typed var if Backspace was pressed.
-			StringTrimRight,typed,typed,1
-			return
-		} else if (RegExMatch(Hotkey, "Numpad(.+?)", numKey)) {
-			if (numkey1 ~= "\d"){
-				typed .= numkey1
-			} else {
-				typed .= effect[numKey1]
-			}
-		} else {
-			typed .= Hotkey
-		}
-		matched := false
-		for k,v in hotstrings
-		{
-			matchRegex := (v.mode == 1 ? "Oi)" : "")  . (v.mode == 3 ? RegExReplace(v.trigger, "\$$", "") : "\Q" . v.trigger . "\E") . "$"
-			
-			if (v.mode == 3){
-				if (matchRegex ~= "^[^\s\)\(\\]+?\)"){
-					matchRegex := "O" . matchRegex
-				} else {
-					matchRegex := "O)" . matchRegex
-				}
-			}
-			if (RegExMatch(typed, matchRegex, local$)){
-				matched := true
-				if (v.cond != "" && IsFunc(v.cond)){
-					; If hotstring has a condition function.
-					A_LoopCond := Func(v.cond)
-					if (A_LoopCond.MinParams >= 1){
-						; If the function has atleast 1 parameters.
-						A_LoopRetVal := A_LoopCond.(v.mode == 3 ? local$ : local$.Value(0))
-					} else {
-						A_LoopRetVal := A_LoopCond.()
-					}
-					if (!A_LoopRetVal){
-						; If the function returns a non-true value.
-						matched := false
-						continue
-					}
-				}
-				if (v.clearTrigger){
-					;Delete the trigger
-					SendInput % "{BS " . StrLen(local$.Value(0))  . "}"
-				}
-				if (IsLabel(v.label)){
-					$ := v.mode == 3 ? local$ : local$.Value(0)
-					gosub, % v.label
-				} else if (IsFunc(v.label)){
-					callbackFunc := Func(v.label)
-					if (callbackFunc.MinParams >= 1){
-						callbackFunc.(v.mode == 3 ? local$ : local$.Value(0))
-					} else {
-						callbackFunc.()
-					}
-				} else {
-					toSend := v.label
-				
-					;Working out the backreferences
-					Loop, % local$.Count()
-						StringReplace, toSend,toSend,% "$" . A_Index,% local$.Value(A_index),All
-					toSend := RegExReplace(toSend,"([!#\+\^\{\}])","{$1}") ;Escape modifiers
-					SendInput,%toSend%
-				}
-				
-			}
-		}
-		if (matched){
-			typed := ""
-		} else if (StrLen(typed) > 350){
-			StringTrimLeft,typed,typed,200
-		}
-	} else {
-		if (hotstrings.HasKey(trigger) && label == ""){
-			; Removing a hotstring.
-			hotstrings.remove(trigger)
-		} else {
-			; Add to hotstrings object.
-			hotstrings[trigger] := {"trigger" : trigger, "label":label, "mode":mode, "clearTrigger" : clearTrigger, "cond": cond}
-		}
-		
-	}
-	return
-
-	__hotstring:
-	; This label is triggered every time a key is pressed.
-    HotstringX("", "", "CALLBACK")
-	return
 }
 
 WinActivated(process, class, Hwnd, title)
