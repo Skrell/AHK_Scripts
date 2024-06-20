@@ -22,7 +22,7 @@ dummyFunction1() {
 SetBatchLines -1
 SetWinDelay   -1
 SetControlDelay -1
-SetKeyDelay, 0
+SetKeyDelay, 10
 SendMode, Input
 
 Global moving := False
@@ -39,7 +39,6 @@ Global PrevActiveWindows := []
 Global InitializeActWins := False
 Global cycleCount := 1
 Global cycleCountMin := 0
-Global totalCycleCountMin := 0
 Global startHighlight := False
 Global border_thickness := 4
 Global border_color := 0xFF00FF
@@ -65,6 +64,7 @@ Global StopRecurssion := False
 Global currMonHeight := 0
 Global currMonWidth  := 0
 Global LbuttonEnabled := True
+Global LastKey4 := 
 Global LastKey1 := 
 Global LastKey2 :=
 Global LastKey3 :=
@@ -80,7 +80,8 @@ Menu, Tray, Add, Exit, Exit_label
 Menu, Tray, Default, &Suspend
 Menu, Tray, Click, 1
 
-SetTimer track, 50
+SetTimer track, 100
+SetTimer keyTrack, 10
 
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
@@ -104,15 +105,14 @@ Gui, ShadowFrFull2: +AlwaysOnTop +ToolWindow -DPIScale +E0x08000000 +E0x20 -Capt
 Gui, ShadowFrFull2: Color, FF00FF
 FrameShadow(IGUIF2)
 
-; Gui +LastFound
-; hWnd := WinExist()
-; DllCall( "RegisterShellHookWindow", UInt, hWnd )
-; MsgNum := DllCall( "RegisterWindowMessage", Str, "SHELLHOOK" )
-; OnMessage(MsgNum, "ShellMessage")
+Gui, GUI4Boarder: New
+Gui, GUI4Boarder: +HwndHighlighter
+Gui, GUI4Boarder: +AlwaysOnTop +Toolwindow -Caption +Owner +Lastfound
+Gui, GUI4Boarder: Color, %border_color%
 
 ; loop 2
 ; {
-	; ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
+; ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
 
 	; ; Reset trans.
 	; if hwndProgman=
@@ -212,16 +212,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If (OutputVar1 == 1) {
                 ControlFocus , SysListView321, % "ahk_id " hWnd
                 sleep, 50
-                Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+                Send, ^{NumpadAdd}
             }
             Else If (OutputVar3 == 1 && OutX > 8) {
                 ; Tooltip, %vWinTitle% : %OutputVar1% - %OutputVar2% - %OutputVar3%
-                Send, {LShift down}{Tab}{LShift up}
+                Send, +{Tab}
                 sleep, 50
-                Send, {LShift down}{Tab}{LShift up}
+                Send, +{Tab}
                 sleep, 50
                 ; ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
-                Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+                Send, ^{NumpadAdd}
                 sleep, 50
                 Send, {Tab}
                 sleep, 50
@@ -231,7 +231,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 ; Tooltip, %vWinTitle% : %OutputVar1% - %OutputVar2% - %OutputVar3%
                 ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
                 sleep, 50
-                Send, {LCtrl down}{NumpadAdd}{LCtrl up}
+                Send, ^{NumpadAdd}
             }
             sleep, 50
             ControlFocus , %focusedCtrl%, % "ahk_id " hWnd
@@ -255,30 +255,30 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 ; For AHK v1.1.31+ ; 6-30-2023 update
 ; By kunkel321, help from Mikeyww, Rohwedder, Others.
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=118807
-CaseArr := [] ; Create the array.
-Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
-Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
-EndKeys := "%&()+,-./0123456789:<=>?@[\]_abcdefghijklmnopqrstuvwxyz{Bs}{Enter}{Space}{Tab}{{}{}}|"
-ccih := InputHook("V I2 E", EndKeys)
-Loop ; WARNING will loop forever until process is killed.
-{
-	;IfWinNotActive, SciTE
-	;{
-	ccih.Start() ; Start the hook.
-	ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
-	CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
-	If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
-		CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
-		;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
-	If (inStr(Uppers,CaseArr[1],true) && inStr(Uppers,CaseArr[2],true) && inStr(Lowers,CaseArr[3],true)) && (CaseArr[3] > 0) { ; "true" makes inStr() case-sensitive.
-		Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
-		StringLower, Last2, Last2
-		Send, {Backspace 2} ; Do actual correction.
-		Send, %Last2%
-		;SoundBeep
-	}
-	;}
-}
+; CaseArr := [] ; Create the array.
+; Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
+; Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
+; EndKeys := "%&()+,-./0123456789:<=>?@[\]_abcdefghijklmnopqrstuvwxyz{Bs}{Enter}{Space}{Tab}{{}{}}|"
+; ccih := InputHook("V I2 E", EndKeys)
+; Loop ; WARNING will loop forever until process is killed.
+; {
+	; ;IfWinNotActive, SciTE
+	; ;{
+	; ccih.Start() ; Start the hook.
+	; ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
+	; CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
+	; If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
+		; CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
+		; ;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
+	; If (inStr(Uppers,CaseArr[1],true) && inStr(Uppers,CaseArr[2],true) && inStr(Lowers,CaseArr[3],true)) && (CaseArr[3] > 0) { ; "true" makes inStr() case-sensitive.
+		; Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
+		; StringLower, Last2, Last2
+		; Send, {Backspace 2} ; Do actual correction.
+		; Send, %Last2%
+		; ;SoundBeep
+	; }
+	; ;}
+; }
 Return
 
 PreventRecur() {
@@ -332,6 +332,15 @@ Return
 ; Return
 
 #If (!hitCAPS && !hitTAB)
+    
+    ~Mbutton::
+    ControlGetFocus, IsEdit, A
+    ; tooltip, %IsEdit%
+    If (IsEdit == "Edit1" || IsEdit == "Edit2") {
+        Send, {Enter}
+    }
+    Return
+    
     $CapsLock:: 
     Send {Delete}
     Hotstring("EndChars", "()[]{}:;,.?!`n `t")
@@ -439,10 +448,12 @@ Return
     Return
 
     $!i::
+    Hotstring("EndChars", "")
     Send {UP}
     Return
 
-    $!k:: 
+    $!k::
+    Hotstring("EndChars", "")
     Send {DOWN}
     Return
 
@@ -457,6 +468,7 @@ Return
     Return
 
     ~Enter:: Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+    ~Space:: Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     ; Goto, EnableHotStrings
     ; Return
@@ -499,10 +511,10 @@ Return
             KeyWait, Esc, U T10
             If !CancelClose {
                 WinClose, ahk_id %escHwndID%
-                loop 500 {
+                loop 100 {
                     If !WinExist("ahk_id " . escHwndID)
                         break
-                    sleep, 10
+                    sleep, 50
                 }
                 SetTimer, ClearRect, -50
                 Gui, GUI4Boarder: Hide
@@ -519,6 +531,7 @@ Return
                 CancelClose := False
         }
     }
+    KeyWait, Esc, U T2
     escHwndID_old := escHwndID
 Return
 
@@ -713,198 +726,29 @@ Return
   HideTrayTip()
 Return
 
-
-;============================================================================================================================
-FadeInWin1:
-    Critical, On
-    MouseGetPos, , , lclickHwndId
-
-    If (lclickHwndId != ValidWindows[1])
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    If (lclickHwndId != ValidWindows[2])
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    If (lclickHwndId != ValidWindows[3])
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
-
-    WinActivate, % "ahk_id " ValidWindows[3]
-    WinActivate, % "ahk_id " ValidWindows[2]
-    WinActivate, % "ahk_id " ValidWindows[1]
-
-    WinActivate, % "ahk_id " lclickHwndId
-
-    If (lclickHwndId != ValidWindows[1]) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        sleep 20
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        sleep 20
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        sleep 20
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
-    }
-    If (lclickHwndId != ValidWindows[2]) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        sleep 20
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-        sleep 20
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-        sleep 20
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
-    }
-    If (lclickHwndId != ValidWindows[3]) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        sleep 20
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-        sleep 20
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-        sleep 20
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
-    }
-    ; If (ValidWindows.MaxIndex() >= 4 && lclickHwndId != ValidWindows[4]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
-    ; }
-    WinActivate, % "ahk_id " lclickHwndId
-    Critical, Off
-Return
-
-FadeInWin2:
-    Critical, On
-    If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1)
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2)
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3)
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
-
-    If ValidWindows.MaxIndex() >= 3
-        WinActivate, % "ahk_id " ValidWindows[3]
-    If ValidWindows.MaxIndex() >= 2
-        WinActivate, % "ahk_id " ValidWindows[2]
-    If ValidWindows.MaxIndex() >= 1
-        WinActivate, % "ahk_id " ValidWindows[1]
-
-    WinActivate, % "ahk_id " ValidWindows[cycleCount]
-
-    If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        sleep 20
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        sleep 20
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        sleep 20
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
-    }
-    If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        sleep 20
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-        sleep 20
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-        sleep 20
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
-    }
-    If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        sleep 20
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-        sleep 20
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-        sleep 20
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
-    }
-    If (ValidWindows.MaxIndex() >= 4 && cycleCount != 4) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
-    }
-    WinActivate, % "ahk_id " ValidWindows[cycleCount]
-    Critical, Off
-Return
-
-ResetWins:
-    If hitCAPS {
-        For k, v in RevMinnedWindows
-        {
-            WinMinimize, % "ahk_id " RevMinnedWindows[k]
-        }
-        If hitTAB {
-            If (ValidWindows.MaxIndex() >= 4)
-                WinActivate, % "ahk_id " ValidWindows[4]
-            If (ValidWindows.MaxIndex() >= 3)
-                WinActivate, % "ahk_id " ValidWindows[3]
-            If (ValidWindows.MaxIndex() >= 2)
-                WinActivate, % "ahk_id " ValidWindows[2]
-            If (ValidWindows.MaxIndex() >= 1)
-                WinActivate, % "ahk_id " ValidWindows[1]
-        }
-    }
-    Else {
-        If (ValidWindows.MaxIndex() >= 4)
-            WinActivate, % "ahk_id " ValidWindows[4]
-        If (ValidWindows.MaxIndex() >= 3)
-            WinActivate, % "ahk_id " ValidWindows[3]
-        If (ValidWindows.MaxIndex() >= 2)
-            WinActivate, % "ahk_id " ValidWindows[2]
-        If (ValidWindows.MaxIndex() >= 1)
-            WinActivate, % "ahk_id " ValidWindows[1]
-    }
-Return
-
-#MaxThreadsBuffer Off
-
-
-#If (!hitTAB && !hitCAPS)
-$!q::
-    Gui, GUI4Boarder: Hide
-    finalWindowsList := []
-    WinGet, activeProcessName, ProcessName, A
-    ; WinGetTitle, FullTitle, A
-    WinGetClass, FullClass, A
-    WinGet, windowsWithSameTitleList, List, ahk_exe %activeProcessName%
-
-    loop % windowsWithSameTitleList
-    {
-
-        hwndID := windowsWithSameTitleList%A_Index%
-
-        If (IsAltTabWindow(hwndID)) {
-            finalWindowsList.push(hwndID)
-        }
-    }
-
-    If (finalWindowsList.length() > 1) {
-        ; If (activeProcessName = "chrome.exe") {
-            ; HandleChromeWindowsWithSameTitle(FullTitle)
-        ; } else {
-            HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
-        ; }
-        GoSub, ClearRect
-    }
-    Else {
-        Tooltip, only 1 window found...
-        sleep 1500
-        Tooltip,
-    }
-Return
-#If
-
-#MaxThreadsPerHotkey 2
-#If !SearchingWindows && hitTAB && !hitCAPS
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 ~Alt Up::
-    while (DrawingRect) {
-        sleep 100
+    Global cycling
+    Global cycleCount
+    Global ValidWindows
+    Global MonCount
+    Global startHighlight
+    Global hitTAB
+    Global hitCAPS
+    Global LclickSelected
+    Global DrawingRect
+    
+    ; KeyWait, Alt, U T10
+    If !hitTAB
+        Return
+    Else {
+        loop 100 {
+            sleep, 20
+            If DrawingRect
+                break
+        }
     }
-
+    
     If !(hitCAPS && !hitTAB) && !LclickSelected {
         WinGet, actWndID, ID, A
         If (GetKeyState("Lbutton","P") && cycling && (ValidWindows.length() > 2)) {
@@ -1000,62 +844,247 @@ Return
             }
         }
     }
-    Else If (hitCAPS && !hitTAB && GetKeyState("x","P")) {
-        Tooltip, Cancelled!
-        SetTimer, ClearRect, -50
-        Gui, GUI4Boarder: Hide
-        If (hitCAPS && !hitTAB)
-            GoSub, ResetWins
-        sleep, 2000
-        Tooltip
-    }
-    Else If (hitCAPS && hitTAB) {
-        Tooltip, Cancelled!
-        Gui, GUI4Boarder: Hide
-        If (hitCAPS && !hitTAB)
-            GoSub, ResetWins
-        sleep, 2000
-        Tooltip
-    }
+    ; Else If (hitCAPS && !hitTAB && GetKeyState("x","P")) {
+        ; Tooltip, Cancelled!
+        ; SetTimer, ClearRect, -50
+        ; Gui, GUI4Boarder: Hide
+        ; If (hitCAPS && !hitTAB)
+            ; GoSub, ResetWins
+        ; sleep, 2000
+        ; Tooltip
+    ; }
+    ; Else If (hitCAPS && hitTAB) {
+        ; Tooltip, Cancelled!
+        ; Gui, GUI4Boarder: Hide
+        ; If (hitCAPS && !hitTAB)
+            ; GoSub, ResetWins
+        ; sleep, 2000
+        ; Tooltip
+    ; }
 
     cycleCount     := 1
-    cycleCountMin  := 1
-    If (totalCycleCountMin >= 2)
-        ReverseSearch := True
-    Else
-        ReverseSearch := False
-
     KeyWait, x, U T1
-    totalCycleCountMin  := 0
     ValidWindows   := {}
-    MinnedWindows  := {}
-    RevMinnedWindows  := {}
     cycling        := False
     cyclingMin     := False
     hitTAB         := False
-    hitCAPS        := False
     LclickSelected := False
-
+    tooltip, clearing
     Gosub, ClearRect
     startHighlight := False
     Gui, GUI4Boarder: Hide
+    ClearingRect := False
+    DrawingRect  := False
     tooltip,
+Return
+
+#MaxThreadsBuffer Off
+
+;============================================================================================================================
+FadeInWin1:
+    Critical, On
+    MouseGetPos, , , lclickHwndId
+
+    ; If (lclickHwndId != ValidWindows[1])
+        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+    ; If (lclickHwndId != ValidWindows[2])
+        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+    ; If (lclickHwndId != ValidWindows[3])
+        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+    WinSet, AlwaysOnTop, On , % "ahk_id " lclickHwndId
+    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    WinActivate, % "ahk_id " ValidWindows[3]
+    WinActivate, % "ahk_id " ValidWindows[2]
+    WinActivate, % "ahk_id " ValidWindows[1]
+
+    ; WinActivate, % "ahk_id " lclickHwndId
+    WinSet, AlwaysOnTop, Off , % "ahk_id " lclickHwndId
+
+    ; If (lclickHwndId != ValidWindows[1]) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        ; sleep 20
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+        ; sleep 20
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+        ; sleep 20
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+    ; }
+    ; If (lclickHwndId != ValidWindows[2]) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        ; sleep 20
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
+        ; sleep 20
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
+        ; sleep 20
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
+    ; }
+    ; If (lclickHwndId != ValidWindows[3]) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        ; sleep 20
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
+        ; sleep 20
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
+        ; sleep 20
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
+    ; }
+    ; If (ValidWindows.MaxIndex() >= 4 && lclickHwndId != ValidWindows[4]) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
+    ; }
+    WinActivate, % "ahk_id " lclickHwndId
+    Critical, Off
+Return
+
+FadeInWin2:
+    Critical, On
+    ; If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1)
+        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+    ; If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2)
+        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+    ; If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3)
+        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+
+    WinSet, AlwaysOnTop, On ,% "ahk_id " ValidWindows[cycleCount]
+    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    
+    If ValidWindows.MaxIndex() >= 3
+        WinActivate, % "ahk_id " ValidWindows[3]
+    If ValidWindows.MaxIndex() >= 2
+        WinActivate, % "ahk_id " ValidWindows[2]
+    If ValidWindows.MaxIndex() >= 1
+        WinActivate, % "ahk_id " ValidWindows[1]
+
+    ; WinActivate, % "ahk_id " ValidWindows[cycleCount]
+    WinSet, AlwaysOnTop, Off ,% "ahk_id " ValidWindows[cycleCount]
+
+    ; If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        ; sleep 20
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+        ; sleep 20
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+        ; sleep 20
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+    ; }
+    ; If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        ; sleep 20
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
+        ; sleep 20
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
+        ; sleep 20
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
+    ; }
+    ; If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        ; sleep 20
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
+        ; sleep 20
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
+        ; sleep 20
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
+    ; }
+    ; If (ValidWindows.MaxIndex() >= 4 && cycleCount != 4) {
+        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
+        ; sleep 10
+        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
+    ; }
+    WinActivate, % "ahk_id " ValidWindows[cycleCount]
+    Critical, Off
+Return
+
+ResetWins:
+    If hitCAPS {
+        For k, v in RevMinnedWindows
+        {
+            WinMinimize, % "ahk_id " RevMinnedWindows[k]
+        }
+        If hitTAB {
+            If (ValidWindows.MaxIndex() >= 4)
+                WinActivate, % "ahk_id " ValidWindows[4]
+            If (ValidWindows.MaxIndex() >= 3)
+                WinActivate, % "ahk_id " ValidWindows[3]
+            If (ValidWindows.MaxIndex() >= 2)
+                WinActivate, % "ahk_id " ValidWindows[2]
+            If (ValidWindows.MaxIndex() >= 1)
+                WinActivate, % "ahk_id " ValidWindows[1]
+        }
+    }
+    Else {
+        If (ValidWindows.MaxIndex() >= 4)
+            WinActivate, % "ahk_id " ValidWindows[4]
+        If (ValidWindows.MaxIndex() >= 3)
+            WinActivate, % "ahk_id " ValidWindows[3]
+        If (ValidWindows.MaxIndex() >= 2)
+            WinActivate, % "ahk_id " ValidWindows[2]
+        If (ValidWindows.MaxIndex() >= 1)
+            WinActivate, % "ahk_id " ValidWindows[1]
+    }
+Return
+
+$!Tab::
+SetTimer, track, Off
+SetTimer, keyTrack, Off
+Cycle(forward)
+SetTimer, track, On
+SetTimer, keyTrack, On
+; KeyHistory
+Return
+
+$!+Tab::
+SetTimer, track, Off
+SetTimer, keyTrack, Off
+Cycle(!forward)
+SetTimer, track, On
+SetTimer, keyTrack, On
+Return
+
+#If !hitTAB
+$!q::
+    Gui, GUI4Boarder: Hide
+    finalWindowsList := []
+    WinGet, activeProcessName, ProcessName, A
+    ; WinGetTitle, FullTitle, A
+    WinGetClass, FullClass, A
+    WinGet, windowsWithSameTitleList, List, ahk_exe %activeProcessName%
+
+    loop % windowsWithSameTitleList
+    {
+
+        hwndID := windowsWithSameTitleList%A_Index%
+
+        If (IsAltTabWindow(hwndID)) {
+            finalWindowsList.push(hwndID)
+        }
+    }
+
+    If (finalWindowsList.length() > 1) {
+        ; If (activeProcessName = "chrome.exe") {
+            ; HandleChromeWindowsWithSameTitle(FullTitle)
+        ; } else {
+            HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
+        ; }
+        GoSub, ClearRect
+    }
+    Else {
+        Tooltip, only 1 window found...
+        sleep 1500
+        Tooltip,
+    }
 Return
 #If
 
-; #If (hitCAPS && hitTAB)
-; !x::
-    ; Tooltip, Cancelled!
-    ; SetTimer, ClearRect, -50
-    ; Gui, GUI4Boarder: Hide
-    ; If (hitCAPS && !hitTAB)
-        ; GoSub, ResetWins
-    ; sleep, 2000
-    ; Tooltip
-; Return
-; #If
-
-#If (hitTAB || hitCAPS)
+; #MaxThreadsPerHotkey 2
+#If hitTAB
 x::
 Return
 #If
@@ -1066,254 +1095,114 @@ Return
     ; GoSub, DrawRect
 ; Return
 ; #If
+
 #If !hitTAB
 !Capslock::
-        ; DetectHiddenWindows, On
-        Critical On
-        hitCAPS := True
+    DetectHiddenWindows, Off
+    Critical On
+    hitCAPS := True
 
-        totalMenuItemCount := 0
-        onlyTitleFound := ""
-        winArray := []
-        winAssoc := {}
-        winArraySort := []
+    totalMenuItemCount := 0
+    onlyTitleFound := ""
+    winArray := []
+    winAssoc := {}
+    winArraySort := []
 
-        WinGet, id, list
-        Loop, %id%
-        {
-            this_ID := id%A_Index%
-            WinGetTitle, title, ahk_id %this_ID%
-            WinGet, procName, ProcessName , ahk_id %this_ID%
-            WinGet, minState, MinMax, ahk_id %this_ID%
+    WinGet, id, list
+    Loop, %id%
+    {
+        this_ID := id%A_Index%
+        WinGetTitle, title, ahk_id %this_ID%
+        WinGet, procName, ProcessName , ahk_id %this_ID%
+        WinGet, minState, MinMax, ahk_id %this_ID%
 
-            If !IsAltTabWindow(this_ID)
-                continue
+        If !IsAltTabWindow(this_ID)
+            continue
 
-            If (minState > -1)
-                continue
+        If (minState > -1)
+            continue
 
-            desknum := VD.getDesktopNumOfWindow(title)
-            If desknum <= 0
-                continue
-            finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
-            winArray.Push(finalTitle)
+        desknum := VD.getDesktopNumOfWindow(title)
+        If desknum <= 0
+            continue
+        finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
+        winArray.Push(finalTitle)
+    }
+
+    If (winArray.length() == 0) {
+        Tooltip, No matches found...
+        Sleep, 1500
+        Tooltip,
+        Return
+    }
+
+    For k, v in winArray
+    {
+        winAssoc[v] := k
+    }
+
+    For k, v in winAssoc
+    {
+        winArraySort.Push(k)
+    }
+
+    desktopEntryLast := ""
+
+    Menu, windows, Add
+    Menu, windows, deleteAll
+    For k, ft in winArraySort
+    {
+        splitEntry1 := StrSplit(ft , "^")
+        entry := splitEntry1[1]
+        ahkid := splitEntry1[2]
+
+        splitEntry2    := StrSplit(entry, "↑")
+        desktopEntry   := splitEntry2[1]
+        procEntry      := Trim(splitEntry2[2])
+        ; procEntry      := RTrim(procEntry)
+        titleEntry     := Trim(splitEntry2[3])
+
+        If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
+            finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
+        Else
+            continue
+
+        WinGet, Path, ProcessPath, ahk_exe %procEntry%
+        If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
+            Menu, windows, Add
         }
+        If (finalEntry != "" && titleEntry != "") {
+            totalMenuItemCount := totalMenuItemCount + 1
+            onlyTitleFound := finalEntry
 
-        If (winArray.length() == 0) {
-            Tooltip, No matches found...
-            Sleep, 1500
-            Tooltip,
-            Return
+            Menu, windows, Add, %finalEntry%, ActivateWindow
+            Try
+                Menu, windows, Icon, %finalEntry%, %Path%,, 32
+            Catch
+                Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
         }
+        desktopEntryLast := desktopEntry
+    }
+    Critical Off
 
-        For k, v in winArray
-        {
-            winAssoc[v] := k
-        }
+    CoordMode, Mouse, Screen
+    CoordMode, Menu, Screen
+    drawX := CoordXCenterScreen()
+    drawY := CoordYCenterScreen()
+    Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
+    Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
 
-        For k, v in winAssoc
-        {
-            winArraySort.Push(k)
-        }
+    DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
 
-        desktopEntryLast := ""
+    ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
 
-        Menu, windows, Add
-        Menu, windows, deleteAll
-        For k, ft in winArraySort
-        {
-            splitEntry1 := StrSplit(ft , "^")
-            entry := splitEntry1[1]
-            ahkid := splitEntry1[2]
+    Gui, ShadowFrFull:  Hide
+    Gui, ShadowFrFull2: Hide
 
-            splitEntry2    := StrSplit(entry, "↑")
-            desktopEntry   := splitEntry2[1]
-            procEntry      := Trim(splitEntry2[2])
-            ; procEntry      := RTrim(procEntry)
-            titleEntry     := Trim(splitEntry2[3])
-
-            If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
-                finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
-            Else
-                continue
-
-            WinGet, Path, ProcessPath, ahk_exe %procEntry%
-            If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
-                Menu, windows, Add
-            }
-            If (finalEntry != "" && titleEntry != "") {
-                totalMenuItemCount := totalMenuItemCount + 1
-                onlyTitleFound := finalEntry
-
-                Menu, windows, Add, %finalEntry%, ActivateWindow
-                Try
-                    Menu, windows, Icon, %finalEntry%, %Path%,, 32
-                Catch
-                    Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
-            }
-            desktopEntryLast := desktopEntry
-        }
-        Critical Off
-
-        CoordMode, Mouse, Screen
-        CoordMode, Menu, Screen
-        drawX := CoordXCenterScreen()
-        drawY := CoordYCenterScreen()
-        Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
-        Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
-
-        DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-
-        ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
-
-        Gui, ShadowFrFull:  Hide
-        Gui, ShadowFrFull2: Hide
-
-        Menu, windows, deleteAll
-        hitCAPS := False
+    Menu, windows, deleteAll
+    hitCAPS := False
 Return
 #If
-; !CapsLock::CycleMin(forward)
-; !+CapsLock::CycleMin(!forward)
-
-; CycleMin(direction)
-; {
-    ; Global cyclingMin
-    ; Global cycleCountMin
-    ; Global totalCycleCountMin
-    ; Global MonCount
-    ; Global startHighlight
-    ; Global hitCAPS
-    ; Global RevMinnedWindows
-    ; Global MinnedWindows
-    ; Global ReverseSearch
-    ; Global lastWinMinHwndId
-
-    ; hitCAPS := True
-
-    ; Gui, GUI4Boarder: Hide
-
-    ; If !cyclingMin
-    ; {
-        ; Critical On
-
-        ; WinGet, allWindows, List
-        ; loop % allWindows
-        ; {
-            ; If !GetKeyState("Lalt","P")
-                ; Return
-
-            ; hwndID := allWindows%A_Index%
-
-            ; WinGetTitle, cTitle, ahk_id %hwndID%
-            ; If (IsAltTabWindow(hwndID)) {
-                ; WinGet, state, MinMax, ahk_id %hwndID%
-                ; If (state == -1) {
-                    ; MinnedWindows.push(hwndID)
-                    ; cyclingMin := True
-            ; }
-            ; }
-            ; Tooltip,
-        ; }
-
-        ; If ReverseSearch {
-
-            ; brr := MinnedWindows.clone()
-            ; for k in MinnedWindows.clone()
-                ; RevMinnedWindows[k] := brr.pop()
-        ; }
-        ; Else {
-            ; RevMinnedWindows := MinnedWindows
-        ; }
-        ; ; tooltip, % join(RevMinnedWindows)
-        ; loop % RevMinnedWindows.length()
-        ; {
-            ; currentVal := RevMinnedWindows[A_Index]
-
-            ; If (lastWinMinHwndId == currentVal) {
-                ; WinActivate, % "ahk_id " lastWinMinHwndId
-                ; WinWaitActive, % "ahk_id " lastWinMinHwndId, , 2
-                ; WinGetClass, currentCl, % "ahk_id " lastWinMinHwndId
-                ; tooltip, %A_Index% - %currentCl%
-                ; sleep 100
-                ; startHighlight := True
-                ; GoSub, DrawRect
-                ; break
-            ; }
-            ; Else {
-                ; cycleCountMin += 1
-                ; currentVal := RevMinnedWindows[cycleCountMin]
-            ; }
-            ; ; sleep, 1000
-        ; }
-        ; Critical Off
-    ; }
-
-    ; totalCycleCountMin += 1
-
-    ; If ((RevMinnedWindows.length() >= 1 && totalCycleCountMin > 1) || (RevMinnedWindows.length() >= 1 && !startHighlight))
-    ; {
-        ; If direction
-        ; {
-            ; If (cycleCountMin >= RevMinnedWindows.MaxIndex())
-                ; cycleCountMin := 1
-            ; Else
-                ; cycleCountMin += 1
-
-            ; PrevCount := cycleCountMin-1
-            ; If (PrevCount < 1)
-                ; PrevCount := RevMinnedWindows.MaxIndex()
-
-            ; WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
-            ; lastWinMinHwndId := RevMinnedWindows[PrevCount]
-            ; If hitCAPS
-                ; sleep, 200
-
-            ; WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
-            ; WinWaitActive, % "ahk_id " RevMinnedWindows[cycleCountMin], , 2
-            ; WinGetClass, currentVal, % "ahk_id " RevMinnedWindows[cycleCountMin]
-            ; tooltip, %cycleCountMin% - %currentVal%
-
-            ; startHighlight := True
-            ; If (startHighlight) {
-                ; sleep 100
-                ; GoSub, DrawRect
-            ; }
-        ; }
-        ; Else
-        ; {
-            ; If (cycleCountMin <= 1)
-                ; cycleCountMin := RevMinnedWindows.MaxIndex()
-            ; Else
-                ; cycleCountMin -= 1
-
-            ; PrevCount := cycleCountMin+1
-            ; If (PrevCount > RevMinnedWindows.MaxIndex())
-                ; PrevCount := 1
-
-            ; WinMinimize,% "ahk_id " RevMinnedWindows[PrevCount]
-            ; lastWinMinHwndId := RevMinnedWindows[PrevCount]
-            ; If hitCAPS
-                ; sleep, 200
-
-            ; WinActivate, % "ahk_id " RevMinnedWindows[cycleCountMin]
-            ; WinWaitActive, % "ahk_id " RevMinnedWindows[cycleCountMin], , 2
-            ; WinGetClass, currentVal, % "ahk_id " RevMinnedWindows[cycleCountMin]
-            ; tooltip, %cycleCountMin% - %currentVal%
-
-            ; startHighlight := True
-            ; If (startHighlight) {
-                ; sleep 100
-                ; GoSub, DrawRect
-            ; }
-        ; }
-    ; }
-
-    ; Return
-    ; }
-
-!Tab::Cycle(forward)
-!+Tab::Cycle(!forward)
 
 Cycle(direction)
 {
@@ -1323,17 +1212,16 @@ Cycle(direction)
     Global MonCount
     Global startHighlight
     Global hitTAB
-    Global RevMinnedWindows
 
-    hitTAB := True
+    ; hitTAB := True
 
-    If hitCAPS {
-        For k, v in RevMinnedWindows
-        {
-            WinMinimize, % "ahk_id " RevMinnedWindows[k]
-        }
-        hitCAPS := False
-    }
+    ; If hitCAPS {
+        ; For k, v in RevMinnedWindows
+        ; {
+            ; WinMinimize, % "ahk_id " RevMinnedWindows[k]
+        ; }
+        ; hitCAPS := False
+    ; }
 
     If !cycling
     {
@@ -1343,14 +1231,11 @@ Cycle(direction)
         failedSwitch := False
 
         WinGet, actId, ID, A
-        WinGetPos,,,,currActHeight, A
 
         WinGet, allWindows, List
+        
         loop % allWindows
         {
-            If !GetKeyState("Lalt","P")
-                Return
-
             hwndID := allWindows%A_Index%
 
             If (MonCount > 1) {
@@ -1362,49 +1247,46 @@ Cycle(direction)
             }
 
             If (currentMonHasActWin) {
-                ; WinGetTitle, cTitle, ahk_id %hwndID%
                 If (IsAltTabWindow(hwndID)) {
                     WinGet, state, MinMax, ahk_id %hwndID%
                     If (state > -1) {
-                        ; desknum := VD.getDesktopNumOfWindow(cTitle)
-                        ; If (desknum == VD.getCurrentDesktopNum()) {
-                        ; If desknum <= 0
-                        ; continue
-                            ValidWindows.push(hwndID)
-                            If (ValidWindows.MaxIndex() == 2) {
-                                WinActivate, % "ahk_id " hwndID
-                                WinWaitActive,  % "ahk_id " hwndID, , 2
-                                cycleCount := 2
-                                If (hwndID == actId) {
-                                    failedSwitch := True
-                                }
-                                Else {
-                                    GoSub, DrawRect
-                                }
+                        ValidWindows.push(hwndID)
+                        If (ValidWindows.MaxIndex() == 2) {
+                            WinActivate, % "ahk_id " hwndID
+                            WinWaitActive,  % "ahk_id " hwndID, , 2
+                            cycleCount := 2
+                            If (hwndID == actId) {
+                                failedSwitch := True
                             }
-                            If (ValidWindows.MaxIndex() == 3 && failedSwitch) {
-                                WinActivate, % "ahk_id " hwndID
-                                WinWaitActive,  % "ahk_id " hwndID, , 2
-                                cycleCount := 3
+                            Else {
                                 GoSub, DrawRect
+                                If !GetKeyState("Alt","P")
+                                    break
                             }
-                        ; }
+                        }
+                        If (ValidWindows.MaxIndex() == 3 && failedSwitch) {
+                            WinActivate, % "ahk_id " hwndID
+                            WinWaitActive,  % "ahk_id " hwndID, , 2
+                            cycleCount := 3
+                            GoSub, DrawRect
+                        }
+                        If ((ValidWindows.MaxIndex() > 3) && !GetKeyState("Alt","P")) {
+                            Critical Off
+                            Return
+                        }
                     }
                 }
             }
-            ; Tooltip,
         }
-        Critical Off
     }
-
+    hitTAB := True
+    
     If (ValidWindows.length() == 1) {
         tooltip, % "Only " ValidWindows.length() " Window to Show..."
-        cycling := True
         sleep, 1000
         tooltip,
         Return
     }
-
 
     If (ValidWindows.length() >= 2 && cycling)
     {
@@ -1416,6 +1298,7 @@ Cycle(direction)
                 cycleCount += 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
             WinWaitActive, % "ahk_id " ValidWindows[cycleCount], , 2
+            Critical Off
             GoSub, DrawRect
         }
         Else
@@ -1426,26 +1309,24 @@ Cycle(direction)
                 cycleCount -= 1
             WinActivate, % "ahk_id " ValidWindows[cycleCount]
             WinWaitActive, % "ahk_id " ValidWindows[cycleCount], , 2
+            Critical Off
             GoSub, DrawRect
         }
     }
     If (cycleCount > 2)
         startHighlight := True
+
     cycling := True
     Return
 }
 
 ClearRect:
-    while (DrawingRect) {
-        sleep, 50
-    }
     ClearingRect := True
-    ; WinGet, activeWin, ID, A
-    loop 25 {
-        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            ; Gui, GUI4Boarder: Hide
+    loop 20 {
+        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
+            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
             Return
         }
         sleep, 10
@@ -1453,70 +1334,69 @@ ClearRect:
 
     WinSet, Transparent, 225, ahk_id %Highlighter%
     loop 5 {
-        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            ; Gui, GUI4Boarder: Hide
+        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
+            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
             Return
         }
         sleep 10
     }
     WinSet, Transparent, 200, ahk_id %Highlighter%
     loop 4 {
-        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            ; Gui, GUI4Boarder: Hide
+        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
+            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
             Return
         }
         sleep 10
     }
     WinSet, Transparent, 175, ahk_id %Highlighter%
     loop 3 {
-        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            ; Gui, GUI4Boarder: Hide
+        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
+            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
             Return
         }
         sleep 10
     }
     WinSet, Transparent, 125, ahk_id %Highlighter%
     loop 2 {
-        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            ; Gui, GUI4Boarder: Hide
+        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
+            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
             Return
         }
         sleep 10
     }
     WinSet, Transparent, 50, ahk_id %Highlighter%
     loop 1 {
-        If (DrawingRect || GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            ; Gui, GUI4Boarder: Hide
+        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
+            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
             Return
         }
         sleep 10
     }
     Gui, GUI4Boarder: Hide
-    ClearingRect := False
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
     Critical, On
+    
     DrawingRect := True
-    ; tooltip, drawing...
     WinGet, activeWin, ID, A
+    x := y := w := h := 0 
     WinGetPosEx(activeWin, x, y, w, h)
 
     if (x="")
         Return
-    Gui, GUI4Boarder: +Lastfound +AlwaysOnTop +Toolwindow hWndHighlighter
-
+    
     borderType:="inside"                ; set to inside, outside, or both
 
     if (borderType="outside") {
@@ -1536,7 +1416,7 @@ DrawRect:
         newH:=h+2*border_thickness
 
     } else if (borderType="inside") {
-        WinGet, myState, MinMax, A
+        ; WinGet, myState, MinMax, A
         ; if (myState == 1)
             ; offset:=8
         ; else
@@ -1574,20 +1454,19 @@ DrawRect:
         newH:=h+4*border_thickness
     }
 
-    Gui, GUI4Boarder: Color, %border_color%
-    Gui, GUI4Boarder: -Caption
-
+    ; Gui, GUI4Boarder: +HwndHighlighter
+    ; Gui, GUI4Boarder: +AlwaysOnTop +Toolwindow -Caption +Owner +Lastfound
+    ; Gui, GUI4Boarder: Color, %border_color%
+    
     ;WinSet, Region, 0-0 %w%-0 %w%-%h% 0-%h% 0-0 %border_thickness%-%border_thickness% %iw%-%border_thickness% %iw%-%ih% %border_thickness%-%ih% %border_thickness%-%border_thickness%
-    WinSet, Region, %outerX%-%outerY% %outerX2%-%outerY% %outerX2%-%outerY2% %outerX%-%outerY2% %outerX%-%outerY%    %innerX%-%innerY% %innerX2%-%innerY% %innerX2%-%innerY2% %innerX%-%innerY2% %innerX%-%innerY%
-
-    ;Gui, Show, w%w% h%h% x%x% y%y% NoActivate, Table awaiting Action
     Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NA, Table awaiting Action
+    WinSet, Region, %outerX%-%outerY%  %outerX2%-%outerY%  %outerX2%-%outerY2%  %outerX%-%outerY2%  %outerX%-%outerY%  %innerX%-%innerY%  %innerX2%-%innerY%  %innerX2%-%innerY2%  %innerX%-%innerY2%  %innerX%-%innerY%, ahk_id %Highlighter%
+
     WinSet, Transparent, off, ahk_id %Highlighter%
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, ahk_id %activeWin%
     WinWaitActive, ahk_id %activeWin%, , 2
-    ; tooltip, done
-    DrawingRect := False
+    ; DrawingRect := False
     Critical, Off
 Return
 
@@ -1610,9 +1489,9 @@ UpdateInputBoxTitle:
     }
 Return
 
-#MaxThreadsPerHotkey 1
+; #MaxThreadsPerHotkey 1
 #If (!VolumeHover() && LbuttonEnabled)
-~$LButton::
+~*$LButton::
     Critical, On
     SetTimer, SendCtrlAdd, Off
     CoordMode, Mouse, Screen
@@ -1638,10 +1517,10 @@ Return
         && (WinActive("ahk_class CabinetWClass") || (WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
     {
         If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
-            Send !{Up}
-            SetTimer, SendCtrlAdd, 200
-            KeyWait, Lbutton, U T5
             LbuttonEnabled := False
+            Send !{Up}
+            SetTimer, SendCtrlAdd, 100
+            KeyWait, Lbutton, U T5
             sleep, 400
             LbuttonEnabled := True
         }
@@ -1664,8 +1543,8 @@ Return
     KeyWait, LButton, U T3
     MouseGetPos, X2, Y2,
     ; tooltip, %X1% %X2% %Y1% %Y2% %lClass% %lctrlN%
-    If ((abs(X1-X2) < 3 && abs(Y1-Y2) < 3) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "SysTreeView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")))  {
-        SetTimer, SendCtrlAdd, -1
+    If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "SysTreeView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")))  {
+        SetTimer, SendCtrlAdd, -100
     }
     Critical Off
 Return
@@ -1933,17 +1812,35 @@ Return
 
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
+    ControlGetFocus, FocusedControl, A
+    ; If (GetKeyState("Lbutton","P") || GetKeyState("Rbutton","P") || GetKeyState("LAlt","P") || GetKeyState("Enter","P") || GetKeyState("Tab","P"))
+    If (FocusedControl != "SysTreeView321" && FocusedControl != "DirectUIHWND2" && FocusedControl != "DirectUIHWND3")
+        SetTimer, SendCtrlAdd, Off
+            
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass) {
-        If (lClassCheck == "CabinetWClass" && lctrlN == "SysTreeView321")
+        
+        If (lctrlN == "SysTreeView321") {
             send, {Tab}
+            loop 50 {
+                ControlGetFocus, FocusedControl, A
+                If (FocusedControl == "DirectUIHWND2" || FocusedControl == "DirectUIHWND3")
+                    break
+                sleep, 50
+            }
+        }
 
         Send, ^{NumpadAdd}
 
-        If (lClassCheck == "CabinetWClass" && lctrlN == "SysTreeView321")
+        If (lctrlN == "SysTreeView321") {
+            sleep, 50
             send, +{Tab}
-
-        If (GetKeyState("Lbutton","P") || GetKeyState("Rbutton","P") || GetKeyState("LAlt","P") || GetKeyState("Enter","P"))
-            SetTimer, SendCtrlAdd, Off
+            loop 50 {
+                ControlGetFocus, FocusedControl, A
+                If (FocusedControl == "SysTreeView321")
+                    break
+                sleep, 50
+            }
+        }
     }
 Return
 
@@ -1954,7 +1851,7 @@ LWin & WheelDown::send {Volume_Down}
 WheelUp::send {Volume_Up}
 WheelDown::send {Volume_Down}
 
-LButton::
+$LButton::
     Run, C:\Windows\System32\SndVol.exe
     WinWait, ahk_exe SndVol.exe
     WinGetPos, sx, sy, sw, sh, ahk_exe SndVol.exe
@@ -2618,22 +2515,25 @@ Exit_label:
     exitapp
 Return
 
-track() {
-    Static x, y, lastX, lastY, lastMon, currentMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
-    Static LbuttonHeld := False
+keyTrack() {
     Static DisableCheck := False
     Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
     Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
-    Global MonCount, MonNum, LastKey1, LastKey2, LastKey3
+    Static LastKey1, LastKey2, LastKey3, LastKey4 := ""
+    Global MonCount, MonNum
 
     ; tooltip,   %LastKey3% %LastKey2% %LastKey1%
     If (LastKey1 != A_PriorKey) {
+        LastKey4 := LastKey3
         LastKey3 := LastKey2
         LastKey2 := LastKey1
         LastKey1 := A_PriorKey
+        If (GetKeyState("Lshift","P"))
+            StringUpper, LastKey1, LastKey1
     
         If (DisableCheck && A_PriorKey == "Space") {
             DisableCheck := False
+            LastKey4 := ""
             LastKey1 := ""
             LastKey2 := ""
             LastKey3 := ""
@@ -2643,16 +2543,33 @@ track() {
         
         If (!DisableCheck 
             && (((LastKey1 == "Space" || LastKey1 == "Enter") && LastKey2 == "/")
-                && (inStr(Uppers,LastKey3,true) || inStr(Lowers,LastKey3,true))))
-            {
-                BlockInput On
-                Send, {BS}{BS}{BS}
-                Send, {%LastKey3%}
-                Send, {?}
-                Send, {%LastKey1%}
-                BlockInput Off
-            }
+                && (inStr(Uppers,LastKey3,true) || inStr(Lowers,LastKey3,true)))) {
+            BlockInput On
+            Send, {%LastKey4%}
+            Send, {BS}{BS}{BS}
+            Send, {%LastKey3%}
+            Send, {?}
+            Send, {%LastKey1%}
+            BlockInput Off
+        }
+        Else If (!DisableCheck && inStr(Uppers,LastKey3,true) && inStr(Uppers,LastKey2,true) && inStr(Lowers,LastKey1,true)) {
+            BlockInput On
+            Send, {%LastKey4%}
+            Send, {BS}{BS}{BS}
+            Send, {%LastKey3%}
+            StringLower, LastKey2, LastKey2
+            Send, {%LastKey2%}
+            Send, {%LastKey1%}
+            BlockInput Off    
+        }
     }
+Return
+}
+
+track() {
+    Global MonCount, MonNum
+    Static x, y, lastX, lastY, lastMon, currentMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
+    Static LbuttonHeld := False
     
     WinGet, actwndId, ID, A
     MouseGetPos x, y, hwndId
@@ -3403,6 +3320,23 @@ WinActivated(process, class, Hwnd, title)
         ToolTip
         return
 }
+
+; https://www.autohotkey.com/boards/viewtopic.php?t=3951
+; Modified from AutoHotkey.chm::/docs/commands/_If.htm
+ControlWaitActive(Hwnd, Seconds = "") {
+	StartTime := A_TickCount
+
+	Loop {
+		Sleep, 100
+		ControlGetFocus, FocusedControl, A
+		ControlGet, FocusedControlHwnd, Hwnd,, %FocusedControl%, A
+	}
+	Until ( FocusedControlHwnd = Hwnd )
+	   || ( Seconds && (A_TickCount-StartTime)/1000 >= Seconds )
+
+	Return (FocusedControlHwnd=Hwnd)
+}
+
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
@@ -3519,8 +3453,9 @@ SetTitleMatchMode, 2
         && !WinActive("ahk_exe bash.exe")
         && !WinActive("ahk_exe mintty.exe")
         && !SearchingWindows
-        && !hitCAPS
         && !hitTAB
+        && !DrawingRect
+        && !ClearingRect
         && !GetKeyState("LAlt","P")
         && !GetKeyState("Ctrl","P")
 
@@ -3910,32 +3845,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:gni::ing
 :?:ign::ing
 :?:ngi::ing
-; :?:a/::a?
-; :?:b/::b?
-; :?:c/::c?
-; :?:d/::d?
-; :?:e/::e?
-; :?:f/::f?
-; :?:g/::g?
-; :?:h/::h?
-; :?:i/::i?
-; :?:j/::j?
-; :?:k/::k?
-; :?:l/::l?
-; :?:m/::m?
-; :?:n/::n?
-; :?:o/::o?
-; :?:p/::p?
-; :?:q/::q?
-; :?:r/::r?
-; :?:s/::s?
-; :?:t/::t?
-; :?:u/::u?
-; :?:v/::v?
-; :?:w/::w?
-; :?:y/::y?
-; :?:x/::x?
-; :?:z/::z?
+:?:yda::day
+:?:groudn::ground
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -4026,6 +3937,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:soem::some
 :*:seom::some
 :*:tyr::try
+:*:tyring::trying
+:*:tryin::trying
 :*:cmakel::CMakeLists.txt
 :*:cmaket::CMakeLists.txt
 :*:unfo::unfortunately, `
