@@ -8,7 +8,7 @@ sleep, 10000
 ExitApp
 Return
 
-Capslock Up::
+~Alt Up::
 Winclose, ahk_class #32768
 ExitApp
 

@@ -727,7 +727,7 @@ Return
 Return
 
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
-~Alt Up::
+Altup:
     Global cycling
     Global cycleCount
     Global ValidWindows
@@ -738,17 +738,9 @@ Return
     Global LclickSelected
     Global DrawingRect
     
-    ; KeyWait, Alt, U T10
     If !hitTAB
         Return
-    Else {
-        loop 100 {
-            sleep, 20
-            If DrawingRect
-                break
-        }
-    }
-    
+
     If !(hitCAPS && !hitTAB) && !LclickSelected {
         WinGet, actWndID, ID, A
         If (GetKeyState("Lbutton","P") && cycling && (ValidWindows.length() > 2)) {
@@ -844,23 +836,6 @@ Return
             }
         }
     }
-    ; Else If (hitCAPS && !hitTAB && GetKeyState("x","P")) {
-        ; Tooltip, Cancelled!
-        ; SetTimer, ClearRect, -50
-        ; Gui, GUI4Boarder: Hide
-        ; If (hitCAPS && !hitTAB)
-            ; GoSub, ResetWins
-        ; sleep, 2000
-        ; Tooltip
-    ; }
-    ; Else If (hitCAPS && hitTAB) {
-        ; Tooltip, Cancelled!
-        ; Gui, GUI4Boarder: Hide
-        ; If (hitCAPS && !hitTAB)
-            ; GoSub, ResetWins
-        ; sleep, 2000
-        ; Tooltip
-    ; }
 
     cycleCount     := 1
     KeyWait, x, U T1
@@ -877,6 +852,14 @@ Return
     DrawingRect  := False
     tooltip,
 Return
+
+TabBlock() {
+    Return
+}
+
+TabOff() {
+    Hotkey, Tab, Off
+}
 
 #MaxThreadsBuffer Off
 
@@ -1035,9 +1018,9 @@ $!Tab::
 SetTimer, track, Off
 SetTimer, keyTrack, Off
 Cycle(forward)
+GoSub, altup
 SetTimer, track, On
 SetTimer, keyTrack, On
-; KeyHistory
 Return
 
 $!+Tab::
@@ -1213,7 +1196,7 @@ Cycle(direction)
     Global startHighlight
     Global hitTAB
 
-    ; hitTAB := True
+    hitTAB := True
 
     ; If hitCAPS {
         ; For k, v in RevMinnedWindows
@@ -1261,7 +1244,7 @@ Cycle(direction)
                             Else {
                                 GoSub, DrawRect
                                 If !GetKeyState("Alt","P")
-                                    break
+                                    Return
                             }
                         }
                         If (ValidWindows.MaxIndex() == 3 && failedSwitch) {
@@ -1279,7 +1262,7 @@ Cycle(direction)
             }
         }
     }
-    hitTAB := True
+    Critical, Off
     
     If (ValidWindows.length() == 1) {
         tooltip, % "Only " ValidWindows.length() " Window to Show..."
@@ -1287,42 +1270,47 @@ Cycle(direction)
         tooltip,
         Return
     }
-
-    If (ValidWindows.length() >= 2 && cycling)
-    {
-        If direction
-        {
-            If (cycleCount == ValidWindows.MaxIndex())
-                cycleCount := 1
-            Else
-                cycleCount += 1
-            WinActivate, % "ahk_id " ValidWindows[cycleCount]
-            WinWaitActive, % "ahk_id " ValidWindows[cycleCount], , 2
-            Critical Off
-            GoSub, DrawRect
-        }
-        Else
-        {
-            If (cycleCount == 1)
-                cycleCount := ValidWindows.MaxIndex()
-            Else
-                cycleCount -= 1
-            WinActivate, % "ahk_id " ValidWindows[cycleCount]
-            WinWaitActive, % "ahk_id " ValidWindows[cycleCount], , 2
-            Critical Off
-            GoSub, DrawRect
-        }
-    }
-    If (cycleCount > 2)
-        startHighlight := True
-
+    KeyWait, Tab, U 
     cycling := True
+    If cycling {
+        loop {
+            If (ValidWindows.length() >= 2 && cycling)
+            {
+                KeyWait, Tab, D  T.25
+                If !ErrorLevel
+                {
+                    If direction {
+                        If (cycleCount == ValidWindows.MaxIndex())
+                            cycleCount := 1
+                        Else
+                            cycleCount += 1
+                        WinActivate, % "ahk_id " ValidWindows[cycleCount]
+                        WinWaitActive, % "ahk_id " ValidWindows[cycleCount], , 2
+                        GoSub, DrawRect
+                        KeyWait, Tab, U 
+                    }
+                    Else {
+                        If (cycleCount == 1)
+                            cycleCount := ValidWindows.MaxIndex()
+                        Else
+                            cycleCount -= 1
+                        WinActivate, % "ahk_id " ValidWindows[cycleCount]
+                        WinWaitActive, % "ahk_id " ValidWindows[cycleCount], , 2
+                        GoSub, DrawRect
+                        KeyWait, Tab, U 
+                    }
+                    If (cycleCount > 2)
+                        startHighlight := True
+                }
+            }
+        } until (!GetKeyState("LAlt", "P"))
+    }
     Return
 }
 
 ClearRect:
     ClearingRect := True
-    loop 20 {
+    loop 15 {
         If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
             WinSet, Transparent, 255, ahk_id %Highlighter%
             ClearingRect := False
@@ -1814,7 +1802,7 @@ SendCtrlAdd:
     WinGetClass, lClassCheck, A
     ControlGetFocus, FocusedControl, A
     ; If (GetKeyState("Lbutton","P") || GetKeyState("Rbutton","P") || GetKeyState("LAlt","P") || GetKeyState("Enter","P") || GetKeyState("Tab","P"))
-    If (FocusedControl != "SysTreeView321" && FocusedControl != "DirectUIHWND2" && FocusedControl != "DirectUIHWND3")
+    If (lClassCheck != lClass)
         SetTimer, SendCtrlAdd, Off
             
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass) {
