@@ -43,7 +43,6 @@ Global startHighlight := False
 Global border_thickness := 4
 Global border_color := 0xFF00FF
 Global hitTAB := False
-Global hitCAPS := False
 Global SearchingWindows := False
 Global ReverseSearch    := False
 Global UserInputTrimmed := ""
@@ -215,17 +214,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Send, ^{NumpadAdd}
             }
             Else If (OutputVar3 == 1 && OutX > 8) {
-                ; Tooltip, %vWinTitle% : %OutputVar1% - %OutputVar2% - %OutputVar3%
-                Send, +{Tab}
+                ; Send, +{Tab}
+                ; sleep, 50
+                ; Send, +{Tab}
+                ; sleep, 50
+                ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
                 sleep, 50
-                Send, +{Tab}
-                sleep, 50
-                ; ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
                 Send, ^{NumpadAdd}
-                sleep, 50
-                Send, {Tab}
-                sleep, 50
-                Send, {Tab}
+                ; Send, {Tab}
+                ; sleep, 50
+                ; Send, {Tab}
             }
             Else If (OutputVar2 == 1) {
                 ; Tooltip, %vWinTitle% : %OutputVar1% - %OutputVar2% - %OutputVar3%
@@ -331,7 +329,7 @@ Return
     ; HotstringX("(\s\w+)/(\s)", "")
 ; Return
 
-#If (!hitCAPS && !hitTAB)
+#If !hitTAB
     
     ~Mbutton::
     ControlGetFocus, IsEdit, A
@@ -501,7 +499,7 @@ Return
     Return
 #If
 
-#If !SearchingWindows && !hitTAB && !hitCAPS
+#If !SearchingWindows && !hitTAB
 ~Esc::
     WinGet, escHwndID, ID, A
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 500 && escHwndID == escHwndID_old) {
@@ -651,14 +649,16 @@ Return
   }
   else
   {
-      WinActivate, ahk_class Shell_TrayWnd
-      If (VD.getCurrentDesktopNum() == 1)
-        Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-      Else If (VD.getCurrentDesktopNum() == 3)
+      ; WinActivate, ahk_class Shell_TrayWnd
+      If (VD.getCurrentDesktopNum() == 1) {
+        Send #^{Right}
+      }
+      Else If (VD.getCurrentDesktopNum() == 3) {
         Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
+      }
       sleep 250
-      WinMinimize, ahk_class Shell_TrayWnd
-      WinSet, Transparent, off, ahk_id %hwndVD%
+      ; WinMinimize, ahk_class Shell_TrayWnd
+      ; WinSet, Transparent, off, ahk_id %hwndVD%
   }
   TrayTip , , Desktop 2, , 16
   sleep 1500
@@ -734,7 +734,6 @@ Altup:
     Global MonCount
     Global startHighlight
     Global hitTAB
-    Global hitCAPS
     Global LclickSelected
     Global DrawingRect
     
@@ -844,7 +843,7 @@ Altup:
     cyclingMin     := False
     hitTAB         := False
     LclickSelected := False
-    tooltip, clearing
+    ; tooltip, clearing
     Gosub, ClearRect
     startHighlight := False
     Gui, GUI4Boarder: Hide
@@ -1083,7 +1082,6 @@ Return
 !Capslock::
     DetectHiddenWindows, Off
     Critical On
-    hitCAPS := True
 
     totalMenuItemCount := 0
     onlyTitleFound := ""
@@ -1105,9 +1103,9 @@ Return
         If (minState > -1)
             continue
 
-        desknum := VD.getDesktopNumOfWindow(title)
-        If desknum <= 0
-            continue
+        ; desknum := VD.getDesktopNumOfWindow(title)
+        ; If desknum <= 0
+            ; continue
         finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
         winArray.Push(finalTitle)
     }
@@ -1142,13 +1140,12 @@ Return
         splitEntry2    := StrSplit(entry, "↑")
         desktopEntry   := splitEntry2[1]
         procEntry      := Trim(splitEntry2[2])
-        ; procEntry      := RTrim(procEntry)
         titleEntry     := Trim(splitEntry2[3])
 
-        If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
+        ; If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
             finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
-        Else
-            continue
+        ; Else
+            ; continue
 
         WinGet, Path, ProcessPath, ahk_exe %procEntry%
         If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
@@ -1183,7 +1180,6 @@ Return
     Gui, ShadowFrFull2: Hide
 
     Menu, windows, deleteAll
-    hitCAPS := False
 Return
 #If
 
@@ -1454,7 +1450,6 @@ DrawRect:
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, ahk_id %activeWin%
     WinWaitActive, ahk_id %activeWin%, , 2
-    ; DrawingRect := False
     Critical, Off
 Return
 
@@ -1507,13 +1502,13 @@ Return
         If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
             LbuttonEnabled := False
             Send !{Up}
-            SetTimer, SendCtrlAdd, 100
+            SetTimer, SendCtrlAdd, 50
             KeyWait, Lbutton, U T5
             sleep, 400
             LbuttonEnabled := True
         }
         Else {
-            SetTimer, SendCtrlAdd, 100
+            SetTimer, SendCtrlAdd, 50
         }
         Critical, Off
         Return
@@ -1801,9 +1796,16 @@ Return
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
     ControlGetFocus, FocusedControl, A
-    ; If (GetKeyState("Lbutton","P") || GetKeyState("Rbutton","P") || GetKeyState("LAlt","P") || GetKeyState("Enter","P") || GetKeyState("Tab","P"))
-    If (lClassCheck != lClass)
+    ControlGet, OutputVar1, Visible ,, SysListView321, A
+    ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  A
+    ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  A
+    
+    ; Tooltip, %vWinTitle% : %OutputVar1% - %OutputVar2% - %OutputVar3%
+    
+    If (lClassCheck != lClass || (OutputVar1 == "" && OutputVar2 == "" && OutputVar3 == "")) {
         SetTimer, SendCtrlAdd, Off
+        Return
+    }
             
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass) {
         
@@ -1811,16 +1813,36 @@ SendCtrlAdd:
             send, {Tab}
             loop 50 {
                 ControlGetFocus, FocusedControl, A
-                If (FocusedControl == "DirectUIHWND2" || FocusedControl == "DirectUIHWND3")
+                If (FocusedControl == "SysListView321" || FocusedControl == "DirectUIHWND2" || FocusedControl == "DirectUIHWND3")
                     break
                 sleep, 50
             }
         }
-
+        
+        ; currentPath := GetExplorerPath()
+        ; loop 40 {
+            ; fileCount := ComObjCreate("Shell.Application").NameSpace(currentPath).Items.Count
+            ; tooltip, %fileCount% %currentPath%
+            ; If (fileCount > 0) {
+                ; SetTimer, SendCtrlAdd, Off
+                ; break
+            ; }
+            ; sleep, 50
+        ; }
+        ControlGetPos , OutX, OutY, OutWidth, OutHeight, %FocusedControl%, A
+        WinGetPos, sx, sy, sw, sh, A
+        CoordMode, Pixel, Screen
+        OutX := sx + OutX + 27
+        OutY := sy + OutY + 43
+        loop 40 {
+            PixelGetColor, HexColor1, %OutX%, %OutY%, RGB
+            If (HexColor1 != 0xFFFFFF)
+                break
+            sleep, 50
+        }
         Send, ^{NumpadAdd}
 
         If (lctrlN == "SysTreeView321") {
-            sleep, 50
             send, +{Tab}
             loop 50 {
                 ControlGetFocus, FocusedControl, A
@@ -2117,6 +2139,7 @@ ProcessIsElevated(vPID)
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
+; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399
 IsAltTabWindow(hWnd)
 {
    DetectHiddenWindows, On
@@ -2508,7 +2531,6 @@ keyTrack() {
     Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
     Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
     Static LastKey1, LastKey2, LastKey3, LastKey4 := ""
-    Global MonCount, MonNum
 
     ; tooltip,   %LastKey3% %LastKey2% %LastKey1%
     If (LastKey1 != A_PriorKey) {
@@ -2533,8 +2555,8 @@ keyTrack() {
             && (((LastKey1 == "Space" || LastKey1 == "Enter") && LastKey2 == "/")
                 && (inStr(Uppers,LastKey3,true) || inStr(Lowers,LastKey3,true)))) {
             BlockInput On
+            Send, {BS}{BS}{BS}{BS}
             Send, {%LastKey4%}
-            Send, {BS}{BS}{BS}
             Send, {%LastKey3%}
             Send, {?}
             Send, {%LastKey1%}
@@ -2542,8 +2564,8 @@ keyTrack() {
         }
         Else If (!DisableCheck && inStr(Uppers,LastKey3,true) && inStr(Uppers,LastKey2,true) && inStr(Lowers,LastKey1,true)) {
             BlockInput On
+            Send, {BS}{BS}{BS}{BS}
             Send, {%LastKey4%}
-            Send, {BS}{BS}{BS}
             Send, {%LastKey3%}
             StringLower, LastKey2, LastKey2
             Send, {%LastKey2%}
@@ -3325,6 +3347,65 @@ ControlWaitActive(Hwnd, Seconds = "") {
 	Return (FocusedControlHwnd=Hwnd)
 }
 
+; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=69925
+GetActiveExplorerPath()
+{
+	explorerHwnd := WinActive("ahk_class CabinetWClass")
+	if (explorerHwnd)
+	{
+		for window in ComObjCreate("Shell.Application").Windows
+		{
+			if (window.hwnd==explorerHwnd)
+			{
+				return window.Document.Folder.Self.Path
+			}
+		}
+	}
+}
+
+; https://www.reddit.com/r/AutoHotkey/comments/10fmk4h/get_path_of_active_explorer_tab/
+GetExplorerPath(hwnd:="") {
+    if !hwnd
+        hwnd := WinExist("A")
+    activeTab := 0
+    try ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
+    for w in ComObjCreate("Shell.Application").Windows {
+        if (w.hwnd != hwnd)
+            continue
+        if activeTab {
+            static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
+            shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
+            DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
+            if (thisTab != activeTab)
+                continue
+            ObjRelease(shellBrowser)
+        }
+        return w.Document.Folder.Self.Path
+    }
+    return false
+}
+
+; https://www.autohotkey.com/boards/viewtopic.php?t=60403
+Explorer_GetSelection() {
+   WinGetClass, winClass, % "ahk_id" . hWnd := WinExist("A")
+   if !(winClass ~= "^(Progman|WorkerW|(Cabinet|Explore)WClass)$")
+      Return
+   
+   shellWindows := ComObjCreate("Shell.Application").Windows
+   if (winClass ~= "Progman|WorkerW")  ; IShellWindows::Item:    https://goo.gl/ihW9Gm
+                                       ; IShellFolderViewDual:   https://goo.gl/gnntq3
+      shellFolderView := shellWindows.Item( ComObject(VT_UI4 := 0x13, SWC_DESKTOP := 0x8) ).Document
+   else {
+      for window in shellWindows       ; ShellFolderView object: https://tinyurl.com/yh92uvpa
+         if (hWnd = window.HWND) && (shellFolderView := window.Document)
+            break
+   }
+   for item in shellFolderView.SelectedItems
+      result .= (result = "" ? "" : "`n") . item.Path
+   ;~ if !result
+      ;~ result := shellFolderView.Folder.Self.Path
+   Return result
+}
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
@@ -3892,7 +3973,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:inlcud::includ
 :*:indenpenden::independen
 :*:indisputib::indisputab
-:*:isntall::install
 :*:insitut::institut
 :*:knwo::know
 :*:lsit::list
@@ -3943,7 +4023,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?*:sgin::sign  ; Covers subcatagories and catagories.
 :?*:fortuante::fortunate  ; Covers subcatagories and catagories.
 :?*:laod::load
-
+:?*:isntall::install
+:?*:insatll::install
+:?*:istall::install
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
