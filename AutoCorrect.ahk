@@ -58,6 +58,7 @@ Global v3 := 0
 Global v4 := 0
 Global DesktopIconsVisible := False
 Global DrawingRect := False
+Global ClearingRect := False
 Global LclickSelected := False
 Global StopRecurssion := False
 Global currMonHeight := 0
@@ -308,7 +309,7 @@ CheckWindow:
     WinGet, targetProc, ProcessName, ahk_id %targetHoverId%
     If (targetProc == "qtcreator.exe" || targetProc == "VirtualBoxVM.exe")
     {
-        while (ClearingRect || DrawingRect || hitTAB || hitCAPS) {
+        while (ClearingRect || DrawingRect || hitTAB) {
             sleep, 20
         }
         Suspend , On
@@ -530,6 +531,8 @@ Return
         }
     }
     KeyWait, Esc, U T2
+    DrawingRect := False
+    ClearingRect := False
     escHwndID_old := escHwndID
 Return
 
@@ -538,6 +541,8 @@ Esc & x::
     CancelClose := True
     sleep, 1500
     Tooltip,
+    DrawingRect := False
+    ClearingRect := False
 Return
 #If
 
@@ -1065,18 +1070,14 @@ $!q::
 Return
 #If
 
-; #MaxThreadsPerHotkey 2
 #If hitTAB
-x::
+!x::
+Gui, GUI4Boarder: Hide
+GoSub, ResetWins
+DrawingRect := False
+ClearingRect := False
 Return
 #If
-
-; #If hitTAB
-; ~!LButton::
-    ; sleep, 150
-    ; GoSub, DrawRect
-; Return
-; #If
 
 #If !hitTAB
 !Capslock::
@@ -1800,13 +1801,12 @@ SendCtrlAdd:
     ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  A
     ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  A
     
-    ; Tooltip, %vWinTitle% : %OutputVar1% - %OutputVar2% - %OutputVar3%
-    
     If (lClassCheck != lClass || (OutputVar1 == "" && OutputVar2 == "" && OutputVar3 == "")) {
         SetTimer, SendCtrlAdd, Off
         Return
     }
-            
+    
+    CoordMode, Mouse, Screen        
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass) {
         
         If (lctrlN == "SysTreeView321") {
@@ -1819,37 +1819,28 @@ SendCtrlAdd:
             }
         }
         
-        ; currentPath := GetExplorerPath()
-        ; loop 40 {
-            ; fileCount := ComObjCreate("Shell.Application").NameSpace(currentPath).Items.Count
-            ; tooltip, %fileCount% %currentPath%
-            ; If (fileCount > 0) {
-                ; SetTimer, SendCtrlAdd, Off
-                ; break
-            ; }
-            ; sleep, 50
-        ; }
         ControlGetPos , OutX, OutY, OutWidth, OutHeight, %FocusedControl%, A
         WinGetPos, sx, sy, sw, sh, A
+        OutX := sx + OutX + 26
+        OutY := sy + OutY + 42
+
         CoordMode, Pixel, Screen
-        OutX := sx + OutX + 27
-        OutY := sy + OutY + 43
         loop 40 {
-            PixelGetColor, HexColor1, %OutX%, %OutY%, RGB
-            If (HexColor1 != 0xFFFFFF)
+            PixelGetColor, HexColor1, %OutX%,   %OutY%, RGB
+            PixelGetColor, HexColor2, %OutX%+5, %OutY%+5, RGB
+            PixelGetColor, HexColor3, %OutX%+10, %OutY%+10, RGB
+            PixelGetColor, HexColor4, %OutX%+15, %OutY%+15, RGB
+            PixelGetColor, HexColor5, %OutX%+8, %OutY%+8, RGB
+            ; tooltip, %HexColor1% %HexColor2% %HexColor3% %HexColor4% %HexColor5% 
+            HexColor := %HexColor1% & %HexColor2% & %HexColor3% & %HexColor4% & %HexColor5%
+            If (HexColor != 0xFFFFFF)
                 break
             sleep, 50
         }
         Send, ^{NumpadAdd}
 
         If (lctrlN == "SysTreeView321") {
-            send, +{Tab}
-            loop 50 {
-                ControlGetFocus, FocusedControl, A
-                If (FocusedControl == "SysTreeView321")
-                    break
-                sleep, 50
-            }
+            ControlFocus, SysTreeView321, A
         }
     }
 Return
@@ -1889,7 +1880,7 @@ Return
 #If
 
 #If !moving && (!IsOverDesktop() || (IsOverDesktop() && DesktopIconsVisible))
-$RButton::
+$*RButton::
     ComboActive := False
     loop {
         If !(GetKeyState("RButton", "P"))
@@ -1904,7 +1895,10 @@ $RButton::
     }
     If !ComboActive
     {
-        Send, {Click, Right}
+        If GetKeyState("Lshift","P")
+            Send, +{Click, Right}
+        Else
+            Send, {Click, Right}
     }
     else
         ComboActive := False
@@ -2474,6 +2468,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
     }
     until (!GetKeyState("LAlt", "P"))
+    DrawingRect := False
+    ClearingRect := False
     ; tooltip,
 }
 
@@ -2532,7 +2528,6 @@ keyTrack() {
     Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
     Static LastKey1, LastKey2, LastKey3, LastKey4 := ""
 
-    ; tooltip,   %LastKey3% %LastKey2% %LastKey1%
     If (LastKey1 != A_PriorKey) {
         LastKey4 := LastKey3
         LastKey3 := LastKey2
@@ -2540,6 +2535,7 @@ keyTrack() {
         LastKey1 := A_PriorKey
         If (GetKeyState("Lshift","P"))
             StringUpper, LastKey1, LastKey1
+        ; tooltip,   %LastKey3% %LastKey2% %LastKey1%
     
         If (DisableCheck && A_PriorKey == "Space") {
             DisableCheck := False
@@ -2564,8 +2560,7 @@ keyTrack() {
         }
         Else If (!DisableCheck && inStr(Uppers,LastKey3,true) && inStr(Uppers,LastKey2,true) && inStr(Lowers,LastKey1,true)) {
             BlockInput On
-            Send, {BS}{BS}{BS}{BS}
-            Send, {%LastKey4%}
+            Send, ^+{Left}
             Send, {%LastKey3%}
             StringLower, LastKey2, LastKey2
             Send, {%LastKey2%}
@@ -2586,8 +2581,7 @@ track() {
     WinGetClass, classId, ahk_id %hwndId%
     WinGet, targetProc, ProcessName, ahk_id %hwndId%
 
-    If (targetProc == "qtcreator.exe" || targetProc == "VirtualBoxVM.exe")
-        Return
+    ; Tooltip, %SearchingWindows% %hitTAB% %DrawingRect% %ClearingRect%
         
     CoordMode Mouse
     lastX := x, lastY := y,
@@ -2768,6 +2762,8 @@ track() {
                     WinActivate, ahk_id %LastActiveWinHwnd%
                     GoSub, DrawRect
                     GoSub, ClearRect
+                    DrawingRect := False
+                    ClearingRect := False
                     Gui, GUI4Boarder: Hide
             }
         }
@@ -3517,17 +3513,12 @@ SetTitleMatchMode, 2
 #If !WinActive("ahk_exe notepad++.exe")
         && !WinActive("ahk_exe Code.exe")
         && !WinActive("ahk_exe cmd.exe")
-        && !WinActive("ahk_exe Everything.exe")
         && !WinActive("ahk_exe Conhost.exe")
         && !WinActive("ahk_exe bash.exe")
         && !WinActive("ahk_exe mintty.exe")
-        && !SearchingWindows
-        && !hitTAB
-        && !DrawingRect
-        && !ClearingRect
+        && !SearchingWindows && !hitTAB && !DrawingRect && !ClearingRect
         && !GetKeyState("LAlt","P")
         && !GetKeyState("Ctrl","P")
-
 
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 

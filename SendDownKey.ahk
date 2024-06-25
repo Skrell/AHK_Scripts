@@ -1,14 +1,14 @@
 #NoTrayIcon
 #NoEnv
-#SingleInstance
+#SingleInstance Force
 #KeyHistory 0
 
 Send, {DOWN}
-sleep, 10000
+sleep, 20000
 ExitApp
 Return
 
 ~Alt Up::
-Winclose, ahk_class #32768
+Send, {Esc}
 ExitApp
 
