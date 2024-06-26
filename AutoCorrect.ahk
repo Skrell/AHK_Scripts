@@ -192,7 +192,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ;EVENT_SYSTEM_FOREGROUND := 0x3
         static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
         DetectHiddenWindows, On
-        ; WinGetClass, vWinClass, % "ahk_id " hWnd
+        WinGetClass, vWinClass, % "ahk_id " hWnd
         WinGetTitle, vWinTitle, % "ahk_id " hWnd
         ; ToolTip, % vWinTitle " - " prevActiveWindows.length()
 
@@ -201,13 +201,24 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             prevActiveWindows.push(hWnd)
             ShellMessage(1, hWnd)
 
-            sleep, 300
-            ControlGet, OutputVar1, Visible ,, SysListView321, % "ahk_id " hWnd
-            ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  % "ahk_id " hWnd
-            ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  % "ahk_id " hWnd
-            ControlGetPos , OutX, OutY, OutWidth, OutHeight, DirectUIHWND2
-            ControlGetFocus, focusedCtrl , % "ahk_id " hWnd
-            ; Tooltip, %vWinTitle% : %OutX% - %OutputVar2% - %OutputVar3%
+            If (vWinClass != "CabinetWClass") {
+                sleep, 300
+                ControlGet, OutputVar1, Visible ,, SysListView321, % "ahk_id " hWnd
+                ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  % "ahk_id " hWnd
+                ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  % "ahk_id " hWnd
+            }
+            Else {
+                loop 40 {
+                    ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  % "ahk_id " hWnd
+                    ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  % "ahk_id " hWnd
+                    If (OutputVar2 == 1 || OutputVar3 == 1)
+                        break
+                    sleep, 50
+                }
+            }
+                ControlGetPos , OutX, OutY, OutWidth, OutHeight, DirectUIHWND2
+                ControlGetFocus, focusedCtrl , % "ahk_id " hWnd
+            
             BlockInput On
             If (OutputVar1 == 1) {
                 ControlFocus , SysListView321, % "ahk_id " hWnd
@@ -215,19 +226,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Send, ^{NumpadAdd}
             }
             Else If (OutputVar3 == 1 && OutX > 8) {
-                ; Send, +{Tab}
-                ; sleep, 50
-                ; Send, +{Tab}
-                ; sleep, 50
                 ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
                 sleep, 50
                 Send, ^{NumpadAdd}
-                ; Send, {Tab}
-                ; sleep, 50
-                ; Send, {Tab}
             }
             Else If (OutputVar2 == 1) {
-                ; Tooltip, %vWinTitle% : %OutputVar1% - %OutputVar2% - %OutputVar3%
                 ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
                 sleep, 50
                 Send, ^{NumpadAdd}
@@ -1046,12 +1049,8 @@ $!q::
 
     loop % windowsWithSameTitleList
     {
-
         hwndID := windowsWithSameTitleList%A_Index%
-
-        If (IsAltTabWindow(hwndID)) {
-            finalWindowsList.push(hwndID)
-        }
+        finalWindowsList.push(hwndID)
     }
 
     If (finalWindowsList.length() > 1) {
@@ -1067,6 +1066,8 @@ $!q::
         sleep 1500
         Tooltip,
     }
+    DrawingRect := False
+    ClearingRect := False
 Return
 #If
 
@@ -1104,6 +1105,7 @@ Return
         If (minState > -1)
             continue
 
+        desknum := 1
         ; desknum := VD.getDesktopNumOfWindow(title)
         ; If desknum <= 0
             ; continue
@@ -1373,7 +1375,7 @@ Return
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
     Critical, On
-    
+    Gui, GUI4Boarder: Hide
     DrawingRect := True
     WinGet, activeWin, ID, A
     x := y := w := h := 0 
@@ -1569,7 +1571,8 @@ $!`::
             If !IsAltTabWindow(this_ID)
                 continue
 
-            desknum := VD.getDesktopNumOfWindow(title)
+            ; desknum := VD.getDesktopNumOfWindow(title)
+            desknum := 1
             If desknum <= 0
                 continue
             finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
@@ -2390,9 +2393,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         If (currentMonHasActWin) {
             WinGetTitle, titleEntry, ahk_id %hwndID%
 
-            If ((VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum()) && (IsAltTabWindow(hwndID))) {
-                finalWindowsListWithProcAndClass.push(hwndID)
-            }
+            finalWindowsListWithProcAndClass.push(hwndID)
         }
     }
 
