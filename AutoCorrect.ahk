@@ -223,6 +223,19 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ; tooltip, %OutputVar1% - %OutputVar2% - %OutputVar3%
             ControlGetPos , OutX2, OutY2, , , DirectUIHWND2, A
             ControlGetPos , OutX3, OutY3, , , DirectUIHWND3, A
+            
+            WinGetPos, sx, sy, , , A
+            OutX := sx + OutX2 + 1
+            OutY := sy + OutY2 + 1
+            
+            CoordMode, Pixel, Screen
+            loop 40 {
+                PixelGetColor, HexC, %OutX%,    %OutY%,    RGB
+                If (HexC == 0xFFFFFF)
+                    break
+                sleep, 50
+            }
+            
             ControlGetFocus, focusedCtrl , % "ahk_id " hWnd
             
             BlockInput On
@@ -232,8 +245,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Send, ^{NumpadAdd}
             }
             Else If ((OutputVar3 == 1 && OutX2 > 8) || (OutputVar2 == 1)) {
-                
-                WinGetPos, sx, sy, sw, sh, A
+                CoordMode, Mouse, Screen
+                WinGetPos, sx, sy, , , A
                 If (OutputVar3 == 1) {
                     OutX := sx + OutX2 + 26
                     OutY := sy + OutY2 + 42
@@ -244,30 +257,41 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
                 
                 sleep, 50
-                
+                HexColor := 0x000000
                 CoordMode, Pixel, Screen
                 loop 40 {
-                    PixelGetColor, HexColor1, %OutX%,    %OutY%,    RGB
-                    PixelGetColor, HexColor2, %OutX%+5,  %OutY%+5,  RGB
-                    PixelGetColor, HexColor3, %OutX%+10, %OutY%+10, RGB
-                    PixelGetColor, HexColor4, %OutX%+15, %OutY%+15, RGB
-                    PixelGetColor, HexColor5, %OutX%+8,  %OutY%+8,  RGB
-                    HexColor := %HexColor1% & %HexColor2% & %HexColor3% & %HexColor4% & %HexColor5%
-                    If (HexColor != 0xFFFFFF)
+                    PixelGetColor, HexColor1, %OutX%,  %OutY%,    RGB
+                    OutX += 1
+                    OutY += 1
+                    PixelGetColor, HexColor2, %OutX%,  %OutY%,  RGB
+                    OutX += 1
+                    OutY += 1
+                    PixelGetColor, HexColor3, %OutX%,  %OutY%,  RGB
+                    OutX += 1
+                    OutY += 1
+                    PixelGetColor, HexColor4, %OutX%,  %OutY%,  RGB
+                    OutX += 1
+                    OutY += 1
+                    PixelGetColor, HexColor5, %OutX%,  %OutY%,  RGB
+                    OutX += 1
+                    OutY += 1
+                    
+                    HexColor := HexColor1 & HexColor2 & HexColor3 & HexColor4 & HexColor5
+                    HexColorX := Format("0x{:06X}", HexColor)
+                    
+                    If (HexColorX < 0xFFFFFF && HexColorX > 0x000000)
                         break
                     sleep, 50
                 }
-                ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
-                ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
+                ; tooltip, %HexColorX%
+                If (OutputVar3 == 1)
+                    ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
+                Else
+                    ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
                 sleep, 50
                 Send, ^{NumpadAdd}
-                tooltip, sent
             }
-            ; Else If (OutputVar2 == 1) {
-                ; ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
-                ; sleep, 50
-                ; Send, ^{NumpadAdd}
-            ; }
+
             sleep, 50
             ControlFocus , %focusedCtrl%, % "ahk_id " hWnd
             BlockInput Off
@@ -1535,7 +1559,7 @@ Return
         && A_TimeSincePriorHotkey < 500
         && (WinActive("ahk_class CabinetWClass") || (WinActive("ahk_class #32770") && lctrlN == "DirectUIHWND2") || (WinActive("ahk_class #32770") && lctrlN == "SysListView321")))
     {
-        If (IsBlankSpace && (HexColor1 == 0xFFFFFF) && (HexColor2 == 0xFFFFFF) && (HexColor3  == 0xFFFFFF)) {
+        If (IsBlankSpace && (LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             LbuttonEnabled := False
             Send !{Up}
             SetTimer, SendCtrlAdd, 50
@@ -1551,13 +1575,15 @@ Return
     }
 
     CoordMode, Pixel, Screen
-    PixelGetColor, HexColor1, %X1%, %Y1%, RGB
+    PixelGetColor, LB_HexColor1, %X1%, %Y1%, RGB
     X -= 1
-    PixelGetColor, HexColor2, %X1%, %Y1%, RGB
+    PixelGetColor, LB_HexColor2, %X1%, %Y1%, RGB
     X += 2
-    PixelGetColor, HexColor3, %X1%, %Y1%, RGB
-    IsBlankSpace := IsEmptySpace()
+    PixelGetColor, LB_HexColor3, %X1%, %Y1%, RGB
     CoordMode, Mouse, Screen
+    
+    IsBlankSpace := IsEmptySpace()
+    ; tooltip, %HexColor1% - %HexColor2% - %HexColor3% - %IsBlankSpace% - %lctrlN%
     
     KeyWait, LButton, U T3
     MouseGetPos, X2, Y2,
@@ -1978,8 +2004,12 @@ Return
         sleep, 750
     }
     Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
-        Send, ^{NumpadAdd}
-        sleep, 200
+        ControlFocus , %wuCtrl%, % "ahk_id " wdID
+        ControlGetFocus, FocusedControl, A
+        If (FocusedControl == wuCtrl) {
+            Send, ^{NumpadAdd}
+            sleep, 200
+        }
     }
     Hotkey, ~$WheelUp, On
 Return
@@ -1994,8 +2024,12 @@ Return
         sleep, 750
     }
     Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
-        Send, ^{NumpadAdd}
-        sleep, 200
+        ControlFocus , %wuCtrl%, % "ahk_id " wdID
+        ControlGetFocus, FocusedControl, A
+        If (FocusedControl == wuCtrl) {
+            Send, ^{NumpadAdd}
+            sleep, 200
+        }
     }
     Hotkey, ~$WheelDown, On
 Return
@@ -3659,6 +3693,7 @@ SetTitleMatchMode, 2
 ::dl::
 ::huh::
 ::bing::
+::spit::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
