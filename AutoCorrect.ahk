@@ -203,39 +203,44 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             prevActiveWindows.push(hWnd)
             ShellMessage(1, hWnd)
 
+            sleep, 300
             If (vWinClass != "CabinetWClass" && vWinClass != "#32770") {
-                sleep, 300
                 ControlGet, OutputVar1, Visible ,, SysListView321, % "ahk_id " hWnd
                 ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  % "ahk_id " hWnd
                 ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  % "ahk_id " hWnd
             }
             Else {
-                loop 40 {
+                loop 60 {
                     ControlGet, OutputVar1, Visible ,, SysListView321, % "ahk_id " hWnd
-                    ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  % "ahk_id " hWnd
-                    ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  % "ahk_id " hWnd
+                    ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  % "ahk_id " hWnd
+                    ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  % "ahk_id " hWnd
+                    ; tooltip, %OutputVar1% - %OutputVar2% - %OutputVar3%
                     If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                         break
                     sleep, 50
                 }
             }
                 
-            ; tooltip, %OutputVar1% - %OutputVar2% - %OutputVar3%
-            ControlGetPos , OutX2, OutY2, , , DirectUIHWND2, A
-            ControlGetPos , OutX3, OutY3, , , DirectUIHWND3, A
-            
-            WinGetPos, sx, sy, , , A
-            OutX := sx + OutX2 + 1
-            OutY := sy + OutY2 + 1
-            
-            CoordMode, Pixel, Screen
-            loop 40 {
-                PixelGetColor, HexC, %OutX%,    %OutY%,    RGB
-                If (HexC == 0xFFFFFF)
-                    break
-                sleep, 50
+            If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
+                WinGetPos, sx, sy, , , A
+                
+                ControlGetPos , OutX2, OutY2, , , DirectUIHWND2, A
+                ControlGetPos , OutX3, OutY3, , , DirectUIHWND3, A
+                
+                OutX := sx + OutX2 + 3
+                OutY := sy + OutY2 + 24
+                
+                CoordMode, Pixel, Screen
+                loop 60 {
+                    PixelGetColor, HexC, %OutX%,    %OutY%,    RGB
+                    ; tooltip, checking for white %HexC% -  %OutX% : %OutY%
+                    If (HexC == 0xFFFFFF)
+                        break
+                    sleep, 50
+                }
+                ; tooltip, checking for white %HexC%
             }
-            
+            CoordMode, Mouse, Screen
             ControlGetFocus, focusedCtrl , % "ahk_id " hWnd
             
             BlockInput On
@@ -244,52 +249,55 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 sleep, 50
                 Send, ^{NumpadAdd}
             }
-            Else If ((OutputVar3 == 1 && OutX2 > 8) || (OutputVar2 == 1)) {
-                CoordMode, Mouse, Screen
-                WinGetPos, sx, sy, , , A
-                If (OutputVar3 == 1) {
-                    OutX := sx + OutX2 + 26
-                    OutY := sy + OutY2 + 42
-                }
-                Else {
-                    OutX := sx + OutX3 + 26
-                    OutY := sy + OutY3 + 42
+            Else If ((OutputVar2 == 1 && OutX2 > 8) || (OutputVar3 == 1)) {
+               
+                If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
+                    WinGetPos, sx, sy, , , A
+                    If (OutputVar2 == 1) {
+                        OutX := sx + OutX2 + 26
+                        OutY := sy + OutY2 + 42
+                    }
+                    Else {
+                        OutX := sx + OutX3 + 26
+                        OutY := sy + OutY3 + 42
+                    }
+                    
+                    sleep, 50
+                    HexColor := 0x000000
+                    CoordMode, Pixel, Screen
+                    loop 60 {
+                        PixelGetColor, HexColor1, %OutX%,  %OutY%,    RGB
+                        OutX += 1
+                        OutY += 1
+                        PixelGetColor, HexColor2, %OutX%,  %OutY%,  RGB
+                        OutX += 1
+                        OutY += 1
+                        PixelGetColor, HexColor3, %OutX%,  %OutY%,  RGB
+                        OutX += 1
+                        OutY += 1
+                        PixelGetColor, HexColor4, %OutX%,  %OutY%,  RGB
+                        OutX += 1
+                        OutY += 1
+                        PixelGetColor, HexColor5, %OutX%,  %OutY%,  RGB
+                        OutX += 1
+                        OutY += 1
+                        
+                        HexColor := HexColor1 & HexColor2 & HexColor3 & HexColor4 & HexColor5
+                        HexColorX := Format("0x{:06X}", HexColor)
+                        tooltip, searching for color %HexColorX%
+                        If (HexColorX < 0xFFFFFF && HexColorX > 0x000000)
+                            break
+                        sleep, 50
+                    }
                 }
                 
-                sleep, 50
-                HexColor := 0x000000
-                CoordMode, Pixel, Screen
-                loop 40 {
-                    PixelGetColor, HexColor1, %OutX%,  %OutY%,    RGB
-                    OutX += 1
-                    OutY += 1
-                    PixelGetColor, HexColor2, %OutX%,  %OutY%,  RGB
-                    OutX += 1
-                    OutY += 1
-                    PixelGetColor, HexColor3, %OutX%,  %OutY%,  RGB
-                    OutX += 1
-                    OutY += 1
-                    PixelGetColor, HexColor4, %OutX%,  %OutY%,  RGB
-                    OutX += 1
-                    OutY += 1
-                    PixelGetColor, HexColor5, %OutX%,  %OutY%,  RGB
-                    OutX += 1
-                    OutY += 1
-                    
-                    HexColor := HexColor1 & HexColor2 & HexColor3 & HexColor4 & HexColor5
-                    HexColorX := Format("0x{:06X}", HexColor)
-                    
-                    If (HexColorX < 0xFFFFFF && HexColorX > 0x000000)
-                        break
-                    sleep, 50
-                }
-                ; tooltip, %HexColorX%
-                If (OutputVar3 == 1)
+                If (OutputVar2 == 1)
                     ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
                 Else
                     ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
                 sleep, 50
                 Send, ^{NumpadAdd}
+                ; tooltip, sent
             }
 
             sleep, 50
@@ -1562,13 +1570,13 @@ Return
         If (IsBlankSpace && (LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             LbuttonEnabled := False
             Send !{Up}
-            SetTimer, SendCtrlAdd, 50
+            SetTimer, SendCtrlAdd, -10
             KeyWait, Lbutton, U T5
             sleep, 400
             LbuttonEnabled := True
         }
         Else {
-            SetTimer, SendCtrlAdd, 50
+            SetTimer, SendCtrlAdd, -10
         }
         Critical, Off
         Return
@@ -1583,13 +1591,12 @@ Return
     CoordMode, Mouse, Screen
     
     IsBlankSpace := IsEmptySpace()
-    ; tooltip, %HexColor1% - %HexColor2% - %HexColor3% - %IsBlankSpace% - %lctrlN%
     
     KeyWait, LButton, U T3
     MouseGetPos, X2, Y2,
     ; tooltip, %X1% %X2% %Y1% %Y2% %lClass% %lctrlN%
     If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "SysTreeView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")))  {
-        SetTimer, SendCtrlAdd, -10
+        GoSub, SendCtrlAdd
     }
     Critical Off
 Return
@@ -1858,49 +1865,89 @@ Return
 
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
-    ControlGetFocus, FocusedControl, A
     
     If (lClassCheck != lClass) {
         SetTimer, SendCtrlAdd, Off
         Return
     }
-    
+    ; tooltip, %lClassCheck% %lClass% %lctrlN%
     CoordMode, Mouse, Screen
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass) {
-        
-        If (lctrlN == "SysTreeView321") {
-            send, {Tab}
-            loop 50 {
-                ControlGetFocus, FocusedControl, A
-                If (FocusedControl == "SysListView321" || FocusedControl == "DirectUIHWND2" || FocusedControl == "DirectUIHWND3")
-                    break
-                sleep, 50
-            }
-        }
-        
-        ControlGetPos , OutX, OutY, , , %FocusedControl%, A
-        WinGetPos, sx, sy, sw, sh, A
-        OutX := sx + OutX + 26
-        OutY := sy + OutY + 42
-
-        CoordMode, Pixel, Screen
-        loop 40 {
-            PixelGetColor, HexColor1, %OutX%,    %OutY%,    RGB
-            PixelGetColor, HexColor2, %OutX%+5,  %OutY%+5,  RGB
-            PixelGetColor, HexColor3, %OutX%+10, %OutY%+10, RGB
-            PixelGetColor, HexColor4, %OutX%+15, %OutY%+15, RGB
-            PixelGetColor, HexColor5, %OutX%+8,  %OutY%+8,  RGB
-            ; tooltip, %HexColor1% %HexColor2% %HexColor3% %HexColor4% %HexColor5% 
-            HexColor := %HexColor1% & %HexColor2% & %HexColor3% & %HexColor4% & %HexColor5%
-            If (HexColor != 0xFFFFFF)
+        loop 60 {
+            ControlGet, OutputVar1, Visible ,, SysListView321, A
+            ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
+            ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
+            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                 break
             sleep, 50
         }
+        
+        If (OutputVar1 == 1) {
+            FocusedControl := "SysListView321"
+        }
+        Else If (OutputVar2 == 1) {
+            FocusedControl := "DirectUIHWND2"
+        }
+        Else If (OutputVar3 == 1) {
+            FocusedControl := "DirectUIHWND3"
+        }
+        
+        loop 60 {
+            ControlGetPos , orgX, orgY, , , %FocusedControl%, A
+            If (orgX > 100)
+                break
+            sleep, 50
+        }
+        WinGetPos, sx, sy, , , A
+        OutX := sx + orgX + 25
+        OutY := sy + orgY + 46
+        ; tooltip, %orgX%  %orgX%  
+        SC_HexColorX := 0xFFFFFF
+        SC_HexColor5_old := 0x000000
+        SC_HexColor4_old := 0x000000
+        SC_HexColor1_old := 0x000000
+        SC_HexColor2_old := 0x000000
+        SC_HexColor3_old := 0x000000
+        
+        CoordMode, Pixel, Screen
+        loop 60 {
+            OutX -= 2
+            PixelGetColor, SC_HexColor3, %OutX%,  %OutY%,  RGB
+            OutX += 1
+            PixelGetColor, SC_HexColor2, %OutX%,  %OutY%,  RGB
+            OutX += 1
+            PixelGetColor, SC_HexColor1, %OutX%,  %OutY%,  RGB
+            OutX += 1
+            PixelGetColor, SC_HexColor4, %OutX%,  %OutY%,  RGB
+            OutX += 1
+            PixelGetColor, SC_HexColor5, %OutX%,  %OutY%,  RGB
+
+            SC_HexColor := SC_HexColor1 & SC_HexColor2 & SC_HexColor3 & SC_HexColor4 & SC_HexColor5
+            SC_HexColorX := Format("0x{:06X}", SC_HexColor)
+            ; MouseMove,  %OutX%,  %OutY%
+            ; tooltip, %SC_HexColorX% - %FocusedControl% : %OutX%  %OutY%
+            ; tooltip, %SC_HexColorX% - %SC_HexColor1% & %SC_HexColor2% & %SC_HexColor3% & %SC_HexColor4% & %SC_HexColor5%
+            
+            If (SC_HexColorX < 0xFFFFFF && SC_HexColorX >= 0x000000 && SC_HexColor3_old == SC_HexColor3 && SC_HexColor2_old == SC_HexColor2 && SC_HexColor1_old == SC_HexColor1 && SC_HexColor4_old == SC_HexColor4 && SC_HexColor5_old == SC_HexColor5)
+                break
+            sleep, 50
+            OutX := sx + orgX + 25
+            OutY := sy + orgY + 46
+            SC_HexColor3_old := SC_HexColor3
+            SC_HexColor2_old := SC_HexColor2
+            SC_HexColor1_old := SC_HexColor1
+            SC_HexColor4_old := SC_HexColor4
+            SC_HexColor5_old := SC_HexColor5
+        }
+        
+        If (lctrlN == "SysTreeView321")
+            Send, {Tab}
+
         sleep, 50
         Send, ^{NumpadAdd}
 
         If (lctrlN == "SysTreeView321") {
-            sleep, 50
+            sleep, 100
             ControlFocus, SysTreeView321, A
         }
     }
@@ -2067,9 +2114,14 @@ IsEmptySpace() {
 
     If WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770") || WinActive("ahk_class #32768") {
         CoordMode, Mouse
-        MouseGetPos, X, Y
-        AccObj := AccObjectFromPoint(idChild, X, Y)
-        Return (AccObj.accRole(0) == ROLE_SYSTEM_LIST)
+        MouseGetPos, X, Y, mID, mCtrlNN
+
+        If (mCtrlNN == "SysListView321" || mCtrlNN == "DirectUIHWND2" || mCtrlNN == "DirectUIHWND3") {
+            AccObj := AccObjectFromPoint(idChild, X, Y)
+            Return (AccObj.accRole(0) == ROLE_SYSTEM_LIST)
+        }
+        Else
+            Return False
     }
 }
 
