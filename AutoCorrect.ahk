@@ -175,7 +175,7 @@ loop % allwindows
     prevActiveWindows.push(winID)
 }
 
-SetTimer CheckWindow, 100
+; SetTimer CheckWindow, 100
 SetTimer track, 100
 SetTimer keyTrack, 10
 
@@ -210,9 +210,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ShellMessage(1, hWnd)
             ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length()
 
-            ControlGet, OutputVar1, Visible ,, SysListView321, % "ahk_id " hWnd
-            ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  % "ahk_id " hWnd
-            ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  % "ahk_id " hWnd
+            loop 20 {
+                ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
+                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
+                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
+                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
+                    break
+                sleep, 50
+            }
             
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
                 BlockInput On 
@@ -313,6 +318,7 @@ CheckWindow:
         while (ClearingRect || DrawingRect || hitTAB) {
             sleep, 20
         }
+        GoSub, ClearRect
         Suspend , On
         Return
     }
@@ -1317,16 +1323,16 @@ ClearRect:
         sleep, 10
     }
 
-    WinSet, Transparent, 225, ahk_id %Highlighter%
-    loop 5 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            WinSet, Transparent, 255, ahk_id %Highlighter%
-            ClearingRect := False
-            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-            Return
-        }
-        sleep 10
-    }
+    ; WinSet, Transparent, 225, ahk_id %Highlighter%
+    ; loop 5 {
+        ; If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            ; WinSet, Transparent, 255, ahk_id %Highlighter%
+            ; ClearingRect := False
+            ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+            ; Return
+        ; }
+        ; sleep 10
+    ; }
     WinSet, Transparent, 200, ahk_id %Highlighter%
     loop 4 {
         If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
@@ -1358,15 +1364,15 @@ ClearRect:
         sleep 10
     }
     WinSet, Transparent, 50, ahk_id %Highlighter%
-    loop 1 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            WinSet, Transparent, 255, ahk_id %Highlighter%
-            ClearingRect := False
-            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-            Return
-        }
-        sleep 10
-    }
+    ; loop 1 {
+        ; If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            ; WinSet, Transparent, 255, ahk_id %Highlighter%
+            ; ClearingRect := False
+            ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+            ; Return
+        ; }
+        ; sleep 10
+    ; }
     Gui, GUI4Boarder: Hide
 Return
 
@@ -1503,14 +1509,14 @@ Return
             
             LbuttonEnabled := False
             Send !{Up}
-            SetTimer, SendCtrlAdd, -100
-            KeyWait, Lbutton, U T5
+            KeyWait, Lbutton, U T3
+            SetTimer, SendCtrlAdd, -50
             sleep, 400
             LbuttonEnabled := True
         }
         Else {
-            SetTimer, SendCtrlAdd, -100
-            KeyWait, Lbutton, U T5
+            KeyWait, Lbutton, U T3
+            SetTimer, SendCtrlAdd, -50
         }
         Critical, Off
         Return
@@ -1526,16 +1532,16 @@ Return
     PixelGetColor, LB_HexColor3, %X1%, %Y1%, RGB
     CoordMode, Mouse, Screen
     
-    KeyWait, LButton, U T3
+    KeyWait, LButton, U T5
     
     ; tooltip, %IsBlankSpace% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
     MouseGetPos, X2, Y2,
 
     If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")))  {
-        SetTimer, SendCtrlAdd, -100
+        SetTimer, SendCtrlAdd, -50
     }
     Else If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && lctrlN == "SysTreeView321")) {
-        SetTimer, SendCtrlAdd, -100
+        SetTimer, SendCtrlAdd, -50
     }
     Else
         SetTimer, SendCtrlAdd, Off
@@ -1818,9 +1824,15 @@ SendCtrlAdd:
     ; CoordMode, Mouse, Screen
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass) {
         If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && lctrlN == "SysTreeView321") {
-            ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
-            ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
-            ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
+            loop 20 {
+                ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
+                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
+                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
+                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
+                    break
+                sleep, 50
+            }
+            
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
                 If (vWinClass != "EVERYTHING_(1.5a)") {
                     exEl := UIA.ElementFromHandle(lIdCheck)
@@ -1838,7 +1850,6 @@ SendCtrlAdd:
             Else If (OutputVar3 == 1) {
                 FocusedControl := "DirectUIHWND3"
             }
-             ; Send, {Tab}
             ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
         }
 
@@ -1852,9 +1863,9 @@ SendCtrlAdd:
         }
     }
     
-    ControlGet, OutputVar1, Visible ,, SysListView321, A
-    ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  A
-    ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  A
+    ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
+    ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
+    ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
     If (OutputVar1 == "" && OutputVar2 == "" && OutputVar3 == "") {
         SetTimer, SendCtrlAdd, Off
         Return
@@ -2574,9 +2585,10 @@ keyTrack() {
     Static DisableCheck := False
     Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
     Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
-    Static LastKey1, LastKey2, LastKey3, LastKey4 := ""
+    Static LastKey1, LastKey2, LastKey3, LastKey4, LastKey5 := ""
 
     If (LastKey1 != A_PriorKey) {
+        LastKey5 := LastKey4
         LastKey4 := LastKey3
         LastKey3 := LastKey2
         LastKey2 := LastKey1
@@ -2585,8 +2597,9 @@ keyTrack() {
             StringUpper, LastKey1, LastKey1
         ; tooltip,   %LastKey3% %LastKey2% %LastKey1%
     
-        If (DisableCheck && A_PriorKey == "Space") {
+        If (DisableCheck && A_PriorKey == "Space" || A_PriorKey == "Enter" || A_PriorKey == "Backspace" || A_PriorKey == "Tab" || A_PriorKey == "Delete" || A_PriorKey == "LButton") {
             DisableCheck := False
+            LastKey5 := ""
             LastKey4 := ""
             LastKey1 := ""
             LastKey2 := ""
@@ -2596,7 +2609,7 @@ keyTrack() {
             DisableCheck := True
         
         If (!DisableCheck 
-            && (((LastKey1 == "Space" || LastKey1 == "Enter") && LastKey2 == "/")
+            && (((LastKey1 == "Space") && LastKey2 == "/")
                 && (inStr(Uppers,LastKey3,true) || inStr(Lowers,LastKey3,true)))) {
             BlockInput On
             Send, {BS}{BS}{BS}{BS}
@@ -3668,6 +3681,8 @@ SetTitleMatchMode, 2
 ::huh::
 ::bing::
 ::spit::
+::app::
+::apps::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
