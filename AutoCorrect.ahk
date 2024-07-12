@@ -177,7 +177,7 @@ loop % allwindows
 
 ; SetTimer CheckWindow, 100
 SetTimer track, 100
-SetTimer keyTrack, 10
+SetTimer keyTrack, 1
 
 OnExit("PreventRecur")
 
@@ -190,18 +190,28 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     static exEl, shellEl, listEl
     CoordMode, Mouse, Screen
     
-    loop 50 {
-        WinGetTitle, vWinTitle, % "ahk_id " hWnd
-        If (vWinTitle != "")
-            break
-        sleep, 40
-    }
     
     If !StopRecurssion {
+
         ;EVENT_SYSTEM_FOREGROUND := 0x3
         static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
-        DetectHiddenWindows, Off
+       
         WinGetClass, vWinClass, % "ahk_id " hWnd
+        
+        If (vWinClass == "#32770" || vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "") {
+            Return
+        }
+        
+        loop 50 {
+            WinGetTitle, vWinTitle, % "ahk_id " hWnd
+            If (vWinTitle != "")
+                break
+            sleep, 40
+        }
+        
+        If (vWinTitle == "")
+            Return
+        
         OutputVar1 := OutputVar2 := OutputVar3 := ""
 
         If !HasVal(prevActiveWindows, hWnd) {
@@ -233,8 +243,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 ControlGetFocus, focusedCtrl , % "ahk_id " hWnd
                 If (OutputVar2 == 1)
                     ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
-                Else
+                Else If (OutputVar3 == 1)
                     ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
+                Else If (OutputVar1 == 1)
+                    ControlFocus , SysListView321, % "ahk_id " hWnd
+                
                 sleep, 50
                 Send, ^{NumpadAdd}
 
@@ -324,18 +337,6 @@ CheckWindow:
     }
     Suspend , Off
 Return
-
-; EnableHotStrings:
-    ; HotstringX("\b(\p{Lu})(\p{Lu})(\p{Ll})", "CapsCorrectionFront", 3, , , True)
-    ; HotstringX("(\p{Ll}+)(\p{Lu})\b", "CapsCorrectionBack", 3, , , True)
-    ; HotstringX("(\s\w+)/(\s)", "QuestionMarkorrection", 3, , , True)
-; Return
-
-; DisableHotStrings:
-    ; HotstringX("\b(\p{Lu})(\p{Lu})(\p{Ll})", "")
-    ; HotstringX("(\p{Ll}+)(\p{Lu})\b", "")
-    ; HotstringX("(\s\w+)/(\s)", "")
-; Return
 
 #If !hitTAB
     
@@ -1509,15 +1510,19 @@ Return
             
             LbuttonEnabled := False
             Send !{Up}
+        }
             KeyWait, Lbutton, U T3
             SetTimer, SendCtrlAdd, -50
             sleep, 400
             LbuttonEnabled := True
-        }
-        Else {
-            KeyWait, Lbutton, U T3
-            SetTimer, SendCtrlAdd, -50
-        }
+        ; Else {
+            ; LbuttonEnabled := False
+            ; KeyWait, Lbutton, U T3
+            ; SetTimer, SendCtrlAdd, -50
+            ; sleep, 400
+            ; LbuttonEnabled := True
+        ; }
+        tooltip, 
         Critical, Off
         Return
     }
@@ -1854,6 +1859,7 @@ SendCtrlAdd:
         }
 
         sleep, 50
+        tooltip, adjust
         Send, ^{NumpadAdd}
 
         If (lctrlN == "SysTreeView321") {
@@ -2599,11 +2605,11 @@ keyTrack() {
     
         If (DisableCheck && A_PriorKey == "Space" || A_PriorKey == "Enter" || A_PriorKey == "Backspace" || A_PriorKey == "Tab" || A_PriorKey == "Delete" || A_PriorKey == "LButton") {
             DisableCheck := False
-            LastKey5 := ""
-            LastKey4 := ""
             LastKey1 := ""
             LastKey2 := ""
             LastKey3 := ""
+            LastKey4 := ""
+            LastKey5 := ""
         }
         Else If (inStr(Lowers,LastKey1,false) && LastKey2 == "/" && inStr(Lowers,LastKey3,false))
             DisableCheck := True
@@ -2611,22 +2617,22 @@ keyTrack() {
         If (!DisableCheck 
             && (((LastKey1 == "Space") && LastKey2 == "/")
                 && (inStr(Uppers,LastKey3,true) || inStr(Lowers,LastKey3,true)))) {
-            BlockInput On
+            Critical On
             Send, {BS}{BS}{BS}{BS}
             Send, {%LastKey4%}
             Send, {%LastKey3%}
             Send, {?}
             Send, {%LastKey1%}
-            BlockInput Off
+            Critical Off
         }
         Else If (!DisableCheck && !inStr(Uppers,LastKey4,false) && inStr(Uppers,LastKey3,true) && inStr(Uppers,LastKey2,true) && inStr(Lowers,LastKey1,true)) {
-            BlockInput On
+            Critical On
             Send, ^+{Left}
             Send, {%LastKey3%}
             StringLower, LastKey2, LastKey2
             Send, {%LastKey2%}
             Send, {%LastKey1%}
-            BlockInput Off    
+            Critical Off    
         }
     }
 Return
@@ -3465,6 +3471,15 @@ Explorer_GetSelection() {
    Return result
 }
 
+; https://www.autohotkey.com/boards/viewtopic.php?p=547156
+IsPopup(winID) {
+    WinGet, ss, Style, ahk_id %winID%
+    WinGet, sx, ExStyle, ahk_id %winID%
+
+    If(ss & 0x80000000 && sx & 0x00000080)
+        Return true
+    Return false
+}
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
