@@ -192,7 +192,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     
     
     If !StopRecurssion {
-
+        DetectHiddenWindows, On
         ;EVENT_SYSTEM_FOREGROUND := 0x3
         static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
        
@@ -1486,7 +1486,8 @@ Return
     CoordMode, Mouse, Screen
     MouseGetPos, X1, Y1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
-
+    currentPath := 
+    
     If hitTAB {
         WinGetTitle, actTitle, ahk_id %lhwnd%
         Gui, GUI4Boarder: Hide
@@ -1501,7 +1502,13 @@ Return
 
     Gui, GUI4Boarder: Hide
     WinGetClass, lClass, ahk_id %lhwnd%
-            
+    
+    ; If (lClass == "CabinetWClass" || lClass == "#32770") {
+        ; exEl := UIA.ElementFromHandle(lhwnd)
+        ; currentPathEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass")
+        ; currentPath := currentPathEl.Name
+    ; }
+    
     If (A_PriorHotkey == A_ThisHotkey
         && A_TimeSincePriorHotkey < 500
         && (WinActive("ahk_class CabinetWClass") || (WinActive("ahk_class #32770"))) && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
@@ -1542,7 +1549,7 @@ Return
     ; tooltip, %IsBlankSpace% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
     MouseGetPos, X2, Y2,
 
-    If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")))  {
+    If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")))  {
         SetTimer, SendCtrlAdd, -50
     }
     Else If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && lctrlN == "SysTreeView321")) {
@@ -1828,7 +1835,7 @@ SendCtrlAdd:
     ; ; tooltip, %lClassCheck% %lClass% %lctrlN%
     ; CoordMode, Mouse, Screen
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass) {
-        If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && lctrlN == "SysTreeView321") {
+        If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (lctrlN == "SysTreeView321" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")) {
             loop 20 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
                 ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
@@ -1859,7 +1866,7 @@ SendCtrlAdd:
         }
 
         sleep, 50
-        tooltip, adjust
+        tooltip, adjust %currentPath%
         Send, ^{NumpadAdd}
 
         If (lctrlN == "SysTreeView321") {
