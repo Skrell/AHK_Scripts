@@ -196,29 +196,42 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ;EVENT_SYSTEM_FOREGROUND := 0x3
         static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
        
-        WinGetClass, vWinClass, % "ahk_id " hWnd
-        
-        If (vWinClass == "#32770" || vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "") {
-            Return
-        }
-        
-        loop 50 {
-            WinGetTitle, vWinTitle, % "ahk_id " hWnd
-            If (vWinTitle != "")
-                break
-            sleep, 40
-        }
-        
-        If (vWinTitle == "")
-            Return
-        
-        OutputVar1 := OutputVar2 := OutputVar3 := ""
-
         If !HasVal(prevActiveWindows, hWnd) {
             Critical, On
+            
             prevActiveWindows.push(hWnd)
-            ShellMessage(1, hWnd)
-            ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length()
+            loop 50 {
+                WinGetTitle, vWinTitle, % "ahk_id " hWnd
+                If (vWinTitle != "")
+                    break
+                sleep, 40
+            }
+            WinGetClass, vWinClass, % "ahk_id " hWnd
+            ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length() 
+            If (vWinTitle == "" || (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == ""))
+                Return
+            
+            If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
+                sleep 100
+                WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
+                tooltip, setting %vWinClass% on top!
+            }
+            
+            ; WinGet, procStr, ProcessName, Ahk_id %hWnd%
+            
+            ; If (IsAltTabWindow(hWnd) || (procStr == "OUTLOOK.EXE" && vWinClass == "#32770")) {
+            WinGet, state, MinMax, Ahk_id %hWnd%
+
+            If (state > -1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := GetFocusWindowMonitorIndex(hWnd, currentMon)
+                If !currentMonHasActWin {
+                    WinActivate, Ahk_id %hWnd%
+                    Send, #+{Left}
+                }
+            }
+            ; }
+            OutputVar1 := OutputVar2 := OutputVar3 := ""
 
             loop 20 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
@@ -232,15 +245,23 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
                 BlockInput On 
                 ; tooltip, here
+                loop, 20 {
+                    ControlGetFocus, focusedCtrl , % "ahk_id " hWnd
+                    If (focusedCtrl != "")
+                        break
+                    sleep, 50
+                }
+                
                 If (vWinClass != "EVERYTHING_(1.5a)") {
                     exEl := UIA.ElementFromHandle(hWnd)
                     shellEl := exEl.FindFirstByName("Items View")
                     shellEl.WaitElementExist("ControlType=ListItem OR ControlType=text",,5)
-                ; listEl := shellEl.FindFirstByType("ListItem")
-                ; tooltip, % "Value is :" listEl.Value " - " vWinTitle
+                    ; listEl := shellEl.FindFirstByType("ListItem")
+                    ; tooltip, % "Value is :" listEl.Value " - " vWinTitle
                 }
                 
-                ControlGetFocus, focusedCtrl , % "ahk_id " hWnd
+                ; tooltip, starting control is %focusedCtrl%
+                
                 If (OutputVar2 == 1)
                     ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
                 Else If (OutputVar3 == 1)
@@ -251,8 +272,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 sleep, 50
                 Send, ^{NumpadAdd}
 
-                sleep, 50
-                ControlFocus , %focusedCtrl%, % "ahk_id " hWnd
+                loop, 20 {
+                    sleep, 50
+                    ControlFocus , %focusedCtrl%, % "ahk_id " hWnd
+                    ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                    If (testCtrlFocus == focusedCtrl)
+                        break
+                }
                 BlockInput Off
                 Critical, Off
             }
@@ -340,6 +366,23 @@ Return
 
 #If !hitTAB
     
+    ~^Enter::
+    DetectHiddenWindows, Off
+    WinGet, myWindow, List
+    Loop % myWindow
+    {
+        ControlGet, myOkay, Hwnd,, OK, % "ahk_id " myWindow%A_Index%
+        if (myOkay) {
+            ControlClick,, ahk_id %myOkay%,,,2
+            hwndID := "ahk_id " myWindow%A_Index%
+            sleep, 400
+            if WinExist(hwndID)
+                Send, !{o}
+            break
+        }
+    }
+    Return
+
     ~Mbutton::
     ControlGetFocus, IsEdit, A
     ; tooltip, %IsEdit%
@@ -1103,12 +1146,13 @@ Return
         WinGetTitle, title, ahk_id %this_ID%
         WinGet, procName, ProcessName , ahk_id %this_ID%
         WinGet, minState, MinMax, ahk_id %this_ID%
+        
+        If (minState > -1)
+            continue
 
         If !IsAltTabWindow(this_ID)
             continue
 
-        If (minState > -1)
-            continue
 
         desknum := 1
         ; desknum := VD.getDesktopNumOfWindow(title)
@@ -2208,84 +2252,143 @@ ProcessIsElevated(vPID)
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399
-IsAltTabWindow(hWnd)
-{
-   DetectHiddenWindows, On
-
-   WinGetTitle, tit, ahk_id %hWnd%
-   WinGet, vPID, PID, % "ahk_id " hWnd
-   WinGet, vProc, ProcessName, ahk_id %hWnd%
-
-   If (tit == "" or vProc == "qrivi_ssam.exe")
-      Return
-
-   If (ProcessIsElevated(vPID))
-      Return
-
+IsAltTabWindow(hWnd) {
    static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
-   If (VirtualDesktopExist = "")
+   if (VirtualDesktopExist = "")
    {
       OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
-      If (OSbuildNumber < 14393)
+      if (OSbuildNumber < 14393)
          VirtualDesktopExist := 0
       else
          VirtualDesktopExist := 1
    }
-   If !DllCall("IsWindowVisible", "uptr", hWnd)
-      Return
+   if !DllCall("IsWindowVisible", "uptr", hWnd)
+      return
    DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
-   ; If (cloaked = DWM_CLOAKED_SHELL)
-   ; Return
-   If (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
-      Return
+   if (cloaked = DWM_CLOAKED_SHELL)
+      return
+   if (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
+      return
    WinGetClass, winClass, ahk_id %hWnd%
-   If (winClass = "Windows.UI.Core.CoreWindow")
-      Return
-   If (winClass = "ApplicationFrameWindow")
+   if (winClass = "Windows.UI.Core.CoreWindow")
+      return
+   if (winClass = "ApplicationFrameWindow")
    {
       varsetcapacity(ApplicationViewCloakType, 4, 0)
       DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
-      If (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
-         Return
+      if (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
+         return
    }
-   ; If !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test If window is shown on any monitor. alt-tab shows any window even If window is out of monitor.
-   ;   Return
+   ; if !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test if window is shown on any monitor. alt-tab shows any window even if window is out of monitor.
+   ;   return
    WinGet, exStyles, ExStyle, ahk_id %hWnd%
-   If (exStyles & WS_EX_APPWINDOW)
+   if (exStyles & WS_EX_APPWINDOW)
    {
-      If DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
-         Return
-      If (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
-         Return true
-      else If (VD.getDesktopNumOfWindow(tit) > 0)
-            Return true
+      if DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
+         return
+      if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
+         return true
       else
-         Return
+         return
    }
-   If (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)
-      Return
+   if (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)
+      return
    loop
    {
       hwndPrev := hwnd
       hwnd := DllCall("GetWindow", "uptr", hwnd, "uint", GW_OWNER, "ptr")
-      If !hwnd
+      if !hwnd
       {
-         If DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
-            Return
-         If (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
-            Return true
-         else If (VD.getDesktopNumOfWindow(tit) > 0)
-            Return true
+         if DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
+            return
+         if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
+            return true
          else
-            Return
+            return
       }
-      If DllCall("IsWindowVisible", "uptr", hwnd)
-         Return
+      if DllCall("IsWindowVisible", "uptr", hwnd)
+         return
       WinGet, exStyles, ExStyle, ahk_id %hwnd%
-      If ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
-         Return
+      if ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
+         return
    }
 }
+   ; DetectHiddenWindows, On
+
+   ; WinGetTitle, tit, ahk_id %hWnd%
+   ; WinGet, vPID, PID, % "ahk_id " hWnd
+   ; WinGet, vProc, ProcessName, ahk_id %hWnd%
+
+   ; If (tit == "" or vProc == "qrivi_ssam.exe")
+      ; Return
+
+   ; If (ProcessIsElevated(vPID))
+      ; Return
+
+   ; static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
+   ; If (VirtualDesktopExist = "")
+   ; {
+      ; OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
+      ; If (OSbuildNumber < 14393)
+         ; VirtualDesktopExist := 0
+      ; else
+         ; VirtualDesktopExist := 1
+   ; }
+   ; If !DllCall("IsWindowVisible", "uptr", hWnd)
+      ; Return
+   ; DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
+   ; ; If (cloaked = DWM_CLOAKED_SHELL)
+   ; ; Return
+   ; If (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
+      ; Return
+   ; WinGetClass, winClass, ahk_id %hWnd%
+   ; If (winClass = "Windows.UI.Core.CoreWindow")
+      ; Return
+   ; If (winClass = "ApplicationFrameWindow")
+   ; {
+      ; varsetcapacity(ApplicationViewCloakType, 4, 0)
+      ; DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
+      ; If (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
+         ; Return
+   ; }
+   ; ; If !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test If window is shown on any monitor. alt-tab shows any window even If window is out of monitor.
+   ; ;   Return
+   ; WinGet, exStyles, ExStyle, ahk_id %hWnd%
+   ; If (exStyles & WS_EX_APPWINDOW)
+   ; {
+      ; If DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
+         ; Return
+      ; If (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
+         ; Return true
+      ; else If (VD.getDesktopNumOfWindow(tit) > 0)
+            ; Return true
+      ; else
+         ; Return
+   ; }
+   ; If (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)
+      ; Return
+   ; loop
+   ; {
+      ; hwndPrev := hwnd
+      ; hwnd := DllCall("GetWindow", "uptr", hwnd, "uint", GW_OWNER, "ptr")
+      ; If !hwnd
+      ; {
+         ; If DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
+            ; Return
+         ; If (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
+            ; Return true
+         ; else If (VD.getDesktopNumOfWindow(tit) > 0)
+            ; Return true
+         ; else
+            ; Return
+      ; }
+      ; If DllCall("IsWindowVisible", "uptr", hwnd)
+         ; Return
+      ; WinGet, exStyles, ExStyle, ahk_id %hwnd%
+      ; If ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
+         ; Return
+   ; }
+; }
 
 GetLastActivePopup(hwnd)
 {
@@ -2934,16 +3037,16 @@ ShellMessage( wParam, lParam )
     If (wParam = 1) ;  HSHELL_WINDOWCREATED := 1
     {
         ID := lParam
-        loop 10 {
-            sleep 100
-            WinGetPos, x, y, w, h, Ahk_id %ID%
-            If (x == x2 && y == y2 && w == w2 && h == h2)
-                break
-            x2 := x
-            y2 := y
-            w2 := w
-            h2 := h
-        }
+        ; loop 10 {
+            ; sleep 100
+            ; WinGetPos, x, y, w, h, Ahk_id %ID%
+            ; If (x == x2 && y == y2 && w == w2 && h == h2)
+                ; break
+            ; x2 := x
+            ; y2 := y
+            ; w2 := w
+            ; h2 := h
+        ; }
         ; sleep, 300
         WinGetTitle, title, Ahk_id %ID%
         WinGet, procStr, ProcessName, Ahk_id %ID%
@@ -2957,7 +3060,7 @@ ShellMessage( wParam, lParam )
             WinSet, AlwaysOnTop, On, ahk_class %classStr%
         }
 
-        ; If (IsAltTabWindow(hwndID) || (procStr == "OUTLOOK.EXE" && classStr == "#32770")) {
+        If (IsAltTabWindow(hwndID) || (procStr == "OUTLOOK.EXE" && classStr == "#32770")) {
             If (MonCount == 1) {
                 Return
             }
@@ -2969,58 +3072,10 @@ ShellMessage( wParam, lParam )
                 currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
                 If !currentMonHasActWin {
                     WinActivate, Ahk_id %ID%
-                    Send, {LWin down}{LShift down}{Left}{LShift up}{LWin up}
+                    Send, #+{Left}
                 }
             }
-        ; }
-    }
-    If (wParam = 16)
-    {
-        ; allow some time for window to finish drawing
-        ; Sleep 400
-        ; since top window might be invalid, get list of windows:
-        WinGet, id, list,,, Start  ; exclude start button window?
-
-        a_Hwnd := a_process := a_class := a_title := ""
-        ; tooltip, %a_title%
-        Loop %id%
-        {
-            loopHwnd := id%A_Index%
-
-            ; skip tooltips
-            WinGetClass, a_class, ahk_id %loopHwnd%
-            if InStr(a_class, "tooltips_class32")
-                continue
-
-            ; the window has to be active, not minimized:
-            WinGet, a_minmax, MinMax, ahk_id %loopHwnd%
-            if (a_minmax = -1)
-                continue
-
-            ; exclude the script's windows
-            WinGet, a_PID, PID, ahk_id %loopHwnd%
-            if (a_PID = s_PID)
-                continue
-
-            WinGet, a_process, ProcessName, ahk_id %loopHwnd%
-
-            ; skip windows without titles (system & helper windows etc)
-            WinGetTitle, a_title, ahk_id %loopHwnd%
-            if (!a_title)
-                continue
-
-            a_Hwnd := a_title
         }
-        until a_Hwnd
-        ; tooltip, %lastHwnd% - %a_Hwnd%
-        ; make sure the active window really changed
-        if (lastHwnd == a_Hwnd)
-            return
-
-        lastHwnd := a_title
-        ; tooltip, Waiting on %a_title%
-        WinwaitActive, %a_title%,,  2
-        WinActivated(a_process, a_class, a_Hwnd, a_title)
     }
 }
 
