@@ -224,7 +224,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             If (state > -1) {
                 currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := GetFocusWindowMonitorIndex(hWnd, currentMon)
+                currentMonHasActWin := IsWindowOnCurrMon(hWnd, currentMon)
                 If !currentMonHasActWin {
                     WinActivate, Ahk_id %hWnd%
                     Send, #+{Left}
@@ -570,9 +570,16 @@ Return
                 Gui, GUI4Boarder: Hide
                 WinGet, allWindows, List
                 loop % allWindows {
-                    this_id := "ahk_id " . allWindows%A_Index%
-                    If IsAltTabWindow(this_id) {
-                        WinActivate, ahk_id %this_id%
+                    hwnd_id := allWindows%A_Index%
+                    If (MonCount > 1) {
+                        currentMon := MWAGetMonitorMouseIsIn()
+                        currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
+                    }
+                    Else {
+                        currentMonHasActWin := True
+                    }
+                    If (currentMonHasActWin && IsAltTabWindow(hwnd_id)) {
+                        WinActivate, ahk_id %hwnd_id%
                         Return
                     }
                 }
@@ -1147,12 +1154,8 @@ Return
         WinGet, procName, ProcessName , ahk_id %this_ID%
         WinGet, minState, MinMax, ahk_id %this_ID%
         
-        If (minState > -1)
+        If (minState > -1 || !IsAltTabWindow(this_ID))
             continue
-
-        If !IsAltTabWindow(this_ID)
-            continue
-
 
         desknum := 1
         ; desknum := VD.getDesktopNumOfWindow(title)
@@ -1271,7 +1274,7 @@ Cycle(direction)
 
             If (MonCount > 1) {
                 currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
             }
             Else {
                 currentMonHasActWin := True
@@ -1835,7 +1838,7 @@ ActivateWindow:
         WinActivate, %fulltitle%
         WinGet, hwndId, ID, A
         currentMon := MWAGetMonitorMouseIsIn()
-        currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+        currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
         If !currentMonHasActWin {
             Send, {LWin down}{LShift down}{Left}{LShift up}{LWin up}
             sleep, 150
@@ -2468,7 +2471,7 @@ HandleChromeWindowsWithSameTitle(title := "") {
 
     hwndId := windowsWithSameTitleList%counter%
     loop  {
-        If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+        If !(IsWindowOnCurrMon(hwndId, currentMon)) {
             counter++
             If (counter > numWindows)
             {
@@ -2494,7 +2497,7 @@ HandleChromeWindowsWithSameTitle(title := "") {
 
     hwndId := windowsWithSameTitleList%counter%
     loop  {
-        If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+        If !(IsWindowOnCurrMon(hwndId, currentMon)) {
             counter++
             If (counter > numWindows)
             {
@@ -2527,7 +2530,7 @@ HandleChromeWindowsWithSameTitle(title := "") {
                 }
                 hwndId := windowsWithSameTitleList%counter%
                 loop  {
-                    If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+                    If !(IsWindowOnCurrMon(hwndId, currentMon)) {
                         counter++
                         If (counter > numWindows)
                         {
@@ -2558,7 +2561,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         hwndID := windowsListWithSameProcessAndClass%A_Index%
         If (MonCount > 1) {
             currentMon := MWAGetMonitorMouseIsIn()
-            currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+            currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
         }
         Else {
             currentMonHasActWin := True
@@ -2595,7 +2598,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     hwndId := finalWindowsListWithProcAndClass[counter]
     loop  {
-        If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+        If !(IsWindowOnCurrMon(hwndId, currentMon)) {
             counter++
             If (counter > numWindows)
             {
@@ -2628,7 +2631,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                 }
                 hwndId := finalWindowsListWithProcAndClass[counter]
                 loop  {
-                    If !(GetFocusWindowMonitorIndex(hwndId, currentMon)) {
+                    If !(IsWindowOnCurrMon(hwndId, currentMon)) {
                         counter++
                         If (counter > numWindows)
                         {
@@ -2752,6 +2755,7 @@ track() {
     Global MonCount, MonNum
     Static x, y, lastX, lastY, lastMon, currentMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
+    Static previousMon := 0
     
     WinGet, actwndId, ID, A
     MouseGetPos x, y, hwndId
@@ -2766,18 +2770,18 @@ track() {
     If (currentMon > 0)
         lastMon := currentMon
 
-    currentVD := VD.getCurrentDesktopNum()
+    ; currentVD := VD.getCurrentDesktopNum()
     SysGet, MonCount, MonitorCount
 
-    If (currentVd < VD.getCount())
-        nextVD := currentVD + 1
-    Else
-        nextVD := currentVD
+    ; If (currentVd < VD.getCount())
+        ; nextVD := currentVD + 1
+    ; Else
+        ; nextVD := currentVD
 
-    If (currentVd > 1)
-        prevVD := currentVD - 1
-    Else
-        prevVD := currentVD
+    ; If (currentVd > 1)
+        ; prevVD := currentVD - 1
+    ; Else
+        ; prevVD := currentVD
 
     If (LbuttonHeld && !GetKeyState("Lbutton", "P"))
     {
@@ -2911,42 +2915,34 @@ track() {
         taskview  := False
         skipCheck := False
     }
-
+    
     If (MonCount > 1 && !GetKeyState("LButton","P")) {
         currentMon := MWAGetMonitorMouseIsIn(40)
-        If (currentMon > 0) {
-            currentMonHasActWin := GetFocusWindowMonitorIndex(actwndId, currentMon)
-
-            If (currentMon == 1 && currentMonHasActWin && IsAltTabWindow(actwndId)) {
-                LastActiveWinHwnd1 := actwndId
-            }
-            Else If (currentMon == 2 && currentMonHasActWin && IsAltTabWindow(actwndId)) {
-                LastActiveWinHwnd2 := actwndId
-            }
-            Else If (currentMon == 3 && currentMonHasActWin && IsAltTabWindow(actwndId)) {
-                LastActiveWinHwnd3 := actwndId
-            }
-            Else If (currentMon == 4 && currentMonHasActWin && IsAltTabWindow(actwndId)) {
-                LastActiveWinHwnd4 := actwndId
-            }
-
-            LastActiveWinHwnd := LastActiveWinHwnd%currentMon%
-            WinGet, State, MinMax, ahk_id %LastActiveWinHwnd%
-            If (lastMon != currentMon
-                && WinExist("ahk_id " . LastActiveWinHwnd)
-                && State != -1
-                && !GetKeyState("Lbutton", "P")
-                && PrevActiveWindHwnd != LastActiveWinHwnd) {
-                    WinActivate, ahk_id %LastActiveWinHwnd%
+        If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
+            ; tooltip, currentMon is %currentMon% and lastMon was %previousMon%
+            WinGet, currID, ID, A
+            DetectHiddenWindows, Off
+            WinGet, allWindows, List
+            loop % allWindows {
+                hwnd_id := allWindows%A_Index%
+                WinGet, isMin, MinMax, ahk_id %hwnd_id%
+                currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
+                    
+                If (isMin > -1 &&  currentMonHasActWin && IsAltTabWindow(hwnd_id)) {
+                    WinActivate, ahk_id %hwnd_id%
                     GoSub, DrawRect
                     GoSub, ClearRect
                     DrawingRect := False
                     ClearingRect := False
                     Gui, GUI4Boarder: Hide
+                    previousMon := currentMon
+                    return
+                }
             }
         }
     }
-    PrevActiveWindHwnd := actwndId
+    ; PrevActiveWindHwnd := actwndId
+    previousMon := currentMon
 }
 
 ;https://www.autohotkey.com/boards/search.php?author_id=139004&sr=posts&sid=13343c88f1a3953143867b71b22fdafc
@@ -2959,8 +2955,9 @@ MouseIsOverTitleBar() {
 }
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
-GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
+IsWindowOnCurrMon(thisWindowHwnd, currentMonNum := 0) {
     WinGet, state, MinMax, ahk_id %thisWindowHwnd%
+    
     If (state == -1)
         Return True
 
@@ -2971,24 +2968,29 @@ GetFocusWindowMonitorIndex(thisWindowHwnd, currentMonNum := 0) {
     ;Get number of monitor
     SysGet, monCount, MonitorCount
 
+    WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd% 
     ;Iterate through each monitor
     Loop %monCount% {
         Critical, On
         ;Get Monitor working area
-        SysGet, workArea, Monitor, % A_Index
+        If (A_Index == currentMonNum) {
+            SysGet, workArea, Monitor, % A_Index
 
-        ;Get the position of the focus window
-        ; WinGetPos, X, Y, W, , ahk_id %thisWindowHwnd%
-        WinGetPosEx(thisWindowHwnd, X, Y, W)
-        ; If (A_Index == currentMonNum)
-            ; tooltip, % currentMonNum " : " X " " Y " | " workAreaTop-buffer " " workAreaBottom
+            ;Get the position of the focus window
+            ; W := 0
+            ; If (state == 1)
+                ; W := abs(workAreaLeft - workAreaRight)
 
-        ;Check If the focus window in on the current monitor index
-        ; If ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
-        If ((A_Index == currentMonNum) && (((X >= workAreaLeft-buffer && X <= workAreaRight) || (X+W >= workAreaLeft && X+W <= workAreaRight)) && (Y >= workAreaTop-buffer && Y < workAreaBottom-buffer))) {
-            ;Return the monitor index since it's within that monitors borders.
-            Critical, Off
-            Return True
+            ; tooltip, % currentMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom
+
+            ;Check If the focus window in on the current monitor index
+            ; If ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
+            If ((A_Index == currentMonNum) && (X >= (workAreaLeft-buffer) && X <= workAreaRight) && (X+W <= (abs(workAreaRight-workAreaLeft) + 2*buffer)) && (Y >= (workAreaTop-buffer) && Y < (workAreaBottom-buffer))) {
+                
+                ; tooltip, % currentMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom " -- " "True"
+                Critical, Off
+                Return True
+            }
         }
     }
     Critical, Off
@@ -3069,7 +3071,7 @@ ShellMessage( wParam, lParam )
             ; tooltip, %classStr% - %currentMonHasActWin%
             If (state > -1) {
                 currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := GetFocusWindowMonitorIndex(hwndId, currentMon)
+                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
                 If !currentMonHasActWin {
                     WinActivate, Ahk_id %ID%
                     Send, #+{Left}
