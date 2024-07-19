@@ -68,7 +68,7 @@ Global LastKey3 :=
 Process, Priority,, High
 
 UIA := UIA_Interface() ; Initialize UIA interface
-UIA.ConnectionTimeout := 1000
+UIA.ConnectionTimeout := 500
 
 Menu, Tray, Icon
 Menu, Tray, NoStandard
@@ -110,30 +110,30 @@ Gui, GUI4Boarder: Color, %border_color%
 ; {
 ; ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
 
-	; ; Reset trans.
-	; if hwndProgman=
-	; {
-		; if !DoOnce
-		; {
-			; DoOnce=1
-			; WinSet,Trans,OFF, ahk_id %hwndProgman%
-			; WinSet,Trans,OFF, ahk_class Progman
-			; ControlGet, hwndWorkerW, Hwnd,, SysListView321, ahk_class WorkerW
-			; WinSet,Trans,255, ahk_id %hwndWorkerW%
-			; WinSet,Trans,OFF, ahk_id %hwndWorkerW%
-			; WinSet,Trans,OFF, ahk_class WorkerW
-			; sleep, 2000
-			; WinSet,Trans,OFF, ahk_id %hwndProgman%
-			; WinSet,Trans,OFF, ahk_class Progman
-			; ControlGet, hwndWorkerW, Hwnd,, SysListView321, ahk_class WorkerW
-			; WinSet,Trans,255, ahk_id %hwndWorkerW%
-			; WinSet,Trans,OFF, ahk_id %hwndWorkerW%
-			; WinSet,Trans,OFF, ahk_class WorkerW
-		; }
-	; }
-	; else if (hwndProgman!="" and DoOnce=1)
+    ; ; Reset trans.
+    ; if hwndProgman=
     ; {
-		; DoOnce=0
+        ; if !DoOnce
+        ; {
+            ; DoOnce=1
+            ; WinSet,Trans,OFF, ahk_id %hwndProgman%
+            ; WinSet,Trans,OFF, ahk_class Progman
+            ; ControlGet, hwndWorkerW, Hwnd,, SysListView321, ahk_class WorkerW
+            ; WinSet,Trans,255, ahk_id %hwndWorkerW%
+            ; WinSet,Trans,OFF, ahk_id %hwndWorkerW%
+            ; WinSet,Trans,OFF, ahk_class WorkerW
+            ; sleep, 2000
+            ; WinSet,Trans,OFF, ahk_id %hwndProgman%
+            ; WinSet,Trans,OFF, ahk_class Progman
+            ; ControlGet, hwndWorkerW, Hwnd,, SysListView321, ahk_class WorkerW
+            ; WinSet,Trans,255, ahk_id %hwndWorkerW%
+            ; WinSet,Trans,OFF, ahk_id %hwndWorkerW%
+            ; WinSet,Trans,OFF, ahk_class WorkerW
+        ; }
+    ; }
+    ; else if (hwndProgman!="" and DoOnce=1)
+    ; {
+        ; DoOnce=0
     ; }
 
     ; if hwndProgman=
@@ -306,22 +306,22 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 ; ccih := InputHook("V I2 E", EndKeys)
 ; Loop ; WARNING will loop forever until process is killed.
 ; {
-	; ;IfWinNotActive, SciTE
-	; ;{
-	; ccih.Start() ; Start the hook.
-	; ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
-	; CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
-	; If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
-		; CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
-		; ;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
-	; If (inStr(Uppers,CaseArr[1],true) && inStr(Uppers,CaseArr[2],true) && inStr(Lowers,CaseArr[3],true)) && (CaseArr[3] > 0) { ; "true" makes inStr() case-sensitive.
-		; Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
-		; StringLower, Last2, Last2
-		; Send, {Backspace 2} ; Do actual correction.
-		; Send, %Last2%
-		; ;SoundBeep
-	; }
-	; ;}
+    ; ;IfWinNotActive, SciTE
+    ; ;{
+    ; ccih.Start() ; Start the hook.
+    ; ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
+    ; CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
+    ; If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
+        ; CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
+        ; ;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
+    ; If (inStr(Uppers,CaseArr[1],true) && inStr(Uppers,CaseArr[2],true) && inStr(Lowers,CaseArr[3],true)) && (CaseArr[3] > 0) { ; "true" makes inStr() case-sensitive.
+        ; Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
+        ; StringLower, Last2, Last2
+        ; Send, {Backspace 2} ; Do actual correction.
+        ; Send, %Last2%
+        ; ;SoundBeep
+    ; }
+    ; ;}
 ; }
 Return
 
@@ -332,20 +332,20 @@ Return
 
 CapsCorrectionFront($) {
     tofix := $.Value(2)
-	StringLower, fixed, tofix
-	SendInput, % $.Value(1) fixed $.Value(3)
+    StringLower, fixed, tofix
+    SendInput, % $.Value(1) fixed $.Value(3)
 Return
 }
 
 CapsCorrectionBack($) {
     tofix := $.Value(2)
-	StringLower, fixed, tofix
-	SendInput, % $.Value(1) fixed
+    StringLower, fixed, tofix
+    SendInput, % $.Value(1) fixed
 Return
 }
 
 QuestionMarkorrection($) {
-	SendInput, % $.Value(1) "?" $.Value(2)
+    SendInput, % $.Value(1) "?" $.Value(2)
 Return
 }
 
@@ -519,9 +519,7 @@ Return
 
     ~Enter:: Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     ~Space:: Hotstring("EndChars", "()[]{}:;,.?!`n `t")
-    ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
-    ; Goto, EnableHotStrings
-    ; Return
+
     #+s::Return
     
 #If
@@ -623,9 +621,9 @@ If (VD.getCurrentDesktopNum() == 1)
       WinSet, AlwaysOnTop , On, %Title%
       loop, 5
       {
-        level := 255-(A_Index*50)
-        WinSet, Transparent , %level%, %Title%
-        sleep, 30
+          level := 255-(A_Index*50)
+          WinSet, Transparent , %level%, %Title%
+          sleep, 30
       }
       WinSet, ExStyle, ^0x80, %Title%
       Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
@@ -636,9 +634,9 @@ If (VD.getCurrentDesktopNum() == 1)
       WinSet, ExStyle, ^0x80, %Title%
       loop, 5
       {
-        level := (A_Index*50)
-        WinSet, Transparent , %level%, %Title%
-        sleep, 30
+          level := (A_Index*50)
+          WinSet, Transparent , %level%, %Title%
+          sleep, 30
       }
       WinSet, Transparent , off, %Title%
       WinActivate, %Title%
@@ -682,25 +680,25 @@ Return
       WinSet, AlwaysOnTop , On, %Title%
       loop, 5
       {
-        level := 255-(A_Index*50)
-        WinSet, Transparent , %level%, %Title%
-        sleep, 30
+          level := 255-(A_Index*50)
+          WinSet, Transparent , %level%, %Title%
+          sleep, 30
       }
       WinSet, ExStyle, ^0x80, %Title%
 
       If (VD.getCurrentDesktopNum() == 1)
-        Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+          Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
       Else If (VD.getCurrentDesktopNum() == 3)
-        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
+          Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
 
       sleep, 500
       WinMinimize, ahk_class Shell_TrayWnd
       WinSet, ExStyle, ^0x80, %Title%
       loop, 5
       {
-        level := (A_Index*50)
-        WinSet, Transparent , %level%, %Title%
-        sleep, 30
+          level := (A_Index*50)
+          WinSet, Transparent , %level%, %Title%
+          sleep, 30
       }
       WinSet, Transparent , off, %Title%
       WinActivate, %Title%
@@ -714,10 +712,10 @@ Return
   {
       ; WinActivate, ahk_class Shell_TrayWnd
       If (VD.getCurrentDesktopNum() == 1) {
-        Send #^{Right}
+          Send #^{Right}
       }
       Else If (VD.getCurrentDesktopNum() == 3) {
-        Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
+          Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
       }
       sleep 250
       ; WinMinimize, ahk_class Shell_TrayWnd
@@ -743,9 +741,9 @@ Return
       WinSet, AlwaysOnTop , On, %Title%
       loop, 5
       {
-        level := 255-(A_Index*50)
-        WinSet, Transparent , %level%, %Title%
-        sleep, 30
+          level := 255-(A_Index*50)
+          WinSet, Transparent , %level%, %Title%
+          sleep, 30
       }
       WinSet, ExStyle, ^0x80, %Title%
       Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
@@ -756,9 +754,9 @@ Return
       WinSet, ExStyle, ^0x80, %Title%
       loop, 5
       {
-        level := (A_Index*50)
-        WinSet, Transparent , %level%, %Title%
-        sleep, 30
+          level := (A_Index*50)
+          WinSet, Transparent , %level%, %Title%
+          sleep, 30
       }
       WinSet, Transparent , off, %Title%
       WinActivate, %Title%
@@ -2976,16 +2974,12 @@ IsWindowOnCurrMon(thisWindowHwnd, currentMonNum := 0) {
         If (A_Index == currentMonNum) {
             SysGet, workArea, Monitor, % A_Index
 
-            ;Get the position of the focus window
-            ; W := 0
-            ; If (state == 1)
-                ; W := abs(workAreaLeft - workAreaRight)
-
             ; tooltip, % currentMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom
 
             ;Check If the focus window in on the current monitor index
-            ; If ((A_Index == currentMonNum) && (X >= workAreaLeft && X < workAreaRight && Y >= workAreaTop && Y < workAreaBottom )){
-            If ((A_Index == currentMonNum) && (X >= (workAreaLeft-buffer) && X <= workAreaRight) && (X+W <= (abs(workAreaRight-workAreaLeft) + 2*buffer)) && (Y >= (workAreaTop-buffer) && Y < (workAreaBottom-buffer))) {
+            ; If ((A_Index == currentMonNum) && (X >= (workAreaLeft-buffer) && X <= workAreaRight) && (X+W <= (abs(workAreaRight-workAreaLeft) + 2*buffer)) && (Y >= (workAreaTop-buffer) && Y < (workAreaBottom-buffer))) {
+            ; https://math.stackexchange.com/questions/2449221/calculating-percentage-of-overlap-between-two-rectangles
+            If ((A_Index == currentMonNum) && ((max(X, workAreaLeft) - min(X+W,workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom)))/(W*H) > 0.50 ) {
                 
                 ; tooltip, % currentMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom " -- " "True"
                 Critical, Off
@@ -3119,48 +3113,48 @@ ShellMsg( wParam, lParam )
 
 DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
 {
-	ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
-	; Toggle See through icons.
-	if !FadeIn
-	{
+    ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
+    ; Toggle See through icons.
+    if !FadeIn
+    {
         Critical, On
-		if hwndProgman=
+        if hwndProgman=
         {
-			WinSet, Trans, 200, ahk_class WorkerW
+            WinSet, Trans, 200, ahk_class WorkerW
             sleep, 20
-			WinSet, Trans, 150, ahk_class WorkerW
+            WinSet, Trans, 150, ahk_class WorkerW
             sleep, 20
-			WinSet, Trans, 100, ahk_class WorkerW
+            WinSet, Trans, 100, ahk_class WorkerW
             sleep, 20
-			WinSet, Trans, 75, ahk_class WorkerW
+            WinSet, Trans, 75, ahk_class WorkerW
             sleep, 20
-			WinSet, Trans, 25, ahk_class WorkerW
+            WinSet, Trans, 25, ahk_class WorkerW
             sleep, 20
             WinSet, Trans, 0, ahk_class WorkerW
         }
-		else
+        else
         {
-			WinSet, Trans, 200, ahk_id %hwndProgman%
+            WinSet, Trans, 200, ahk_id %hwndProgman%
             sleep, 20
-			WinSet, Trans, 150, ahk_id %hwndProgman%
+            WinSet, Trans, 150, ahk_id %hwndProgman%
             sleep, 20
-			WinSet, Trans, 100, ahk_id %hwndProgman%
+            WinSet, Trans, 100, ahk_id %hwndProgman%
             sleep, 20
-			WinSet, Trans, 75, ahk_id %hwndProgman%
+            WinSet, Trans, 75, ahk_id %hwndProgman%
             sleep, 20
-			WinSet, Trans, 25, ahk_id %hwndProgman%
+            WinSet, Trans, 25, ahk_id %hwndProgman%
             sleep, 20
-			WinSet, Trans, 0, ahk_id %hwndProgman%
+            WinSet, Trans, 0, ahk_id %hwndProgman%
             sleep, 20
         }
         Critical, Off
-	}
-	else
-	{
+    }
+    else
+    {
         Critical, On
-		if hwndProgman=
+        if hwndProgman=
         {
-			WinSet, Trans, OFF, ahk_class WorkerW
+            WinSet, Trans, OFF, ahk_class WorkerW
             WinSet, Trans, 25, ahk_class WorkerW
             sleep, 20
             WinSet, Trans, 75, ahk_class WorkerW
@@ -3173,9 +3167,9 @@ DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
             sleep, 20
             WinSet, Trans, 255, ahk_class WorkerW
         }
-		else
+        else
         {
-			WinSet, Trans, OFF, ahk_id %hwndProgman%
+            WinSet, Trans, OFF, ahk_id %hwndProgman%
             WinSet, Trans, 25, ahk_id %hwndProgman%
             sleep, 20
             WinSet, Trans, 75, ahk_id %hwndProgman%
@@ -3206,36 +3200,36 @@ HasVal(haystack, needle) {
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=62156
 Clip(Text="", Reselect="")
 {
-	Static BackUpClip, Stored, LastClip
-	If (A_ThisLabel = A_ThisFunc) {
-		If (Clipboard == LastClip)
-			Clipboard := BackUpClip
-		BackUpClip := LastClip := Stored := ""
-	} Else {
-		If !Stored {
-			Stored := True
-			BackUpClip := ClipboardAll ; ClipboardAll must be on its own line
-		} Else
-			SetTimer, %A_ThisFunc%, Off
-		LongCopy := A_TickCount, Clipboard := "", LongCopy -= A_TickCount ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
-		If (Text = "") {
-			SendInput, ^c
-			ClipWait, LongCopy ? 0.6 : 0.2, True
-		} Else {
-			Clipboard := LastClip := Text
-			ClipWait, 10
-			SendInput, ^v
-		}
-		SetTimer, %A_ThisFunc%, -700
-		Sleep 20 ; Short sleep in case Clip() is followed by more keystrokes such as {Enter}
-		If (Text = "")
-			Return LastClip := Clipboard
-		Else If ReSelect and ((ReSelect = True) or (StrLen(Text) < 3000))
-			SendInput, % "{Shift Down}{Left " StrLen(StrReplace(Text, "`r")) "}{Shift Up}"
-	}
-	Return
-	Clip:
-	Return Clip()
+    Static BackUpClip, Stored, LastClip
+    If (A_ThisLabel = A_ThisFunc) {
+        If (Clipboard == LastClip)
+            Clipboard := BackUpClip
+        BackUpClip := LastClip := Stored := ""
+    } Else {
+        If !Stored {
+            Stored := True
+            BackUpClip := ClipboardAll ; ClipboardAll must be on its own line
+        } Else
+            SetTimer, %A_ThisFunc%, Off
+        LongCopy := A_TickCount, Clipboard := "", LongCopy -= A_TickCount ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
+        If (Text = "") {
+            SendInput, ^c
+            ClipWait, LongCopy ? 0.6 : 0.2, True
+        } Else {
+            Clipboard := LastClip := Text
+            ClipWait, 10
+            SendInput, ^v
+        }
+        SetTimer, %A_ThisFunc%, -700
+        Sleep 20 ; Short sleep in case Clip() is followed by more keystrokes such as {Enter}
+        If (Text = "")
+            Return LastClip := Clipboard
+        Else If ReSelect and ((ReSelect = True) or (StrLen(Text) < 3000))
+            SendInput, % "{Shift Down}{Left " StrLen(StrReplace(Text, "`r")) "}{Shift Up}"
+    }
+    Return
+    Clip:
+    Return Clip()
 }
 
 ;------------------------------
@@ -3443,16 +3437,16 @@ WinActivated(process, class, Hwnd, title)
             ; MsgBox, MicrosoftSilverlight1 control exists in IEFrame window so do the rest of your stuff here
         ; }
     ; }
-	; a_Time := A_YEAR "/" A_MM "/" A_DD " " A_Hour ":" A_Min ":" A_Sec
+    ; a_Time := A_YEAR "/" A_MM "/" A_DD " " A_Hour ":" A_Min ":" A_Sec
     ; a_Text := "Process:" A_Tab  process "`n"
             ; . "Class:"   A_Tab  class   "`n"
             ; . "Hwnd:"    A_Tab  Hwnd    "`n"
             ; . "Title:"   A_Tab  title
 
-	; ToolTip, %a_Text%, 540, 10
+    ; ToolTip, %a_Text%, 540, 10
     ; ToolTip, %title% - %OutputVar1% : %OutputVar2% : %OutputVar3%, 540, 10
     ; SetTimer, ToolTipCancel, % "-" 2000
-	return
+    return
 
     ToolTipCancel:
         ToolTip
@@ -3462,33 +3456,33 @@ WinActivated(process, class, Hwnd, title)
 ; https://www.autohotkey.com/boards/viewtopic.php?t=3951
 ; Modified from AutoHotkey.chm::/docs/commands/_If.htm
 ControlWaitActive(Hwnd, Seconds = "") {
-	StartTime := A_TickCount
+    StartTime := A_TickCount
 
-	Loop {
-		Sleep, 100
-		ControlGetFocus, FocusedControl, A
-		ControlGet, FocusedControlHwnd, Hwnd,, %FocusedControl%, A
-	}
-	Until ( FocusedControlHwnd = Hwnd )
-	   || ( Seconds && (A_TickCount-StartTime)/1000 >= Seconds )
+    Loop {
+        Sleep, 100
+        ControlGetFocus, FocusedControl, A
+        ControlGet, FocusedControlHwnd, Hwnd,, %FocusedControl%, A
+    }
+    Until ( FocusedControlHwnd = Hwnd )
+       || ( Seconds && (A_TickCount-StartTime)/1000 >= Seconds )
 
-	Return (FocusedControlHwnd=Hwnd)
+    Return (FocusedControlHwnd=Hwnd)
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=69925
 GetActiveExplorerPath()
 {
-	explorerHwnd := WinActive("ahk_class CabinetWClass")
-	if (explorerHwnd)
-	{
-		for window in ComObjCreate("Shell.Application").Windows
-		{
-			if (window.hwnd==explorerHwnd)
-			{
-				return window.Document.Folder.Self.Path
-			}
-		}
-	}
+    explorerHwnd := WinActive("ahk_class CabinetWClass")
+    if (explorerHwnd)
+    {
+        for window in ComObjCreate("Shell.Application").Windows
+        {
+            if (window.hwnd==explorerHwnd)
+            {
+                return window.Document.Folder.Self.Path
+            }
+        }
+    }
 }
 
 ; https://www.reddit.com/r/AutoHotkey/comments/10fmk4h/get_path_of_active_explorer_tab/
