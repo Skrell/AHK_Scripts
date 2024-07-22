@@ -232,7 +232,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == vWinClass) {
                 OutputVar1 := OutputVar2 := OutputVar3 := ""
 
-                loop 20 {
+                loop 40 {
                     ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
                     ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
                     ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
@@ -288,15 +288,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     
                     WinGetClass, lClassCheck, A
                     If (lClassCheck == vWinClass) {
+                        tooltip, adjusted %vWinClass% %FocusedControl%
                         Send, ^{NumpadAdd}
                     }
 
                     loop, 20 {
+                        sleep, 50
                         ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
                         ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
                         If (testCtrlFocus == initFocusedCtrl)
                             break
-                        sleep, 50
                     }
                     BlockInput Off
                     Critical, Off
@@ -1899,13 +1900,13 @@ SendCtrlAdd:
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd") {
         OutputVar1 := OutputVar2 := OutputVar3 := ""
         
-        loop 20 {
+        loop 100 {
             ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                 break
-            sleep, 50
+            sleep, 10
         }
             
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
@@ -1928,12 +1929,12 @@ SendCtrlAdd:
                 FocusedControl := "DirectUIHWND3"
             }
 
-            loop, 10 {
+            loop, 50 {
                 ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
                 ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
                 If (FocusedControl == whatCtrl)
                     break
-                sleep, 50
+                sleep, 10
             }
             
             WinGetClass, lClassCheck, A
