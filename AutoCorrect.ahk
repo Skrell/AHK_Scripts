@@ -217,9 +217,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 tooltip, setting %vWinClass% on top!
             }
             
-            ; WinGet, procStr, ProcessName, Ahk_id %hWnd%
-            
-            ; If (IsAltTabWindow(hWnd) || (procStr == "OUTLOOK.EXE" && vWinClass == "#32770")) {
             WinGet, state, MinMax, Ahk_id %hWnd%
 
             If (state > -1) {
@@ -230,57 +227,80 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Send, #+{Left}
                 }
             }
-            ; }
-            OutputVar1 := OutputVar2 := OutputVar3 := ""
-
-            loop 20 {
-                ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
-                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
-                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
-                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
-                    break
-                sleep, 50
-            }
             
-            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
-                BlockInput On 
-                ; tooltip, here
-                loop, 20 {
-                    ControlGetFocus, focusedCtrl , % "ahk_id " hWnd
-                    If (focusedCtrl != "")
-                        break
-                    sleep, 50
-                }
-                
-                If (vWinClass != "EVERYTHING_(1.5a)") {
-                    exEl := UIA.ElementFromHandle(hWnd)
-                    shellEl := exEl.FindFirstByName("Items View")
-                    shellEl.WaitElementExist("ControlType=ListItem OR ControlType=text",,5)
-                    ; listEl := shellEl.FindFirstByType("ListItem")
-                    ; tooltip, % "Value is :" listEl.Value " - " vWinTitle
-                }
-                
-                ; tooltip, starting control is %focusedCtrl%
-                
-                If (OutputVar2 == 1)
-                    ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
-                Else If (OutputVar3 == 1)
-                    ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
-                Else If (OutputVar1 == 1)
-                    ControlFocus , SysListView321, % "ahk_id " hWnd
-                
-                sleep, 50
-                Send, ^{NumpadAdd}
+            WinGetClass, lClassCheck, A
+            If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == vWinClass) {
+                OutputVar1 := OutputVar2 := OutputVar3 := ""
 
-                loop, 20 {
-                    sleep, 50
-                    ControlFocus , %focusedCtrl%, % "ahk_id " hWnd
-                    ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                    If (testCtrlFocus == focusedCtrl)
+                loop 20 {
+                    ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
+                    ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
+                    ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
+                    If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                         break
+                    sleep, 50
                 }
-                BlockInput Off
-                Critical, Off
+                
+                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
+                    BlockInput On 
+                    ; tooltip, here
+                    loop, 20 {
+                        ControlGetFocus, initFocusedCtrl , % "ahk_id " hWnd
+                        If (initFocusedCtrl != "")
+                            break
+                        sleep, 50
+                    }
+                    
+                    If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
+                        If (vWinClass != "EVERYTHING_(1.5a)") {
+                            exEl := UIA.ElementFromHandle(hWnd)
+                            shellEl := exEl.FindFirstByName("Items View")
+                            shellEl.WaitElementExist("ControlType=ListItem OR ControlType=text",,5)
+                            ; listEl := shellEl.FindFirstByType("ListItem")
+                            ; tooltip, % "Value is :" listEl.Value " - " vWinTitle
+                        }
+                    }
+                    
+                    If (OutputVar2 == 1)
+                        ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
+                    Else If (OutputVar3 == 1)
+                        ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
+                    Else If (OutputVar1 == 1)
+                        ControlFocus , SysListView321, % "ahk_id " hWnd
+                    
+                    If (OutputVar2 == 1) {
+                        FocusedControl := "DirectUIHWND2"
+                    }
+                    Else If (OutputVar3 == 1) {
+                        FocusedControl := "DirectUIHWND3"
+                    }
+                    Else If (OutputVar1 == 1) {
+                        FocusedControl := "SysListView321"
+                    }
+                    
+                    loop, 10 {
+                        ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
+                        ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
+                        If (FocusedControl == whatCtrl)
+                            break
+                        sleep, 50
+                    }
+                    
+                    WinGetClass, lClassCheck, A
+                    If (lClassCheck == vWinClass) {
+                        Send, ^{NumpadAdd}
+                    }
+
+                    loop, 20 {
+                        ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
+                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        If (testCtrlFocus == initFocusedCtrl)
+                            break
+                        sleep, 50
+                    }
+                    BlockInput Off
+                    Critical, Off
+                }
             }
         }
         
@@ -326,6 +346,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 Return
 
 PreventRecur() {
+    Global StopRecurssion
     StopRecurssion := True
 Return
 }
@@ -1556,24 +1577,20 @@ Return
     
     If (A_PriorHotkey == A_ThisHotkey
         && A_TimeSincePriorHotkey < 500
-        && (WinActive("ahk_class CabinetWClass") || (WinActive("ahk_class #32770"))) && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
+        && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
 
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
-            
             LbuttonEnabled := False
-            Send !{Up}
+            If (lctrlN == "SysListView321")
+                Send, {Backspace}
+            Else
+                Send, !{Up}
         }
-            KeyWait, Lbutton, U T3
-            SetTimer, SendCtrlAdd, -50
-            sleep, 400
-            LbuttonEnabled := True
-        ; Else {
-            ; LbuttonEnabled := False
-            ; KeyWait, Lbutton, U T3
-            ; SetTimer, SendCtrlAdd, -50
-            ; sleep, 400
-            ; LbuttonEnabled := True
-        ; }
+        KeyWait, Lbutton, U T3
+        SetTimer, SendCtrlAdd, -5
+        sleep, 400
+        LbuttonEnabled := True
+
         tooltip, 
         Critical, Off
         Return
@@ -1879,25 +1896,28 @@ SendCtrlAdd:
     
     ; ; tooltip, %lClassCheck% %lClass% %lctrlN%
     ; CoordMode, Mouse, Screen
-    If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass) {
-        If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (lctrlN == "SysTreeView321" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")) {
-            loop 20 {
-                ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
-                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
-                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
-                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
-                    break
-                sleep, 50
-            }
+    If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd") {
+        OutputVar1 := OutputVar2 := OutputVar3 := ""
+        
+        loop 20 {
+            ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
+            ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
+            ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
+            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
+                break
+            sleep, 50
+        }
             
-            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
+        If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
+            BlockInput On
+            If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (lctrlN == "SysTreeView321" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")) {
                 If (vWinClass != "EVERYTHING_(1.5a)") {
                     exEl := UIA.ElementFromHandle(lIdCheck)
                     shellEl := exEl.FindFirstByName("Items View")
                     shellEl.WaitElementExist("ControlType=ListItem OR ControlType=text",,5)
                 }
             }
-            
+        
             If (OutputVar1 == 1) {
                 FocusedControl := "SysListView321"
             }
@@ -1907,27 +1927,36 @@ SendCtrlAdd:
             Else If (OutputVar3 == 1) {
                 FocusedControl := "DirectUIHWND3"
             }
-            ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
-        }
 
-        sleep, 50
-        tooltip, adjust %currentPath%
-        Send, ^{NumpadAdd}
+            loop, 10 {
+                ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
+                ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
+                If (FocusedControl == whatCtrl)
+                    break
+                sleep, 50
+            }
+            
+            WinGetClass, lClassCheck, A
+            If (lClassCheck == lClass) {
+                tooltip, adjusted %lClassCheck%
+                Send, ^{NumpadAdd}
+            }
 
-        If (lctrlN == "SysTreeView321") {
-            sleep, 50
-            ; Send, +{Tab}
-            ControlFocus, SysTreeView321, ahk_id %lIdCheck%
+            If (lctrlN == "SysTreeView321") {
+                sleep, 50
+                ControlFocus, SysTreeView321, ahk_id %lIdCheck%
+            }
+            BlockInput, Off
         }
     }
     
-    ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
-    ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
-    ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
-    If (OutputVar1 == "" && OutputVar2 == "" && OutputVar3 == "") {
-        SetTimer, SendCtrlAdd, Off
-        Return
-    }
+    ; ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
+    ; ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
+    ; ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
+    ; If (OutputVar1 == "" && OutputVar2 == "" && OutputVar3 == "") {
+        ; SetTimer, SendCtrlAdd, Off
+        ; Return
+    ; }
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?style=2&t=113107
