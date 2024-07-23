@@ -68,7 +68,7 @@ Global LastKey3 :=
 Process, Priority,, High
 
 UIA := UIA_Interface() ; Initialize UIA interface
-UIA.ConnectionTimeout := 500
+UIA.ConnectionTimeout := 6000
 
 Menu, Tray, Icon
 Menu, Tray, NoStandard
@@ -200,11 +200,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Critical, On
             
             prevActiveWindows.push(hWnd)
-            loop 50 {
+            loop 200 {
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
                 If (vWinTitle != "")
                     break
-                sleep, 40
+                sleep, 10
             }
             WinGetClass, vWinClass, % "ahk_id " hWnd
             ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length() 
@@ -232,30 +232,30 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == vWinClass) {
                 OutputVar1 := OutputVar2 := OutputVar3 := ""
 
-                loop 40 {
+                loop 200 {
                     ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
                     ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
                     ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
                     If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                         break
-                    sleep, 50
+                    sleep, 10
                 }
                 
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
                     BlockInput On 
                     ; tooltip, here
-                    loop, 20 {
+                    loop, 100 {
                         ControlGetFocus, initFocusedCtrl , % "ahk_id " hWnd
                         If (initFocusedCtrl != "")
                             break
-                        sleep, 50
+                        sleep, 10
                     }
                     
                     If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                         If (vWinClass != "EVERYTHING_(1.5a)") {
                             exEl := UIA.ElementFromHandle(hWnd)
                             shellEl := exEl.FindFirstByName("Items View")
-                            shellEl.WaitElementExist("ControlType=ListItem OR ControlType=text",,5)
+                            shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty.",,,,5000)
                             ; listEl := shellEl.FindFirstByType("ListItem")
                             ; tooltip, % "Value is :" listEl.Value " - " vWinTitle
                         }
@@ -1588,8 +1588,8 @@ Return
                 Send, !{Up}
         }
         KeyWait, Lbutton, U T3
-        SetTimer, SendCtrlAdd, -5
-        sleep, 400
+        GoSub, SendCtrlAdd
+        sleep, 300
         LbuttonEnabled := True
 
         tooltip, 
@@ -1613,10 +1613,10 @@ Return
     MouseGetPos, X2, Y2,
 
     If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")))  {
-        SetTimer, SendCtrlAdd, -50
+        SetTimer, SendCtrlAdd, -100
     }
     Else If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && lctrlN == "SysTreeView321")) {
-        SetTimer, SendCtrlAdd, -50
+        SetTimer, SendCtrlAdd, -100
     }
     Else
         SetTimer, SendCtrlAdd, Off
@@ -1911,11 +1911,11 @@ SendCtrlAdd:
             
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
             BlockInput On
-            If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (lctrlN == "SysTreeView321" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")) {
+            If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
                 If (vWinClass != "EVERYTHING_(1.5a)") {
                     exEl := UIA.ElementFromHandle(lIdCheck)
                     shellEl := exEl.FindFirstByName("Items View")
-                    shellEl.WaitElementExist("ControlType=ListItem OR ControlType=text",,5)
+                    shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty.",,,,5000)
                 }
             }
         
