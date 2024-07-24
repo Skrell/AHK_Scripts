@@ -4,7 +4,7 @@
 ; ? = triggered even when the character typed immediately before it is alphanumeric
 ; r = raw output
 
-#include %A_ScriptDir%\_VD.ahk
+; #include %A_ScriptDir%\_VD.ahk
 #include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 
 dummyFunction1() {
@@ -288,7 +288,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     
                     WinGetClass, lClassCheck, A
                     If (lClassCheck == vWinClass) {
-                        tooltip, adjusted %vWinClass% %FocusedControl%
+                        ; tooltip, adjusted %vWinClass% %FocusedControl%
                         Send, ^{NumpadAdd}
                     }
 
@@ -1589,7 +1589,7 @@ Return
         }
         KeyWait, Lbutton, U T3
         GoSub, SendCtrlAdd
-        sleep, 300
+        sleep, 400
         LbuttonEnabled := True
 
         tooltip, 
@@ -1939,7 +1939,7 @@ SendCtrlAdd:
             
             WinGetClass, lClassCheck, A
             If (lClassCheck == lClass) {
-                tooltip, adjusted %lClassCheck%
+                ; tooltip, adjusted %lClassCheck%
                 Send, ^{NumpadAdd}
             }
 
@@ -2733,8 +2733,17 @@ keyTrack() {
     Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
     Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
     Static LastKey1, LastKey2, LastKey3, LastKey4, LastKey5 := ""
+    Static TimeOfLastKey := 0
+
+    ControlGetFocus, currCtrl, A
+    ; tooltip, control is %TimeOfLastKey%
+    If (currCtrl == "Edit1" && (A_TickCount-TimeOfLastKey) > 500 && A_PriorKey != "Enter") {
+        Send, ^{NumpadAdd}
+        TimeOfLastKey := A_TickCount
+    }
 
     If (LastKey1 != A_PriorKey) {
+        TimeOfLastKey := A_TickCount
         LastKey5 := LastKey4
         LastKey4 := LastKey3
         LastKey3 := LastKey2
