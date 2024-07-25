@@ -1563,6 +1563,7 @@ Return
     
     If (lClass == "CabinetWClass" || lClass == "#32770") {
         exEl := UIA.ElementFromHandle(lhwnd)
+        exEl.WaitElementExist("ClassName=ShellTabWindowClass",,,,5000)
         currentPathEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass")
         currentPath := currentPathEl.Name
     }
