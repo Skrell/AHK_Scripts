@@ -209,8 +209,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
             WinGetClass, vWinClass, % "ahk_id " hWnd
             ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length() 
-            If (vWinTitle == "" || (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == ""))
+            If (vWinTitle == "" || (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "")) {
+                Critical, Off
                 Return
+            }
             
             If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
                 sleep 100
@@ -279,26 +281,29 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         FocusedControl := "SysListView321"
                     }
                     
-                    loop, 10 {
+                    loop, 50 {
                         ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
                         ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
                         If (FocusedControl == whatCtrl)
                             break
-                        sleep, 50
+                        sleep, 10
                     }
                     
                     WinGetClass, lClassCheck, A
                     If (lClassCheck == vWinClass) {
                         ; tooltip, adjusted %vWinClass% %FocusedControl%
                         Send, ^{NumpadAdd}
+                        sleep, 50
                     }
 
-                    loop, 20 {
-                        sleep, 50
-                        ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
-                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                        If (testCtrlFocus == initFocusedCtrl)
-                            break
+                    If initFocusedCtrl {
+                        loop, 100 {
+                            ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
+                            ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                            If (testCtrlFocus == initFocusedCtrl)
+                                break
+                            sleep, 10
+                        }
                     }
                     BlockInput Off
                     Critical, Off
@@ -1891,6 +1896,7 @@ SendCtrlAdd:
     ; ; tooltip, %lClassCheck% %lClass% %lctrlN%
     ; CoordMode, Mouse, Screen
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd") {
+        
         OutputVar1 := OutputVar2 := OutputVar3 := ""
         
         loop 100 {
@@ -1934,11 +1940,17 @@ SendCtrlAdd:
             If (lClassCheck == lClass) {
                 ; tooltip, adjusted %lClassCheck%
                 Send, ^{NumpadAdd}
+                sleep, 50
             }
 
             If (lctrlN == "SysTreeView321") {
-                sleep, 50
-                ControlFocus, SysTreeView321, ahk_id %lIdCheck%
+                loop, 100 {
+                    ControlFocus , SysTreeView321, ahk_id %lIdCheck%
+                    ControlGetFocus, testCtrlFocus , ahk_id %lIdCheck%
+                    If (testCtrlFocus == "SysTreeView321")
+                        break
+                    sleep, 10
+                }
             }
             BlockInput, Off
         }
