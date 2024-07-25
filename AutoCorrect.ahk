@@ -1568,10 +1568,10 @@ Return
     }
     
     If (A_PriorHotkey == A_ThisHotkey
-        && A_TimeSincePriorHotkey < 500
+        && (A_TimeSincePriorHotkey < 500)
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
 
-        LbuttonEnabled := False
+       LbuttonEnabled := False
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321")
                 Send, {Backspace}
@@ -1581,8 +1581,8 @@ Return
         KeyWait, Lbutton, U T3
         If (prevPath != currentPath) {
             GoSub, SendCtrlAdd
-            sleep, 125
         }
+        sleep, 300
         LbuttonEnabled := True
 
         tooltip, 
@@ -1609,9 +1609,6 @@ Return
         && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323")))  {
         SetTimer, SendCtrlAdd, -100
     }
-    ; Else If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && lctrlN == "SysTreeView321")) {
-        ; SetTimer, SendCtrlAdd, -100
-    ; }
     Else
         SetTimer, SendCtrlAdd, Off
     
