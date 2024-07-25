@@ -4,19 +4,20 @@
 ; ? = triggered even when the character typed immediately before it is alphanumeric
 ; r = raw output
 
-; #include %A_ScriptDir%\_VD.ahk
+#include %A_ScriptDir%\_VD.ahk
+; #include %A_ScriptDir%\VirtualDesktopAccessor.ahk
 #include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 
 dummyFunction1() {
     static dummyStatic1 := VD.init()
-    }
+}
 
 #InstallMouseHook
 #InstallKeybdHook
 #WinActivateForce
 #NoEnv
 #SingleInstance
-; #KeyHistory 0
+#KeyHistory 0
 #MaxHotkeysPerInterval 500
 
 SetBatchLines -1
@@ -24,6 +25,7 @@ SetWinDelay   -1
 SetControlDelay -1
 SetKeyDelay, 10
 SendMode, Input
+
 
 Global moving := False
 Global ComboActive := False
@@ -83,11 +85,11 @@ SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
 SysGet, MonCount, MonitorCount
 
-Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum%
-sleep 1500
-Tooltip, % "Current Mon is " GetCurrentMonitorIndex()
-sleep 1500
-Tooltip,
+; Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum%
+; sleep 1500
+; Tooltip, % "Current Mon is " GetCurrentMonitorIndex()
+; sleep 1500
+; Tooltip,
 
 Gui, ShadowFrFull: New
 Gui, ShadowFrFull: +HwndIGUIF
@@ -175,7 +177,6 @@ loop % allwindows
     prevActiveWindows.push(winID)
 }
 
-; SetTimer CheckWindow, 100
 SetTimer track, 100
 SetTimer keyTrack, 1
 
@@ -406,54 +407,54 @@ Return
     Return
 
     ~Mbutton::
-    ControlGetFocus, IsEdit, A
-    ; tooltip, %IsEdit%
-    If (IsEdit == "Edit1" || IsEdit == "Edit2") {
-        Send, {Enter}
-    }
+        ControlGetFocus, IsEdit, A
+        ; tooltip, %IsEdit%
+        If (IsEdit == "Edit1" || IsEdit == "Edit2") {
+            Send, {Enter}
+        }
     Return
     
     $CapsLock:: 
-    Send {Delete}
-    Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        Send {Delete}
+        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     Return
 
     $!a:: 
-    Send, {home}
+        Send, {home}
     Return
     
     $+!a:: 
-    Send, {SHIFT down}{home}{SHIFT up}
+        Send, {SHIFT down}{home}{SHIFT up}
     Return
 
     $!;::
-    Send, {end}
-    Hotstring("EndChars", "")
+        Send, {end}
+        Hotstring("EndChars", "")
     Return
 
     $!+;::
-    Send, {SHIFT down}{end}{SHIFT up}
-    Hotstring("EndChars", "")
+        Send, {SHIFT down}{end}{SHIFT up}
+        Hotstring("EndChars", "")
     Return
 
     $!+i::
-    Send {SHIFT down}{UP}{SHIFT up}
-    Hotstring("EndChars", "")
+        Send {SHIFT down}{UP}{SHIFT up}
+        Hotstring("EndChars", "")
     Return
 
     $!+k::   
-    Send {SHIFT down}{DOWN}{SHIFT up}
-    Hotstring("EndChars", "")
+        Send {SHIFT down}{DOWN}{SHIFT up}
+        Hotstring("EndChars", "")
     Return
 
     $!+j::
-    Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
-    Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
+        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     Return
 
     $!+l::
-    Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
-    Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
+        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     Return
 
     $!+'::
@@ -520,26 +521,32 @@ Return
     Return
 
     $!i::
-    Hotstring("EndChars", "")
-    Send {UP}
+        Hotstring("EndChars", "")
+        Send {UP}
     Return
 
     $!k::
-    Hotstring("EndChars", "")
-    Send {DOWN}
+        Hotstring("EndChars", "")
+        Send {DOWN}
     Return
 
     $!j:: 
-    Hotstring("EndChars", "")
-    Send {LCtrl down}{LEFT}{LCtrl up}
+        Hotstring("EndChars", "")
+        Send {LCtrl down}{LEFT}{LCtrl up}
     Return
 
     $!l:: 
-    Hotstring("EndChars", "")
-    Send {LCtrl down}{RIGHT}{LCtrl up}
+        Hotstring("EndChars", "")
+        Send {LCtrl down}{RIGHT}{LCtrl up}
     Return
 
-    ~Enter:: Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+    ~Enter:: 
+        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        ControlGetFocus, currCtrl, A
+        If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3")
+            GoSUb, SendCtrlAdd
+    Return
+    
     ~Space:: Hotstring("EndChars", "()[]{}:;,.?!`n `t")
 
     #+s::Return
@@ -625,190 +632,180 @@ Return
 #If
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
-#MaxThreadsPerHotkey 1
-#MaxThreadsBuffer On
+; #MaxThreadsPerHotkey 2
+; #MaxThreadsBuffer On
 
 !1::
-  HideTrayTip()
-If (VD.getCurrentDesktopNum() == 1)
-     Return
-
-  If GetKeyState("Lbutton", "P")
-  {
-      BlockInput, MouseMove
-      Send {Lbutton up}
-      WinGetTitle, Title, A
-      WinGet, hwndVD, ID, A
-      WinActivate, ahk_class Shell_TrayWnd
-      WinSet, AlwaysOnTop , On, %Title%
-      loop, 5
-      {
-          level := 255-(A_Index*50)
-          WinSet, Transparent , %level%, %Title%
-          sleep, 30
-      }
-      WinSet, ExStyle, ^0x80, %Title%
-      Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
-      sleep, 250
-      Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
-      sleep, 500
-      WinMinimize, ahk_class Shell_TrayWnd
-      WinSet, ExStyle, ^0x80, %Title%
-      loop, 5
-      {
-          level := (A_Index*50)
-          WinSet, Transparent , %level%, %Title%
-          sleep, 30
-      }
-      WinSet, Transparent , off, %Title%
-      WinActivate, %Title%
-      Send {Lbutton down}
-      BlockInput, MouseMoveOff
-      KeyWait, Lbutton, U T10
-      Send {Lbutton up}
-      WinSet, AlwaysOnTop , Off, %Title%
-  }
-  Else
-  {
-      WinActivate, ahk_class Shell_TrayWnd
-      If (VD.getCurrentDesktopNum() == 3) {
-          Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
-          sleep 250
-          Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
-      }
-      Else If (VD.getCurrentDesktopNum() == 2)
-          Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
-      sleep 250
-      WinMinimize, ahk_class Shell_TrayWnd
-      WinSet, Transparent, off, ahk_id %hwndVD%
-  }
-  TrayTip , , Desktop 1, , 16
-  sleep 1500
-  HideTrayTip()
+    LbuttonEnabled := False
+    ; If GetKeyState("Lbutton", "P")
+    ; {
+      ; BlockInput, MouseMove
+      ; Send {Lbutton up}
+      ; WinGetTitle, Title, A
+      ; WinGet, hwndVD, ID, A
+      ; WinActivate, ahk_class Shell_TrayWnd
+      ; WinSet, AlwaysOnTop , On, %Title%
+      ; loop, 5
+      ; {
+          ; level := 255-(A_Index*50)
+          ; WinSet, Transparent , %level%, %Title%
+          ; sleep, 30
+      ; }
+      ; WinSet, ExStyle, ^0x80, %Title%
+      ; Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
+      ; sleep, 250
+      ; Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
+      ; sleep, 500
+      ; WinMinimize, ahk_class Shell_TrayWnd
+      ; WinSet, ExStyle, ^0x80, %Title%
+      ; loop, 5
+      ; {
+          ; level := (A_Index*50)
+          ; WinSet, Transparent , %level%, %Title%
+          ; sleep, 30
+      ; }
+      ; WinSet, Transparent , off, %Title%
+      ; WinActivate, %Title%
+      ; Send {Lbutton down}
+      ; BlockInput, MouseMoveOff
+      ; KeyWait, Lbutton, U T10
+      ; Send {Lbutton up}
+      ; WinSet, AlwaysOnTop , Off, %Title%
+    ; }
+    ; Else
+    ; {
+    ; WinActivate, ahk_class Shell_TrayWnd
+    If GetKeyState("Lbutton","P") && MouseIsOverTitleBar() {
+        Send, {Lbutton up}
+        VD.MoveWindowToDesktopNum("A", 1)
+    }
+    current := VD.getCurrentDesktopNum()
+    If (current == 3) {
+        Send #^{Left}
+        Send #^{Left}
+    }
+    Else If (current == 2) {
+        Send #^{Left}
+    }
+    sleep 250
+    LbuttonEnabled := True
+      ; WinMinimize, ahk_class Shell_TrayWnd
 Return
 
 !2::
-  HideTrayTip()
-  If (VD.getCurrentDesktopNum() == 2)
-    Return
-
-  If GetKeyState("Lbutton", "P")
-  {
-      BlockInput, MouseMove
-      Send {Lbutton up}
-      WinGetTitle, Title, A
-      WinGet, hwndVD, ID, A
-      WinActivate, ahk_class Shell_TrayWnd
-      WinSet, AlwaysOnTop , On, %Title%
-      loop, 5
-      {
-          level := 255-(A_Index*50)
-          WinSet, Transparent , %level%, %Title%
-          sleep, 30
-      }
-      WinSet, ExStyle, ^0x80, %Title%
-
-      If (VD.getCurrentDesktopNum() == 1)
-          Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-      Else If (VD.getCurrentDesktopNum() == 3)
-          Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
-
-      sleep, 500
-      WinMinimize, ahk_class Shell_TrayWnd
-      WinSet, ExStyle, ^0x80, %Title%
-      loop, 5
-      {
-          level := (A_Index*50)
-          WinSet, Transparent , %level%, %Title%
-          sleep, 30
-      }
-      WinSet, Transparent , off, %Title%
-      WinActivate, %Title%
-      Send {Lbutton down}
-      BlockInput, MouseMoveOff
-      KeyWait, Lbutton, U T10
-      Send {Lbutton up}
-      WinSet, AlwaysOnTop , Off, %Title%
-  }
-  else
-  {
-      ; WinActivate, ahk_class Shell_TrayWnd
-      If (VD.getCurrentDesktopNum() == 1) {
-          Send #^{Right}
-      }
-      Else If (VD.getCurrentDesktopNum() == 3) {
-          Send {LWin down}{LCtrl down}{Left}{LCtrl up}{LWin up}
-      }
-      sleep 250
+    LbuttonEnabled := False
+    ; If GetKeyState("Lbutton", "P")
+    ; {
+        ; BlockInput, MouseMove
+        ; Send {Lbutton up}
+        ; WinGetTitle, Title, A
+        ; WinGet, hwndVD, ID, A
+        ; WinActivate, ahk_class Shell_TrayWnd
+        ; WinSet, AlwaysOnTop , On, %Title%
+        ; loop, 5
+        ; {
+            ; level := 255-(A_Index*50)
+            ; WinSet, Transparent , %level%, %Title%
+            ; sleep, 30
+        ; }
+        ; WinSet, ExStyle, ^0x80, %Title%
+    ; }
+    ; else
+    ; {
+    ; WinActivate, ahk_class Shell_TrayWnd
+    If GetKeyState("Lbutton","P") && MouseIsOverTitleBar() {
+        Send, {Lbutton up}
+        VD.MoveWindowToDesktopNum("A", 2)
+    }
+    current := VD.getCurrentDesktopNum()
+    If (current == 1) {
+        Send #^{Right}
+    }
+    Else If (current == 3) {
+        Send #^{Left}
+    }
+    sleep 250
+    LbuttonEnabled := True
+    ; If GetKeyState("Lbutton","P") {
+      ; sleep, 500
       ; WinMinimize, ahk_class Shell_TrayWnd
-      ; WinSet, Transparent, off, ahk_id %hwndVD%
-  }
-  TrayTip , , Desktop 2, , 16
-  sleep 1500
-  HideTrayTip()
+      ; WinSet, ExStyle, ^0x80, %Title%
+      ; loop, 5
+      ; {
+          ; level := (A_Index*50)
+          ; WinSet, Transparent , %level%, %Title%
+          ; sleep, 30
+      ; }
+      ; WinSet, Transparent , off, %Title%
+      ; WinActivate, %Title%
+      ; Send {Lbutton down}
+      ; BlockInput, MouseMoveOff
+      ; KeyWait, Lbutton, U T10
+      ; Send {Lbutton up}
+      ; WinSet, AlwaysOnTop , Off, %Title%
+    ; }
 Return
 
 !3::
-  HideTrayTip()
-  If (VD.getCurrentDesktopNum() == 3)
-     Return
-
-  If GetKeyState("Lbutton", "P")
-  {
-      BlockInput, MouseMove
-      Send {Lbutton up}
-      WinGetTitle, Title, A
-      WinGet, hwndVD, ID, A
-      WinActivate, ahk_class Shell_TrayWnd
-      WinSet, AlwaysOnTop , On, %Title%
-      loop, 5
-      {
-          level := 255-(A_Index*50)
-          WinSet, Transparent , %level%, %Title%
-          sleep, 30
+    LbuttonEnabled := False
+    ; If GetKeyState("Lbutton", "P")
+    ; {
+      ; BlockInput, MouseMove
+      ; Send {Lbutton up}
+      ; WinGetTitle, Title, A
+      ; WinGet, hwndVD, ID, A
+      ; WinActivate, ahk_class Shell_TrayWnd
+      ; WinSet, AlwaysOnTop , On, %Title%
+      ; loop, 5
+      ; {
+          ; level := 255-(A_Index*50)
+          ; WinSet, Transparent , %level%, %Title%
+          ; sleep, 30
+      ; }
+      ; WinSet, ExStyle, ^0x80, %Title%
+      ; Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+      ; sleep, 250
+      ; Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+      ; sleep, 500
+      ; WinMinimize, ahk_class Shell_TrayWnd
+      ; WinSet, ExStyle, ^0x80, %Title%
+      ; loop, 5
+      ; {
+          ; level := (A_Index*50)
+          ; WinSet, Transparent , %level%, %Title%
+          ; sleep, 30
+      ; }
+      ; WinSet, Transparent , off, %Title%
+      ; WinActivate, %Title%
+      ; Send {Lbutton down}
+      ; BlockInput, MouseMoveOff
+      ; KeyWait, Lbutton, U T10
+      ; Send {Lbutton up}
+      ; WinSet, AlwaysOnTop , Off, %Title%
+    ; }
+    ; else
+    ; {
+      ; WinActivate, ahk_class Shell_TrayWnd
+      If GetKeyState("Lbutton","P") && MouseIsOverTitleBar() {
+          Send, {Lbutton up}
+          VD.MoveWindowToDesktopNum("A", 3)
       }
-      WinSet, ExStyle, ^0x80, %Title%
-      Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-      sleep, 250
-      Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-      sleep, 500
-      WinMinimize, ahk_class Shell_TrayWnd
-      WinSet, ExStyle, ^0x80, %Title%
-      loop, 5
-      {
-          level := (A_Index*50)
-          WinSet, Transparent , %level%, %Title%
-          sleep, 30
+      current := VD.getCurrentDesktopNum()
+      If (current == 1) {
+          Send #^{Right}
+          Send #^{Right}
       }
-      WinSet, Transparent , off, %Title%
-      WinActivate, %Title%
-      Send {Lbutton down}
-      BlockInput, MouseMoveOff
-      KeyWait, Lbutton, U T10
-      Send {Lbutton up}
-      WinSet, AlwaysOnTop , Off, %Title%
-  }
-  else
-  {
-      WinActivate, ahk_class Shell_TrayWnd
-      If (VD.getCurrentDesktopNum() == 1) {
-          Send {LWin down}{LCtrl down}{Right}{LCtrl up}{LWin up}
-          sleep, 250
-          Send {LWin down}{LCtrl down}{Right}{LCtrl up}{LWin up}
+      Else If (current == 2) {
+          Send #^{Right}
       }
-      Else {
-          Send {LWin down}{LCtrl down}{Right}{LCtrl up}{LWin up}
-      }
-      sleep, 250
-
-      WinMinimize, ahk_class Shell_TrayWnd
-      WinSet, Transparent, off, ahk_id %hwndVD%
-  }
-  TrayTip , , Desktop 3, , 16
-  sleep 1500
-  HideTrayTip()
+      sleep 250
+      LbuttonEnabled := True
+      ; WinMinimize, ahk_class Shell_TrayWnd
 Return
 
+; #MaxThreadsBuffer Off
+    
+    
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 Altup:
     Global cycling
@@ -934,16 +931,6 @@ Altup:
     DrawingRect  := False
     tooltip,
 Return
-
-TabBlock() {
-    Return
-}
-
-TabOff() {
-    Hotkey, Tab, Off
-}
-
-#MaxThreadsBuffer Off
 
 ;============================================================================================================================
 FadeInWin1:
@@ -1148,10 +1135,10 @@ Return
 
 #If hitTAB
 !x::
-Gui, GUI4Boarder: Hide
-GoSub, ResetWins
-DrawingRect := False
-ClearingRect := False
+    Gui, GUI4Boarder: Hide
+    GoSub, ResetWins
+    DrawingRect := False
+    ClearingRect := False
 Return
 #If
 
@@ -1612,12 +1599,13 @@ Return
     ; tooltip, %IsBlankSpace% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
     MouseGetPos, X2, Y2,
 
-    If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")))  {
+    If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" 
+        && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323")))  {
         SetTimer, SendCtrlAdd, -100
     }
-    Else If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && lctrlN == "SysTreeView321")) {
-        SetTimer, SendCtrlAdd, -100
-    }
+    ; Else If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" && lctrlN == "SysTreeView321")) {
+        ; SetTimer, SendCtrlAdd, -100
+    ; }
     Else
         SetTimer, SendCtrlAdd, Off
         
@@ -1704,7 +1692,7 @@ $!`::
             titleEntry     := Trim(splitEntry2[3])
 
             WinGet, Path, ProcessPath, ahk_exe %procEntry%
-            If (minState == -1 && VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
+            If (minState == -1 ) ; && VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
                 finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
             Else
                 finalEntry   := % desktopEntry " : " titleEntry " (" procEntry ")"
@@ -1781,14 +1769,17 @@ ActivateWindow:
     fulltitle := Trim(fulltitle)
     ; msgbox, %fulltitle%
 
-    cdt := VD.getCurrentDesktopNum()
-    desknum := VD.getDesktopNumOfWindow(fulltitle)
+    cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    ; desknum := VD.getDesktopNumOfWindow(fulltitle)
     WinGet, vState, MinMax, %fulltitle%
+    WinGet, vID, ID, %fulltitle%
     If (desknum < cdt)
     {
         WinGetPos, vwx,vwy,vww,, %fulltitle%
         WinSet, Transparent, 0, %fulltitle%
-        VD.MoveWindowToCurrentDesktop(fulltitle)
+        ; VD.MoveWindowToCurrentDesktop(fulltitle)
+        DllCall(MoveWindowToDesktopNumberProc, "Ptr", vID, "Int", cdt, "Int")
+        
         If (vState > -1) {
             ; WinRestore , %fulltitle%
             WinActivate, %fulltitle%
@@ -1819,7 +1810,9 @@ ActivateWindow:
     {
         WinGetPos, vwx,vwy,vww,, %fulltitle%
         WinSet, Transparent, 0, %fulltitle%
-        VD.MoveWindowToCurrentDesktop(fulltitle)
+        ; VD.MoveWindowToCurrentDesktop(fulltitle)
+        DllCall(MoveWindowToDesktopNumberProc, "Ptr", vID, "Int", cdt, "Int")
+        
         If (vState > -1) {
             ; WinRestore , %fulltitle%
             WinActivate, %fulltitle%
@@ -1950,14 +1943,6 @@ SendCtrlAdd:
             BlockInput, Off
         }
     }
-    
-    ; ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
-    ; ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
-    ; ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
-    ; If (OutputVar1 == "" && OutputVar2 == "" && OutputVar3 == "") {
-        ; SetTimer, SendCtrlAdd, Off
-        ; Return
-    ; }
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?style=2&t=113107
@@ -1987,33 +1972,33 @@ LWin & WheelDown::send {Volume_Down}
 #If VolumeHover() && !IsOverDesktop()
 WheelUp::send {Volume_Up}
 WheelDown::send {Volume_Down}
-
-$LButton::
-    Run, C:\Windows\System32\SndVol.exe
-    WinWait, ahk_exe SndVol.exe
-    WinGetPos, sx, sy, sw, sh, ahk_exe SndVol.exe
-    sw := sw + 200
-    WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, MonitorWorkAreaBottom-sh, sw
-    WinActivate, ahk_exe SndVol.exe
-    x_coord := A_ScreenWidth - floor((sx+sw)/2)
-    y_coord := MonitorWorkAreaBottom - 30
-    CoordMode, Pixel, Screen
-    sleep 300
-    Critical On
-    loop
-    {
-        PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
-        ; msgbox, %HexColor% - %x_coord% - %y_coord%
-        newX := A_ScreenWidth-sw-(10*A_Index)
-        newW := sw + (10*A_Index)
-        If (HexColor == 0xCDCDCD || HexColor == 0xF0F0F0)
-            WinMove, ahk_exe SndVol.exe, , %newX%, , %newW%
-        Else
-            break
-    }
-    Critical Off
-Return
 #If
+; $LButton::
+    ; Run, C:\Windows\System32\SndVol.exe
+    ; WinWait, ahk_exe SndVol.exe
+    ; WinGetPos, sx, sy, sw, sh, ahk_exe SndVol.exe
+    ; sw := sw + 200
+    ; WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, MonitorWorkAreaBottom-sh, sw
+    ; WinActivate, ahk_exe SndVol.exe
+    ; x_coord := A_ScreenWidth - floor((sx+sw)/2)
+    ; y_coord := MonitorWorkAreaBottom - 30
+    ; CoordMode, Pixel, Screen
+    ; sleep 300
+    ; Critical On
+    ; loop
+    ; {
+        ; PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
+        ; ; msgbox, %HexColor% - %x_coord% - %y_coord%
+        ; newX := A_ScreenWidth-sw-(10*A_Index)
+        ; newW := sw + (10*A_Index)
+        ; If (HexColor == 0xCDCDCD || HexColor == 0xF0F0F0)
+            ; WinMove, ahk_exe SndVol.exe, , %newX%, , %newW%
+        ; Else
+            ; break
+    ; }
+    ; Critical Off
+; Return
+; #If
 
 #If !moving && (!IsOverDesktop() || (IsOverDesktop() && DesktopIconsVisible))
 $*RButton::
@@ -2067,8 +2052,7 @@ Return
     WinGetClass, wuClass, ahk_id %wuID%
     If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
     {
-        Send {LWin down}{LCtrl down}{Left}{LWin up}{LCtrl up}
-        sleep, 750
+        Send #^{Left}
     }
     Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
@@ -2087,8 +2071,7 @@ Return
     WinGetClass, wdClass, ahk_id %wdID%
     If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
     {
-        Send {LWin down}{LCtrl down}{Right}{LWin up}{LCtrl up}
-        sleep, 750
+        Send #^{Right}
     }
     Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
@@ -2454,14 +2437,6 @@ realHwnd(hwnd)
    numput(hwnd, var, 0, "uint64")
    Return numget(var, 0, "uint")
 }
-
-
-; Alt + ` - hotkey to activate NEXT Window of same type of the current App or Chrome Website Shortcut
-#If !moving
-LButton & RButton::
-send, {ENTER}
-    Return
-#If
 
 /* ;
 *****************************
@@ -2880,7 +2855,7 @@ track() {
 
             WinActivate, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , On, %Title%
-            VD.PinWindow(Title)
+            ; VD.PinWindow(Title)
             moveAmount := ceil((A_ScreenWidth-wx)/5)
             loop, 5
             {
@@ -2892,7 +2867,7 @@ track() {
             Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
             WinMove, %Title%,, wx,,,,
             sleep, 250
-            VD.UnPinWindow(Title)
+            ; VD.UnPinWindow(Title)
             WinMinimize, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , Off, %Title%
             WinActivate, %Title%
@@ -2923,7 +2898,7 @@ track() {
             WinActivate, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , On, %Title%
 
-            VD.PinWindow(Title)
+            ; VD.PinWindow(Title)
             moveAmount := ceil((wx+ww)/5)
             loop, 5
             {
@@ -2935,7 +2910,7 @@ track() {
             Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
             WinMove, %Title%,, wx,,,,
             sleep, 250
-            VD.UnPinWindow(Title)
+            ; VD.UnPinWindow(Title)
             WinMinimize, ahk_class Shell_TrayWnd
             WinSet, AlwaysOnTop , Off, %Title%
             WinActivate, %Title%
