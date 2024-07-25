@@ -1572,8 +1572,8 @@ Return
         && A_TimeSincePriorHotkey < 500
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
 
+        LbuttonEnabled := False
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
-            LbuttonEnabled := False
             If (lctrlN == "SysListView321")
                 Send, {Backspace}
             Else
@@ -1581,7 +1581,7 @@ Return
         }
         KeyWait, Lbutton, U T3
         GoSub, SendCtrlAdd
-        sleep, 400
+        sleep, 200
         LbuttonEnabled := True
 
         tooltip, 
