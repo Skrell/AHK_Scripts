@@ -1545,7 +1545,6 @@ Return
     CoordMode, Mouse, Screen
     MouseGetPos, X1, Y1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
-    currentPath := 
     
     If hitTAB {
         WinGetTitle, actTitle, ahk_id %lhwnd%
@@ -1562,11 +1561,11 @@ Return
     Gui, GUI4Boarder: Hide
     WinGetClass, lClass, ahk_id %lhwnd%
     
-    ; If (lClass == "CabinetWClass" || lClass == "#32770") {
-        ; exEl := UIA.ElementFromHandle(lhwnd)
-        ; currentPathEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass")
-        ; currentPath := currentPathEl.Name
-    ; }
+    If (lClass == "CabinetWClass" || lClass == "#32770") {
+        exEl := UIA.ElementFromHandle(lhwnd)
+        currentPathEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass")
+        currentPath := currentPathEl.Name
+    }
     
     If (A_PriorHotkey == A_ThisHotkey
         && A_TimeSincePriorHotkey < 500
@@ -1580,8 +1579,10 @@ Return
                 Send, !{Up}
         }
         KeyWait, Lbutton, U T3
-        GoSub, SendCtrlAdd
-        sleep, 200
+        If (prevPath != currentPath) {
+            GoSub, SendCtrlAdd
+            sleep, 125
+        }
         LbuttonEnabled := True
 
         tooltip, 
@@ -1613,7 +1614,9 @@ Return
     ; }
     Else
         SetTimer, SendCtrlAdd, Off
-        
+    
+    prevPath := currentPath
+    
     Critical Off
 Return
 #If
