@@ -549,7 +549,7 @@ Return
         Hotstring("EndChars", "()[]{}:;,.?!`n `t")
         ControlGetFocus, currCtrl, A
         If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3")
-            GoSUb, SendCtrlAdd
+            GoSub, SendCtrlAdd
     Return
     
     ~Space:: Hotstring("EndChars", "()[]{}:;,.?!`n `t")
@@ -1563,11 +1563,17 @@ Return
     
     If (lClass == "CabinetWClass" || lClass == "#32770") {
         exEl := UIA.ElementFromHandle(lhwnd)
-        exEl.WaitElementExist("ClassName=ShellTabWindowClass",,,,5000)
-        currentPathEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass")
-        currentPath := currentPathEl.Name
+        exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
+        targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
+        If (targetEl.Name == "Loading")
+            tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
+        Else
+            tabEl := targetEl
+            
+        currentPath := tabEl.Name
     }
     
+    ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 500)
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
