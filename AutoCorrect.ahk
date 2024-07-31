@@ -537,7 +537,8 @@ Return
 
     $!j:: 
         Hotstring("EndChars", "")
-        Send {LCtrl down}{LEFT}{LCtrl up}
+        ; Send {LCtrl down}{LEFT}{LCtrl up}
+        Send, ^{Left}
     Return
 
     $!l:: 
@@ -548,7 +549,7 @@ Return
     ~Enter:: 
         Hotstring("EndChars", "()[]{}:;,.?!`n `t")
         ControlGetFocus, currCtrl, A
-        If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3")
+        If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3"|| currCtrl == "Edit1")
             GoSub, SendCtrlAdd
     Return
     
@@ -603,16 +604,19 @@ Return
                 WinGet, allWindows, List
                 loop % allWindows {
                     hwnd_id := allWindows%A_Index%
-                    If (MonCount > 1) {
-                        currentMon := MWAGetMonitorMouseIsIn()
-                        currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
-                    }
-                    Else {
-                        currentMonHasActWin := True
-                    }
-                    If (currentMonHasActWin && IsAltTabWindow(hwnd_id)) {
-                        WinActivate, ahk_id %hwnd_id%
-                        Return
+                    WinGet, MMState, MinMax, ahk_id %hwnd_id%
+                    If (MMState > -1) {
+                        If (MonCount > 1) {
+                            currentMon := MWAGetMonitorMouseIsIn()
+                            currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
+                        }
+                        Else {
+                            currentMonHasActWin := True
+                        }
+                        If (currentMonHasActWin && IsAltTabWindow(hwnd_id)) {
+                            WinActivate, ahk_id %hwnd_id%
+                            Return
+                        }
                     }
                 }
             }
@@ -1561,40 +1565,55 @@ Return
     Gui, GUI4Boarder: Hide
     WinGetClass, lClass, ahk_id %lhwnd%
     
-    If (lClass == "CabinetWClass" || lClass == "#32770") {
-        exEl := UIA.ElementFromHandle(lhwnd)
-        exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
-        targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
-        If (targetEl.Name == "Loading")
-            tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
-        Else
-            tabEl := targetEl
-            
-        currentPath := tabEl.Name
-    }
     
-    ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 500)
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
 
        LbuttonEnabled := False
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
-            If (lctrlN == "SysListView321")
+            If (lctrlN == "SysListView321") {
                 Send, {Backspace}
-            Else
+                tooltip, Navigating Up...
+            }
+            Else {
                 Send, !{Up}
+                tooltip, Navigating Up...
+            }
         }
         KeyWait, Lbutton, U T3
-        If (prevPath != currentPath) {
-            GoSub, SendCtrlAdd
+        If (lClass == "CabinetWClass" || lClass == "#32770") {
+            exEl := UIA.ElementFromHandle(lhwnd)
+            exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
+            targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
+            
+            If (targetEl.LocalizedControlType == "progress bar")
+                tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
+            Else
+                tabEl := targetEl
+                
+            currentPath := tabEl.Name
+            
+            ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
+            
+            If (prevPath != currentPath) {
+                GoSub, SendCtrlAdd
+            }
+            LbuttonEnabled := True
+            sleep, 300
+            tooltip, 
+            Critical, Off
+            Return
         }
-        sleep, 300
-        LbuttonEnabled := True
+        Else {
+            GoSub, SendCtrlAdd
+            sleep, 300
+            LbuttonEnabled := True
 
-        tooltip, 
-        Critical, Off
-        Return
+            tooltip, 
+            Critical, Off
+            Return
+        }
     }
 
     CoordMode, Pixel, Screen
@@ -1619,7 +1638,18 @@ Return
     Else
         SetTimer, SendCtrlAdd, Off
     
-    prevPath := currentPath
+    If (lClass == "CabinetWClass" || lClass == "#32770") {
+        exEl := UIA.ElementFromHandle(lhwnd)
+        exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
+        targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
+        
+        If (targetEl.LocalizedControlType == "progress bar")
+            tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
+        Else
+            tabEl := targetEl
+            
+        prevPath := tabEl.Name
+    }
     
     Critical Off
 Return
@@ -2031,7 +2061,7 @@ $*RButton::
         {
             Return
         }
-        sleep 50
+        sleep 25
     }
     If !ComboActive
     {
