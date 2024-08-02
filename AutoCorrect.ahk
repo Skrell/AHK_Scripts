@@ -1549,6 +1549,7 @@ Return
     CoordMode, Mouse, Screen
     MouseGetPos, X1, Y1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
+    initTime := A_TickCount
     
     If hitTAB {
         WinGetTitle, actTitle, ahk_id %lhwnd%
@@ -1582,7 +1583,7 @@ Return
             }
         }
         KeyWait, Lbutton, U T3
-        If (lClass == "CabinetWClass" || lClass == "#32770") {
+        If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
             exEl := UIA.ElementFromHandle(lhwnd)
             exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
             targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
@@ -1627,18 +1628,19 @@ Return
     CoordMode, Mouse, Screen
     
     KeyWait, LButton, U T5
-    
+    rlsTime := A_TickCount
     ; tooltip, %IsBlankSpace% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
     MouseGetPos, X2, Y2,
 
     If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" 
+        && ((rlsTime - initTime) < 500)
         && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323")))  {
         SetTimer, SendCtrlAdd, -100
     }
     Else
         SetTimer, SendCtrlAdd, Off
     
-    If (lClass == "CabinetWClass" || lClass == "#32770") {
+    If (lClass == "CabinetWClass" || lClass == "#32770") && ((rlsTime - initTime) < 500) && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
         exEl := UIA.ElementFromHandle(lhwnd)
         exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
         targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
