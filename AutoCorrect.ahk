@@ -179,6 +179,22 @@ loop % allwindows
 
 SetTimer track, 100
 SetTimer keyTrack, 1
+Expr = 
+(
+    #NoEnv
+    #NoTrayIcon
+    #SingleInstance, off
+    #Persistent
+    Send, {DOWN}
+    sleep, 20000
+    ExitApp
+    Return
+
+    ~Alt Up::
+    Send, {Esc}
+    ExitApp
+)
+
 
 OnExit("PreventRecur")
 
@@ -197,6 +213,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ;EVENT_SYSTEM_FOREGROUND := 0x3
         static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
        
+        WinGetClass, vWinClass, % "ahk_id " hWnd
+        If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
+            sleep 100
+            WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
+            ; tooltip, setting %vWinClass% on top!
+        }
+
         If !HasVal(prevActiveWindows, hWnd) {
             Critical, On
             
@@ -207,18 +230,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     break
                 sleep, 10
             }
-            WinGetClass, vWinClass, % "ahk_id " hWnd
             ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length() 
             If (vWinTitle == "" || (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "")) {
                 Critical, Off
                 Return
             }
             
-            If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
-                sleep 100
-                WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
-                tooltip, setting %vWinClass% on top!
-            }
             
             WinGet, state, MinMax, Ahk_id %hWnd%
 
@@ -560,27 +577,31 @@ Return
 #If
 
 ; Ctl+Tab in chrome to goto recent
-#If WinActive("ahk_exe Chrome.exe")
     prevChromeTab()
     {
+        static allChromeWindows := {}
+        DetectHiddenWindows, Off
         send ^+a
         loop {
-            WinGet, allwindows, List
-            loop, %allwindows%
+            WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1
+            loop, % allChromeWindows
             {
-                this_id := "ahk_id " . allwindows%A_Index%
+                this_id := "ahk_id " . allChromeWindows%A_Index%
                 WinGet, procName, ProcessName, %this_id%
                 WinGetTitle, titID, %this_id%
                 If (titID == "" && procName == "chrome.exe" && WinActive(this_id))
                 {
                     send {BackSpace}
-                    send {Enter}
+                    send {Enter}
                     Return
                 }
             }
         }
     }
-    ^Tab::prevChromeTab()
+    
+#If WinActive("ahk_exe Chrome.exe")
+    ^Tab::
+        prevChromeTab()
     Return
 #If
 
@@ -837,60 +858,7 @@ Altup:
             }
             Else If (startHighlight) {
                 BlockInput, MouseMove
-                ; GoSub, DrawRect
-                ; Send, {Lbutton Up}
 
-                ; v1 := ValidWindows[1]
-                ; v2 := ValidWindows[2]
-                ; v3 := ValidWindows[3]
-                ; MouseGetPos, , , lclickHwndId
-
-                ; script =
-                ; (
-                    ; #NoTrayIcon
-                    ; Process, Priority,, High
-                    ; If (%lclickHwndId% != %v1%)
-                        ; WinSet, Transparent, 0, ahk_id %v1%
-                    ; If (%lclickHwndId% != %v2%)
-                        ; WinSet, Transparent, 0, ahk_id %v2%
-                    ; If (%lclickHwndId% != %v3%)
-                        ; WinSet, Transparent, 0, ahk_id %v3%
-
-                    ; WinActivate, ahk_id %v3%
-                    ; WinActivate, ahk_id %v2%
-                    ; WinActivate, ahk_id %v1%
-
-                    ; WinActivate, ahk_id %lclickHwndId%
-
-                    ; If (%lclickHwndId% != %v1%) {
-                        ; WinSet, Transparent, 50,  ahk_id %v1%
-                        ; sleep 20
-                        ; WinSet, Transparent, 100, ahk_id %v1%
-                        ; sleep 20
-                        ; WinSet, Transparent, 200, ahk_id %v1%
-                        ; sleep 20
-                        ; WinSet, Transparent, 255, ahk_id %v1%
-                    ; }
-                    ; If (%lclickHwndId% != %v2%) {
-                        ; WinSet, Transparent, 50,  ahk_id %v2%
-                        ; sleep 20
-                        ; WinSet, Transparent, 100, ahk_id %v2%
-                        ; sleep 20
-                        ; WinSet, Transparent, 200, ahk_id %v2%
-                        ; sleep 20
-                        ; WinSet, Transparent, 255, ahk_id %v2%
-                    ; }
-                    ; If (%lclickHwndId% != %v3%) {
-                        ; WinSet, Transparent, 50,  ahk_id %v3%
-                        ; sleep 20
-                        ; WinSet, Transparent, 100, ahk_id %v3%
-                        ; sleep 20
-                        ; WinSet, Transparent, 200, ahk_id %v3%
-                        ; sleep 20
-                        ; WinSet, Transparent, 255, ahk_id %v3%
-                    ; }
-                ; )
-                ; DynaRun(script, dynaRunName)
                 GoSub, FadeInWin1
 
                 BlockInput, MouseMoveOff
@@ -1152,6 +1120,10 @@ Return
 #If
 
 #If !hitTAB
+RunDynRun:
+    DynaRun(Expr, tempScript)
+Return
+
 !Capslock::
     DetectHiddenWindows, Off
     Critical On
@@ -1161,7 +1133,9 @@ Return
     winArray := []
     winAssoc := {}
     winArraySort := []
-
+    
+    SetTimer, RunDynRun, -1
+    
     WinGet, id, list
     Loop, %id%
     {
@@ -1244,7 +1218,7 @@ Return
     Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
 
     DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-
+   
     ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
 
     Gui, ShadowFrFull:  Hide
@@ -1900,6 +1874,7 @@ ActivateWindow:
         GoSub, ClearRect
         Gui, GUI4Boarder: Hide
     }
+    Process, Close, tempScript
 Return
 
 #If moving
@@ -1975,8 +1950,8 @@ SendCtrlAdd:
                 sleep, 10
             }
             
-            WinGetClass, lClassCheck, A
-            If (lClassCheck == lClass) {
+            WinGet, lIdCheck2, ID, A
+            If (lIdCheck == lIdCheck2) {
                 ; tooltip, adjusted %lClassCheck%
                 Send, ^{NumpadAdd}
                 sleep, 50
@@ -2232,7 +2207,7 @@ MyTimer() {
    Global IGUIF2
    DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2)
 
-   run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
+   ; run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
    WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
    WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh,
    WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh,
@@ -2983,8 +2958,9 @@ track() {
         currentMon := MWAGetMonitorMouseIsIn(40)
         If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
             ; tooltip, currentMon is %currentMon% and lastMon was %previousMon%
-            WinGet, currID, ID, A
             DetectHiddenWindows, Off
+            Critical, On
+            WinGet, currID, ID, A
             WinGet, allWindows, List
             loop % allWindows {
                 hwnd_id := allWindows%A_Index%
@@ -2999,10 +2975,12 @@ track() {
                     ClearingRect := False
                     Gui, GUI4Boarder: Hide
                     previousMon := currentMon
+                    Critical, Off
                     return
                 }
             }
         }
+        Critical, Off
     }
     ; PrevActiveWindHwnd := actwndId
     previousMon := currentMon
