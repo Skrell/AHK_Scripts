@@ -17,7 +17,6 @@ dummyFunction1() {
 #WinActivateForce
 #NoEnv
 #SingleInstance
-#KeyHistory 0
 #MaxHotkeysPerInterval 500
 
 SetBatchLines -1
@@ -615,10 +614,10 @@ Return
             KeyWait, Esc, U T10
             If !CancelClose {
                 WinClose, ahk_id %escHwndID%
-                loop 100 {
+                loop 500 {
                     If !WinExist("ahk_id " . escHwndID)
                         break
-                    sleep, 50
+                    sleep, 10
                 }
                 SetTimer, ClearRect, -50
                 Gui, GUI4Boarder: Hide
@@ -1543,17 +1542,18 @@ Return
     
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 500)
+        && (lClass != "ProgMan" && lClass != "WorkerW")
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
 
        LbuttonEnabled := False
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321") {
                 Send, {Backspace}
-                tooltip, Navigating Up...
+                SetTimer, ShowTooltip, -1
             }
             Else {
                 Send, !{Up}
-                tooltip, Navigating Up...
+                SetTimer, ShowTooltip, -1
             }
         }
         KeyWait, Lbutton, U T3
@@ -1575,8 +1575,7 @@ Return
                 GoSub, SendCtrlAdd
             }
             LbuttonEnabled := True
-            sleep, 300
-            tooltip, 
+            sleep, 200
             Critical, Off
             Return
         }
@@ -1585,7 +1584,6 @@ Return
             sleep, 300
             LbuttonEnabled := True
 
-            tooltip, 
             Critical, Off
             Return
         }
@@ -1606,11 +1604,12 @@ Return
     ; tooltip, %IsBlankSpace% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
     MouseGetPos, X2, Y2,
 
-    If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++" 
+    If ((abs(X1-X2) < 5 && abs(Y1-Y2) < 5) 
+        && (lClass != "ProgMan" && lClass != "WorkerW" && lClass != "Notepad++") 
         && ((rlsTime - initTime) < 500)
-        && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323")))  {
+        && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323"))  {
         SetTimer, SendCtrlAdd, -100
-    }
+        }
     Else
         SetTimer, SendCtrlAdd, Off
     
@@ -1631,6 +1630,11 @@ Return
 Return
 #If
 
+ShowTooltip:
+    tooltip, Navigating Up...
+    sleep, 1000
+    tooltip,
+Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 $!`::
@@ -2737,9 +2741,13 @@ keyTrack() {
     Static TimeOfLastKey := 0
 
     ControlGetFocus, currCtrl, A
-    ; tooltip, control is %TimeOfLastKey%
-    If (currCtrl == "Edit1" && (A_TickCount-TimeOfLastKey) > 500 && A_PriorKey != "Enter") {
-        Send, ^{NumpadAdd}
+    ; tooltip, control is %LastKey1% %A_PriorKey%
+    If (currCtrl == "Edit1" && (A_TickCount-TimeOfLastKey) > 500 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
+        ControlGet, OutputVar1, Visible ,, SysListView321, A
+        ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
+        ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
+        If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
+            Send, ^{NumpadAdd}
         TimeOfLastKey := A_TickCount
     }
 
@@ -2965,9 +2973,10 @@ track() {
             loop % allWindows {
                 hwnd_id := allWindows%A_Index%
                 WinGet, isMin, MinMax, ahk_id %hwnd_id%
+                WinGet, whatProc, ProcessName, ahk_id %hwnd_id%
                 currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
                     
-                If (isMin > -1 &&  currentMonHasActWin && IsAltTabWindow(hwnd_id)) {
+                If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
                     WinActivate, ahk_id %hwnd_id%
                     GoSub, DrawRect
                     GoSub, ClearRect
