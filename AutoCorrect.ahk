@@ -65,6 +65,7 @@ Global LastKey4 :=
 Global LastKey1 := 
 Global LastKey2 :=
 Global LastKey3 :=
+Global X_PriorPriorHotKey := 
 
 Process, Priority,, High
 
@@ -107,69 +108,7 @@ Gui, GUI4Boarder: +HwndHighlighter
 Gui, GUI4Boarder: +AlwaysOnTop +Toolwindow -Caption +Owner +Lastfound
 Gui, GUI4Boarder: Color, %border_color%
 
-; loop 2
-; {
-; ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
-
-    ; ; Reset trans.
-    ; if hwndProgman=
-    ; {
-        ; if !DoOnce
-        ; {
-            ; DoOnce=1
-            ; WinSet,Trans,OFF, ahk_id %hwndProgman%
-            ; WinSet,Trans,OFF, ahk_class Progman
-            ; ControlGet, hwndWorkerW, Hwnd,, SysListView321, ahk_class WorkerW
-            ; WinSet,Trans,255, ahk_id %hwndWorkerW%
-            ; WinSet,Trans,OFF, ahk_id %hwndWorkerW%
-            ; WinSet,Trans,OFF, ahk_class WorkerW
-            ; sleep, 2000
-            ; WinSet,Trans,OFF, ahk_id %hwndProgman%
-            ; WinSet,Trans,OFF, ahk_class Progman
-            ; ControlGet, hwndWorkerW, Hwnd,, SysListView321, ahk_class WorkerW
-            ; WinSet,Trans,255, ahk_id %hwndWorkerW%
-            ; WinSet,Trans,OFF, ahk_id %hwndWorkerW%
-            ; WinSet,Trans,OFF, ahk_class WorkerW
-        ; }
-    ; }
-    ; else if (hwndProgman!="" and DoOnce=1)
-    ; {
-        ; DoOnce=0
-    ; }
-
-    ; if hwndProgman=
-        ; {
-        ; WinSet, Trans, 200, ahk_class WorkerW
-        ; sleep, 20
-        ; WinSet, Trans, 150, ahk_class WorkerW
-        ; sleep, 20
-        ; WinSet, Trans, 100, ahk_class WorkerW
-        ; sleep, 20
-        ; WinSet, Trans, 75, ahk_class WorkerW
-        ; sleep, 20
-        ; WinSet, Trans, 25, ahk_class WorkerW
-        ; sleep, 20
-        ; WinSet, Trans, 0, ahk_class WorkerW
-    ; }
-    ; else
-    ; {
-        ; WinSet, Trans, 200, ahk_id %hwndProgman%
-        ; sleep, 20
-        ; WinSet, Trans, 150, ahk_id %hwndProgman%
-        ; sleep, 20
-        ; WinSet, Trans, 100, ahk_id %hwndProgman%
-        ; sleep, 20
-        ; WinSet, Trans, 75, ahk_id %hwndProgman%
-        ; sleep, 20
-        ; WinSet, Trans, 25, ahk_id %hwndProgman%
-        ; sleep, 20
-        ; WinSet, Trans, 0, ahk_id %hwndProgman%
-        ; sleep, 20
-    ; }
-    ; sleep, 250
-; }
 WinGet, allwindows, List
-
 loop % allwindows
 {
     winID := allWindows%A_Index%
@@ -194,8 +133,53 @@ Expr =
     ExitApp
 )
 
-
 OnExit("PreventRecur")
+
+;------------------------------------------------------------------------------
+    ; AUto-COrrect TWo COnsecutive CApitals.
+; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
+; To enable it, remove the /*..*/ symbols around it.
+; From Laszlo's script at http://www.autohotkey.com/forum/topic9689.html
+;------------------------------------------------------------------------------
+; The first line of code below is the set of letters, digits, and/or symbols
+; that are eligible for this type of correction.  Customize if you wish:
+keys = abcdefghijklmnopqrstuvwxyz
+numbers = 0123456789
+Loop Parse, keys 
+{
+    HotKey ~+%A_LoopField%, Hoty
+    HotKey ~%A_LoopField%, FixSlash
+}
+Loop Parse, numbers
+{
+    HotKey ~%A_LoopField%, Hoty
+}
+HotKey ~/,  FixSlash
+HotKey ~',  Hoty
+HotKey ~?,  Hoty
+HotKey ~!,  Hoty
+HotKey ~`,, Hoty
+HotKey ~.,  Hoty
+
+Hoty:
+    CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999) ? CapCount+1 : 1
+    if (CapCount == 2 && SubStr(A_ThisHotKey,2,1)=="'")
+        return
+    else if (CapCount == 2) {
+        SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
+    }
+    else if (CapCount == 3) {
+        SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+    }
+    else if CapCount == 2 && (Substr(A_PriorHotkey,2,1) == "'" || Substr(A_PriorHotkey,2,1) == "," || Substr(A_PriorHotkey,2,1) == "!" || Substr(A_PriorHotkey,2,1) == "?" || Substr(A_PriorHotkey,2,1) == "." || A_ThisHotkey == "~Space")
+        SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+    else if CapCount == 2 && inStr(numbers, Substr(A_ThisHotKey,2,1), false)
+        SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+FixSlash:
+    if (inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
+        SendInput, % "{BS}{BS}{?}{SPACE}"
+    ; tooltip, %X_PriorPriorHotKey% %A_PriorHotKey% %A_ThisHotkey%
+    X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
 
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
@@ -569,7 +553,11 @@ Return
             GoSub, SendCtrlAdd
     Return
     
-    ~Space:: Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+    ~Space:: 
+        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        GoSub, FixSlash
+        GoSub, Hoty
+    Return
 
     #+s::Return
     
@@ -1213,8 +1201,8 @@ Return
     CoordMode, Menu, Screen
     drawX := CoordXCenterScreen()
     drawY := CoordYCenterScreen()
-    Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
-    Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
+    Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
+    Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
 
     DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
    
@@ -1523,6 +1511,9 @@ Return
     MouseGetPos, X1, Y1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
     initTime := A_TickCount
+    
+    If MouseIsOverTitleBar()
+        Return
     
     If hitTAB {
         WinGetTitle, actTitle, ahk_id %lhwnd%
@@ -2080,7 +2071,7 @@ Return
     Hotkey, ~$WheelUp, Off
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
-    If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
+    If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Left}
     }
@@ -2099,7 +2090,7 @@ Return
     Hotkey, ~$WheelDown, Off
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
-    If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323")
+    If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Right}
     }
@@ -2123,7 +2114,7 @@ Return
 */
 VolumeHover() {
     ControlGetText, toolText,, ahk_class tooltips_class32
-    If (InStr(toolText, "Speakers") || InStr(toolText, "Headphones"))
+    If (InStr(toolText, "Speakers", false) || InStr(toolText, "Headphones", false))
         Return True
     Else
         Return False
@@ -2742,7 +2733,7 @@ keyTrack() {
 
     ControlGetFocus, currCtrl, A
     ; tooltip, control is %LastKey1% %A_PriorKey%
-    If (currCtrl == "Edit1" && (A_TickCount-TimeOfLastKey) > 500 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
+    If (currCtrl == "Edit1" && (A_TickCount-TimeOfLastKey) > 400 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
         ControlGet, OutputVar1, Visible ,, SysListView321, A
         ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
         ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
@@ -2751,49 +2742,49 @@ keyTrack() {
         TimeOfLastKey := A_TickCount
     }
 
-    If (LastKey1 != A_PriorKey) {
-        TimeOfLastKey := A_TickCount
-        LastKey5 := LastKey4
-        LastKey4 := LastKey3
-        LastKey3 := LastKey2
-        LastKey2 := LastKey1
-        LastKey1 := A_PriorKey
-        If (GetKeyState("Lshift","P"))
-            StringUpper, LastKey1, LastKey1
-        ; tooltip,   %LastKey3% %LastKey2% %LastKey1%
+    ; If (LastKey1 != A_PriorKey) {
+        ; TimeOfLastKey := A_TickCount
+        ; LastKey5 := LastKey4
+        ; LastKey4 := LastKey3
+        ; LastKey3 := LastKey2
+        ; LastKey2 := LastKey1
+        ; LastKey1 := A_PriorKey
+        ; If (GetKeyState("Lshift","P"))
+            ; StringUpper, LastKey1, LastKey1
+        ; ; tooltip,   %LastKey3% %LastKey2% %LastKey1%
     
-        If (DisableCheck && A_PriorKey == "Space" || A_PriorKey == "Enter" || A_PriorKey == "Backspace" || A_PriorKey == "Tab" || A_PriorKey == "Delete" || A_PriorKey == "LButton") {
-            DisableCheck := False
-            LastKey1 := ""
-            LastKey2 := ""
-            LastKey3 := ""
-            LastKey4 := ""
-            LastKey5 := ""
-        }
-        Else If (inStr(Lowers,LastKey1,false) && LastKey2 == "/" && inStr(Lowers,LastKey3,false))
-            DisableCheck := True
+        ; If (DisableCheck && A_PriorKey == "Space" || A_PriorKey == "Enter" || A_PriorKey == "Backspace" || A_PriorKey == "Tab" || A_PriorKey == "Delete" || A_PriorKey == "LButton") {
+            ; DisableCheck := False
+            ; LastKey1 := ""
+            ; LastKey2 := ""
+            ; LastKey3 := ""
+            ; LastKey4 := ""
+            ; LastKey5 := ""
+        ; }
+        ; Else If (inStr(Lowers,LastKey1,false) && LastKey2 == "/" && inStr(Lowers,LastKey3,false))
+            ; DisableCheck := True
         
-        If (!DisableCheck 
-            && (((LastKey1 == "Space") && LastKey2 == "/")
-                && (inStr(Uppers,LastKey3,true) || inStr(Lowers,LastKey3,true)))) {
-            Critical On
-            Send, {BS}{BS}{BS}{BS}
-            Send, {%LastKey4%}
-            Send, {%LastKey3%}
-            Send, {?}
-            Send, {%LastKey1%}
-            Critical Off
-        }
-        Else If (!DisableCheck && !inStr(Uppers,LastKey4,false) && inStr(Uppers,LastKey3,true) && inStr(Uppers,LastKey2,true) && inStr(Lowers,LastKey1,true)) {
-            Critical On
-            Send, ^+{Left}
-            Send, {%LastKey3%}
-            StringLower, LastKey2, LastKey2
-            Send, {%LastKey2%}
-            Send, {%LastKey1%}
-            Critical Off    
-        }
-    }
+        ; If (!DisableCheck 
+            ; && (((LastKey1 == "Space") && LastKey2 == "/")
+                ; && (inStr(Uppers,LastKey3,true) || inStr(Lowers,LastKey3,true)))) {
+            ; Critical On
+            ; Send, {BS}{BS}{BS}{BS}
+            ; Send, {%LastKey4%}
+            ; Send, {%LastKey3%}
+            ; Send, {?}
+            ; Send, {%LastKey1%}
+            ; Critical Off
+        ; }
+        ; Else If (!DisableCheck && !inStr(Uppers,LastKey4,false) && inStr(Uppers,LastKey3,true) && inStr(Uppers,LastKey2,true) && inStr(Lowers,LastKey1,true)) {
+            ; Critical On
+            ; Send, ^+{Left}
+            ; Send, {%LastKey3%}
+            ; StringLower, LastKey2, LastKey2
+            ; Send, {%LastKey2%}
+            ; Send, {%LastKey1%}
+            ; Critical Off    
+        ; }
+    ; }
 Return
 }
 
@@ -3808,6 +3799,7 @@ SetTitleMatchMode, 2
 ::spit::
 ::app::
 ::apps::
+::cue::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
@@ -4211,6 +4203,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::digestable::digestible
 ::i::I
 ::fo::of
 ::fi::If
@@ -8859,9 +8852,12 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::hsan't::hasn't
 ::i'd::I'd
 ::i'll::I'll
+::Ill'::I'll
 ::i'm::I'm
+::Im'::I'm
 ::i've::I've
 ::id'::I'd
+::Id'::I'd
 ::im::I'm
 ::isnt'::isn't
 ::isnt::isn't
