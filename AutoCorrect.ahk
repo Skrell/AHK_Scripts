@@ -202,37 +202,24 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     
     
     If !StopRecurssion {
-        DetectHiddenWindows, On
-        ;EVENT_SYSTEM_FOREGROUND := 0x3
-        static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
        
-        WinGetClass, vWinClass, % "ahk_id " hWnd
-        If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
-            sleep 100
-            WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
-            ; tooltip, setting %vWinClass% on top!
-        }
-
+        DetectHiddenWindows, On
+        
         If !HasVal(prevActiveWindows, hWnd) {
-            Critical, On
-            
-            prevActiveWindows.push(hWnd)
             loop 200 {
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
                 If (vWinTitle != "")
                     break
                 sleep, 10
+             }
+                
+            WinGetClass, vWinClass, % "ahk_id " hWnd
+            If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
+                WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
             }
-            ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length() 
-            If (vWinTitle == "" || (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "")) {
-                Critical, Off
-                Return
-            }
-            
-            
-            WinGet, state, MinMax, Ahk_id %hWnd%
 
-            If (state > -1) {
+            WinGet, state, MinMax, Ahk_id %hWnd%
+            If (state > -1 && vWinTitle != "") {
                 currentMon := MWAGetMonitorMouseIsIn()
                 currentMonHasActWin := IsWindowOnCurrMon(hWnd, currentMon)
                 If !currentMonHasActWin {
@@ -240,6 +227,19 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Send, #+{Left}
                 }
             }
+            
+            ;EVENT_SYSTEM_FOREGROUND := 0x3
+            static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+            
+            If (vWinTitle == "" || (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "")) {
+                Return
+            }
+        
+            Critical, On
+            
+            prevActiveWindows.push(hWnd)
+
+            ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length() 
             
             WinGetClass, lClassCheck, A
             If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == vWinClass) {
@@ -274,20 +274,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         }
                     }
                     
-                    If (OutputVar2 == 1)
-                        ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
-                    Else If (OutputVar3 == 1)
-                        ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
-                    Else If (OutputVar1 == 1)
-                        ControlFocus , SysListView321, % "ahk_id " hWnd
-                    
                     If (OutputVar2 == 1) {
+                        ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
                         FocusedControl := "DirectUIHWND2"
                     }
                     Else If (OutputVar3 == 1) {
+                        ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
                         FocusedControl := "DirectUIHWND3"
                     }
                     Else If (OutputVar1 == 1) {
+                        ControlFocus , SysListView321, % "ahk_id " hWnd
                         FocusedControl := "SysListView321"
                     }
                     
@@ -316,9 +312,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         }
                     }
                     BlockInput Off
-                    Critical, Off
                 }
             }
+            Critical, Off
         }
         
         i := 1
