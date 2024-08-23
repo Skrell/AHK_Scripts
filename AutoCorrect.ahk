@@ -18,6 +18,7 @@ dummyFunction1() {
 #NoEnv
 #SingleInstance
 #MaxHotkeysPerInterval 500
+#HotString EndChars ()[]{}:;,.?!`n `t
 
 SetBatchLines -1
 SetWinDelay   -1
@@ -163,25 +164,34 @@ HotKey ~.,  Hoty
 
 Hoty:
     CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999) ? CapCount+1 : 1
-    if (CapCount == 2 && SubStr(A_ThisHotKey,2,1)=="'")
+    if (CapCount == 2 && SubStr(A_ThisHotKey,2,1)=="'") {
         return
-    else if (CapCount == 2) {
+    }
+    else if (CapCount == 2 && A_ThisHotkey != "~Space" && A_ThisHotkey != "~`," && A_ThisHotkey != "~'" && A_ThisHotkey != "~?" && A_ThisHotkey != "~." && A_ThisHotkey != "~!" && !inStr(numbers, Substr(A_ThisHotKey,2,1))) {
+        tooltip, 1
         SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
     else if (CapCount == 3) {
+        tooltip, 2
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
-    else if CapCount == 2 && (Substr(A_PriorHotkey,2,1) == "'" || Substr(A_PriorHotkey,2,1) == "," || Substr(A_PriorHotkey,2,1) == "!" || Substr(A_PriorHotkey,2,1) == "?" || Substr(A_PriorHotkey,2,1) == "." || A_ThisHotkey == "~Space")
+    else if (CapCount == 2 && (Substr(A_PriorHotkey,2,1) == "'" || Substr(A_PriorHotkey,2,1) == "," || Substr(A_PriorHotkey,2,1) == "!" || Substr(A_PriorHotkey,2,1) == "?" || Substr(A_PriorHotkey,2,1) == "." || A_ThisHotkey == "~Space")) {
+        tooltip, 3
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
-    else if CapCount == 2 && inStr(numbers, Substr(A_ThisHotKey,2,1), false)
+    }
+    else if (CapCount == 2 && inStr(numbers, Substr(A_ThisHotKey,2,1), false)) {
+        tooltip, 4
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+    }
 FixSlash:
     if (inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
         SendInput, % "{BS}{BS}{?}{SPACE}"
     ; tooltip, %X_PriorPriorHotKey% %A_PriorHotKey% %A_ThisHotkey%
     X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
 
+;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
+;------------------------------------------------------------------------------
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
     Global prevActiveWindows
@@ -421,7 +431,7 @@ Return
     
     $CapsLock:: 
         Send {Delete}
-        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     Return
 
     $!a:: 
@@ -430,36 +440,36 @@ Return
     
     $+!a:: 
         Send, {SHIFT down}{home}{SHIFT up}
+        Hotstring("Reset")
     Return
 
     $!;::
         Send, {end}
-        Hotstring("EndChars", "")
     Return
 
     $!+;::
         Send, {SHIFT down}{end}{SHIFT up}
-        Hotstring("EndChars", "")
+        Hotstring("Reset")
     Return
 
     $!+i::
         Send {SHIFT down}{UP}{SHIFT up}
-        Hotstring("EndChars", "")
+        Hotstring("Reset")
     Return
 
     $!+k::   
         Send {SHIFT down}{DOWN}{SHIFT up}
-        Hotstring("EndChars", "")
+        Hotstring("Reset")
     Return
 
     $!+j::
         Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
-        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        Hotstring("Reset")
     Return
 
     $!+l::
         Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
-        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        Hotstring("Reset")
     Return
 
     $!+'::
@@ -526,35 +536,30 @@ Return
     Return
 
     $!i::
-        Hotstring("EndChars", "")
         Send {UP}
     Return
 
     $!k::
-        Hotstring("EndChars", "")
         Send {DOWN}
     Return
 
     $!j:: 
-        Hotstring("EndChars", "")
-        ; Send {LCtrl down}{LEFT}{LCtrl up}
-        Send, ^{Left}
+        Send {LCtrl down}{LEFT}{LCtrl up}
     Return
 
     $!l:: 
-        Hotstring("EndChars", "")
         Send {LCtrl down}{RIGHT}{LCtrl up}
     Return
 
     ~Enter:: 
-        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
         ControlGetFocus, currCtrl, A
         If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3"|| currCtrl == "Edit1")
             GoSub, SendCtrlAdd
     Return
     
     ~Space:: 
-        Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
         GoSub, FixSlash
         GoSub, Hoty
     Return
