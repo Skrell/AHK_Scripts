@@ -1553,9 +1553,8 @@ Return
     Gui, GUI4Boarder: Hide
     WinGetClass, lClass, ahk_id %lhwnd%
     
-    
     If (A_PriorHotkey == A_ThisHotkey
-        && (A_TimeSincePriorHotkey < 500)
+        && (A_TimeSincePriorHotkey < 550)
         && (lClass != "ProgMan" && lClass != "WorkerW")
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
 
@@ -1563,17 +1562,17 @@ Return
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321") {
                 Send, {Backspace}
-                SetTimer, ShowTooltip, -1
+                ; SetTimer, ShowTooltip, -1
             }
             Else {
                 Send, !{Up}
-                SetTimer, ShowTooltip, -1
+                ; SetTimer, ShowTooltip, -1
             }
         }
         KeyWait, Lbutton, U T3
         If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
             exEl := UIA.ElementFromHandle(lhwnd)
-            exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
+            exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,100)
             targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
             
             If (targetEl.LocalizedControlType == "progress bar")
@@ -1589,13 +1588,13 @@ Return
                 GoSub, SendCtrlAdd
             }
             LbuttonEnabled := True
-            sleep, 200
+            sleep, 100
             Critical, Off
             Return
         }
         Else {
             GoSub, SendCtrlAdd
-            sleep, 300
+            sleep, 200
             LbuttonEnabled := True
 
             Critical, Off
@@ -1629,7 +1628,7 @@ Return
     
     If (lClass == "CabinetWClass" || lClass == "#32770") && ((rlsTime - initTime) < 500) && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
         exEl := UIA.ElementFromHandle(lhwnd)
-        exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
+        exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,100)
         targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
         
         If (targetEl.LocalizedControlType == "progress bar")
