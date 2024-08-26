@@ -114,16 +114,9 @@ WinGet, allwindows, List
 loop % allwindows
 {
     winID := allWindows%A_Index%
-    WinGetTitle, title, ahk_id %winID%
     WinGet, minState, MinMax, ahk_id %winID%
-    WinGet, procName, ProcessName , ahk_id %winID%
     
-    desknum := 1
-    finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" winID
-    If (minState == -1 && IsAltTabWindow(winID) && !HasVal(minWinArray,finalTitle)) {
-        minWinArray.Push(finalTitle)
-    }
-    Else {
+    If (minState > -1 && IsAltTabWindow(winID)) {
         prevActiveWindows.push(winID)
     }
 }
@@ -150,6 +143,7 @@ Expr =
     ExitApp
 )
 
+GoSub, RunDynRun
 OnExit("PreventRecur")
 
 ;------------------------------------------------------------------------------
@@ -564,7 +558,7 @@ Return
     Return
 
     ~Enter:: 
-        ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        WinGetClass, lClass, A
         ControlGetFocus, currCtrl, A
         If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3"|| currCtrl == "Edit1")
             GoSub, SendCtrlAdd
@@ -1234,6 +1228,14 @@ Return
     Gui, ShadowFrFull2: Hide
 
     Menu, windows, deleteAll
+    i := 1
+    while (i <= minWinArray.MaxIndex()) {
+        checkID := minWinArray[i]
+        If !WinExist("ahk_id " checkID)
+            minWinArray.RemoveAt(i)
+        else
+            ++i
+    }
 Return
 #If
 
@@ -2232,7 +2234,24 @@ MyTimer() {
    WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh,
    WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh,
 
+   WinSet, TransColor, FF00FF 50, ahk_id %IGUIF%
+   sleep, 20
+   WinSet, TransColor, FF00FF 50, ahk_id %IGUIF2%
+   sleep, 20
+   WinSet, TransColor, FF00FF 100, ahk_id %IGUIF%
+   sleep, 20
+   WinSet, TransColor, FF00FF 100, ahk_id %IGUIF2%
+   sleep, 20
+   WinSet, TransColor, FF00FF 150, ahk_id %IGUIF%
+   sleep, 20
+   WinSet, TransColor, FF00FF 150, ahk_id %IGUIF2%
+   sleep, 20
+   WinSet, TransColor, FF00FF 200, ahk_id %IGUIF%
+   sleep, 20
+   WinSet, TransColor, FF00FF 200, ahk_id %IGUIF2%
+   sleep, 20
    WinSet, TransColor, FF00FF 254, ahk_id %IGUIF%
+   sleep, 20
    WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2%
    ; Gui, ShadowFrFull: Show, x%menux% w%menuw% h%menuh% y%menuy%
    WinSet, AlwaysOnTop, on,  ahk_class #32768
