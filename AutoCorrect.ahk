@@ -1530,6 +1530,7 @@ Return
 #If (!VolumeHover() && LbuttonEnabled)
 ~*$LButton::
     Critical, On
+    StopRecurssion := true
     CoordMode, Mouse, Screen
     MouseGetPos, X1, Y1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
@@ -1556,10 +1557,11 @@ Return
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
         && (lClass != "ProgMan" && lClass != "WorkerW")
+        && (abs(X1-X2) < 5 && abs(Y1-Y2) < 5) 
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
 
-       LbuttonEnabled := False
-        If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
+        LbuttonEnabled := False
+        If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF) && (LB_HexColor1a == 0xFFFFFF) && (LB_HexColor2b == 0xFFFFFF) && (LB_HexColor3c  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321") {
                 Send, {Backspace}
                 ; SetTimer, ShowTooltip, -1
@@ -1590,6 +1592,7 @@ Return
             LbuttonEnabled := True
             sleep, 100
             Critical, Off
+            StopRecurssion := False
             Return
         }
         Else {
@@ -1598,6 +1601,7 @@ Return
             LbuttonEnabled := True
 
             Critical, Off
+            StopRecurssion := False
             Return
         }
     }
@@ -1638,7 +1642,7 @@ Return
             
         prevPath := tabEl.Name
     }
-    
+    StopRecurssion := False
     Critical Off
 Return
 #If
