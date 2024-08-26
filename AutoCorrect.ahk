@@ -266,7 +266,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
                 
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
-                    BlockInput On 
+                    BlockKeyboard(true) 
                     ; tooltip, here
                     loop, 100 {
                         ControlGetFocus, initFocusedCtrl , % "ahk_id " hWnd
@@ -322,7 +322,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             sleep, 10
                         }
                     }
-                    BlockInput Off
+                    BlockKeyboard(false) 
                 }
             }
             Critical, Off
@@ -1943,7 +1943,6 @@ SendCtrlAdd:
         }
             
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
-            BlockInput On
             If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
                 If (vWinClass != "EVERYTHING_(1.5a)") {
                     exEl := UIA.ElementFromHandle(lIdCheck)
@@ -1961,7 +1960,7 @@ SendCtrlAdd:
             Else If (OutputVar3 == 1) {
                 FocusedControl := "DirectUIHWND3"
             }
-
+            BlockKeyboard(true)
             loop, 50 {
                 ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
                 ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
@@ -1986,7 +1985,7 @@ SendCtrlAdd:
                     sleep, 10
                 }
             }
-            BlockInput, Off
+            BlockKeyboard(false)
         }
     }
 Return
@@ -2775,19 +2774,31 @@ keyTrack() {
     Static TimeOfLastKey := 0
 
     ControlGetFocus, currCtrl, A
-    ; tooltip, control is %LastKey1% %A_PriorKey%
+    WinGetClass, currClass, A
     If (currCtrl == "Edit1") {
         StopAutoFix := True
         If ((A_TickCount-TimeOfLastKey) > 400 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
             ControlGet, OutputVar1, Visible ,, SysListView321, A
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
-            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
-                Send, ^{NumpadAdd}
+            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
+                BlockKeyboard(true)
+                WinGetClass, testClass, A
+                If (testClass == currClass) {
+                    Send, ^{NumpadAdd}
+                }
+                TimeOfLastKey := A_TickCount
+                BlockKeyboard(false)
+            }
         }
-        TimeOfLastKey := A_TickCount
         Return
     }
+    
+    If (LastKey1 != A_PriorHotkey) {
+        LastKey1 := A_PriorHotkey
+        TimeOfLastKey := A_TickCount
+    }
+    
     StopAutoFix := False
 Return
 }
@@ -3584,6 +3595,16 @@ IsPopup(winID) {
     If(ss & 0x80000000 && sx & 0x00000080)
         Return true
     Return false
+}
+; https://www.autohotkey.com/boards/viewtopic.php?t=107842
+BlockKeyboard( bAction )
+{
+	static Blocker := InputHook( "L0 I" )
+	Blocker.KeyOpt( "{All}", "S" )
+	If bAction
+		Blocker.Start()
+	Else
+		Blocker.Stop()
 }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
