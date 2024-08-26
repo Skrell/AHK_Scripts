@@ -68,6 +68,7 @@ Global LastKey1 :=
 Global LastKey2 :=
 Global LastKey3 :=
 Global X_PriorPriorHotKey := 
+Global StopAutoFix := False
 
 Process, Priority,, High
 
@@ -174,14 +175,14 @@ HotKey ~.,  Hoty
 
 Hoty:
     CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999) ? CapCount+1 : 1
-    if (CapCount == 2 && SubStr(A_ThisHotKey,2,1)=="'") {
+    if (!StopAutoFix && CapCount == 2 && SubStr(A_ThisHotKey,2,1)=="'") {
         return
     }
-    else if (CapCount == 2 && A_ThisHotkey != "~Space" && A_ThisHotkey != "~`," && A_ThisHotkey != "~'" && A_ThisHotkey != "~?" && A_ThisHotkey != "~." && A_ThisHotkey != "~!" && !inStr(numbers, Substr(A_ThisHotKey,2,1))) {
+    else if (!StopAutoFix && CapCount == 2 && A_ThisHotkey != "~Space" && A_ThisHotkey != "~`," && A_ThisHotkey != "~'" && A_ThisHotkey != "~?" && A_ThisHotkey != "~." && A_ThisHotkey != "~!" && !inStr(numbers, Substr(A_ThisHotKey,2,1))) {
         tooltip, 1
         SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
-    else if (CapCount == 3) {
+    else if (!StopAutoFix && CapCount == 3) {
         tooltip, 2
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
@@ -194,7 +195,7 @@ Hoty:
         ; SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     ; }
 FixSlash:
-    if (inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
+    if (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
         SendInput, % "{BS}{BS}{?}{SPACE}"
     ; tooltip, %X_PriorPriorHotKey% %A_PriorHotKey% %A_ThisHotkey%
     X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
@@ -564,19 +565,16 @@ Return
             GoSub, SendCtrlAdd
     Return
     
+    #+s::Return
+    
     ~Space:: 
-        ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
         GoSub, FixSlash
         GoSub, Hoty
     Return
     ~+Space:: 
-        ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
         GoSub, FixSlash
         GoSub, Hoty
     Return
-
-    #+s::Return
-    
 #If
 
 ; Ctl+Tab in chrome to goto recent
@@ -2769,66 +2767,28 @@ Exit_label:
 Return
 
 keyTrack() {
-    Static DisableCheck := False
-    Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
-    Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
+    ; Static DisableCheck := False
+    ; Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
+    ; Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
+    Global StopAutoFix
     Static LastKey1, LastKey2, LastKey3, LastKey4, LastKey5 := ""
     Static TimeOfLastKey := 0
 
     ControlGetFocus, currCtrl, A
     ; tooltip, control is %LastKey1% %A_PriorKey%
-    If (currCtrl == "Edit1" && (A_TickCount-TimeOfLastKey) > 400 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
-        ControlGet, OutputVar1, Visible ,, SysListView321, A
-        ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
-        ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
-        If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
-            Send, ^{NumpadAdd}
+    If (currCtrl == "Edit1") {
+        StopAutoFix := True
+        If ((A_TickCount-TimeOfLastKey) > 400 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
+            ControlGet, OutputVar1, Visible ,, SysListView321, A
+            ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
+            ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
+            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
+                Send, ^{NumpadAdd}
+        }
         TimeOfLastKey := A_TickCount
+        Return
     }
-
-    ; If (LastKey1 != A_PriorKey) {
-        ; TimeOfLastKey := A_TickCount
-        ; LastKey5 := LastKey4
-        ; LastKey4 := LastKey3
-        ; LastKey3 := LastKey2
-        ; LastKey2 := LastKey1
-        ; LastKey1 := A_PriorKey
-        ; If (GetKeyState("Lshift","P"))
-            ; StringUpper, LastKey1, LastKey1
-        ; ; tooltip,   %LastKey3% %LastKey2% %LastKey1%
-    
-        ; If (DisableCheck && A_PriorKey == "Space" || A_PriorKey == "Enter" || A_PriorKey == "Backspace" || A_PriorKey == "Tab" || A_PriorKey == "Delete" || A_PriorKey == "LButton") {
-            ; DisableCheck := False
-            ; LastKey1 := ""
-            ; LastKey2 := ""
-            ; LastKey3 := ""
-            ; LastKey4 := ""
-            ; LastKey5 := ""
-        ; }
-        ; Else If (inStr(Lowers,LastKey1,false) && LastKey2 == "/" && inStr(Lowers,LastKey3,false))
-            ; DisableCheck := True
-        
-        ; If (!DisableCheck 
-            ; && (((LastKey1 == "Space") && LastKey2 == "/")
-                ; && (inStr(Uppers,LastKey3,true) || inStr(Lowers,LastKey3,true)))) {
-            ; Critical On
-            ; Send, {BS}{BS}{BS}{BS}
-            ; Send, {%LastKey4%}
-            ; Send, {%LastKey3%}
-            ; Send, {?}
-            ; Send, {%LastKey1%}
-            ; Critical Off
-        ; }
-        ; Else If (!DisableCheck && !inStr(Uppers,LastKey4,false) && inStr(Uppers,LastKey3,true) && inStr(Uppers,LastKey2,true) && inStr(Lowers,LastKey1,true)) {
-            ; Critical On
-            ; Send, ^+{Left}
-            ; Send, {%LastKey3%}
-            ; StringLower, LastKey2, LastKey2
-            ; Send, {%LastKey2%}
-            ; Send, {%LastKey1%}
-            ; Critical Off    
-        ; }
-    ; }
+    StopAutoFix := False
 Return
 }
 
@@ -3742,6 +3702,7 @@ SetTitleMatchMode, 2
         && !SearchingWindows && !hitTAB && !DrawingRect && !ClearingRect
         && !GetKeyState("LAlt","P")
         && !GetKeyState("Ctrl","P")
+        && !StopAutoFix
 
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 
