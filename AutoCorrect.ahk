@@ -37,6 +37,7 @@ Global cyclingMin := False
 Global ValidWindows := []
 Global RevMinnedWindows := []
 Global PrevActiveWindows := []
+Global minWinArray := []
 Global cycleCount := 1
 Global startHighlight := False
 Global border_thickness := 4
@@ -113,7 +114,18 @@ WinGet, allwindows, List
 loop % allwindows
 {
     winID := allWindows%A_Index%
-    prevActiveWindows.push(winID)
+    WinGetTitle, title, ahk_id %winID%
+    WinGet, minState, MinMax, ahk_id %winID%
+    WinGet, procName, ProcessName , ahk_id %winID%
+    
+    desknum := 1
+    finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" winID
+    If (minState == -1 && IsAltTabWindow(winID) && !HasVal(minWinArray,finalTitle)) {
+        minWinArray.Push(finalTitle)
+    }
+    Else {
+        prevActiveWindows.push(winID)
+    }
 }
 
 SetTimer track, 100
@@ -124,6 +136,10 @@ Expr =
     #NoTrayIcon
     #SingleInstance, off
     #Persistent
+    #KeyHistory 0
+    
+    WinWait, ahk_class #32768
+    sleep, 100
     Send, {DOWN}
     sleep, 20000
     ExitApp
@@ -175,14 +191,14 @@ Hoty:
         tooltip, 2
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
-    else if (CapCount == 2 && (Substr(A_PriorHotkey,2,1) == "'" || Substr(A_PriorHotkey,2,1) == "," || Substr(A_PriorHotkey,2,1) == "!" || Substr(A_PriorHotkey,2,1) == "?" || Substr(A_PriorHotkey,2,1) == "." || A_ThisHotkey == "~Space")) {
-        tooltip, 3
-        SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
-    }
-    else if (CapCount == 2 && inStr(numbers, Substr(A_ThisHotKey,2,1), false)) {
-        tooltip, 4
-        SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
-    }
+    ; else if (CapCount == 2 && (Substr(A_PriorHotkey,2,1) == "'" || Substr(A_PriorHotkey,2,1) == "," || Substr(A_PriorHotkey,2,1) == "!" || Substr(A_PriorHotkey,2,1) == "?" || Substr(A_PriorHotkey,2,1) == "." || A_ThisHotkey == "~Space")) {
+        ; tooltip, 3
+        ; SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+    ; }
+    ; else if (CapCount == 2 && inStr(numbers, Substr(A_ThisHotKey,2,1), false)) {
+        ; tooltip, 4
+        ; SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+    ; }
 FixSlash:
     if (inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
         SendInput, % "{BS}{BS}{?}{SPACE}"
@@ -555,6 +571,11 @@ Return
     Return
     
     ~Space:: 
+        ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
+        GoSub, FixSlash
+        GoSub, Hoty
+    Return
+    ~+Space:: 
         ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
         GoSub, FixSlash
         GoSub, Hoty
@@ -1118,39 +1139,39 @@ Return
 
     totalMenuItemCount := 0
     onlyTitleFound := ""
-    winArray := []
     winAssoc := {}
     winArraySort := []
-    
-    SetTimer, RunDynRun, -1
+    ; tooltip, Executing DynaRun
+    GoSub, RunDynRun
+    ; tooltip, Building List of Apps... 
     
     WinGet, id, list
     Loop, %id%
     {
         this_ID := id%A_Index%
         WinGetTitle, title, ahk_id %this_ID%
-        WinGet, procName, ProcessName , ahk_id %this_ID%
         WinGet, minState, MinMax, ahk_id %this_ID%
         
-        If (minState > -1 || !IsAltTabWindow(this_ID))
+        desknum := 1
+        WinGet, procName, ProcessName , ahk_id %this_ID%
+        finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
+        If (minState > -1 || !IsAltTabWindow(this_ID) || HasVal(minWinArray,finalTitle))
             continue
 
-        desknum := 1
         ; desknum := VD.getDesktopNumOfWindow(title)
         ; If desknum <= 0
             ; continue
-        finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
-        winArray.Push(finalTitle)
+        minWinArray.Push(finalTitle)
     }
 
-    If (winArray.length() == 0) {
+    If (minWinArray.length() == 0) {
         Tooltip, No matches found...
         Sleep, 1500
         Tooltip,
         Return
     }
 
-    For k, v in winArray
+    For k, v in minWinArray
     {
         winAssoc[v] := k
     }
@@ -1206,9 +1227,9 @@ Return
     Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
 
     DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-   
+    ; Tooltip, Displaying... 
     ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
-
+    ; Tooltip, Done.
     Gui, ShadowFrFull:  Hide
     Gui, ShadowFrFull2: Hide
 
@@ -1505,6 +1526,7 @@ UpdateInputBoxTitle:
     }
 Return
 
+#MaxThreadsPerHotkey 2
 #If (!VolumeHover() && LbuttonEnabled)
 ~*$LButton::
     Critical, On
@@ -1628,6 +1650,8 @@ ShowTooltip:
     tooltip,
 Return
 
+#MaxThreadsPerHotkey 1
+
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 $!`::
     ; Send, {LAlt}{up}
@@ -1648,7 +1672,7 @@ $!`::
         Critical On
         totalMenuItemCount := 0
         onlyTitleFound := ""
-        winArray := []
+        minWinArray := []
         winAssoc := {}
         winArraySort := []
 
@@ -1667,17 +1691,17 @@ $!`::
             If desknum <= 0
                 continue
             finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
-            winArray.Push(finalTitle)
+            minWinArray.Push(finalTitle)
         }
 
-        If (winArray.length() == 0) {
+        If (minWinArray.length() == 0) {
             Tooltip, No matches found...
             Sleep, 1500
             Tooltip,
             Return
         }
 
-        For k, v in winArray
+        For k, v in minWinArray
         {
             winAssoc[v] := k
         }
@@ -7950,6 +7974,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::shortwhile::short while
 ::shorly::shortly
 ::shoudl::should
+::Shoudl::Should
 ::should of::should have
 ::sohw::show
 ::showinf::showing
