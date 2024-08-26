@@ -1943,12 +1943,10 @@ SendCtrlAdd:
         }
             
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
-            If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
-                If (vWinClass != "EVERYTHING_(1.5a)") {
-                    exEl := UIA.ElementFromHandle(lIdCheck)
-                    shellEl := exEl.FindFirstByName("Items View")
-                    shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty.",,,,5000)
-                }
+            If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && vWinClass != "EVERYTHING_(1.5a)") {
+                exEl := UIA.ElementFromHandle(lIdCheck)
+                shellEl := exEl.FindFirstByName("Items View")
+                shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty.",,,,5000)
             }
         
             If (OutputVar1 == 1) {
