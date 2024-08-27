@@ -166,6 +166,7 @@ Loop Parse, numbers
 {
     HotKey ~%A_LoopField%, Hoty
 }
+
 HotKey ~/,  FixSlash
 HotKey ~',  Hoty
 HotKey ~?,  Hoty
@@ -174,11 +175,11 @@ HotKey ~`,, Hoty
 HotKey ~.,  Hoty
 
 Hoty:
-    CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999) ? CapCount+1 : 1
+    CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 && A_PriorHotKey != "~+SPACE") ? CapCount+1 : 1
     if (!StopAutoFix && CapCount == 2 && SubStr(A_ThisHotKey,2,1)=="'") {
         return
     }
-    else if (!StopAutoFix && CapCount == 2 && A_ThisHotkey != "~Space" && A_ThisHotkey != "~`," && A_ThisHotkey != "~'" && A_ThisHotkey != "~?" && A_ThisHotkey != "~." && A_ThisHotkey != "~!" && !inStr(numbers, Substr(A_ThisHotKey,2,1))) {
+    else if (!StopAutoFix && CapCount == 2 && A_ThisHotkey != "~Space" && A_ThisHotkey != "~+Space" && A_ThisHotkey != "~`," && A_ThisHotkey != "~'" && A_ThisHotkey != "~?" && A_ThisHotkey != "~." && A_ThisHotkey != "~!" && !inStr(numbers, Substr(A_ThisHotKey,2,1))) {
         tooltip, 1
         SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
@@ -2794,13 +2795,17 @@ keyTrack() {
         }
         Return
     }
+    Else If (currClass == "XLMAIN") {
+        StopAutoFix := True
+    }
+    Else
+        StopAutoFix := False
     
     If (LastKey1 != A_PriorHotkey) {
         LastKey1 := A_PriorHotkey
         TimeOfLastKey := A_TickCount
     }
     
-    StopAutoFix := False
 Return
 }
 
