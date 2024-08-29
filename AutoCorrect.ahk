@@ -88,11 +88,11 @@ SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
 SysGet, MonCount, MonitorCount
 
-; Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum%
-; sleep 1500
-; Tooltip, % "Current Mon is " GetCurrentMonitorIndex()
-; sleep 1500
-; Tooltip,
+Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum%
+sleep 1000
+Tooltip, % "Current Mon is " GetCurrentMonitorIndex()
+sleep 1000
+Tooltip,
 
 Gui, ShadowFrFull: New
 Gui, ShadowFrFull: +HwndIGUIF
@@ -133,7 +133,7 @@ Expr =
     #KeyHistory 0
     
     WinWait, ahk_class #32768
-    sleep, 100
+    sleep, 200
     Send, {DOWN}
     sleep, 20000
     ExitApp
@@ -173,6 +173,8 @@ HotKey ~?,  Hoty
 HotKey ~!,  Hoty
 HotKey ~`,, Hoty
 HotKey ~.,  Hoty
+HotKey ~_,  Hoty
+HotKey ~-,  Hoty
 
 Hoty:
     CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 && A_PriorHotKey != "~+SPACE") ? CapCount+1 : 1
@@ -180,11 +182,11 @@ Hoty:
         return
     }
     else if (!StopAutoFix && CapCount == 2 && A_ThisHotkey != "~Space" && A_ThisHotkey != "~+Space" && A_ThisHotkey != "~`," && A_ThisHotkey != "~'" && A_ThisHotkey != "~?" && A_ThisHotkey != "~." && A_ThisHotkey != "~!" && !inStr(numbers, Substr(A_ThisHotKey,2,1))) {
-        tooltip, 1
+        ; tooltip, 1
         SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
     else if (!StopAutoFix && CapCount == 3) {
-        tooltip, 2
+        ; tooltip, 2
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
     ; else if (CapCount == 2 && (Substr(A_PriorHotkey,2,1) == "'" || Substr(A_PriorHotkey,2,1) == "," || Substr(A_PriorHotkey,2,1) == "!" || Substr(A_PriorHotkey,2,1) == "?" || Substr(A_PriorHotkey,2,1) == "." || A_ThisHotkey == "~Space")) {
@@ -1135,25 +1137,28 @@ Return
     winAssoc := {}
     winArraySort := []
     ; tooltip, Executing DynaRun
-    GoSub, RunDynRun
     ; tooltip, Building List of Apps... 
     
     WinGet, id, list
     Loop, %id%
     {
         this_ID := id%A_Index%
-        WinGetTitle, title, ahk_id %this_ID%
         WinGet, minState, MinMax, ahk_id %this_ID%
         
         desknum := 1
-        WinGet, procName, ProcessName , ahk_id %this_ID%
-        finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
-        If (minState > -1 || !IsAltTabWindow(this_ID) || HasVal(minWinArray,finalTitle))
-            continue
-
         ; desknum := VD.getDesktopNumOfWindow(title)
         ; If desknum <= 0
             ; continue
+            
+        If (minState > -1 || !IsAltTabWindow(this_ID))
+            continue
+        
+        WinGetTitle, title, ahk_id %this_ID%
+        WinGet, procName, ProcessName , ahk_id %this_ID%
+        finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
+        If HasVal(minWinArray,finalTitle)
+            continue
+
         minWinArray.Push(finalTitle)
     }
 
@@ -1212,19 +1217,20 @@ Return
     }
     Critical Off
 
+    GoSub, RunDynRun
     CoordMode, Mouse, Screen
     CoordMode, Menu, Screen
     drawX := CoordXCenterScreen()
     drawY := CoordYCenterScreen()
     Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
-    Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
+    ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
 
     DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
     ; Tooltip, Displaying... 
     ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
     ; Tooltip, Done.
     Gui, ShadowFrFull:  Hide
-    Gui, ShadowFrFull2: Hide
+    ; Gui, ShadowFrFull2: Hide
 
     Menu, windows, deleteAll
     i := 1
@@ -1529,7 +1535,7 @@ Return
 
 #MaxThreadsPerHotkey 2
 #If (!VolumeHover() && LbuttonEnabled)
-~*$LButton::
+~$LButton::
     Critical, On
     StopRecurssion := true
     CoordMode, Mouse, Screen
@@ -1555,21 +1561,25 @@ Return
     Gui, GUI4Boarder: Hide
     WinGetClass, lClass, ahk_id %lhwnd%
     
+    
     If (A_PriorHotkey == A_ThisHotkey
-        && (A_TimeSincePriorHotkey < 550)
+        && (A_TimeSincePriorHotkey < 500)
         && (lClass != "ProgMan" && lClass != "WorkerW")
         && (abs(X1-X2) < 5 && abs(Y1-Y2) < 5) 
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
+        ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %A_TimeSincePriorHotkey% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
 
         LbuttonEnabled := False
-        If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF) && (LB_HexColor1a == 0xFFFFFF) && (LB_HexColor2b == 0xFFFFFF) && (LB_HexColor3c  == 0xFFFFFF)) {
+        If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321") {
                 Send, {Backspace}
-                ; SetTimer, ShowTooltip, -1
+                tooltip, Navigating up...
+                SetTimer, ShowTooltip, -1000
             }
             Else {
                 Send, !{Up}
-                ; SetTimer, ShowTooltip, -1
+                tooltip, Navigating up...
+                SetTimer, ShowTooltip, -1000
             }
         }
         KeyWait, Lbutton, U T3
@@ -1649,8 +1659,6 @@ Return
 #If
 
 ShowTooltip:
-    tooltip, Navigating Up...
-    sleep, 1000
     tooltip,
 Return
 
@@ -2231,27 +2239,27 @@ MyTimer() {
    ; run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
    WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
    WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh,
-   WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh,
+   ; WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh,
 
    WinSet, TransColor, FF00FF 50, ahk_id %IGUIF%
    sleep, 20
-   WinSet, TransColor, FF00FF 50, ahk_id %IGUIF2%
+   ; WinSet, TransColor, FF00FF 50, ahk_id %IGUIF2%
    sleep, 20
    WinSet, TransColor, FF00FF 100, ahk_id %IGUIF%
    sleep, 20
-   WinSet, TransColor, FF00FF 100, ahk_id %IGUIF2%
+   ; WinSet, TransColor, FF00FF 100, ahk_id %IGUIF2%
    sleep, 20
    WinSet, TransColor, FF00FF 150, ahk_id %IGUIF%
    sleep, 20
-   WinSet, TransColor, FF00FF 150, ahk_id %IGUIF2%
+   ; WinSet, TransColor, FF00FF 150, ahk_id %IGUIF2%
    sleep, 20
    WinSet, TransColor, FF00FF 200, ahk_id %IGUIF%
    sleep, 20
-   WinSet, TransColor, FF00FF 200, ahk_id %IGUIF2%
+   ; WinSet, TransColor, FF00FF 200, ahk_id %IGUIF2%
    sleep, 20
    WinSet, TransColor, FF00FF 254, ahk_id %IGUIF%
    sleep, 20
-   WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2%
+   ; WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2%
    ; Gui, ShadowFrFull: Show, x%menux% w%menuw% h%menuh% y%menuy%
    WinSet, AlwaysOnTop, on,  ahk_class #32768
 }
