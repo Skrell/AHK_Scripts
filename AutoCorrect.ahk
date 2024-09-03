@@ -156,12 +156,12 @@ OnExit("PreventRecur")
 ; The first line of code below is the set of letters, digits, and/or symbols
 ; that are eligible for this type of correction.  Customize if you wish:
 keys = abcdefghijklmnopqrstuvwxyz
-numbers = 0123456789
 Loop Parse, keys 
 {
     HotKey ~+%A_LoopField%, Hoty
     HotKey ~%A_LoopField%, FixSlash
 }
+numbers = 0123456789
 Loop Parse, numbers
 {
     HotKey ~%A_LoopField%, Hoty
@@ -178,10 +178,21 @@ HotKey ~-,  Hoty
 
 Hoty:
     CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 && A_PriorHotKey != "~+SPACE") ? CapCount+1 : 1
-    if (!StopAutoFix && CapCount == 2 && SubStr(A_ThisHotKey,2,1)=="'") {
+    if (!StopAutoFix && CapCount == 2 && (SubStr(A_ThisHotKey,2,1)=="'" || SubStr(A_ThisHotKey,2,1)=="-")) {
+        ; tooltip, 0
         return
     }
-    else if (!StopAutoFix && CapCount == 2 && A_ThisHotkey != "~Space" && A_ThisHotkey != "~+Space" && A_ThisHotkey != "~`," && A_ThisHotkey != "~'" && A_ThisHotkey != "~?" && A_ThisHotkey != "~." && A_ThisHotkey != "~!" && !inStr(numbers, Substr(A_ThisHotKey,2,1))) {
+    else if (!StopAutoFix && CapCount == 2 && StrLen(A_ThisHotKey) == 3 && inStr(keys, Substr(A_ThisHotKey,3,1))) {
+        ; && A_ThisHotkey != "~'" 
+        ; && A_ThisHotkey != "~?" 
+        ; && A_ThisHotkey != "~!" 
+        ; && A_ThisHotkey != "~`," 
+        ; && A_ThisHotkey != "~." 
+        ; && A_ThisHotkey != "~_" 
+        ; && A_ThisHotkey != "~-"
+        ; && A_ThisHotkey != "~Space" 
+        ; && A_ThisHotkey != "~+Space" 
+        ; && !inStr(numbers, Substr(A_ThisHotKey,2,1))) {
         ; tooltip, 1
         SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
@@ -189,14 +200,6 @@ Hoty:
         ; tooltip, 2
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
-    ; else if (CapCount == 2 && (Substr(A_PriorHotkey,2,1) == "'" || Substr(A_PriorHotkey,2,1) == "," || Substr(A_PriorHotkey,2,1) == "!" || Substr(A_PriorHotkey,2,1) == "?" || Substr(A_PriorHotkey,2,1) == "." || A_ThisHotkey == "~Space")) {
-        ; tooltip, 3
-        ; SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
-    ; }
-    ; else if (CapCount == 2 && inStr(numbers, Substr(A_ThisHotKey,2,1), false)) {
-        ; tooltip, 4
-        ; SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
-    ; }
 FixSlash:
     if (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
         SendInput, % "{BS}{BS}{?}{SPACE}"
@@ -220,7 +223,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         DetectHiddenWindows, On
         
         If !HasVal(prevActiveWindows, hWnd) {
-            loop 200 {
+            loop 2000 {
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
                 If (vWinTitle != "")
                     break
@@ -277,7 +280,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             break
                         sleep, 10
                     }
-                    
+                    ; tooltip, waiting for shell
                     If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                         If (vWinClass != "EVERYTHING_(1.5a)") {
                             exEl := UIA.ElementFromHandle(hWnd)
@@ -308,7 +311,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             break
                         sleep, 10
                     }
-                    
+                    ; tooltip, adjusted
                     WinGetClass, lClassCheck, A
                     If (lClassCheck == vWinClass) {
                         ; tooltip, adjusted %vWinClass% %FocusedControl%
@@ -1600,19 +1603,18 @@ Return
             If (prevPath != currentPath) {
                 GoSub, SendCtrlAdd
             }
-            LbuttonEnabled := True
             sleep, 100
-            Critical, Off
+            LbuttonEnabled := True
             StopRecurssion := False
+            Critical, Off
             Return
         }
         Else {
             GoSub, SendCtrlAdd
             sleep, 200
             LbuttonEnabled := True
-
-            Critical, Off
             StopRecurssion := False
+            Critical, Off
             Return
         }
     }
@@ -2055,19 +2057,15 @@ WheelDown::send {Volume_Down}
 ; Return
 ; #If
 
-#If !moving && (!IsOverDesktop() || (IsOverDesktop() && DesktopIconsVisible))
+#If !moving
 $*RButton::
     ComboActive := False
-    loop {
+    loop 300 {
         If !(GetKeyState("RButton", "P"))
         {
             break
         }
-        else if (A_Index > 200)
-        {
-            Return
-        }
-        sleep 25
+        sleep 10
     }
     If !ComboActive
     {
@@ -2848,6 +2846,11 @@ track() {
         ; prevVD := currentVD - 1
     ; Else
         ; prevVD := currentVD
+    
+    ; If (classId == "CabinetWClass" || classId == "#32770") {
+        ; ie := GetIEobject()
+        ; tooltip, % ie.Busy "-" ie.ReadyState
+    ; }
 
     If (LbuttonHeld && !GetKeyState("Lbutton", "P"))
     {
@@ -3619,6 +3622,16 @@ BlockKeyboard( bAction )
 		Blocker.Start()
 	Else
 		Blocker.Stop()
+}
+; https://www.autohotkey.com/boards/viewtopic.php?p=583366#p583366
+GetIEobject()
+{
+   WinGet, hWnd, ID, A
+   for oWin in ComObjCreate("Shell.Application").Windows
+   {
+      if (oWin.HWND = hWnd)
+         return oWin
+   }
 }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
