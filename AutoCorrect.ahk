@@ -1918,11 +1918,6 @@ Return
 #If
 
 ; #If !DesktopIconsVisible && IsOverDesktop() && !VolumeHover() && !moving
-; LButton::
-    ; DesktopIcons(True)
-    ; DesktopIconsVisible := True
-; Return
-
 ; RButton::
     ; DesktopIcons(True)
     ; DesktopIconsVisible := True
@@ -2067,15 +2062,17 @@ $*RButton::
         }
         sleep 10
     }
-    If !ComboActive
-    {
+    If ComboActive {
+        ComboActive := False
+        Return
+    } 
+    else {
         If GetKeyState("Lshift","P")
             Send, +{Click, Right}
         Else
             Send, {Click, Right}
     }
-    else
-        ComboActive := False
+        
 Return
 #If
 
@@ -2816,7 +2813,7 @@ Return
 }
 
 track() {
-    Global MonCount, MonNum
+    Global MonCount, MonNum, moving
     Static x, y, lastX, lastY, lastMon, currentMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
     Static previousMon := 0
@@ -2825,17 +2822,15 @@ track() {
     MouseGetPos x, y, hwndId
     WinGetClass, classId, ahk_id %hwndId%
     WinGet, targetProc, ProcessName, ahk_id %hwndId%
+    SysGet, MonCount, MonitorCount
 
-    ; Tooltip, %SearchingWindows% %hitTAB% %DrawingRect% %ClearingRect%
-        
-    CoordMode Mouse
-    lastX := x, lastY := y,
+    ; CoordMode Mouse
+    ; lastX := x, lastY := y,
 
     If (currentMon > 0)
         lastMon := currentMon
 
     ; currentVD := VD.getCurrentDesktopNum()
-    SysGet, MonCount, MonitorCount
 
     ; If (currentVd < VD.getCount())
         ; nextVD := currentVD + 1
@@ -2861,12 +2856,14 @@ track() {
 
     If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
         moving := True
-        If (classId == "CabinetWClass" || ((classId == "Progman" || classId == "WorkerW") && DesktopIconsVisible))
+        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || "#32770")
             sleep 250
     } Else {
         moving := False
     }
-
+    
+    lastX := x, lastY := y,
+    
     MWAGetMonitorMouseIsIn()
     If WinActive("ahk_class ZPContentViewWndClass") {
         WinGetPos, x, y, w, h, ahk_class ZPContentViewWndClass
