@@ -284,11 +284,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     tooltip, waiting for shell
                     If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                         If (vWinClass != "EVERYTHING_(1.5a)") {
+                            exEl    :=
+                            shellEl :=
                             exEl := UIA.ElementFromHandle(hWnd)
-                            shellEl := exEl.FindFirstByName("Items View")
-                            tooltip, waiting for load
-                            shellEl.WaitElementExist("ControlType=ListItem OR LocalizedControlType=group OR Name=This folder is empty.",0x2,,,5000)
-                            tooltip,
+                            If exEl {
+                                tooltip, waiting for load
+                                shellEl := exEl.WaitElementExistByName("Items View",,,,2000)
+                                If shellEl
+                                    shellEl.WaitElementExist("ControlType=ListItem OR LocalizedControlType=group OR Name=This folder is empty.",0x2,,,5000)
+                                tooltip,
+                            }
                         }
                     }
                     
@@ -1589,21 +1594,26 @@ Return
         }
         KeyWait, Lbutton, U T3
         If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
+            exEl     := 
+            targetEl :=
+            tooltip, waiting for shell 4
             exEl := UIA.ElementFromHandle(lhwnd)
-            exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,100)
-            targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
+            If exEl
+                targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
             
-            If (targetEl.LocalizedControlType == "progress bar")
-                tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
-            Else
-                tabEl := targetEl
+            If targetEl {
+                If (targetEl.LocalizedControlType == "progress bar")
+                    tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
+                Else
+                    tabEl := targetEl
+                    
+                currentPath := tabEl.Name
+                tooltip,
+                ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
                 
-            currentPath := tabEl.Name
-            
-            ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% 
-            
-            If (prevPath != currentPath) {
-                GoSub, SendCtrlAdd
+                If (prevPath != currentPath) {
+                    GoSub, SendCtrlAdd
+                }
             }
             sleep, 100
             LbuttonEnabled := True
@@ -1644,18 +1654,22 @@ Return
         SetTimer, SendCtrlAdd, Off
     
     If (lClass == "CabinetWClass" || lClass == "#32770") && ((rlsTime - initTime) < 500) && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
+        exEl     := 
+        targetEl := 
+        tooltip, waiting for shell 3
         exEl := UIA.ElementFromHandle(lhwnd)
-        exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,100)
-        targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
+        If exEl
+            targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,500)
         
-        If (targetEl.LocalizedControlType == "progress bar")
-            tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
-        Else
-            tabEl := targetEl
-            
-        prevPath := tabEl.Name
+        If targetEl {
+            If (targetEl.LocalizedControlType == "progress bar")
+                tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
+            Else
+                tabEl := targetEl
+            prevPath := tabEl.Name
+            tooltip,
+        }
     }
-    StopRecurssion := False
     Critical Off
 Return
 #If
@@ -1949,9 +1963,17 @@ SendCtrlAdd:
             
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && vWinClass != "EVERYTHING_(1.5a)") {
+                exEl    := 
+                shellEl := 
+                tooltip, waiting for shell 2
                 exEl := UIA.ElementFromHandle(lIdCheck)
-                shellEl := exEl.FindFirstByName("Items View")
-                shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty.",,,,5000)
+                If exEl {
+                    tooltip, waiting for load 2
+                    shellEl := exEl.WaitElementExistByName("Items View",,,,2000)
+                    If shellEl
+                        shellEl.WaitElementExist("ControlType=ListItem OR LocalizedControlType=group OR Name=This folder is empty.",0x2,,,5000)
+                    tooltip,
+                }
             }
         
             If (OutputVar1 == 1) {
