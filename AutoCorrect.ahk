@@ -38,6 +38,7 @@ Global ValidWindows := []
 Global RevMinnedWindows := []
 Global PrevActiveWindows := []
 Global minWinArray := []
+Global allWinArray := []
 Global cycleCount := 1
 Global startHighlight := False
 Global border_thickness := 4
@@ -280,14 +281,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             break
                         sleep, 10
                     }
-                    ; tooltip, waiting for shell
+                    tooltip, waiting for shell
                     If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                         If (vWinClass != "EVERYTHING_(1.5a)") {
                             exEl := UIA.ElementFromHandle(hWnd)
                             shellEl := exEl.FindFirstByName("Items View")
-                            shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty.",,,,5000)
-                            ; listEl := shellEl.FindFirstByType("ListItem")
-                            ; tooltip, % "Value is :" listEl.Value " - " vWinTitle
+                            tooltip, waiting for load
+                            shellEl.WaitElementExist("ControlType=ListItem OR LocalizedControlType=group OR Name=This folder is empty.",0x2,,,5000)
+                            tooltip,
                         }
                     }
                     
@@ -304,13 +305,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         FocusedControl := "SysListView321"
                     }
                     
-                    loop, 50 {
-                        ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
-                        ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
-                        If (FocusedControl == whatCtrl)
-                            break
-                        sleep, 10
-                    }
+                    ; loop, 50 {
+                    ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
+                        ; ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
+                        ; If (FocusedControl == whatCtrl)
+                        ; break
+                        ; sleep, 10
+                    ; }
                     ; tooltip, adjusted
                     WinGetClass, lClassCheck, A
                     If (lClassCheck == vWinClass) {
@@ -1068,20 +1069,20 @@ ResetWins:
 Return
 
 $!Tab::
-SetTimer, track, Off
-SetTimer, keyTrack, Off
-Cycle(forward)
-GoSub, altup
-SetTimer, track, On
-SetTimer, keyTrack, On
+    SetTimer, track, Off
+    SetTimer, keyTrack, Off
+    Cycle(forward)
+    GoSub, altup
+    SetTimer, track, On
+    SetTimer, keyTrack, On
 Return
 
 $!+Tab::
-SetTimer, track, Off
-SetTimer, keyTrack, Off
-Cycle(!forward)
-SetTimer, track, On
-SetTimer, keyTrack, On
+    SetTimer, track, Off
+    SetTimer, keyTrack, Off
+    Cycle(!forward)
+    SetTimer, track, On
+    SetTimer, keyTrack, On
 Return
 
 #If !hitTAB
@@ -1126,22 +1127,21 @@ Return
 Return
 #If
 
-#If !hitTAB
 RunDynRun:
     DynaRun(Expr, tempScript)
 Return
 
+#If !hitTAB
 !Capslock::
-    DetectHiddenWindows, Off
     Critical On
-
+    StopRecurssion := True
     totalMenuItemCount := 0
     onlyTitleFound := ""
     winAssoc := {}
     winArraySort := []
-    ; tooltip, Executing DynaRun
-    ; tooltip, Building List of Apps... 
+    tooltip, Looking for Minimized Apps... 
     
+    DetectHiddenWindows, Off
     WinGet, id, list
     Loop, %id%
     {
@@ -1169,6 +1169,7 @@ Return
         Tooltip, No matches found...
         Sleep, 1500
         Tooltip,
+        StopRecurssion := False
         Return
     }
 
@@ -1184,8 +1185,8 @@ Return
 
     desktopEntryLast := ""
 
-    Menu, windows, Add
-    Menu, windows, deleteAll
+    ; Menu, minWindows, Add
+    ; Menu, minWindows, deleteAll
     For k, ft in winArraySort
     {
         splitEntry1 := StrSplit(ft , "^")
@@ -1204,40 +1205,42 @@ Return
 
         WinGet, Path, ProcessPath, ahk_exe %procEntry%
         If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
-            Menu, windows, Add
+            Menu, minWindows, Add
         }
         If (finalEntry != "" && titleEntry != "") {
             totalMenuItemCount := totalMenuItemCount + 1
             onlyTitleFound := finalEntry
 
-            Menu, windows, Add, %finalEntry%, ActivateWindow
+            Menu, minWindows, Add, %finalEntry%, ActivateWindow
             Try
-                Menu, windows, Icon, %finalEntry%, %Path%,, 32
+                Menu, minWindows, Icon, %finalEntry%, %Path%,, 32
             Catch
-                Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
+                Menu, minWindows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
         }
         desktopEntryLast := desktopEntry
     }
-    Critical Off
 
     GoSub, RunDynRun
+    
     CoordMode, Mouse, Screen
     CoordMode, Menu, Screen
     drawX := CoordXCenterScreen()
     drawY := CoordYCenterScreen()
     Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
+    StopRecurssion := False
     ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
+    Critical Off
 
     DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-    ; Tooltip, Displaying... 
-    ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
+    Tooltip, 
+    ShowMenu(MenuGetHandle("minWindows"), False, drawX, drawY, 0x14)
     ; Tooltip, Done.
     Gui, ShadowFrFull:  Hide
     ; Gui, ShadowFrFull2: Hide
 
-    Menu, windows, deleteAll
+    Menu, minWindows, deleteAll
     i := 1
-    while (i <= minWinArray.MaxIndex()) {
+while (i <= minWinArray.MaxIndex()) {
         checkID := minWinArray[i]
         If !WinExist("ahk_id " checkID)
             minWinArray.RemoveAt(i)
@@ -1540,7 +1543,6 @@ Return
 #If (!VolumeHover() && LbuttonEnabled)
 ~$LButton::
     Critical, On
-    StopRecurssion := true
     CoordMode, Mouse, Screen
     MouseGetPos, X1, Y1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
@@ -1605,7 +1607,6 @@ Return
             }
             sleep, 100
             LbuttonEnabled := True
-            StopRecurssion := False
             Critical, Off
             Return
         }
@@ -1613,7 +1614,6 @@ Return
             GoSub, SendCtrlAdd
             sleep, 200
             LbuttonEnabled := True
-            StopRecurssion := False
             Critical, Off
             Return
         }
@@ -1668,13 +1668,14 @@ Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 $!`::
-    ; Send, {LAlt}{up}
     StopCheck := False
     SearchingWindows := True
+    StopRecurssion := True
     SetTimer, UpdateInputBoxTitle, 50
     InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
     SetTimer, UpdateInputBoxTitle, off
     SearchingWindows := False
+    StopRecurssion := False
 
     If ErrorLevel
     {
@@ -1686,7 +1687,7 @@ $!`::
         Critical On
         totalMenuItemCount := 0
         onlyTitleFound := ""
-        minWinArray := []
+        allWinArray := []
         winAssoc := {}
         winArraySort := []
 
@@ -1705,17 +1706,17 @@ $!`::
             If desknum <= 0
                 continue
             finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
-            minWinArray.Push(finalTitle)
+            allWinArray.Push(finalTitle)
         }
 
-        If (minWinArray.length() == 0) {
+        If (allWinArray.length() == 0) {
             Tooltip, No matches found...
             Sleep, 1500
             Tooltip,
             Return
         }
 
-        For k, v in minWinArray
+        For k, v in allWinArray
         {
             winAssoc[v] := k
         }
@@ -1727,8 +1728,8 @@ $!`::
 
         desktopEntryLast := ""
 
-        Menu, windows, Add
-        Menu, windows, deleteAll
+        ; Menu, windows, Add
+        ; Menu, windows, deleteAll
         For k, ft in winArraySort
         {
             splitEntry1 := StrSplit(ft , "^")
@@ -1767,7 +1768,6 @@ $!`::
             }
             desktopEntryLast := desktopEntry
         }
-        Critical Off
         If (totalMenuItemCount == 1 && onlyTitleFound != "") {
             GoSub, ActivateWindow
         }
@@ -1780,23 +1780,22 @@ $!`::
             drawX := CoordXCenterScreen()
             drawY := CoordYCenterScreen()
             Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
-            Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
+            ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
+            Critical Off
 
             ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
             DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
 
             ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
-
-            Gui, ShadowFrFull:  Hide
-            Gui, ShadowFrFull2: Hide
         }
+        Gui, ShadowFrFull:  Hide
         Menu, windows, deleteAll
     }
 Return
 
 ActivateWindow:
     Gui, ShadowFrFull:  Hide
-    Gui, ShadowFrFull2: Hide
+    ; Gui, ShadowFrFull2: Hide
     DetectHiddenWindows, On
     thisMenuItem := ""
 
@@ -1893,9 +1892,6 @@ ActivateWindow:
     }
     else
     {
-        ; If (vState == -1) {
-            ; WinRestore , %fulltitle%
-        ; }
         WinActivate, %fulltitle%
         WinGet, hwndId, ID, A
         currentMon := MWAGetMonitorMouseIsIn()
@@ -2856,7 +2852,7 @@ track() {
 
     If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
         moving := True
-        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || "#32770")
+        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770")
             sleep 250
     } Else {
         moving := False
