@@ -295,12 +295,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     ; tooltip, waiting for shell
                     If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                         If (vWinClass != "EVERYTHING_(1.5a)") {
-                            ; exEl := UIA.ElementFromHandle(hWnd)
-                            exEl := UIA.ElementFromHandleBuildCache(hWnd, cacheRequest)
-                            shellEl := exEl.FindFirstByName("Items View",,,,cacheRequest)
-                            shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000,cacheRequest)
-                            ; listEl := shellEl.FindFirstByType("ListItem")
-                            ; tooltip, % "Value is :" listEl.Value " - " vWinTitle
+                            exEl := UIA.ElementFromHandle(hWnd)
+                            shellEl := exEl.FindFirstByName("Items View")
+                            shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
                         }
                     }
                     
