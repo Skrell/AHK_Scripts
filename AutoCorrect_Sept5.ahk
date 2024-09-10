@@ -1553,7 +1553,7 @@ Return
 
 #MaxThreadsPerHotkey 2
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop())
-~$LButton::
+~$*LButton::
     CoordMode, Mouse, Window
     MouseGetPos, lbX1, lbY1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
@@ -1682,7 +1682,7 @@ Return
         && ((rlsTime - initTime) < 275)
         && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3  != 0xFFFFFF)
         && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323"))  {
-        SetTimer, SendCtrlAdd, -125
+        SetTimer, SendCtrlAdd, -100
         }
     Else
         SetTimer, SendCtrlAdd, Off
