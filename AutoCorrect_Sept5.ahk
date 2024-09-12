@@ -23,7 +23,7 @@ dummyFunction1() {
 SetBatchLines -1
 SetWinDelay   -1
 SetControlDelay -1
-SetKeyDelay, 10
+SetKeyDelay, 5
 SendMode, Input
 
 
@@ -100,6 +100,8 @@ Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum%
 sleep 1000
 Tooltip, % "Current Mon is " GetCurrentMonitorIndex()
 sleep 1000
+Tooltip, Path to ahk %A_AhkPath%
+sleep 2000
 Tooltip,
 
 Gui, ShadowFrFull: New
@@ -136,7 +138,7 @@ Expr =
 (
     #NoEnv
     #NoTrayIcon
-    #SingleInstance, off
+    #SingleInstance, On
     #Persistent
     #KeyHistory 0
     
@@ -146,8 +148,8 @@ Expr =
         
     sleep, 200
     Send, {DOWN}
-    sleep, 20000
-    ExitApp
+    ; sleep, 20000
+    ; ExitApp
     Return
 
     ~Alt Up::
@@ -159,7 +161,7 @@ ExprTimeout =
 (
     #NoEnv
     #NoTrayIcon
-    #SingleInstance, off
+    #SingleInstance, On
     #Persistent
     #KeyHistory 0
     
@@ -459,6 +461,7 @@ Return
 
     $!a:: 
         Send, {home}
+        Hotstring("Reset")
     Return
     
     $+!a:: 
@@ -468,6 +471,7 @@ Return
 
     $!;::
         Send, {end}
+        Hotstring("Reset")
     Return
 
     $!+;::
@@ -637,7 +641,7 @@ Return
                         break
                     sleep, 10
                 }
-                SetTimer, ClearRect, -50
+                SetTimer, ClearRect, -10
                 Gui, GUI4Boarder: Hide
                 WinGet, allWindows, List
                 loop % allWindows {
@@ -670,6 +674,7 @@ Return
 
 Esc & x::
     Tooltip, Canceled!
+    GoSub, ClearRect
     CancelClose := True
     sleep, 1500
     Tooltip,
