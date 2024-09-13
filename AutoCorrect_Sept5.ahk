@@ -944,9 +944,13 @@ FadeInWin1:
         ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
     WinSet, AlwaysOnTop, On , % "ahk_id " lclickHwndId
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
-    WinActivate, % "ahk_id " ValidWindows[3]
-    WinActivate, % "ahk_id " ValidWindows[2]
-    WinActivate, % "ahk_id " ValidWindows[1]
+    
+    If ValidWindows.MaxIndex() >= 3
+        WinActivate, % "ahk_id " ValidWindows[3]
+    If ValidWindows.MaxIndex() >= 2
+        WinActivate, % "ahk_id " ValidWindows[2]
+    If ValidWindows.MaxIndex() >= 1
+        WinActivate, % "ahk_id " ValidWindows[1]
 
     ; WinActivate, % "ahk_id " lclickHwndId
     WinSet, AlwaysOnTop, Off , % "ahk_id " lclickHwndId
@@ -2652,10 +2656,12 @@ HandleChromeWindowsWithSameTitle(title := "") {
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    Global MonCount, VD
+    Global MonCount, VD, Highlighter
+    
     currentMon := MWAGetMonitorMouseIsIn()
     finalWindowsListWithProcAndClass := []
     counter := 2
+    Critical, On
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
 
     loop % windowsListWithSameProcessAndClass
@@ -2670,8 +2676,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
 
         If (currentMonHasActWin) {
-            WinGetTitle, titleEntry, ahk_id %hwndID%
-
             finalWindowsListWithProcAndClass.push(hwndID)
         }
     }
@@ -2684,8 +2688,10 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         Return
     }
 
+    WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
     WinWaitActive, % "ahk_id " finalWindowsListWithProcAndClass[counter], , 2
+    Critical, Off
     ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
     GoSub, DrawRect
 
@@ -2696,20 +2702,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     If (counter > numWindows)
     {
         counter := 1
-    }
-
-    hwndId := finalWindowsListWithProcAndClass[counter]
-    loop  {
-        If !(IsWindowOnCurrMon(hwndId, currentMon)) {
-            counter++
-            If (counter > numWindows)
-            {
-                counter := 1
-            }
-            hwndId := finalWindowsListWithProcAndClass[counter]
-        }
-        Else
-            break
     }
 
     loop
@@ -2731,26 +2723,37 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                 {
                     counter := 1
                 }
-                hwndId := finalWindowsListWithProcAndClass[counter]
-                loop  {
-                    If !(IsWindowOnCurrMon(hwndId, currentMon)) {
-                        counter++
-                        If (counter > numWindows)
-                        {
-                            counter := 1
-                        }
-                        hwndId := finalWindowsListWithProcAndClass[counter]
-                    }
-                    Else
-                        break
-                }
             }
         }
     }
     until (!GetKeyState("LAlt", "P"))
-    DrawingRect := False
-    ClearingRect := False
-    ; tooltip,
+    
+    counter := counter - 1
+    If (counter <= 0)
+        counter := finalWindowsListWithProcAndClass.MaxIndex()
+    
+    If (counter > 2) {
+        WinSet, AlwaysOnTop, On, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+        WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+        
+        If finalWindowsListWithProcAndClass.MaxIndex() >= 3 {
+            WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[3]
+            If (isMin > -1)
+                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[3]
+        }
+        If finalWindowsListWithProcAndClass.MaxIndex() >= 2 {
+            WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[2]
+            If (isMin > -1)
+                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[2]
+        }
+        If finalWindowsListWithProcAndClass.MaxIndex() >= 1 {
+            WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[1]
+            If (isMin > -1)
+                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
+        }
+        
+        WinSet, AlwaysOnTop, Off, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+    }
 }
 
 FrameShadow(HGui) {
