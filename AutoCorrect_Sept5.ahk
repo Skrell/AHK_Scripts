@@ -219,6 +219,8 @@ FixSlash:
         SendInput, % "{BS}{BS}{?}{SPACE}"
     X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
 
+;EVENT_SYSTEM_FOREGROUND := 0x3
+DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
@@ -230,7 +232,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     Global cacheRequest
     static exEl, shellEl, listEl
     CoordMode, Mouse, Screen
-    
     
     If !StopRecurssion {
        
@@ -248,6 +249,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
             }
+            Else If (vWinClass == "#32768")
+                Return
 
             WinGet, state, MinMax, Ahk_id %hWnd%
             If (state > -1 && vWinTitle != "") {
@@ -260,7 +263,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
             
             ;EVENT_SYSTEM_FOREGROUND := 0x3
-            static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+            ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
             
             If (vWinTitle == "" || (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "")) {
                 Return
@@ -306,23 +309,21 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     If (OutputVar2 == 1) {
                         ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
                         FocusedControl := "DirectUIHWND2"
+                        sleep, 10
                     }
                     Else If (OutputVar3 == 1) {
                         ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
                         FocusedControl := "DirectUIHWND3"
+                        sleep, 10
                     }
                     Else If (OutputVar1 == 1) {
                         ControlFocus , SysListView321, % "ahk_id " hWnd
                         FocusedControl := "SysListView321"
+                        sleep, 20
                     }
                     
-                    ; loop, 50 {
-                        ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
-                        ; ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
-                        ; If (FocusedControl == whatCtrl)
-                        ; break
-                        ; sleep, 10
-                    ; }
+                    ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
+
                     ; tooltip, adjusted
                     WinGetClass, lClassCheck, A
                     If (lClassCheck == vWinClass) {
@@ -388,8 +389,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 Return
 
 PreventRecur() {
-    Global StopRecurssion
+    Global StopRecurssion, hWinEventHook
     StopRecurssion := True
+    nCheck := DllCall( "UnhookWinEvent", Ptr,hWinEventHook )
+    DllCall( "CoUninitialize" )
 Return
 }
 
@@ -456,7 +459,6 @@ Return
     
     $CapsLock:: 
         Send {Delete}
-        ; Hotstring("EndChars", "()[]{}:;,.?!`n `t")
     Return
 
     $!a:: 
@@ -594,6 +596,10 @@ Return
     ~+Space:: 
         GoSub, FixSlash
         GoSub, Hoty
+    Return
+    
+    ~^Backspace::
+        Hotstring("Reset")
     Return
 #If
 
@@ -1106,31 +1112,13 @@ Return
 #If !hitTAB
 $!q::
     Gui, GUI4Boarder: Hide
-    finalWindowsList := []
     WinGet, activeProcessName, ProcessName, A
-    ; WinGetTitle, FullTitle, A
     WinGetClass, FullClass, A
     WinGet, windowsWithSameTitleList, List, ahk_exe %activeProcessName%
 
-    loop % windowsWithSameTitleList
-    {
-        hwndID := windowsWithSameTitleList%A_Index%
-        finalWindowsList.push(hwndID)
-    }
+    HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
+    GoSub, ClearRect
 
-    If (finalWindowsList.length() > 1) {
-        ; If (activeProcessName = "chrome.exe") {
-            ; HandleChromeWindowsWithSameTitle(FullTitle)
-        ; } else {
-            HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
-        ; }
-        GoSub, ClearRect
-    }
-    Else {
-        Tooltip, only 1 window found...
-        sleep 1500
-        Tooltip,
-    }
     DrawingRect := False
     ClearingRect := False
 Return
