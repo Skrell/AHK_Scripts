@@ -4,28 +4,26 @@
 ; ? = triggered even when the character typed immediately before it is alphanumeric
 ; r = raw output
 
-#include %A_ScriptDir%\_VD.ahk
-; #include %A_ScriptDir%\VirtualDesktopAccessor.ahk
-#include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 
 dummyFunction1() {
     static dummyStatic1 := VD.init()
 }
 
-#InstallMouseHook
-#InstallKeybdHook
-#WinActivateForce
 #NoEnv
 #SingleInstance
+#InstallMouseHook
+#InstallKeybdHook
 #MaxHotkeysPerInterval 500
 #HotString EndChars ()[]{}:;,.?!`n `t
+#include %A_ScriptDir%\_VD.ahk
+; #include %A_ScriptDir%\VirtualDesktopAccessor.ahk
+#include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 
 SetBatchLines -1
 SetWinDelay   -1
 SetControlDelay -1
 SetKeyDelay, 5
 SendMode, Input
-
 
 Global moving := False
 Global ComboActive := False
@@ -132,8 +130,6 @@ loop % allwindows
     }
 }
 
-SetTimer track, 100
-SetTimer keyTrack, 1
 Expr = 
 (
     #NoEnv
@@ -141,6 +137,8 @@ Expr =
     #SingleInstance, On
     #Persistent
     #KeyHistory 0
+    SetBatchLines -1
+    ListLines Off
     
     WinWait, ahk_class #32768,, 3000
     If ErrorLevel
@@ -148,12 +146,12 @@ Expr =
         
     sleep, 200
     Send, {DOWN}
-    ; sleep, 20000
-    ; ExitApp
     Return
 
     ~Alt Up::
     Send, {Esc}
+    If WinExist("ahk_class #32768")
+        WinClose, ahk_class #32768
     ExitApp
 )
 
@@ -164,6 +162,8 @@ ExprTimeout =
     #SingleInstance, On
     #Persistent
     #KeyHistory 0
+    SetBatchLines -1
+    ListLines Off
     
     tooltip, Navigating Up...
     sleep, 1000
@@ -171,7 +171,6 @@ ExprTimeout =
     ExitApp
 )
 
-GoSub, RunDynRun
 OnExit("PreventRecur")
 
 ;------------------------------------------------------------------------------
@@ -221,6 +220,12 @@ FixSlash:
 
 ;EVENT_SYSTEM_FOREGROUND := 0x3
 DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+
+SetTimer track, 100
+SetTimer keyTrack, 1
+
+Return
+
 ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
@@ -322,8 +327,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         sleep, 20
                     }
                     
-                    ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
-
                     ; tooltip, adjusted
                     WinGetClass, lClassCheck, A
                     If (lClassCheck == vWinClass) {
@@ -356,37 +359,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 ++i
         }
     }
+    Return
 }
-;###########################################################
-;############### CAse COrrector ###################### LText
-; For AHK v1.1.31+ ; 6-30-2023 update
-; By kunkel321, help from Mikeyww, Rohwedder, Others.
-; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=118807
-; CaseArr := [] ; Create the array.
-; Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
-; Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
-; EndKeys := "%&()+,-./0123456789:<=>?@[\]_abcdefghijklmnopqrstuvwxyz{Bs}{Enter}{Space}{Tab}{{}{}}|"
-; ccih := InputHook("V I2 E", EndKeys)
-; Loop ; WARNING will loop forever until process is killed.
-; {
-    ; ;IfWinNotActive, SciTE
-    ; ;{
-    ; ccih.Start() ; Start the hook.
-    ; ccih.Wait() ; Keep hooking until EndKey is pressed, then do stuff below.
-    ; CaseArr.Push(ccih.EndKey) ; Push the Key to the back of the array.
-    ; If (CaseArr.length() > 3) || (ccih.EndKey = "{Bs}")
-        ; CaseArr.RemoveAt(1) ; If array too long, or BS pressed, remove item from front (making room for next push).
-        ; ;ToolTip,% CaseArr[1] CaseArr[2] CaseArr[3],
-    ; If (inStr(Uppers,CaseArr[1],true) && inStr(Uppers,CaseArr[2],true) && inStr(Lowers,CaseArr[3],true)) && (CaseArr[3] > 0) { ; "true" makes inStr() case-sensitive.
-        ; Last2 := CaseArr[2] CaseArr[3] ; Combine in prep for next line.
-        ; StringLower, Last2, Last2
-        ; Send, {Backspace 2} ; Do actual correction.
-        ; Send, %Last2%
-        ; ;SoundBeep
-    ; }
-    ; ;}
-; }
-Return
 
 PreventRecur() {
     Global StopRecurssion, hWinEventHook
@@ -452,7 +426,7 @@ Return
     ~Mbutton::
         ControlGetFocus, IsEdit, A
         ; tooltip, %IsEdit%
-        If (IsEdit == "Edit1" || IsEdit == "Edit2") {
+        If (InStr(IsEdit,"Edit")) {
             Send, {Enter}
         }
     Return
@@ -606,24 +580,30 @@ Return
 ; Ctl+Tab in chrome to goto recent
     prevChromeTab()
     {
-        static allChromeWindows := {}
+        Global StopRecurssion
+        ; static allChromeWindows := {}
+        StopRecurssion := True
         DetectHiddenWindows, Off
         send ^+a
-        loop {
-            WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1
-            loop, % allChromeWindows
-            {
-                this_id := "ahk_id " . allChromeWindows%A_Index%
-                WinGet, procName, ProcessName, %this_id%
-                WinGetTitle, titID, %this_id%
-                If (titID == "" && procName == "chrome.exe" && WinActive(this_id))
-                {
-                    send {BackSpace}
-                    send {Enter}
-                    Return
-                }
-            }
-        }
+        KeyWait, Tab, U T5
+        send, {Enter}
+        StopRecurssion := False
+        ; loop {
+            ; WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1
+            ; loop, % allChromeWindows
+            ; {
+                ; this_id := "ahk_id " . allChromeWindows%A_Index%
+                ; WinGet, procName, ProcessName, %this_id%
+                ; WinGetTitle, titID, %this_id%
+                ; If (titID == "" && procName == "chrome.exe" && WinActive(this_id))
+                ; {
+                    ; send {BackSpace}
+                    ; sleep, 100
+                    ; send {Enter}
+                    ; Return
+                ; }
+            ; }
+        ; }
     }
     
 #If WinActive("ahk_exe Chrome.exe")
@@ -1114,7 +1094,6 @@ $!q::
     Gui, GUI4Boarder: Hide
     WinGet, activeProcessName, ProcessName, A
     WinGetClass, FullClass, A
-    WinGet, windowsWithSameTitleList, List, ahk_exe %activeProcessName%
 
     HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
     GoSub, ClearRect
@@ -1205,7 +1184,8 @@ Return
         titleEntry     := Trim(splitEntry2[3])
 
         ; If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
-            finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
+        ; finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
+            finalEntry   := %  "[" titleEntry "] (" procEntry ")"
         ; Else
             ; continue
 
@@ -1226,6 +1206,7 @@ Return
         desktopEntryLast := desktopEntry
     }
 
+    Critical Off
     GoSub, RunDynRun
     CoordMode, Mouse, Screen
     CoordMode, Menu, Screen
@@ -1234,7 +1215,6 @@ Return
     Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
     StopRecurssion := False
     ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
-    Critical Off
 
     DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
     Tooltip, 
@@ -2255,6 +2235,7 @@ MyTimer() {
    Global IGUIF2
    DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2)
 
+   WinWait, ahk_class #32768,, 3000
    ; run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
    WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
    WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh,
@@ -2711,11 +2692,23 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                 {
                     counter := 1
                 }
+                loop {
+                    hwndId := finalWindowsListWithProcAndClass[counter]
+                    If !IsWindowOnCurrMon(hwndId, currentMon) {
+                        counter++
+                        If (counter > numWindows)
+                        {
+                            counter := 1
+                        }
+                    }
+                    Else
+                        break
+                }
             }
         }
     }
     until (!GetKeyState("LAlt", "P"))
-    
+    BlockKeyboard(true)
     counter := counter - 1
     If (counter <= 0)
         counter := finalWindowsListWithProcAndClass.MaxIndex()
@@ -2742,6 +2735,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         
         WinSet, AlwaysOnTop, Off, % "ahk_id " finalWindowsListWithProcAndClass[counter]
     }
+    BlockKeyboard(false)
 }
 
 FrameShadow(HGui) {
