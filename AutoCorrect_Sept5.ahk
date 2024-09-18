@@ -8,7 +8,7 @@
 dummyFunction1() {
     static dummyStatic1 := VD.init()
 }
-
+; the auto-exec section ends at the first hotkey/hotstring or return or exit or at the script end - whatever comes first; function definitions get ignored by the execution flow.
 #NoEnv
 #SingleInstance
 #InstallMouseHook
@@ -202,6 +202,14 @@ HotKey ~.,  Hoty
 HotKey ~_,  Hoty
 HotKey ~-,  Hoty
 
+;EVENT_SYSTEM_FOREGROUND := 0x3
+DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+
+SetTimer track, 100
+SetTimer keyTrack, 1
+
+Return
+
 Hoty:
     CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 && A_PriorHotKey != "~+SPACE") ? CapCount+1 : 1
     if (!StopAutoFix && CapCount == 2 && (SubStr(A_ThisHotKey,2,1)=="'" || SubStr(A_ThisHotKey,2,1)=="-")) {
@@ -217,16 +225,8 @@ FixSlash:
     if (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
         SendInput, % "{BS}{BS}{?}{SPACE}"
     X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
-
-;EVENT_SYSTEM_FOREGROUND := 0x3
-DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
-
-SetTimer track, 100
-SetTimer keyTrack, 1
-
-Return
-
-;------------------------------------------------------------------------------
+    
+    ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
@@ -389,193 +389,175 @@ QuestionMarkorrection($) {
 Return
 }
 
-CheckWindow:
-    MouseGetPos, , , targetHoverId
-    WinGet, targetProc, ProcessName, ahk_id %targetHoverId%
-    If (targetProc == "qtcreator.exe" || targetProc == "VirtualBoxVM.exe")
-    {
-        while (ClearingRect || DrawingRect || hitTAB) {
-            sleep, 20
-        }
-        GoSub, ClearRect
-        Suspend , On
-        Return
+~^Enter::
+DetectHiddenWindows, Off
+WinGet, myWindow, List
+Loop % myWindow
+{
+    ControlGet, myOkay, Hwnd,, OK, % "ahk_id " myWindow%A_Index%
+    if (myOkay) {
+        ControlClick,, ahk_id %myOkay%,,,2
+        hwndID := "ahk_id " myWindow%A_Index%
+        sleep, 400
+        if WinExist(hwndID)
+            Send, !{o}
+        break
     }
-    Suspend , Off
+}
 Return
 
-#If !hitTAB
-    
-    ~^Enter::
-    DetectHiddenWindows, Off
-    WinGet, myWindow, List
-    Loop % myWindow
-    {
-        ControlGet, myOkay, Hwnd,, OK, % "ahk_id " myWindow%A_Index%
-        if (myOkay) {
-            ControlClick,, ahk_id %myOkay%,,,2
-            hwndID := "ahk_id " myWindow%A_Index%
-            sleep, 400
-            if WinExist(hwndID)
-                Send, !{o}
-            break
-        }
+~Mbutton::
+    ControlGetFocus, IsEdit, A
+    ; tooltip, %IsEdit%
+    If (InStr(IsEdit,"Edit")) {
+        Send, {Enter}
     }
-    Return
+Return
 
-    ~Mbutton::
-        ControlGetFocus, IsEdit, A
-        ; tooltip, %IsEdit%
-        If (InStr(IsEdit,"Edit")) {
-            Send, {Enter}
-        }
-    Return
-    
-    $CapsLock:: 
-        Send {Delete}
-    Return
+$CapsLock:: 
+    Send {Delete}
+Return
 
-    $!a:: 
-        Send, {home}
-        Hotstring("Reset")
-    Return
-    
-    $+!a:: 
-        Send, {SHIFT down}{home}{SHIFT up}
-        Hotstring("Reset")
-    Return
+$!a:: 
+    Send, {home}
+    Hotstring("Reset")
+Return
 
-    $!;::
-        Send, {end}
-        Hotstring("Reset")
-    Return
+$+!a:: 
+    Send, {SHIFT down}{home}{SHIFT up}
+    Hotstring("Reset")
+Return
 
-    $!+;::
-        Send, {SHIFT down}{end}{SHIFT up}
-        Hotstring("Reset")
-    Return
+$!;::
+    Send, {end}
+    Hotstring("Reset")
+Return
 
-    $!+i::
-        Send {SHIFT down}{UP}{SHIFT up}
-        Hotstring("Reset")
-    Return
+$!+;::
+    Send, {SHIFT down}{end}{SHIFT up}
+    Hotstring("Reset")
+Return
 
-    $!+k::   
-        Send {SHIFT down}{DOWN}{SHIFT up}
-        Hotstring("Reset")
-    Return
+$!+i::
+    Send {SHIFT down}{UP}{SHIFT up}
+    Hotstring("Reset")
+Return
 
-    $!+j::
-        Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
-        Hotstring("Reset")
-    Return
+$!+k::   
+    Send {SHIFT down}{DOWN}{SHIFT up}
+    Hotstring("Reset")
+Return
 
-    $!+l::
-        Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
-        Hotstring("Reset")
-    Return
+$!+j::
+    Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
+    Hotstring("Reset")
+Return
 
-    $!+'::
-        Critical, On
-        store := Clip()
-        store := Trim(store)
-        store := """" . store . """"
-        Clip(store)
-        Critical, Off
-    Return
+$!+l::
+    Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
+    Hotstring("Reset")
+Return
 
-    $!+[::
-        Critical, On
-        store := Clip()
-        store := Trim(store)
-        store := "{" . store . "}"
-        Clip(store)
-        Critical, Off
-    Return
+$!+'::
+    Critical, On
+    store := Clip()
+    store := Trim(store)
+    store := """" . store . """"
+    Clip(store)
+    Critical, Off
+Return
 
-    $!+]::
-        Critical, On
-        store := Clip()
-        store := Trim(store)
-        store := "{" . store . "}"
-        Clip(store)
-        Critical, Off
-    Return
+$!+[::
+    Critical, On
+    store := Clip()
+    store := Trim(store)
+    store := "{" . store . "}"
+    Clip(store)
+    Critical, Off
+Return
 
-    $!+<::
-        Critical, On
-        store := Clip()
-        store := Trim(store)
-        store := "<" . store . ">"
-        Clip(store)
-        Critical, Off
-    Return
+$!+]::
+    Critical, On
+    store := Clip()
+    store := Trim(store)
+    store := "{" . store . "}"
+    Clip(store)
+    Critical, Off
+Return
 
-    $!+>::
-        Critical, On
-        store := Clip()
-        store := Trim(store)
-        store := "<" . store . ">"
-        Clip(store)
-        Critical, Off
-    Return
+$!+<::
+    Critical, On
+    store := Clip()
+    store := Trim(store)
+    store := "<" . store . ">"
+    Clip(store)
+    Critical, Off
+Return
 
-    $!+(::
-        Critical, On
-        store := Clip()
-        store := Trim(store)
-        store := "(" . store . ")"
-        Clip(store)
-        Critical, Off
-    Return
+$!+>::
+    Critical, On
+    store := Clip()
+    store := Trim(store)
+    store := "<" . store . ">"
+    Clip(store)
+    Critical, Off
+Return
 
-    $!+)::
-        Critical, On
-        store := Clip()
-        store := Trim(store)
-        store := "(" . store . ")"
-        Clip(store)
-        Critical, Off
-    Return
+$!+(::
+    Critical, On
+    store := Clip()
+    store := Trim(store)
+    store := "(" . store . ")"
+    Clip(store)
+    Critical, Off
+Return
 
-    $!i::
-        Send {UP}
-    Return
+$!+)::
+    Critical, On
+    store := Clip()
+    store := Trim(store)
+    store := "(" . store . ")"
+    Clip(store)
+    Critical, Off
+Return
 
-    $!k::
-        Send {DOWN}
-    Return
+$!i::
+    Send {UP}
+Return
 
-    $!j:: 
-        Send {LCtrl down}{LEFT}{LCtrl up}
-    Return
+$!k::
+    Send {DOWN}
+Return
 
-    $!l:: 
-        Send {LCtrl down}{RIGHT}{LCtrl up}
-    Return
+$!j:: 
+    Send {LCtrl down}{LEFT}{LCtrl up}
+Return
 
-    ~Enter:: 
-        WinGetClass, lClass, A
-        ControlGetFocus, currCtrl, A
-        If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3"|| currCtrl == "Edit1")
-            GoSub, SendCtrlAdd
-    Return
-    
-    #+s::Return
-    
-    ~Space:: 
-        GoSub, FixSlash
-        GoSub, Hoty
-    Return
-    ~+Space:: 
-        GoSub, FixSlash
-        GoSub, Hoty
-    Return
-    
-    ~^Backspace::
-        Hotstring("Reset")
-    Return
-#If
+$!l:: 
+    Send {LCtrl down}{RIGHT}{LCtrl up}
+Return
+
+~Enter:: 
+    WinGetClass, lClass, A
+    ControlGetFocus, currCtrl, A
+    If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3"|| currCtrl == "Edit1")
+        GoSub, SendCtrlAdd
+Return
+
+#+s::Return
+
+~Space:: 
+    GoSub, FixSlash
+    GoSub, Hoty
+Return
+~+Space:: 
+    GoSub, FixSlash
+    GoSub, Hoty
+Return
+
+~^Backspace::
+    Hotstring("Reset")
+Return
 
 ; Ctl+Tab in chrome to goto recent
     prevChromeTab()
@@ -1116,9 +1098,7 @@ RunDynRun:
     DynaRun(Expr, tempScript)
 Return
 
-#If !hitTAB
 !Capslock::
-    Critical On
     StopRecurssion := True
     totalMenuItemCount := 0
     onlyTitleFound := ""
@@ -1127,6 +1107,7 @@ Return
     tooltip, Looking for Minimized Apps... 
     
     DetectHiddenWindows, Off
+    Critical On
     WinGet, id, list
     Loop, %id%
     {
@@ -1155,6 +1136,7 @@ Return
         Sleep, 1500
         Tooltip,
         StopRecurssion := False
+        Critical Off
         Return
     }
 
@@ -1207,13 +1189,14 @@ Return
     }
 
     Critical Off
+    
     GoSub, RunDynRun
+    
     CoordMode, Mouse, Screen
     CoordMode, Menu, Screen
     drawX := CoordXCenterScreen()
     drawY := CoordYCenterScreen()
     Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
-    StopRecurssion := False
     ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
 
     DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
@@ -1221,7 +1204,8 @@ Return
     ShowMenu(MenuGetHandle("minWindows"), False, drawX, drawY, 0x14)
     ; Tooltip, Done.
     Gui, ShadowFrFull:  Hide
-    ; Gui, ShadowFrFull2: Hide
+
+    StopRecurssion := False
 
     Menu, minWindows, deleteAll
     i := 1
@@ -1233,7 +1217,6 @@ Return
             ++i
     }
 Return
-#If
 
 Cycle(direction)
 {
@@ -1245,14 +1228,6 @@ Cycle(direction)
     Global hitTAB
 
     hitTAB := True
-
-    ; If hitCAPS {
-        ; For k, v in RevMinnedWindows
-        ; {
-            ; WinMinimize, % "ahk_id " RevMinnedWindows[k]
-        ; }
-        ; hitCAPS := False
-    ; }
 
     If !cycling
     {
@@ -1335,7 +1310,7 @@ Cycle(direction)
                         WinActivate, % "ahk_id " ValidWindows[cycleCount]
                         WinWaitActive, % "ahk_id " ValidWindows[cycleCount], , 2
                         GoSub, DrawRect
-                        KeyWait, Tab, U 
+                        KeyWait, Tab, U T.25
                     }
                     Else {
                         If (cycleCount == 1)
@@ -2232,11 +2207,11 @@ IsWindow(hWnd){
 ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
 MyTimer() {
    Global IGUIF
-   Global IGUIF2
+   ; Global IGUIF2
    DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2)
 
    WinWait, ahk_class #32768,, 3000
-   ; run, C:\Users\vbonaventura\Programs\SendDownKey.ahk
+   
    WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
    WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh,
    ; WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh,
@@ -2260,7 +2235,7 @@ MyTimer() {
    WinSet, TransColor, FF00FF 254, ahk_id %IGUIF%
    sleep, 20
    ; WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2%
-   ; Gui, ShadowFrFull: Show, x%menux% w%menuw% h%menuh% y%menuy%
+   
    WinSet, AlwaysOnTop, on,  ahk_class #32768
 }
 
@@ -2684,7 +2659,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
             GoSub, DrawRect
 
-            KeyWait, q, U ; T.25
+            KeyWait, q, U T.25
             If !ErrorLevel
             {
                 counter++
