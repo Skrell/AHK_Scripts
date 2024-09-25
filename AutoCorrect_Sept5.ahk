@@ -406,59 +406,71 @@ Loop % myWindow
 }
 Return
 
-~Mbutton::
-    ControlGetFocus, IsEdit, A
-    ; tooltip, %IsEdit%
-    If (InStr(IsEdit,"Edit")) {
+#IfWinActive ahk_class #32770
+!WheelDown::
+    ControlGet, mOutput, Visible ,, Edit1, A
+    If (mOutput == 1) {
+        ControlGetFocus, Edit1, A
         Send, {Enter}
+        sleep, 50
     }
 Return
 
-$CapsLock:: 
+!WheelUp::
+    ControlGet, mOutput, Visible ,, Edit1, A
+    If (mOutput == 1) {
+        ControlGetFocus, Edit1, A
+        Send, +{Enter}
+        sleep, 50
+    }
+Return
+#IfWinActive
+
+CapsLock:: 
     Send {Delete}
 Return
 
-$!a:: 
+!a:: 
     Send, {home}
     Hotstring("Reset")
 Return
 
-$+!a:: 
++!a:: 
     Send, {SHIFT down}{home}{SHIFT up}
     Hotstring("Reset")
 Return
 
-$!;::
+!;::
     Send, {end}
     Hotstring("Reset")
 Return
 
-$!+;::
+!+;::
     Send, {SHIFT down}{end}{SHIFT up}
     Hotstring("Reset")
 Return
 
-$!+i::
+!+i::
     Send {SHIFT down}{UP}{SHIFT up}
     Hotstring("Reset")
 Return
 
-$!+k::   
+!+k::   
     Send {SHIFT down}{DOWN}{SHIFT up}
     Hotstring("Reset")
 Return
 
-$!+j::
+!+j::
     Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
     Hotstring("Reset")
 Return
 
-$!+l::
+!+l::
     Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
     Hotstring("Reset")
 Return
 
-$!+'::
+!+'::
     Critical, On
     store := Clip()
     store := Trim(store)
@@ -467,7 +479,7 @@ $!+'::
     Critical, Off
 Return
 
-$!+[::
+!+[::
     Critical, On
     store := Clip()
     store := Trim(store)
@@ -476,7 +488,7 @@ $!+[::
     Critical, Off
 Return
 
-$!+]::
+!+]::
     Critical, On
     store := Clip()
     store := Trim(store)
@@ -485,7 +497,7 @@ $!+]::
     Critical, Off
 Return
 
-$!+<::
+!+<::
     Critical, On
     store := Clip()
     store := Trim(store)
@@ -494,7 +506,7 @@ $!+<::
     Critical, Off
 Return
 
-$!+>::
+!+>::
     Critical, On
     store := Clip()
     store := Trim(store)
@@ -503,7 +515,7 @@ $!+>::
     Critical, Off
 Return
 
-$!+(::
+!+(::
     Critical, On
     store := Clip()
     store := Trim(store)
@@ -512,7 +524,7 @@ $!+(::
     Critical, Off
 Return
 
-$!+)::
+!+)::
     Critical, On
     store := Clip()
     store := Trim(store)
@@ -521,19 +533,19 @@ $!+)::
     Critical, Off
 Return
 
-$!i::
+!i::
     Send {UP}
 Return
 
-$!k::
+!k::
     Send {DOWN}
 Return
 
-$!j:: 
+!j:: 
     Send {LCtrl down}{LEFT}{LCtrl up}
 Return
 
-$!l:: 
+!l:: 
     Send {LCtrl down}{RIGHT}{LCtrl up}
 Return
 
@@ -1505,7 +1517,7 @@ Return
 
 #MaxThreadsPerHotkey 2
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop())
-~$*LButton::
+~*LButton::
     CoordMode, Mouse, Window
     MouseGetPos, lbX1, lbY1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
@@ -1562,10 +1574,10 @@ Return
                 currentPath := tabEl.Name
             } catch e {
                 tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %A_TimeSincePriorHotkey% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
-                ; UIA := "" ;// set to a different value
+                UIA :=  ;// set to a different value
                 ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                 UIA := UIA_Interface() ; Initialize UIA interface
-                ; UIA.ConnectionTimeout := 6000
+                UIA.ConnectionTimeout := 6000
                 LbuttonEnabled := True
                 StopRecurssion := False
                 Return
@@ -1604,34 +1616,39 @@ Return
     MouseGetPos, lbX2, lbY2,
     
     If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
-        try {
-            exEl := UIA.ElementFromHandle(lhwnd)
-            targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,275)
-            ; targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
-            
-            If (targetEl.LocalizedControlType == "progress bar")
-                tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
-            Else
-                tabEl := targetEl
+        ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lhwnd%
+        ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lhwnd%
+        
+        If (OutputVar2 == 1 || OutputVar3 == 1) {
+            try {
+                exEl := UIA.ElementFromHandle(lhwnd)
+                targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,275)
+                ; targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
                 
-            prevPath := tabEl.Name
-            currentPath := ""
-        } catch e {
-            tooltip, TIMED OUT!!!!
-            ; UIA := "" ;// set to a different value
-            ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-            UIA := UIA_Interface() ; Initialize UIA interface
-            ; UIA.ConnectionTimeout := 6000
-            LbuttonEnabled := True
-            Return
+                If (targetEl.LocalizedControlType == "progress bar")
+                    tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
+                Else
+                    tabEl := targetEl
+                    
+                prevPath := tabEl.Name
+            } catch e {
+                tooltip, TIMED OUT!!!!
+                UIA :=  ;// set to a different value
+                ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                UIA := UIA_Interface() ; Initialize UIA interface
+                UIA.ConnectionTimeout := 6000
+                LbuttonEnabled := True
+                Return
+            }
         }
     }
-    ; tooltip, %A_TimeSincePriorHotkey% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %X1% - %X2%
     
     rlsTime := A_TickCount
+    timeDiff := rlsTime - initTime
+    ; tooltip, %timeDiff% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
 
-    If ((abs(lbX1-lbX2) < 5 && abs(lbY1-lbY2) < 5) 
-        && ((rlsTime - initTime) < 275)
+    If ((abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)
+        && (timeDiff < 325)
         && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3  != 0xFFFFFF)
         && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323"))  {
         SetTimer, SendCtrlAdd, -100
@@ -1645,8 +1662,8 @@ Return
 #MaxThreadsPerHotkey 1
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
-$!`::
-    ; Send, {LAlt}{up}
+!`::
+    UserInputTrimmed :=
     StopCheck := False
     SearchingWindows := True
     StopRecurssion := True
@@ -1654,7 +1671,6 @@ $!`::
     InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
     SetTimer, UpdateInputBoxTitle, off
     SearchingWindows := False
-    StopRecurssion := False
 
     If ErrorLevel
     {
@@ -1674,12 +1690,12 @@ $!`::
         Loop, %id%
         {
             this_ID := id%A_Index%
+
+            If !JEE_WinHasAltTabIcon(this_ID)
+               continue
+
             WinGetTitle, title, ahk_id %this_ID%
             WinGet, procName, ProcessName , ahk_id %this_ID%
-
-            If !IsAltTabWindow(this_ID)
-                continue
-
             ; desknum := VD.getDesktopNumOfWindow(title)
             desknum := 1
             If desknum <= 0
@@ -1692,6 +1708,8 @@ $!`::
             Tooltip, No matches found...
             Sleep, 1500
             Tooltip,
+            StopRecurssion := False
+            Critical, Off
             Return
         }
 
@@ -1725,9 +1743,9 @@ $!`::
 
             WinGet, Path, ProcessPath, ahk_exe %procEntry%
             If (minState == -1 ) ; && VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
-                finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
+                finalEntry   := % desktopEntry ":  [" titleEntry "] (" procEntry ")"
             Else
-                finalEntry   := % desktopEntry " : " titleEntry " (" procEntry ")"
+                finalEntry   := % desktopEntry ":  " titleEntry " (" procEntry ")"
 
             If (!InStr(finalEntry, UserInputTrimmed))
                 continue
@@ -1751,6 +1769,9 @@ $!`::
             GoSub, ActivateWindow
         }
         Else {
+        
+            Critical Off
+    
             CoordMode, Mouse, Screen
             CoordMode, Menu, Screen
             ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
@@ -1758,12 +1779,13 @@ $!`::
             ; drawY := A_ScreenHeight/2
             drawX := CoordXCenterScreen()
             drawY := CoordYCenterScreen()
-            Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h1 y1
+            Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 y0
             ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
             Critical Off
 
             ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
             DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+            Tooltip,
 
             ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
         }
@@ -1801,77 +1823,90 @@ ActivateWindow:
 
     cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     ; desknum := VD.getDesktopNumOfWindow(fulltitle)
-    WinGet, vState, MinMax, %fulltitle%
-    WinGet, vID, ID, %fulltitle%
-    If (desknum < cdt)
-    {
-        WinGetPos, vwx,vwy,vww,, %fulltitle%
-        WinSet, Transparent, 0, %fulltitle%
-        ; VD.MoveWindowToCurrentDesktop(fulltitle)
-        DllCall(MoveWindowToDesktopNumberProc, "Ptr", vID, "Int", cdt, "Int")
+    ; If (desknum < cdt)
+    ; {
+        ; WinGet, vState, MinMax, %fulltitle%
+        ; WinGet, vID, ID, %fulltitle%
+        ; WinGetPos, vwx,vwy,vww,, %fulltitle%
+        ; WinSet, Transparent, 0, %fulltitle%
+        ; ; VD.MoveWindowToCurrentDesktop(fulltitle)
+        ; DllCall(MoveWindowToDesktopNumberProc, "Ptr", vID, "Int", cdt, "Int")
         
-        If (vState > -1) {
-            ; WinRestore , %fulltitle%
-            WinActivate, %fulltitle%
-            offscreenX := -1*vww
+        ; If (vState > -1) {
+            ; ; WinRestore , %fulltitle%
+            ; WinActivate, %fulltitle%
+            ; offscreenX := -1*vww
 
-            WinMove, %fulltitle%,, %offscreenX%, , , ,
+            ; WinMove, %fulltitle%,, %offscreenX%, , , ,
 
-            WinSet, Transparent, 255, %fulltitle%
-            loopCount := (vwx+abs(offscreenX))/100
+            ; WinSet, Transparent, 255, %fulltitle%
+            ; loopCount := (vwx+abs(offscreenX))/100
 
-            loop, %loopCount%
-            {
-                offscreenX := offscreenX + 100
-                WinMove, %fulltitle%,, offscreenX, , , ,
-                sleep 1
-            }
-            WinMove, %fulltitle%,, vwx, , , ,
-        }
-        else {
-            sleep 500
-            WinMinimize, %fulltitle%
-            WinSet, Transparent, 255, %fulltitle%
-            ; WinRestore , %fulltitle%
-            WinActivate, %fulltitle%
-        }
-    }
-    else If (desknum > cdt)
-    {
-        WinGetPos, vwx,vwy,vww,, %fulltitle%
-        WinSet, Transparent, 0, %fulltitle%
-        ; VD.MoveWindowToCurrentDesktop(fulltitle)
-        DllCall(MoveWindowToDesktopNumberProc, "Ptr", vID, "Int", cdt, "Int")
+            ; loop, %loopCount%
+            ; {
+                ; offscreenX := offscreenX + 100
+                ; WinMove, %fulltitle%,, offscreenX, , , ,
+                ; sleep 1
+            ; }
+            ; WinMove, %fulltitle%,, vwx, , , ,
+        ; }
+        ; else {
+            ; sleep 500
+            ; WinMinimize, %fulltitle%
+            ; WinSet, Transparent, 255, %fulltitle%
+            ; ; WinRestore , %fulltitle%
+            ; WinActivate, %fulltitle%
+        ; }
+    ; }
+    ; else If (desknum > cdt)
+    ; {
+        ; WinGet, vState, MinMax, %fulltitle%
+        ; WinGet, vID, ID, %fulltitle%
+        ; WinGetPos, vwx,vwy,vww,, %fulltitle%
+        ; WinSet, Transparent, 0, %fulltitle%
+        ; ; VD.MoveWindowToCurrentDesktop(fulltitle)
+        ; DllCall(MoveWindowToDesktopNumberProc, "Ptr", vID, "Int", cdt, "Int")
         
-        If (vState > -1) {
-            ; WinRestore , %fulltitle%
-            WinActivate, %fulltitle%
-            offscreenX := A_ScreenWidth
+        ; If (vState > -1) {
+            ; ; WinRestore , %fulltitle%
+            ; WinActivate, %fulltitle%
+            ; offscreenX := A_ScreenWidth
 
-            WinMove, %fulltitle%,, %offscreenX%, , , ,
+            ; WinMove, %fulltitle%,, %offscreenX%, , , ,
 
-            WinSet, Transparent, 255, %fulltitle%
-            loopCount := (A_ScreenWidth-vwx)/100
-            ; tooltip, %loopCount%
-            loop, %loopCount%
-            {
-                offscreenX := offscreenX - 100
-                WinMove, %fulltitle%,, offscreenX, , , ,
-                sleep 1
-            }
-            WinMove, %fulltitle%,, vwx, , , ,
-        }
-        else {
-            sleep 500
-            WinMinimize, %fulltitle%
-            WinSet, Transparent, 255, %fulltitle%
-            ; WinRestore , %fulltitle%
-            WinActivate, %fulltitle%
-        }
-    }
-    else
+            ; WinSet, Transparent, 255, %fulltitle%
+            ; loopCount := (A_ScreenWidth-vwx)/100
+            ; ; tooltip, %loopCount%
+            ; loop, %loopCount%
+            ; {
+                ; offscreenX := offscreenX - 100
+                ; WinMove, %fulltitle%,, offscreenX, , , ,
+                ; sleep 1
+            ; }
+            ; WinMove, %fulltitle%,, vwx, , , ,
+        ; }
+        ; else {
+            ; sleep 500
+            ; WinMinimize, %fulltitle%
+            ; WinSet, Transparent, 255, %fulltitle%
+            ; ; WinRestore , %fulltitle%
+            ; WinActivate, %fulltitle%
+        ; }
+    ; }
+    ; else
     {
-        WinActivate, %fulltitle%
+        If (fulltitle == "Calculator") {
+            ; https://www.autohotkey.com/boards/viewtopic.php?t=43997
+            WinGet, CalcIDs, List, Calculator
+            If (CalcIDs = 1) ; Calc is NOT minimized
+                CalcID := CalcIDs1
+            else
+                CalcID := CalcIDs2 ; Calc is Minimized use 2nd ID
+            WinActivate, ahk_id %CalcID%
+        }
+        Else
+            WinActivate, %fulltitle%
+            
         WinGet, hwndId, ID, A
         currentMon := MWAGetMonitorMouseIsIn()
         currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
@@ -1933,10 +1968,10 @@ SendCtrlAdd:
                     shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
                 } catch e {
                     tooltip, TIMED OUT!!!!
-                    ; UIA := "" ;// set to a different value
+                    UIA :=  ;// set to a different value
                     ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                     UIA := UIA_Interface() ; Initialize UIA interface
-                    ; UIA.ConnectionTimeout := 6000
+                    UIA.ConnectionTimeout := 6000
                     Return
                 }
             }
@@ -2034,7 +2069,7 @@ WheelDown::send {Volume_Down}
 ; #If
 
 #If !moving && !IsOverDesktop()
-$*RButton::
+*RButton::
     ComboActive := False
     loop 300 {
         If !(GetKeyState("RButton", "P"))
@@ -2075,8 +2110,8 @@ RButton & WheelDown::
 Return
 #If
 
-~$WheelUp::
-    Hotkey, ~$WheelUp, Off
+~WheelUp::
+    Hotkey, ~WheelUp, Off
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
     If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
@@ -2091,11 +2126,11 @@ Return
             sleep, 200
         }
     }
-    Hotkey, ~$WheelUp, On
+    Hotkey, ~WheelUp, On
 Return
 
-~$WheelDown::
-    Hotkey, ~$WheelDown, Off
+~WheelDown::
+    Hotkey, ~WheelDown, Off
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
     If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
@@ -2110,7 +2145,7 @@ Return
             sleep, 200
         }
     }
-    Hotkey, ~$WheelDown, On
+    Hotkey, ~WheelDown, On
 Return
 
 
@@ -2309,6 +2344,34 @@ ProcessIsElevated(vPID)
     DllCall("kernel32\CloseHandle", "Ptr",hToken)
     DllCall("kernel32\CloseHandle", "Ptr",hProc)
     Return vRet ? vIsElevated : -1
+}
+
+; https://www.autohotkey.com/boards/viewtopic.php?t=37184
+;gives you roughly the correct results (tested on Windows 7)
+;JEE_WinIsAltTab
+JEE_WinHasAltTabIcon(hWnd)
+{
+	local
+	if !(DllCall("user32\GetDesktopWindow", "Ptr") = DllCall("user32\GetAncestor", "Ptr",hWnd, "UInt",1, "Ptr")) ;GA_PARENT := 1
+	;|| DllCall("user32\GetWindow", "Ptr",hWnd, "UInt",4, "Ptr") ;GW_OWNER := 4 ;affects taskbar but not alt-tab
+		return 0
+        
+    WinGet, vWinProc, ProcessName, % "ahk_id " hWnd
+    If inStr(vWinProc, "InputHost.exe") || inStr(vWinProc, "App.exe") 
+        return 0
+        
+	WinGet, vWinStyle, Style, % "ahk_id " hWnd
+	if !vWinStyle
+	|| !(vWinStyle & 0x10000000) ;WS_VISIBLE := 0x10000000
+	|| (vWinStyle & 0x8000000) ;WS_DISABLED := 0x8000000 ;affects alt-tab but not taskbar
+		return 0
+	WinGet, vWinExStyle, ExStyle, % "ahk_id " hWnd
+	if (vWinExStyle & 0x40000) ;WS_EX_APPWINDOW := 0x40000
+		return 1
+	if (vWinExStyle & 0x80) ;WS_EX_TOOLWINDOW := 0x80
+	|| (vWinExStyle & 0x8000000) ;WS_EX_NOACTIVATE := 0x8000000 ;affects alt-tab but not taskbar
+		return 0
+	return 1
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
