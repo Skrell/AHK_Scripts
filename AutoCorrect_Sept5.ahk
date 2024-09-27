@@ -436,8 +436,10 @@ Return
 Return
 
 +!a:: 
-    Send, {SHIFT down}{home}{SHIFT up}
+    Send, +{home}
     Hotstring("Reset")
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !;::
@@ -446,28 +448,38 @@ Return
 Return
 
 !+;::
-    Send, {SHIFT down}{end}{SHIFT up}
+    Send, +{end}
     Hotstring("Reset")
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+i::
-    Send {SHIFT down}{UP}{SHIFT up}
+    Send +{UP}
     Hotstring("Reset")
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+k::   
-    Send {SHIFT down}{DOWN}{SHIFT up}
+    Send +{DOWN}
     Hotstring("Reset")
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+j::
-    Send {LCtrl down}{SHIFT down}{LEFT}{SHIFT up}{LCtrl up}
+    Send ^+{LEFT}
     Hotstring("Reset")
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+l::
-    Send {LCtrl down}{SHIFT down}{RIGHT}{SHIFT up}{LCtrl up}
+    Send ^+{RIGHT}
     Hotstring("Reset")
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+'::
@@ -542,11 +554,15 @@ Return
 Return
 
 !j:: 
-    Send {LCtrl down}{LEFT}{LCtrl up}
+    Send ^{LEFT}
+    If GetKeyState("LCtrl", "P")
+        Send, {LCtrl Up}
 Return
 
 !l:: 
-    Send {LCtrl down}{RIGHT}{LCtrl up}
+    Send ^{RIGHT}
+    If GetKeyState("LCtrl", "P")
+        Send, {LCtrl Up}
 Return
 
 ~Enter:: 
@@ -562,6 +578,7 @@ Return
     GoSub, FixSlash
     GoSub, Hoty
 Return
+
 ~+Space:: 
     GoSub, FixSlash
     GoSub, Hoty
@@ -572,33 +589,28 @@ Return
 Return
 
 ; Ctl+Tab in chrome to goto recent
-    prevChromeTab()
-    {
-        Global StopRecurssion
-        ; static allChromeWindows := {}
-        StopRecurssion := True
-        DetectHiddenWindows, Off
-        send ^+a
-        KeyWait, Tab, U T5
-        send, {Enter}
-        StopRecurssion := False
-        ; loop {
-            ; WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1
-            ; loop, % allChromeWindows
-            ; {
-                ; this_id := "ahk_id " . allChromeWindows%A_Index%
-                ; WinGet, procName, ProcessName, %this_id%
-                ; WinGetTitle, titID, %this_id%
-                ; If (titID == "" && procName == "chrome.exe" && WinActive(this_id))
-                ; {
-                    ; send {BackSpace}
-                    ; sleep, 100
-                    ; send {Enter}
-                    ; Return
-                ; }
-            ; }
-        ; }
+prevChromeTab()
+{
+    Global StopRecurssion
+    StopRecurssion := True
+    DetectHiddenWindows, Off
+    send ^+a
+    loop {
+        WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1
+        loop, % allChromeWindows
+        {
+            this_id := "ahk_id " . allChromeWindows%A_Index%
+            WinGet, procName, ProcessName, %this_id%
+            WinGetTitle, titID, %this_id%
+            If (titID == "" && procName == "chrome.exe")
+                break
+        }
+        If (titID == "" && procName == "chrome.exe")
+            break
     }
+    send, {Enter}
+    StopRecurssion := False
+}
     
 #If WinActive("ahk_exe Chrome.exe")
     ^Tab::
@@ -1410,7 +1422,7 @@ Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
-    Critical, On
+    ; Critical, On
     Gui, GUI4Boarder: Hide
     DrawingRect := True
     WinGet, activeWin, ID, A
@@ -1477,11 +1489,6 @@ DrawRect:
         newH:=h+4*border_thickness
     }
 
-    ; Gui, GUI4Boarder: +HwndHighlighter
-    ; Gui, GUI4Boarder: +AlwaysOnTop +Toolwindow -Caption +Owner +Lastfound
-    ; Gui, GUI4Boarder: Color, %border_color%
-    
-    ;WinSet, Region, 0-0 %w%-0 %w%-%h% 0-%h% 0-0 %border_thickness%-%border_thickness% %iw%-%border_thickness% %iw%-%ih% %border_thickness%-%ih% %border_thickness%-%border_thickness%
     Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NA, Table awaiting Action
     WinSet, Region, %outerX%-%outerY%  %outerX2%-%outerY%  %outerX2%-%outerY2%  %outerX%-%outerY2%  %outerX%-%outerY%  %innerX%-%innerY%  %innerX2%-%innerY%  %innerX2%-%innerY2%  %innerX%-%innerY2%  %innerX%-%innerY%, ahk_id %Highlighter%
 
@@ -1489,7 +1496,7 @@ DrawRect:
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, ahk_id %activeWin%
     WinWaitActive, ahk_id %activeWin%, , 2
-    Critical, Off
+    ; Critical, Off
 Return
 
 UpdateInputBoxTitle:
@@ -1516,14 +1523,11 @@ SetTimeout:
 Return
 
 #MaxThreadsPerHotkey 2
-#If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop())
+#If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !MouseIsOverTitleBar())
 ~*LButton::
     CoordMode, Mouse, Window
     MouseGetPos, lbX1, lbY1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
-    
-    If MouseIsOverTitleBar(lbX1, lbY1)
-        Return
         
     WinGetClass, lClass, ahk_id %lhwnd%
     
@@ -1601,6 +1605,7 @@ Return
         }
     }
 
+    
     PixelGetColor, LB_HexColor1, %lbX1%, %lbY1%, RGB
     lbX1 -= 1
     lbY1 -= 1
@@ -1612,7 +1617,6 @@ Return
     initTime := A_TickCount
 
     KeyWait, LButton, U T5
-    CoordMode, Mouse, Window
     MouseGetPos, lbX2, lbY2,
     
     If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
@@ -1807,7 +1811,6 @@ ActivateWindow:
 
     SetTitleMatchMode, 3
 
-
     fulltitle := RegExReplace(thisMenuItem, "\(\S+\.\S+\)$", "")
     fulltitle := Trim(fulltitle)
     ; msgbox, %fulltitle%
@@ -1821,7 +1824,7 @@ ActivateWindow:
     fulltitle := Trim(fulltitle)
     ; msgbox, %fulltitle%
 
-    cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    ; cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     ; desknum := VD.getDesktopNumOfWindow(fulltitle)
     ; If (desknum < cdt)
     ; {
@@ -1894,7 +1897,7 @@ ActivateWindow:
         ; }
     ; }
     ; else
-    {
+    ; {
         If (fulltitle == "Calculator") {
             ; https://www.autohotkey.com/boards/viewtopic.php?t=43997
             WinGet, CalcIDs, List, Calculator
@@ -1915,9 +1918,10 @@ ActivateWindow:
             sleep, 150
          }
         GoSub, DrawRect
+        If GetKeyState("Lalt","P")
+            Keywait, Lalt, U T3
         GoSub, ClearRect
-        Gui, GUI4Boarder: Hide
-    }
+    ; }
     Process, Close, tempScript
 Return
 
@@ -2697,7 +2701,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
-    WinWaitActive, % "ahk_id " finalWindowsListWithProcAndClass[counter], , 2
+
     Critical, Off
     ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
     GoSub, DrawRect
@@ -2718,11 +2722,10 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         {
             ; tooltip, Windows # [counter]
             WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
-            WinWaitActive, % "ahk_id " finalWindowsListWithProcAndClass[counter], , 2
             ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
             GoSub, DrawRect
 
-            KeyWait, q, U T.25
+            KeyWait, q, U 
             If !ErrorLevel
             {
                 counter++
@@ -2746,6 +2749,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
     }
     until (!GetKeyState("LAlt", "P"))
+    
     BlockKeyboard(true)
     counter := counter - 1
     If (counter <= 0)
@@ -3068,16 +3072,31 @@ track() {
     previousMon := currentMon
 }
 
-;https://www.autohotkey.com/boards/search.php?author_id=139004&sr=posts&sid=13343c88f1a3953143867b71b22fdafc
 MouseIsOverTitleBar(xPos := "", yPos := "") {
+    SysGet, SM_CXMIN, 28
+    SysGet, SM_CYMIN, 29
+    SysGet, SM_CXSIZEFRAME, 32
+    SysGet, SM_CYSIZEFRAME , 33
+    
+    titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
+    
     CoordMode, Mouse, Screen
     If (xPos != "" && yPos != "")
         MouseGetPos, , , WindowUnderMouseID
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
-    WinGetClass, class, ahk_id %WindowUnderMouseID%
-    SendMessage, 0x84, , ( yPos << 16 )|xPos, , ahk_id %WindowUnderMouseID%
-    Return (class <> "Shell_TrayWnd") && (ErrorLevel = 2)
+    
+    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+    WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+
+    If (mClass != "Shell_TrayWnd") && (mClass != "WorkerW")  && (mClass != "ProgMan") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w))
+        Return True
+    Else
+        Return False
+}
+
+MouseIsOverCloseButton(xPos := "", yPos := "") {
+
 }
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
@@ -3800,7 +3819,7 @@ SetTitleMatchMode, 2
         && !WinActive("ahk_exe Conhost.exe")
         && !WinActive("ahk_exe bash.exe")
         && !WinActive("ahk_exe mintty.exe")
-        && !SearchingWindows && !hitTAB && !DrawingRect && !ClearingRect
+        && !SearchingWindows && !hitTAB && !ClearingRect
         && !GetKeyState("LAlt","P")
         && !GetKeyState("Ctrl","P")
         && !StopAutoFix
