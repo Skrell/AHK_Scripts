@@ -751,6 +751,7 @@ Return
         WinSet, Transparent , off, %Title%
         WinActivate, %Title%
         Send {Lbutton down}
+        sleep, 50
         BlockInput, MouseMoveOff
         KeyWait, Lbutton, U T10
         Send {Lbutton up}
@@ -812,6 +813,7 @@ Return
         WinSet, Transparent , off, %Title%
         WinActivate, %Title%
         Send {Lbutton down}
+        sleep, 50
         BlockInput, MouseMoveOff
         KeyWait, Lbutton, U T10
         Send {Lbutton up}
@@ -877,6 +879,7 @@ Return
         WinSet, Transparent , off, %Title%
         WinActivate, %Title%
         Send {Lbutton down}
+        sleep, 50
         BlockInput, MouseMoveOff
         KeyWait, Lbutton, U T10
         Send {Lbutton up}
