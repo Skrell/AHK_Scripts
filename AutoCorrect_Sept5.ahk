@@ -699,23 +699,77 @@ Return
 ; #MaxThreadsPerHotkey 2
 ; #MaxThreadsBuffer On
 
+!0::
+    DetectHiddenWindows, On
+    wndIdOnDesk := getForemostWindowIdOnDesktop(2)
+    WinGetClass, cl, ahk_id %wndIdOnDesk%
+    tooltip, class is %cl%
+    DetectHiddenWindows, Off
+Return
+
 !1::
     StopRecurssion := True
     CurrentDesktop := getCurrentDesktop()
-    If (CurrentDesktop == 3) {
-        Send #^{Left}
-        sleep, 100
-        CurrentDesktop -= 1
-        Send #^{Left}
-        CurrentDesktop -= 1
+    If GetKeyState("Lbutton", "P") {
+        BlockInput, MouseMove
+        Send {Lbutton up}
+        WinGetTitle, Title, A
+        WinGet, hwndVD, ID, A
+        ; WinActivate, ahk_class Shell_TrayWnd
+        WinSet, AlwaysOnTop , On, %Title%
+        loop, 5
+        {
+            level := 255-(A_Index*50)
+            WinSet, Transparent , %level%, %Title%
+            sleep, 30
+        }
+        ; WinSet, ExStyle, ^0x80, %Title%
+        If (CurrentDesktop == 3) {
+            MoveCurrentWindowToDesktop(2)
+            Send #^{Left}
+            sleep, 100
+            CurrentDesktop -= 1
+            MoveCurrentWindowToDesktop(1)
+            Send #^{Left}
+            CurrentDesktop -= 1
+            sleep, 1000
+        }
+        Else If (CurrentDesktop == 2) {
+            MoveCurrentWindowToDesktop(1)
+            Send #^{Left}
+            CurrentDesktop -= 1
+            sleep 500
+        }
+        ; WinMinimize, ahk_class Shell_TrayWnd
+        ; WinSet, ExStyle, ^0x80, %Title%
+        loop, 5
+        {
+            level := (A_Index*50)
+            WinSet, Transparent , %level%, %Title%
+            sleep, 30
+        }
+        WinSet, Transparent , off, %Title%
+        WinActivate, %Title%
+        Send {Lbutton down}
+        BlockInput, MouseMoveOff
+        KeyWait, Lbutton, U T10
+        Send {Lbutton up}
+        WinSet, AlwaysOnTop , Off, %Title%
     }
-    Else If (CurrentDesktop == 2) {
-        Send #^{Left}
-        CurrentDesktop -= 1
+    Else {
+        If (CurrentDesktop == 3) {
+            Send #^{Left}
+            sleep, 100
+            CurrentDesktop -= 1
+            Send #^{Left}
+            CurrentDesktop -= 1
+        }
+        Else If (CurrentDesktop == 2) {
+            Send #^{Left}
+            CurrentDesktop -= 1
+        }
+        sleep 250
     }
-    tooltip, Changed Desktop to %CurrentDesktop%
-    sleep 250
-    tooltip, 
     StopRecurssion := False
 
 Return
@@ -723,17 +777,57 @@ Return
 !2::
     StopRecurssion := True
     CurrentDesktop := getCurrentDesktop()
-    If (CurrentDesktop == 1) {
-        Send #^{Right}
-        CurrentDesktop += 1
+    If GetKeyState("Lbutton", "P") {
+        BlockInput, MouseMove
+        Send {Lbutton up}
+        WinGetTitle, Title, A
+        WinGet, hwndVD, ID, A
+        ; WinActivate, ahk_class Shell_TrayWnd
+        WinSet, AlwaysOnTop , On, %Title%
+        loop, 5
+        {
+            level := 255-(A_Index*50)
+            WinSet, Transparent , %level%, %Title%
+            sleep, 30
+        }
+        MoveCurrentWindowToDesktop(2)
+        ; WinSet, ExStyle, ^0x80, %Title%
+        If (CurrentDesktop == 1) {
+            Send #^{Right}
+            CurrentDesktop += 1
+        }
+        Else If (CurrentDesktop == 3) {
+            Send #^{Left}
+            CurrentDesktop -= 1
+        }
+        sleep 500
+        ; WinMinimize, ahk_class Shell_TrayWnd
+        ; WinSet, ExStyle, ^0x80, %Title%
+        loop, 5
+        {
+            level := (A_Index*50)
+            WinSet, Transparent , %level%, %Title%
+            sleep, 30
+        }
+        WinSet, Transparent , off, %Title%
+        WinActivate, %Title%
+        Send {Lbutton down}
+        BlockInput, MouseMoveOff
+        KeyWait, Lbutton, U T10
+        Send {Lbutton up}
+        WinSet, AlwaysOnTop , Off, %Title%
     }
-    Else If (CurrentDesktop == 3) {
-        Send #^{Left}
-        CurrentDesktop -= 1
+    Else {
+        If (CurrentDesktop == 1) {
+            Send #^{Right}
+            CurrentDesktop += 1
+        }
+        Else If (CurrentDesktop == 3) {
+            Send #^{Left}
+            CurrentDesktop -= 1
+        }
+        sleep 250
     }
-    tooltip, Changed Desktop to %CurrentDesktop%
-    sleep 250
-    tooltip,
     StopRecurssion := False
 
 Return
@@ -741,22 +835,68 @@ Return
 !3::
     StopRecurssion := True
     CurrentDesktop := getCurrentDesktop()
-    If (CurrentDesktop == 1) {
-        Send #^{Right}
-        sleep, 100
-        CurrentDesktop += 1
-        Send #^{Right}
-        CurrentDesktop += 1
+    If GetKeyState("Lbutton", "P") {
+        BlockInput, MouseMove
+        Send {Lbutton up}
+        WinGetTitle, Title, A
+        WinGet, hwndVD, ID, A
+        ; WinActivate, ahk_class Shell_TrayWnd
+        WinSet, AlwaysOnTop , On, %Title%
+        loop, 5
+        {
+            level := 255-(A_Index*50)
+            WinSet, Transparent , %level%, %Title%
+            sleep, 30
+        }
+        MoveCurrentWindowToDesktop(3)
+        ; WinSet, ExStyle, ^0x80, %Title%
+        If (CurrentDesktop == 1) {
+            MoveCurrentWindowToDesktop(2)
+            Send #^{Right}
+            sleep, 100
+            CurrentDesktop += 1
+            MoveCurrentWindowToDesktop(3)
+            Send #^{Right}
+            CurrentDesktop += 1
+            sleep, 1000
+        }
+        Else If (CurrentDesktop == 2) {
+            MoveCurrentWindowToDesktop(3)
+            Send #^{Right}
+            CurrentDesktop += 1
+            sleep 500
+        }
+        ; WinMinimize, ahk_class Shell_TrayWnd
+        ; WinSet, ExStyle, ^0x80, %Title%
+        loop, 5
+        {
+            level := (A_Index*50)
+            WinSet, Transparent , %level%, %Title%
+            sleep, 30
+        }
+        WinSet, Transparent , off, %Title%
+        WinActivate, %Title%
+        Send {Lbutton down}
+        BlockInput, MouseMoveOff
+        KeyWait, Lbutton, U T10
+        Send {Lbutton up}
+        WinSet, AlwaysOnTop , Off, %Title%
     }
-    Else If (CurrentDesktop == 2) {
-        Send #^{Right}
-        CurrentDesktop += 1
+    Else {
+        If (CurrentDesktop == 1) {
+            Send #^{Right}
+            sleep, 100
+            CurrentDesktop += 1
+            Send #^{Right}
+            CurrentDesktop += 1
+        }
+        Else If (CurrentDesktop == 2) {
+            Send #^{Right}
+            CurrentDesktop += 1
+        }
+        sleep 250
     }
-    tooltip, Changed Desktop to %CurrentDesktop%
-    sleep 250
-    tooltip,
     StopRecurssion := False
-
 Return
 
 ; #MaxThreadsBuffer Off
@@ -3398,6 +3538,29 @@ getSessionId()
     OutputDebug, Current Session Id: %SessionId%
     return SessionId
 }
+
+getForemostWindowIdOnDesktop(n)
+{
+    n := n - 1 ; Desktops start at 0, while in script it's 1
+
+    ; winIDList contains a list of windows IDs ordered from the top to the bottom for each desktop.
+    WinGet winIDList, list
+    Loop % winIDList {
+        windowID := % winIDList%A_Index%
+        windowIsOnDesktop := DllCall(IsWindowOnDesktopNumberProc, UInt, windowID, UInt, n)
+        ; Select the first (and foremost) window which is in the specified desktop.
+        if (windowIsOnDesktop == 1) {
+            return windowID
+        }
+    }
+}
+
+MoveCurrentWindowToDesktop(desktopNumber) {
+    WinGet, activeHwnd, ID, A
+    DllCall(MoveWindowToDesktopNumberProc, UInt, activeHwnd, UInt, desktopNumber - 1)
+    ; switchDesktopByNumber(desktopNumber)
+}
+
 ;-------------------------------------------------------------------------------
 ;-------------------------------------------------------------------------------
 
