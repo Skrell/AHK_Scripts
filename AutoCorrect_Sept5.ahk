@@ -15,8 +15,16 @@ dummyFunction1() {
 #InstallKeybdHook
 #MaxHotkeysPerInterval 500
 #HotString EndChars ()[]{}:;,.?!`n `t
-#include %A_ScriptDir%\_VD.ahk
-; #include %A_ScriptDir%\VirtualDesktopAccessor.ahk
+
+; #include %A_ScriptDir%\_VD.ahk
+; DLL
+hVirtualDesktopAccessor := DllCall("LoadLibrary", "Str", A_ScriptDir . "\VirtualDesktopAccessor.dll", "Ptr")
+global IsWindowOnDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "IsWindowOnDesktopNumber", "Ptr")
+global MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "MoveWindowToDesktopNumber", "Ptr")
+global GoToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "GoToDesktopNumber", "Ptr")
+
+CurrentDesktop := 1
+
 #include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 
 SetBatchLines -1
@@ -202,11 +210,21 @@ HotKey ~.,  Hoty
 HotKey ~_,  Hoty
 HotKey ~-,  Hoty
 
+Send #^{Left}
+sleep, 50
+Send #^{Left}
+sleep, 50
+Send #^{Left}
+sleep, 50
+Send #^{Left}
+sleep, 50
+
 ;EVENT_SYSTEM_FOREGROUND := 0x3
 DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
 SetTimer track, 100
 SetTimer keyTrack, 1
+
 
 Return
 
@@ -406,8 +424,9 @@ Loop % myWindow
 }
 Return
 
-#IfWinActive ahk_class #32770
+#IfWinExist ahk_class #32770
 !WheelDown::
+    WinActivate, ahk_class #32770
     ControlGet, mOutput, Visible ,, Edit1, A
     If (mOutput == 1) {
         ControlGetFocus, Edit1, A
@@ -417,6 +436,7 @@ Return
 Return
 
 !WheelUp::
+    WinActivate, ahk_class #32770
     ControlGet, mOutput, Visible ,, Edit1, A
     If (mOutput == 1) {
         ControlGetFocus, Edit1, A
@@ -680,171 +700,63 @@ Return
 ; #MaxThreadsBuffer On
 
 !1::
-    LbuttonEnabled := False
-    ; If GetKeyState("Lbutton", "P")
-    ; {
-      ; BlockInput, MouseMove
-      ; Send {Lbutton up}
-      ; WinGetTitle, Title, A
-      ; WinGet, hwndVD, ID, A
-      ; WinActivate, ahk_class Shell_TrayWnd
-      ; WinSet, AlwaysOnTop , On, %Title%
-      ; loop, 5
-      ; {
-          ; level := 255-(A_Index*50)
-          ; WinSet, Transparent , %level%, %Title%
-          ; sleep, 30
-      ; }
-      ; WinSet, ExStyle, ^0x80, %Title%
-      ; Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
-      ; sleep, 250
-      ; Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
-      ; sleep, 500
-      ; WinMinimize, ahk_class Shell_TrayWnd
-      ; WinSet, ExStyle, ^0x80, %Title%
-      ; loop, 5
-      ; {
-          ; level := (A_Index*50)
-          ; WinSet, Transparent , %level%, %Title%
-          ; sleep, 30
-      ; }
-      ; WinSet, Transparent , off, %Title%
-      ; WinActivate, %Title%
-      ; Send {Lbutton down}
-      ; BlockInput, MouseMoveOff
-      ; KeyWait, Lbutton, U T10
-      ; Send {Lbutton up}
-      ; WinSet, AlwaysOnTop , Off, %Title%
-    ; }
-    ; Else
-    ; {
-    ; WinActivate, ahk_class Shell_TrayWnd
-    If GetKeyState("Lbutton","P") && MouseIsOverTitleBar() {
-        Send, {Lbutton up}
-        VD.MoveWindowToDesktopNum("A", 1)
-    }
-    current := VD.getCurrentDesktopNum()
-    If (current == 3) {
+    StopRecurssion := True
+    CurrentDesktop := getCurrentDesktop()
+    If (CurrentDesktop == 3) {
         Send #^{Left}
+        sleep, 100
+        CurrentDesktop -= 1
         Send #^{Left}
+        CurrentDesktop -= 1
     }
-    Else If (current == 2) {
+    Else If (CurrentDesktop == 2) {
         Send #^{Left}
+        CurrentDesktop -= 1
     }
+    tooltip, Changed Desktop to %CurrentDesktop%
     sleep 250
-    LbuttonEnabled := True
-      ; WinMinimize, ahk_class Shell_TrayWnd
+    tooltip, 
+    StopRecurssion := False
+
 Return
 
 !2::
-    LbuttonEnabled := False
-    ; If GetKeyState("Lbutton", "P")
-    ; {
-        ; BlockInput, MouseMove
-        ; Send {Lbutton up}
-        ; WinGetTitle, Title, A
-        ; WinGet, hwndVD, ID, A
-        ; WinActivate, ahk_class Shell_TrayWnd
-        ; WinSet, AlwaysOnTop , On, %Title%
-        ; loop, 5
-        ; {
-            ; level := 255-(A_Index*50)
-            ; WinSet, Transparent , %level%, %Title%
-            ; sleep, 30
-        ; }
-        ; WinSet, ExStyle, ^0x80, %Title%
-    ; }
-    ; else
-    ; {
-    ; WinActivate, ahk_class Shell_TrayWnd
-    If GetKeyState("Lbutton","P") && MouseIsOverTitleBar() {
-        Send, {Lbutton up}
-        VD.MoveWindowToDesktopNum("A", 2)
-    }
-    current := VD.getCurrentDesktopNum()
-    If (current == 1) {
+    StopRecurssion := True
+    CurrentDesktop := getCurrentDesktop()
+    If (CurrentDesktop == 1) {
         Send #^{Right}
+        CurrentDesktop += 1
     }
-    Else If (current == 3) {
+    Else If (CurrentDesktop == 3) {
         Send #^{Left}
+        CurrentDesktop -= 1
     }
+    tooltip, Changed Desktop to %CurrentDesktop%
     sleep 250
-    LbuttonEnabled := True
-    ; If GetKeyState("Lbutton","P") {
-      ; sleep, 500
-      ; WinMinimize, ahk_class Shell_TrayWnd
-      ; WinSet, ExStyle, ^0x80, %Title%
-      ; loop, 5
-      ; {
-          ; level := (A_Index*50)
-          ; WinSet, Transparent , %level%, %Title%
-          ; sleep, 30
-      ; }
-      ; WinSet, Transparent , off, %Title%
-      ; WinActivate, %Title%
-      ; Send {Lbutton down}
-      ; BlockInput, MouseMoveOff
-      ; KeyWait, Lbutton, U T10
-      ; Send {Lbutton up}
-      ; WinSet, AlwaysOnTop , Off, %Title%
-    ; }
+    tooltip,
+    StopRecurssion := False
+
 Return
 
 !3::
-    LbuttonEnabled := False
-    ; If GetKeyState("Lbutton", "P")
-    ; {
-      ; BlockInput, MouseMove
-      ; Send {Lbutton up}
-      ; WinGetTitle, Title, A
-      ; WinGet, hwndVD, ID, A
-      ; WinActivate, ahk_class Shell_TrayWnd
-      ; WinSet, AlwaysOnTop , On, %Title%
-      ; loop, 5
-      ; {
-          ; level := 255-(A_Index*50)
-          ; WinSet, Transparent , %level%, %Title%
-          ; sleep, 30
-      ; }
-      ; WinSet, ExStyle, ^0x80, %Title%
-      ; Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-      ; sleep, 250
-      ; Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-      ; sleep, 500
-      ; WinMinimize, ahk_class Shell_TrayWnd
-      ; WinSet, ExStyle, ^0x80, %Title%
-      ; loop, 5
-      ; {
-          ; level := (A_Index*50)
-          ; WinSet, Transparent , %level%, %Title%
-          ; sleep, 30
-      ; }
-      ; WinSet, Transparent , off, %Title%
-      ; WinActivate, %Title%
-      ; Send {Lbutton down}
-      ; BlockInput, MouseMoveOff
-      ; KeyWait, Lbutton, U T10
-      ; Send {Lbutton up}
-      ; WinSet, AlwaysOnTop , Off, %Title%
-    ; }
-    ; else
-    ; {
-      ; WinActivate, ahk_class Shell_TrayWnd
-      If GetKeyState("Lbutton","P") && MouseIsOverTitleBar() {
-          Send, {Lbutton up}
-          VD.MoveWindowToDesktopNum("A", 3)
-      }
-      current := VD.getCurrentDesktopNum()
-      If (current == 1) {
-          Send #^{Right}
-          Send #^{Right}
-      }
-      Else If (current == 2) {
-          Send #^{Right}
-      }
-      sleep 250
-      LbuttonEnabled := True
-      ; WinMinimize, ahk_class Shell_TrayWnd
+    StopRecurssion := True
+    CurrentDesktop := getCurrentDesktop()
+    If (CurrentDesktop == 1) {
+        Send #^{Right}
+        sleep, 100
+        CurrentDesktop += 1
+        Send #^{Right}
+        CurrentDesktop += 1
+    }
+    Else If (CurrentDesktop == 2) {
+        Send #^{Right}
+        CurrentDesktop += 1
+    }
+    tooltip, Changed Desktop to %CurrentDesktop%
+    sleep 250
+    tooltip,
+    StopRecurssion := False
+
 Return
 
 ; #MaxThreadsBuffer Off
@@ -1824,7 +1736,7 @@ ActivateWindow:
     fulltitle := Trim(fulltitle)
     ; msgbox, %fulltitle%
 
-    ; cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+; cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     ; desknum := VD.getDesktopNumOfWindow(fulltitle)
     ; If (desknum < cdt)
     ; {
@@ -2074,6 +1986,7 @@ WheelDown::send {Volume_Down}
 
 #If !moving && !IsOverDesktop()
 *RButton::
+    StopRecurssion := True
     ComboActive := False
     loop 300 {
         If !(GetKeyState("RButton", "P"))
@@ -2091,6 +2004,7 @@ WheelDown::send {Volume_Down}
     }
     else
         ComboActive := False
+    StopRecurssion := False
 Return
 #If
 
@@ -3075,6 +2989,8 @@ track() {
 MouseIsOverTitleBar(xPos := "", yPos := "") {
     SysGet, SM_CXMIN, 28
     SysGet, SM_CYMIN, 29
+    SysGet, SM_CXSIZE, 30
+    SysGet, SM_CYSIZE , 31
     SysGet, SM_CXSIZEFRAME, 32
     SysGet, SM_CYSIZEFRAME , 33
     
@@ -3089,8 +3005,10 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     WinGetPosEx(WindowUnderMouseID,x,y,w,h)
 
-    If (mClass != "Shell_TrayWnd") && (mClass != "WorkerW")  && (mClass != "ProgMan") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w))
+    If (mClass != "Shell_TrayWnd") && (mClass != "WorkerW")  && (mClass != "ProgMan") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w)) {
+        ; tooltip, %SM_CXSIZE% - %SM_CYSIZE%
         Return True
+    }
     Else
         Return False
 }
@@ -3378,6 +3296,110 @@ Clip(Text="", Reselect="")
     Clip:
     Return Clip()
 }
+
+
+;-------------------------------------------------------------------------------
+; https://github.com/radosi/virtualdesktop/tree/main 
+;-------------------------------------------------------------------------------
+getCurrentDesktop()
+{
+    global CurrentDesktop
+    mapDesktopsFromRegistry()
+    global CurrentDesktop
+    ;    MsgBox %CurrentDesktop%
+    ;    SetTimer, %CurrentDesktop%, Off  ; i.e. the timer turns itself off here.
+
+    ; SplashTextOn, , , <<<     %CurrentDesktop%     >>>, fontsz = 20
+    ; Progress, zh0 B W100 fs50, %CurrentDesktop%
+    ; Sleep, 300
+    ; SplashTextOff
+    ; Progress, Off
+    Return %CurrentDesktop%
+}
+
+; This function examines the registry to build an accurate list of the current virtual desktops and which one we're currently on.
+; Current desktop UUID appears to be in HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\1\VirtualDesktops
+; List of desktops appears to be in HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops
+; On Windows 11 the current desktop UUID appears to be in the same location
+; On previous versions in HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\1\VirtualDesktops
+;
+mapDesktopsFromRegistry()
+{
+    global CurrentDesktop, DesktopCount
+
+    ; Get the current desktop UUID. Length should be 32 always, but there's no guarantee this couldn't change in a later Windows release so we check.
+    IdLength := 32
+    SessionId := getSessionId()
+    if (SessionId) {
+        
+        ; Older windows 10 version
+        ;RegRead, CurrentDesktopId, HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\1\VirtualDesktops, CurrentVirtualDesktop
+        
+        ; Windows 10
+        ;RegRead, CurrentDesktopId, HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\%SessionId%\VirtualDesktops, CurrentVirtualDesktop
+        
+        ; Windows 11
+        RegRead, CurrentDesktopId, HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops, CurrentVirtualDesktop
+        if ErrorLevel {
+            RegRead, CurrentDesktopId, HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\%SessionId%\VirtualDesktops, CurrentVirtualDesktop
+        }
+        
+        if (CurrentDesktopId) {
+            IdLength := StrLen(CurrentDesktopId)
+        }
+    }
+
+    ; Get a list of the UUIDs for all virtual desktops on the system
+    RegRead, DesktopList, HKEY_CURRENT_USER, SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops, VirtualDesktopIDs
+    if (DesktopList) {
+        DesktopListLength := StrLen(DesktopList)
+        ; Figure out how many virtual desktops there are
+        DesktopCount := floor(DesktopListLength / IdLength)
+    }
+    else {
+        DesktopCount := 1
+    }
+
+    ; Parse the REG_DATA string that stores the array of UUID's for virtual desktops in the registry.
+    i := 0
+    while (CurrentDesktopId and i < DesktopCount) {
+        StartPos := (i * IdLength) + 1
+        DesktopIter := SubStr(DesktopList, StartPos, IdLength)
+        OutputDebug, The iterator is pointing at %DesktopIter% and count is %i%.
+
+        ; Break out if we find a match in the list. If we didn't find anything, keep the
+        ; old guess and pray we're still correct :-D.
+        if (DesktopIter = CurrentDesktopId) {
+            CurrentDesktop := i + 1
+            OutputDebug, Current desktop number is %CurrentDesktop% with an ID of %DesktopIter%.
+            break
+        }
+        i++
+    }
+}
+
+;
+; This functions finds out ID of current session.
+;
+getSessionId()
+{
+    ProcessId := DllCall("GetCurrentProcessId", "UInt")
+    if ErrorLevel {
+        OutputDebug, Error getting current process id: %ErrorLevel%
+        return
+    }
+    OutputDebug, Current Process Id: %ProcessId%
+
+    DllCall("ProcessIdToSessionId", "UInt", ProcessId, "UInt*", SessionId)
+    if ErrorLevel {
+        OutputDebug, Error getting session id: %ErrorLevel%
+        return
+    }
+    OutputDebug, Current Session Id: %SessionId%
+    return SessionId
+}
+;-------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
 
 ;------------------------------
 ;
