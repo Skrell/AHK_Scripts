@@ -23,7 +23,7 @@ global IsWindowOnDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDes
 global MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "MoveWindowToDesktopNumber", "Ptr")
 global GoToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "GoToDesktopNumber", "Ptr")
 
-CurrentDesktop := 1
+Global CurrentDesktop := 1
 
 #include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 
@@ -2175,6 +2175,8 @@ Return
     Hotkey, ~WheelUp, Off
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
+
+    
     If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Left}
@@ -2183,6 +2185,9 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
+            If !GetKeyState("Lctrl","P")
+                Send, {Lctrl Up}
+            sleep, 10
             Send, ^{NumpadAdd}
             sleep, 200
         }
@@ -2194,6 +2199,7 @@ Return
     Hotkey, ~WheelDown, Off
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
+
     If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Right}
@@ -2202,6 +2208,9 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
+            If !GetKeyState("Lctrl","P")
+                Send, {Lctrl Up}
+            sleep, 10
             Send, ^{NumpadAdd}
             sleep, 200
         }
