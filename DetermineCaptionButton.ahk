@@ -1,7 +1,21 @@
 ; https://www.autohotkey.com/boards/viewtopic.php?t=31119#p145253
 ; #q:: ;get information from object under cursor, 'AccViewer Basic' (cf. AccViewer.ahk)
-#If MouseIsOverCaptionButtons()
 
+#If MouseIsOverTaskbarThumbnail()
+~lbutton::
+    CoordMode, Mouse, Screen
+    MouseGetPos, vPosX, vPosY, hWnd
+
+    vName := WhichButton(vPosX, vPosY, hWnd)
+
+    ; vOutput .= "value: " vValue "`r`n"
+    ToolTip, % vName
+    sleep, 500
+    tooltip
+    Return
+#If
+
+#If MouseIsOverCaptionButtons()
 !lbutton up::
     CoordMode, Mouse, Screen
     MouseGetPos, vPosX, vPosY, hWnd
@@ -15,6 +29,7 @@
     vName := WhichButton(vPosX, vPosY, hWnd)
     
     If (InStr(vName,"close",false)) {
+        tooltip, Closing all windows...
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
         loop % windowsFromProc
         {
@@ -24,6 +39,7 @@
         }
     }
     If (InStr(vName,"minimize",false)) {
+        tooltip, Minimizing all windows...
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
         loop % windowsFromProc
         {
@@ -32,6 +48,8 @@
             sleep, 250
         }
     }
+    sleep, 500
+    tooltip,
 Return
 
 lbutton up::
@@ -66,7 +84,13 @@ WhichButton(vPosX, vPosY, hWnd) {
     ; vRoleText1 := Acc_Role(oAcc, vChildID)
     ;get role text method 2 (using role number from earlier)
     ; vRoleText2 := (vRole = "") ? "" : Acc_GetRoleText(vRole)
-    vName := "", try vName := oAcc.accName(vChildID)
+    vName := "", 
+    
+    try {  
+        vName := oAcc.accName(vChildID)
+    }
+    catch e {
+    }
 
     If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
         SendMessage, 0x84, 0, vPosX|(vPosY<<16),, % "ahk_id " hWnd 
@@ -394,10 +418,22 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     WinGetPosEx(WindowUnderMouseID,x,y,w,h)
 
-    If (mClass != "Shell_TrayWnd") && (mClass != "WorkerW")  && (mClass != "ProgMan") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45))) {
+    If ((mClass != "Shell_TrayWnd") && (mClass != "WorkerW")  && (mClass != "ProgMan")   && (mClass != "TaskListThumbnailWnd") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45)))) {
         ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
         Return True
     }
     Else
         Return False
+}
+
+MouseIsOverTaskbarThumbnail() {
+    CoordMode, Mouse, Screen
+    MouseGetPos, , , WindowUnderMouseID
+    
+    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+    If (mClass == "TaskListThumbnailWnd")
+        Return True
+    Else
+        Return False
+
 }
