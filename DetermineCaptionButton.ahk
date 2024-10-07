@@ -1,81 +1,122 @@
 ; https://www.autohotkey.com/boards/viewtopic.php?t=31119#p145253
 ; #q:: ;get information from object under cursor, 'AccViewer Basic' (cf. AccViewer.ahk)
 #If MouseIsOverCaptionButtons()
+
+!lbutton up::
+    CoordMode, Mouse, Screen
+    MouseGetPos, vPosX, vPosY, hWnd
+
+    WinGet, targetProcess, ProcessName, ahk_id %hWnd%
+    WinGetClass, targetClass, ahk_id %hWnd%
+
+    If targetProcess == "svchost.exe"
+        Return
+    
+    vName := WhichButton(vPosX, vPosY, hWnd)
+    
+    If (InStr(vName,"close",false)) {
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc
+        {
+            hwndID := windowsFromProc%A_Index%
+            WinClose, ahk_id %hwndID%
+            sleep, 250
+        }
+    }
+    If (InStr(vName,"minimize",false)) {
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc
+        {
+            hwndID := windowsFromProc%A_Index%
+            WinMinimize, ahk_id %hwndID%
+            sleep, 250
+        }
+    }
+Return
+
 lbutton up::
-CoordMode, Mouse, Screen
+    CoordMode, Mouse, Screen
+    MouseGetPos, vPosX, vPosY, hWnd
 
-MouseGetPos, vPosX, vPosY, hWnd
+    vName := WhichButton(vPosX, vPosY, hWnd)
+
+    If (InStr(vName,"minimize",false))
+        WinMinimize, ahk_id %hWnd%
+    If (InStr(vName,"maximize",false))
+        WinMaximize, ahk_id %hWnd%
+    If (InStr(vName,"close",false))
+        WinClose, ahk_id %hWnd%
+    If (InStr(vName,"restore",false))
+        WinRestore, ahk_id %hWnd%
+
+    ; vOutput .= "value: " vValue "`r`n"
+    ToolTip, % vName
+    sleep, 500
+    tooltip
+    Return
+#If
+
+WhichButton(vPosX, vPosY, hWnd) {
     
-oAcc := Acc_ObjectFromPoint(vChildID)
+    oAcc := Acc_ObjectFromPoint(vChildID)
 
-;get role number
-; vRole := "", try vRole := oAcc.accRole(vChildID)
-;get role text method 1
-; vRoleText1 := Acc_Role(oAcc, vChildID)
-;get role text method 2 (using role number from earlier)
-; vRoleText2 := (vRole = "") ? "" : Acc_GetRoleText(vRole)
-vName := "", try vName := oAcc.accName(vChildID)
+    ;get role number
+    ; vRole := "", try vRole := oAcc.accRole(vChildID)
+    ;get role text method 1
+    ; vRoleText1 := Acc_Role(oAcc, vChildID)
+    ;get role text method 2 (using role number from earlier)
+    ; vRoleText2 := (vRole = "") ? "" : Acc_GetRoleText(vRole)
+    vName := "", try vName := oAcc.accName(vChildID)
 
-If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
-	SendMessage, 0x84, 0, vPosX|(vPosY<<16),, % "ahk_id " hWnd 
-	If (ErrorLevel == 8)
-		vName := "minimize" 
-	Else If (ErrorLevel == 9)
-		vName := "maximize"
-	Else If (ErrorLevel == 20)
-		vName := "close"
-    ; msgbox, 1 - %vName%
+    If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
+        SendMessage, 0x84, 0, vPosX|(vPosY<<16),, % "ahk_id " hWnd 
+        If (ErrorLevel == 8)
+            vName := "minimize" 
+        Else If (ErrorLevel == 9)
+            vName := "maximize"
+        Else If (ErrorLevel == 20)
+            vName := "close"
+        ; msgbox, 1 - %vName%
+    }
+
+    If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
+        wx := wy := ww := wh := 0
+        SysGet, SM_CXBORDER, 5
+        SysGet, SM_CYBORDER, 6
+        SysGet, SM_CXFIXEDFRAME, 7
+        SysGet, SM_CYFIXEDFRAME, 8
+        SysGet, SM_CXMIN, 28
+        SysGet, SM_CYMIN, 29
+        SysGet, SM_CXSIZE, 30
+        SysGet, SM_CYSIZE , 31
+        SysGet, SM_CXSIZEFRAME, 32
+        SysGet, SM_CYSIZEFRAME , 33
+        
+        titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
+        
+        WinGetPosEx(hWnd, wx, wy, ww, wh)
+        
+        If      ((vPosY > wy) && (vPosY < (wy+titlebarHeight)) && (vPosX > (wx+ww-SM_CXBORDER-(45*3)) && (vPosX < (wx+ww-SM_CXBORDER-(45*2)))))
+            vName := "minimize" 
+        Else If ((vPosY > wy) && (vPosY < (wy+titlebarHeight)) && (vPosX > (wx+ww-SM_CXBORDER-(45*2)) && (vPosX < (wx+ww-SM_CXBORDER-(45*1)))))
+            vName := "maximize"
+        Else If ((vPosY > wy) && (vPosY < (wy+titlebarHeight)) && (vPosX > (wx+ww-SM_CXBORDER-(45*1)) && (vPosX < (wx+ww-SM_CXBORDER-(45*0)))))
+            vName := "close"
+        ; msgbox, 2 - %vName% - %wx% %wy% %ww% %wh% 
+    }
+
+    ; vValue := "", try vValue := oAcc.accValue(vChildID)
+    oAcc := ""
+
+    vOutput := ""
+    ; vOutput := "role: " vRole "`r`n"
+    ; if (vRoleText1 == vRoleText2)
+        ; vOutput .= "role text: " vRoleText1 "`r`n"
+    ; else
+    ; vOutput .= "role text (1): " vRoleText1 "`r`n" "role text (2): " vRoleText2 "`r`n"
+    vOutput .= "name: " vName ; "`r`n"
+    Return vOutput
 }
-
-If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
-	wx := wy := ww := wh := 0
-    SysGet, SM_CXBORDER, 5
-    SysGet, SM_CYBORDER, 6
-    SysGet, SM_CXFIXEDFRAME, 7
-    SysGet, SM_CYFIXEDFRAME, 8
-    SysGet, SM_CXMIN, 28
-    SysGet, SM_CYMIN, 29
-    SysGet, SM_CXSIZE, 30
-    SysGet, SM_CYSIZE , 31
-    SysGet, SM_CXSIZEFRAME, 32
-    SysGet, SM_CYSIZEFRAME , 33
-    
-    titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
-	
-	WinGetPosEx(hWnd, wx, wy, ww, wh)
-	
-	If      ((vPosY > wy) && (vPosY < (wy+titlebarHeight)) && (vPosX > (wx+ww-SM_CXBORDER-(45*3)) && (vPosX < (wx+ww-SM_CXBORDER-(45*2)))))
-		vName := "minimize" 
-	Else If ((vPosY > wy) && (vPosY < (wy+titlebarHeight)) && (vPosX > (wx+ww-SM_CXBORDER-(45*2)) && (vPosX < (wx+ww-SM_CXBORDER-(45*1)))))
-		vName := "maximize"
-	Else If ((vPosY > wy) && (vPosY < (wy+titlebarHeight)) && (vPosX > (wx+ww-SM_CXBORDER-(45*1)) && (vPosX < (wx+ww-SM_CXBORDER-(45*0)))))
-		vName := "close"
-    ; msgbox, 2 - %vName% - %wx% %wy% %ww% %wh% 
-}
-
-; vValue := "", try vValue := oAcc.accValue(vChildID)
-oAcc := ""
-
-vOutput := ""
-; vOutput := "role: " vRole "`r`n"
-; if (vRoleText1 == vRoleText2)
-	; vOutput .= "role text: " vRoleText1 "`r`n"
-; else
-; vOutput .= "role text (1): " vRoleText1 "`r`n" "role text (2): " vRoleText2 "`r`n"
-vOutput .= "name: " vName "`r`n"
-If (InStr(vName,"minimize",false))
-    WinMinimize, ahk_id %hWnd%
-If (InStr(vName,"maximize",false))
-    WinMaximize, ahk_id %hWnd%
-If (InStr(vName,"close",false))
-    WinClose, ahk_id %hWnd%
-If (InStr(vName,"restore",false))
-    WinRestore, ahk_id %hWnd%
-
-; vOutput .= "value: " vValue "`r`n"
-ToolTip, % vOutput
-return
-#If 
 
 Acc_Init()
 {
