@@ -60,8 +60,13 @@ lbutton up::
 
     If (InStr(vName,"minimize",false))
         WinMinimize, ahk_id %hWnd%
-    If (InStr(vName,"maximize",false))
-        WinMaximize, ahk_id %hWnd%
+    If (InStr(vName,"maximize",false)) {
+        WinGet, state, MinMax, ahk_id %hWnd%
+        If (state == 0)
+            WinMaximize, ahk_id %hWnd%
+        Else
+            WinRestore, ahk_id %hWnd%
+    }
     If (InStr(vName,"close",false))
         WinClose, ahk_id %hWnd%
     If (InStr(vName,"restore",false))
@@ -418,7 +423,13 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     WinGetPosEx(WindowUnderMouseID,x,y,w,h)
 
-    If ((mClass != "Shell_TrayWnd") && (mClass != "WorkerW")  && (mClass != "ProgMan")   && (mClass != "TaskListThumbnailWnd") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45)))) {
+    If    ((mClass != "Shell_TrayWnd") 
+        && (mClass != "WorkerW")  
+        && (mClass != "ProgMan")   
+        && (mClass != "TaskListThumbnailWnd") 
+        && (mClass != "#32768") 
+        && (mClass != "Net UI Tool Window") 
+        && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45)))) {
         ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
         Return True
     }
@@ -431,7 +442,7 @@ MouseIsOverTaskbarThumbnail() {
     MouseGetPos, , , WindowUnderMouseID
     
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If (mClass == "TaskListThumbnailWnd")
+    If (mClass == "TaskListThumbnailWnd" || mClass == "Windows.UI.Core.CoreWindow")
         Return True
     Else
         Return False
