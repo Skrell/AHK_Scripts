@@ -1,7 +1,29 @@
 ; https://www.autohotkey.com/boards/viewtopic.php?t=31119#p145253
 ; #q:: ;get information from object under cursor, 'AccViewer Basic' (cf. AccViewer.ahk)
 
-#If MouseIsOverTaskbarThumbnail()
+#If MouseIsOverTaskbar() || MouseIsOverTaskbarWidgets()
+~!lbutton::
+    WinGetClass, activeClass, A
+    KeyWait, Lbutton, U T3
+    sleep, 250
+    WinGetClass, targetClass, A
+    If (targetClass != activeClass) {
+        WinGet, targetProcess, ProcessName, A
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc 
+        {
+            hwndID := windowsFromProc%A_Index%
+            WinGet, isMin, MinMax, ahk_id %hwndId%
+            If (isMin == -1)
+                WinRestore, ahk_id %hwndId%
+            Else If (isMin == 0)
+                WinActivate, ahk_id %hwndId%
+        }
+    }
+Return
+#If
+
+#If MouseIsOverTaskbarWidgets()
 ~lbutton::
     CoordMode, Mouse, Screen
     MouseGetPos, vPosX, vPosY, hWnd
@@ -437,7 +459,7 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
         Return False
 }
 
-MouseIsOverTaskbarThumbnail() {
+MouseIsOverTaskbarWidgets() {
     CoordMode, Mouse, Screen
     MouseGetPos, , , WindowUnderMouseID
     
@@ -446,5 +468,16 @@ MouseIsOverTaskbarThumbnail() {
         Return True
     Else
         Return False
-
 }
+
+MouseIsOverTaskbar() {
+    CoordMode, Mouse, Screen
+    MouseGetPos, , , WindowUnderMouseID
+    
+    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+    If (mClass == "Shell_TrayWnd")
+        Return True
+    Else
+        Return False
+}
+
