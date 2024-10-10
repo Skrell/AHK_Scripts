@@ -260,7 +260,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
        
         DetectHiddenWindows, On
         
-        If !HasVal(prevActiveWindows, hWnd) {
+        WinGetClass, vWinClass, % "ahk_id " hWnd
+        If !HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey" {
             loop 200 {
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
                 If (vWinTitle != "")
@@ -268,7 +269,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 sleep, 10
              }
                 
-            WinGetClass, vWinClass, % "ahk_id " hWnd
             If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
             }
@@ -361,6 +361,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                 break
                             sleep, 10
                         }
+                    }
+                    
+                    If (testCtrlFocus == "Edit1") {
+                        ControlGet, rText, Selected,,Edit1, % "ahk_id " hWnd
+                        If (StrLen(rText) <= 1)
+                            Send, {Backspace}
                     }
                     BlockKeyboard(false) 
                 }
@@ -509,6 +515,8 @@ Return
     store := """" . store . """"
     Clip(store)
     Critical, Off
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+[::
@@ -518,6 +526,8 @@ Return
     store := "{" . store . "}"
     Clip(store)
     Critical, Off
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+]::
@@ -527,6 +537,8 @@ Return
     store := "{" . store . "}"
     Clip(store)
     Critical, Off
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+<::
@@ -536,6 +548,8 @@ Return
     store := "<" . store . ">"
     Clip(store)
     Critical, Off
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+>::
@@ -545,6 +559,8 @@ Return
     store := "<" . store . ">"
     Clip(store)
     Critical, Off
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+(::
@@ -554,6 +570,8 @@ Return
     store := "(" . store . ")"
     Clip(store)
     Critical, Off
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !+)::
@@ -563,6 +581,8 @@ Return
     store := "(" . store . ")"
     Clip(store)
     Critical, Off
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 !i::
@@ -602,6 +622,8 @@ Return
 ~+Space:: 
     GoSub, FixSlash
     GoSub, Hoty
+    If GetKeyState("LShift", "P")
+        Send, {LShift Up}
 Return
 
 ~^Backspace::
@@ -1305,12 +1327,14 @@ Cycle(direction)
     Global MonCount
     Global startHighlight
     Global hitTAB
-
+    static prev_cl, prev_exe
     hitTAB := True
 
+    prev_cl := ""
+    prev_exe := ""
+    
     If !cycling
     {
-        Critical On
         DetectHiddenWindows, Off
         skipFirst := True
         failedSwitch := False
@@ -1321,6 +1345,7 @@ Cycle(direction)
         
         loop % allWindows
         {
+            Critical On
             hwndID := allWindows%A_Index%
 
             If (MonCount > 1) {
@@ -1334,7 +1359,9 @@ Cycle(direction)
             If (currentMonHasActWin) {
                 If (IsAltTabWindow(hwndID)) {
                     WinGet, state, MinMax, ahk_id %hwndID%
-                    If (state > -1) {
+                    WinGet, exe, ProcessName, ahk_id %hwndID%
+                    WinGetClass, cl, ahk_id %hwndID%
+                    If (state > -1 && prev_cl != cl && prev_exe != exe) {
                         ValidWindows.push(hwndID)
                         If (ValidWindows.MaxIndex() == 2) {
                             WinActivate, % "ahk_id " hwndID
@@ -1344,6 +1371,7 @@ Cycle(direction)
                                 failedSwitch := True
                             }
                             Else {
+                                Critical, Off
                                 GoSub, DrawRect
                                 If !GetKeyState("Alt","P")
                                     Return
@@ -1353,13 +1381,16 @@ Cycle(direction)
                             WinActivate, % "ahk_id " hwndID
                             WinWaitActive,  % "ahk_id " hwndID, , 2
                             cycleCount := 3
+                            Critical, Off
                             GoSub, DrawRect
                         }
                         If ((ValidWindows.MaxIndex() > 3) && !GetKeyState("Alt","P")) {
-                            Critical Off
+                            Critical, Off
                             Return
                         }
                     }
+                    prev_exe := exe
+                    prev_cl  := cl
                 }
             }
         }
@@ -1969,7 +2000,7 @@ ActivateWindow:
         currentMon := MWAGetMonitorMouseIsIn()
         currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
         If !currentMonHasActWin {
-            Send, {LWin down}{LShift down}{Left}{LShift up}{LWin up}
+            Send, #+{Left}
             sleep, 150
          }
         GoSub, DrawRect
@@ -3139,6 +3170,10 @@ track() {
 }
 
 MouseIsOverTitleBar(xPos := "", yPos := "") {
+    SysGet, SM_CXBORDER, 5
+    SysGet, SM_CYBORDER, 6
+    SysGet, SM_CXFIXEDFRAME, 7
+    SysGet, SM_CYFIXEDFRAME, 8
     SysGet, SM_CXMIN, 28
     SysGet, SM_CYMIN, 29
     SysGet, SM_CXSIZE, 30
@@ -3157,8 +3192,8 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     WinGetPosEx(WindowUnderMouseID,x,y,w,h)
 
-    If (mClass != "Shell_TrayWnd") && (mClass != "WorkerW")  && (mClass != "ProgMan") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w)) {
-        ; tooltip, %SM_CXSIZE% - %SM_CYSIZE%
+    If (mClass != "Shell_TrayWnd") && (mClass != "WorkerW")  && (mClass != "ProgMan") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-SM_CXBORDER-(45*3))) {
+        ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
         Return True
     }
     Else

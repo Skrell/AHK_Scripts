@@ -7,7 +7,7 @@
     KeyWait, Lbutton, U T3
     sleep, 250
     WinGetClass, targetClass, A
-    If (targetClass != activeClass) {
+    If (targetClass != activeClass && targetClass != "Windows.UI.Core.CoreWindow" && targetClass != "TaskListThumbnailWnd") {
         WinGet, targetProcess, ProcessName, A
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
         loop % windowsFromProc 
