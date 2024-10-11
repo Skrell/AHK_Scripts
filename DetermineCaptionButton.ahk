@@ -2,7 +2,7 @@
 ; #q:: ;get information from object under cursor, 'AccViewer Basic' (cf. AccViewer.ahk)
 
 #If MouseIsOverTaskbar() || MouseIsOverTaskbarWidgets()
-~!lbutton::
+~^lbutton::
     WinGetClass, activeClass, A
     KeyWait, Lbutton, U T3
     sleep, 250
@@ -38,7 +38,7 @@ Return
 #If
 
 #If MouseIsOverCaptionButtons()
-!lbutton up::
+^lbutton up::
     CoordMode, Mouse, Screen
     MouseGetPos, vPosX, vPosY, hWnd
 
@@ -57,7 +57,6 @@ Return
         {
             hwndID := windowsFromProc%A_Index%
             WinClose, ahk_id %hwndID%
-            sleep, 250
         }
     }
     If (InStr(vName,"minimize",false)) {
@@ -67,7 +66,6 @@ Return
         {
             hwndID := windowsFromProc%A_Index%
             WinMinimize, ahk_id %hwndID%
-            sleep, 250
         }
     }
     sleep, 500
@@ -93,6 +91,9 @@ lbutton up::
         WinClose, ahk_id %hWnd%
     If (InStr(vName,"restore",false))
         WinRestore, ahk_id %hWnd%
+
+    If (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))
+        Send, {Click, left}
 
     ; vOutput .= "value: " vValue "`r`n"
     ToolTip, % vName
@@ -130,7 +131,8 @@ WhichButton(vPosX, vPosY, hWnd) {
         ; msgbox, 1 - %vName%
     }
 
-    If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
+    isAltTab := JEE_WinHasAltTabIcon(hWnd)
+    If (isAltTab && vName == "") { ; || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false)))) {
         wx := wy := ww := wh := 0
         SysGet, SM_CXBORDER, 5
         SysGet, SM_CYBORDER, 6
@@ -481,3 +483,30 @@ MouseIsOverTaskbar() {
         Return False
 }
 
+; https://www.autohotkey.com/boards/viewtopic.php?t=37184
+;gives you roughly the correct results (tested on Windows 7)
+;JEE_WinIsAltTab
+JEE_WinHasAltTabIcon(hWnd)
+{
+	local
+	if !(DllCall("user32\GetDesktopWindow", "Ptr") = DllCall("user32\GetAncestor", "Ptr",hWnd, "UInt",1, "Ptr")) ;GA_PARENT := 1
+	;|| DllCall("user32\GetWindow", "Ptr",hWnd, "UInt",4, "Ptr") ;GW_OWNER := 4 ;affects taskbar but not alt-tab
+		return 0+
+        
+    WinGet, vWinProc, ProcessName, % "ahk_id " hWnd
+    If inStr(vWinProc, "InputHost.exe") || inStr(vWinProc, "App.exe") 
+        return 0
+        
+	WinGet, vWinStyle, Style, % "ahk_id " hWnd
+	if !vWinStyle
+	|| !(vWinStyle & 0x10000000) ;WS_VISIBLE := 0x10000000
+	|| (vWinStyle & 0x8000000) ;WS_DISABLED := 0x8000000 ;affects alt-tab but not taskbar
+		return 0
+	WinGet, vWinExStyle, ExStyle, % "ahk_id " hWnd
+	if (vWinExStyle & 0x40000) ;WS_EX_APPWINDOW := 0x40000
+		return 1
+	if (vWinExStyle & 0x80) ;WS_EX_TOOLWINDOW := 0x80
+	|| (vWinExStyle & 0x8000000) ;WS_EX_NOACTIVATE := 0x8000000 ;affects alt-tab but not taskbar
+		return 0
+	return 1
+}
