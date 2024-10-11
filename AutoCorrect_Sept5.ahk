@@ -949,13 +949,9 @@ Altup:
     If !hitTAB
         Return
     Else {
-        Gosub, ClearRect
         WinGet, actWndID, ID, A
         If (LclickSelected && cycling && (GroupedWindows.length() > 2)) {
-            If ((actWndID == GroupedWindows[1]) || (GroupedWindows.length() <= 1)) {
-                Gui, GUI4Boarder: Hide
-            }
-            Else If (startHighlight) {
+            If (startHighlight) {
                 BlockInput, MouseMove
                 GoSub, FadeInWin1
                 BlockInput, MouseMoveOff
@@ -974,6 +970,7 @@ Altup:
         }
     }
 
+    Gosub, ClearRect
     cycleCount     := 1
     KeyWait, x, U T1
     ValidWindows   := {}
@@ -995,135 +992,135 @@ FadeInWin1:
     Critical, On
     MouseGetPos, , , lclickHwndId
 
-    ; If (lclickHwndId != ValidWindows[1])
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    ; If (lclickHwndId != ValidWindows[2])
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    ; If (lclickHwndId != ValidWindows[3])
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+    If (lclickHwndId != ValidWindows[1])
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+    If (lclickHwndId != ValidWindows[2])
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+    If (lclickHwndId != ValidWindows[3])
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+        
     WinSet, AlwaysOnTop, On , % "ahk_id " lclickHwndId
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
     If (ValidWindows.MaxIndex() >= 3) {
         WinActivate, % "ahk_id " ValidWindows[3]
-        WinActivate, % "ahk_id " lclickHwndId
+        ; WinActivate, % "ahk_id " lclickHwndId
     }
     If (ValidWindows.MaxIndex() >= 2) {
         WinActivate, % "ahk_id " ValidWindows[2]
-        WinActivate, % "ahk_id " lclickHwndId
+        ; WinActivate, % "ahk_id " lclickHwndId
     }
     If (ValidWindows.MaxIndex() >= 1) {
         WinActivate, % "ahk_id " ValidWindows[1]
-        WinActivate, % "ahk_id " lclickHwndId
+        ; WinActivate, % "ahk_id " lclickHwndId
     }
 
-    ; WinActivate, % "ahk_id " lclickHwndId
     WinSet, AlwaysOnTop, Off , % "ahk_id " lclickHwndId
 
-    ; If (lclickHwndId != ValidWindows[1]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        ; sleep 20
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        ; sleep 20
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        ; sleep 20
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
-    ; }
-    ; If (lclickHwndId != ValidWindows[2]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        ; sleep 20
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-        ; sleep 20
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-        ; sleep 20
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
-    ; }
-    ; If (lclickHwndId != ValidWindows[3]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        ; sleep 20
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-        ; sleep 20
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-        ; sleep 20
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 4 && lclickHwndId != ValidWindows[4]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
-    ; }
+    If (ValidWindows.MaxIndex() >= 1 && lclickHwndId != ValidWindows[1]) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+    }
+    If (ValidWindows.MaxIndex() >= 2 && lclickHwndId != ValidWindows[2]) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
+    }
+    If (ValidWindows.MaxIndex() >= 3 && lclickHwndId != ValidWindows[3]) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
+    }
+    If (ValidWindows.MaxIndex() >= 4 && lclickHwndId != ValidWindows[4]) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
+    }
     WinActivate, % "ahk_id " lclickHwndId
     Critical, Off
 Return
 
 FadeInWin2:
     Critical, On
-    ; If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1)
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    ; If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2)
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    ; If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3)
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+    If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+    If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+    If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
 
     WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
     If (ValidWindows.MaxIndex() >= 3) {
         WinActivate, % "ahk_id " ValidWindows[3]
-        WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+        ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
     }
     If (ValidWindows.MaxIndex() >= 2) {
         WinActivate, % "ahk_id " ValidWindows[2]
-        WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+        ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
     }
     If (ValidWindows.MaxIndex() >= 1) {
         WinActivate, % "ahk_id " ValidWindows[1]
-        WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+        ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
     }
 
-    ; WinActivate, % "ahk_id " ValidWindows[cycleCount]
     WinSet, AlwaysOnTop, Off ,% "ahk_id " GroupedWindows[cycleCount]
 
-    ; If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        ; sleep 20
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        ; sleep 20
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        ; sleep 20
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        ; sleep 20
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-        ; sleep 20
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-        ; sleep 20
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        ; sleep 20
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-        ; sleep 20
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-        ; sleep 20
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 4 && cycleCount != 4) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
-    ; }
+    If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+    }
+    If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
+    }
+    If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
+    }
+    If (ValidWindows.MaxIndex() >= 4 && cycleCount != 4) {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
+    }
+    
     WinActivate, % "ahk_id " GroupedWindows[cycleCount]
     Critical, Off
 Return
