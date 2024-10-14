@@ -231,17 +231,17 @@ Return
 
 Hoty:
     CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 && A_PriorHotKey != "~+SPACE") ? CapCount+1 : 1
-    if (!StopAutoFix && CapCount == 2 && (SubStr(A_ThisHotKey,2,1)=="'" || SubStr(A_ThisHotKey,2,1)=="-")) {
+    If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && (SubStr(A_ThisHotKey,2,1)=="'" || SubStr(A_ThisHotKey,2,1)=="-")) {
         return
     }
-    else if (!StopAutoFix && CapCount == 2 && StrLen(A_ThisHotKey) == 3 && inStr(keys, Substr(A_ThisHotKey,3,1))) {
+    else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && StrLen(A_ThisHotKey) == 3 && inStr(keys, Substr(A_ThisHotKey,3,1))) {
         SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
-    else if (!StopAutoFix && CapCount == 3) {
+    else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 3) {
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
 FixSlash:
-    if (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
+    If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
         SendInput, % "{BS}{BS}{?}{SPACE}"
     X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
 
@@ -3941,6 +3941,14 @@ GetIEobject()
          return oWin
    }
 }
+
+IsGoogleDocWindow() {
+    WinGetTitle, title, A
+    If InStr(title, "Google Sheets", false) || InStr(title, "Google Docs", false) 
+        Return True
+    Else
+        Return False
+}
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
@@ -4059,6 +4067,7 @@ SetTitleMatchMode, 2
         && !GetKeyState("LAlt","P")
         && !GetKeyState("Ctrl","P")
         && !StopAutoFix
+        && !IsGoogleDocWindow()
 
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 
