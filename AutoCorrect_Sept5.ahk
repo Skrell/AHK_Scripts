@@ -3177,6 +3177,10 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
 
+    SendMessage, 0x84, 0, xPos|(yPos<<16),, % "ahk_id " WindowUnderMouseID 
+    If (ErrorLevel == 2)
+        Return True
+        
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     WinGetPosEx(WindowUnderMouseID,x,y,w,h)
 

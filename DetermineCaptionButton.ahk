@@ -1,5 +1,8 @@
 ; https://www.autohotkey.com/boards/viewtopic.php?t=31119#p145253
-; #q:: ;get information from object under cursor, 'AccViewer Basic' (cf. AccViewer.ahk)
+;get information from object under cursor, 'AccViewer Basic' (cf. AccViewer.ahk)
+; #q:: 
+; MouseIsOverTitlebar()
+; Return
 
 If !A_IsAdmin {
     tooltip, NOT ADMIN!
@@ -7,7 +10,6 @@ If !A_IsAdmin {
     tooltip,
     Return
 }
-
 
 #If MouseIsOverTaskbar() || MouseIsOverTaskbarWidgets()
 ~^lbutton::
@@ -432,6 +434,60 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
     Return &RECTPlus
 }
 
+MouseIsOverTitlebar(xPos := "", yPos := "") {
+    try {
+        oAcc := Acc_ObjectFromPoint(vChildId)
+    }
+    catch e {
+    }
+    
+    If oAcc {
+        vAccRoleText := Acc_GetRoleText(oAcc.accRole(vChildId))
+        
+        If (InStr(vAccRoleText,"title bar",false)) {
+            Return True
+        }
+    }
+        
+    SysGet, SM_CXBORDER, 5
+    SysGet, SM_CYBORDER, 6
+    SysGet, SM_CXFIXEDFRAME, 7
+    SysGet, SM_CYFIXEDFRAME, 8
+    SysGet, SM_CXMIN, 28
+    SysGet, SM_CYMIN, 29
+    SysGet, SM_CXSIZE, 30
+    SysGet, SM_CYSIZE , 31
+    SysGet, SM_CXSIZEFRAME, 32
+    SysGet, SM_CYSIZEFRAME , 33
+    
+    titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
+    
+    CoordMode, Mouse, Screen
+    If (xPos != "" && yPos != "")
+        MouseGetPos, , , WindowUnderMouseID
+    Else
+        MouseGetPos, xPos, yPos, WindowUnderMouseID
+    
+    SendMessage, 0x84, 0, xPos|(yPos<<16),, % "ahk_id " WindowUnderMouseID 
+    If (ErrorLevel == 2)
+        Return True
+    
+    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+    WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+
+    If    ((mClass != "Shell_TrayWnd") 
+        && (mClass != "WorkerW")  
+        && (mClass != "ProgMan")   
+        && (mClass != "TaskListThumbnailWnd") 
+        && (mClass != "#32768") 
+        && (mClass != "Net UI Tool Window") 
+        && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos < (x+w-(3*45)))) {
+        ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
+        Return True
+    }
+    Else
+        Return False
+}
 MouseIsOverCaptionButtons(xPos := "", yPos := "") {
     SysGet, SM_CXBORDER, 5
     SysGet, SM_CYBORDER, 6
