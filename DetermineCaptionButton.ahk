@@ -1,6 +1,14 @@
 ; https://www.autohotkey.com/boards/viewtopic.php?t=31119#p145253
 ; #q:: ;get information from object under cursor, 'AccViewer Basic' (cf. AccViewer.ahk)
 
+If !A_IsAdmin {
+    tooltip, NOT ADMIN!
+    sleep, 1000
+    tooltip,
+    Return
+}
+
+
 #If MouseIsOverTaskbar() || MouseIsOverTaskbarWidgets()
 ~^lbutton::
     WinGetClass, activeClass, A
@@ -444,6 +452,10 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
     
+    SendMessage, 0x84, 0, xPos|(yPos<<16),, % "ahk_id " WindowUnderMouseID 
+    If (ErrorLevel == 8) || (ErrorLevel == 9) || (ErrorLevel == 20)
+        Return True
+    
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     WinGetPosEx(WindowUnderMouseID,x,y,w,h)
 
@@ -509,4 +521,60 @@ JEE_WinHasAltTabIcon(hWnd)
 	|| (vWinExStyle & 0x8000000) ;WS_EX_NOACTIVATE := 0x8000000 ;affects alt-tab but not taskbar
 		return 0
 	return 1
+}
+
+; https://www.autohotkey.com/boards/viewtopic.php?t=26700
+JEE_AhkIsAdmin()
+{
+	;see AHK source code: os_version.h
+	;see also:
+	;Operating System Version (Windows)
+	;https://msdn.microsoft.com/en-gb/library/windows/desktop/ms724832(v=vs.85).aspx
+	;Using the Windows Headers (Windows)
+	;https://msdn.microsoft.com/en-us/library/windows/desktop/aa383745(v=vs.85).aspx
+	vVersion := DllCall("kernel32\GetVersion", "UInt")
+	if (vVersion & 0xFF < 5)
+		return 1
+
+	;SC_MANAGER_LOCK := 0x8
+	hSC := DllCall("advapi32\OpenSCManager", "Ptr",0, "Ptr",0, "UInt",0x8, "Ptr")
+	vRet := 0
+	if hSC
+	{
+		if (vLock := DllCall("advapi32\LockServiceDatabase", "Ptr",hSC, "Ptr"))
+		{
+			DllCall("advapi32\UnlockServiceDatabase", "Ptr",vLock)
+			vRet := 1
+		}
+		else
+		{
+			vLastError := DllCall("kernel32\GetLastError", "UInt")
+			;ERROR_SERVICE_DATABASE_LOCKED := 1055
+			if (vLastError = 1055)
+				vRet := 1
+		}
+		DllCall("advapi32\CloseServiceHandle", "Ptr",hSC)
+	}
+	return vRet
+}
+
+; https://www.autohotkey.com/boards/viewtopic.php?t=43417
+JEE_ProcessIsElevated(vPID)
+{
+	;PROCESS_QUERY_LIMITED_INFORMATION := 0x1000
+	if !(hProc := DllCall("kernel32\OpenProcess", "UInt",0x1000, "Int",0, "UInt",vPID, "Ptr"))
+		return -1
+	;TOKEN_QUERY := 0x8
+	hToken := 0
+	if !(DllCall("advapi32\OpenProcessToken", "Ptr",hProc, "UInt",0x8, "Ptr*",hToken))
+	{
+		DllCall("kernel32\CloseHandle", "Ptr",hProc)
+		return -1
+	}
+	;TokenElevation := 20
+	vIsElevated := vSize := 0
+	vRet := (DllCall("advapi32\GetTokenInformation", "Ptr",hToken, "Int",20, "UInt*",vIsElevated, "UInt",4, "UInt*",vSize))
+	DllCall("kernel32\CloseHandle", "Ptr",hToken)
+	DllCall("kernel32\CloseHandle", "Ptr",hProc)
+	return vRet ? vIsElevated : -1
 }

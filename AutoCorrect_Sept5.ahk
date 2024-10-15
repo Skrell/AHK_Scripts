@@ -351,7 +351,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     If (lClassCheck == vWinClass) {
                         ; tooltip, adjusted %vWinClass% %FocusedControl%
                         Send, ^{NumpadAdd}
-                        sleep, 50
+                        sleep, 125
                     }
 
                     If GetKeyState("Ctrl","P")
@@ -1126,32 +1126,14 @@ FadeInWin2:
 Return
 
 ResetWins:
-    If hitCAPS {
-        For k, v in RevMinnedWindows
-        {
-            WinMinimize, % "ahk_id " RevMinnedWindows[k]
-        }
-        If hitTAB {
-            If (ValidWindows.MaxIndex() >= 4)
-                WinActivate, % "ahk_id " ValidWindows[4]
-            If (ValidWindows.MaxIndex() >= 3)
-                WinActivate, % "ahk_id " ValidWindows[3]
-            If (ValidWindows.MaxIndex() >= 2)
-                WinActivate, % "ahk_id " ValidWindows[2]
-            If (ValidWindows.MaxIndex() >= 1)
-                WinActivate, % "ahk_id " ValidWindows[1]
-        }
-    }
-    Else {
-        If (ValidWindows.MaxIndex() >= 4)
-            WinActivate, % "ahk_id " ValidWindows[4]
-        If (ValidWindows.MaxIndex() >= 3)
-            WinActivate, % "ahk_id " ValidWindows[3]
-        If (ValidWindows.MaxIndex() >= 2)
-            WinActivate, % "ahk_id " ValidWindows[2]
-        If (ValidWindows.MaxIndex() >= 1)
-            WinActivate, % "ahk_id " ValidWindows[1]
-    }
+    If (ValidWindows.MaxIndex() >= 4)
+        WinActivate, % "ahk_id " ValidWindows[4]
+    If (ValidWindows.MaxIndex() >= 3)
+        WinActivate, % "ahk_id " ValidWindows[3]
+    If (ValidWindows.MaxIndex() >= 2)
+        WinActivate, % "ahk_id " ValidWindows[2]
+    If (ValidWindows.MaxIndex() >= 1)
+        WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
 $!Tab::
@@ -1631,7 +1613,7 @@ Return
 
     If MouseIsOverTitleBar(lbX1, lbY1)
         Return
-    
+
     Gui, GUI4Boarder: Hide
 
     ; tooltip, %A_TimeSincePriorHotkey% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
@@ -1707,6 +1689,7 @@ Return
     initTime := A_TickCount
 
     KeyWait, LButton, U T5
+    CoordMode, Mouse, Window
     MouseGetPos, lbX2, lbY2,
 
     If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
@@ -1745,6 +1728,7 @@ Return
         && (timeDiff < 325)
         && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3  != 0xFFFFFF)
         && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323"))  {
+
         SetTimer, SendCtrlAdd, -100
         }
     Else
@@ -2090,7 +2074,7 @@ SendCtrlAdd:
             WinGet, lIdCheck2, ID, A
             If (lIdCheck == lIdCheck2) {
                 Send, ^{NumpadAdd}
-                sleep, 50
+                sleep, 125
             }
 
             If (lctrlN == "SysTreeView321") {
