@@ -2005,7 +2005,7 @@ Return
 Return
 #If
 
-#If !moving && MouseIsOverTitleBar()
+#If MouseIsOverTitleBar()
 Mbutton::
     Global movehWndId
     MouseGetPos, , , movehWndId
@@ -2023,20 +2023,37 @@ SendWindow:
     Global movehWndId
    
     DetectHiddenWindows, On
+    WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
+    sw_x_org := sw_x
+    
     WinSet, Transparent, 225, ahk_id %movehWndId%
+    sw_x += 15
+    WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 200, ahk_id %movehWndId%
+    sw_x += 15
+    WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 175, ahk_id %movehWndId%
+    sw_x += 15
+    WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 150, ahk_id %movehWndId%
+    sw_x += 15
+    WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 100, ahk_id %movehWndId%
+    sw_x += 15
+    WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 50,  ahk_id %movehWndId%
+    sw_x += 15
+    WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 0,   ahk_id %movehWndId%
     sleep, 20
+    
+    WinMove, ahk_id %movehWndId%,, %sw_x_org%
     
     If      (A_ThisMenuItem == "Move to Desktop 1")
         MoveCurrentWindowToDesktop(1)
