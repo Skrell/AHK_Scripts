@@ -1,7 +1,11 @@
 ; https://www.autohotkey.com/boards/viewtopic.php?t=31119#p145253
 ;get information from object under cursor, 'AccViewer Basic' (cf. AccViewer.ahk)
 ; #q:: 
-; MouseIsOverTitlebar()
+   ; WinGet, procName, ProcessName, A
+   ; If (procName == "chrome.exe") {
+        ; MouseGetPos, , , hWnd
+        ; Msgbox, % JEE_ChromeGetTabCount(hWnd)
+   ; }
 ; Return
 
 If !A_IsAdmin {
@@ -13,21 +17,42 @@ If !A_IsAdmin {
 
 #If MouseIsOverTaskbar() || MouseIsOverTaskbarWidgets()
 ~^lbutton::
+    SysGet, MonCount, MonitorCount
     WinGetClass, activeClass, A
+    WinGet, activeID, ID, A
+
     KeyWait, Lbutton, U T3
     sleep, 250
     WinGetClass, targetClass, A
-    If (targetClass != activeClass && targetClass != "Windows.UI.Core.CoreWindow" && targetClass != "TaskListThumbnailWnd") {
+    WinGet, targetID, ID, A
+    
+    If (targetID != activeID && targetClass != "Windows.UI.Core.CoreWindow" && targetClass != "TaskListThumbnailWnd") {
         WinGet, targetProcess, ProcessName, A
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
         loop % windowsFromProc 
         {
             hwndID := windowsFromProc%A_Index%
             WinGet, isMin, MinMax, ahk_id %hwndId%
-            If (isMin == -1)
+            If (isMin == -1) {
                 WinRestore, ahk_id %hwndId%
-            Else If (isMin == 0)
-                WinActivate, ahk_id %hwndId%
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                    If !currentMonHasActWin
+                        WinMinimize, ahk_id %hwndId%
+                }
+            }
+            Else If (isMin == 0) {
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                    If currentMonHasActWin
+                        WinActivate, ahk_id %hwndId%
+                }
+                Else {
+                    WinActivate, ahk_id %hwndId%
+                }
+            }
         }
     }
 Return
@@ -50,6 +75,7 @@ Return
 #If MouseIsOverCaptionButtons()
 ^lbutton up::
     CoordMode, Mouse, Screen
+    SysGet, MonCount, MonitorCount
     MouseGetPos, vPosX, vPosY, hWnd
 
     WinGet, targetProcess, ProcessName, ahk_id %hWnd%
@@ -75,7 +101,15 @@ Return
         loop % windowsFromProc
         {
             hwndID := windowsFromProc%A_Index%
-            WinMinimize, ahk_id %hwndID%
+            If (MonCount > 1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                If currentMonHasActWin
+                    WinMinimize, ahk_id %hwndId%
+            }
+            Else {
+                WinMinimize, ahk_id %hwndID%
+            }
         }
     }
     sleep, 500
@@ -114,6 +148,7 @@ lbutton up::
 
 WhichButton(vPosX, vPosY, hWnd) {
     
+    errorFound := False
     oAcc := Acc_ObjectFromPoint(vChildID)
 
     ;get role number
@@ -128,10 +163,12 @@ WhichButton(vPosX, vPosY, hWnd) {
         vName := oAcc.accName(vChildID)
     }
     catch e {
+        tooltip, error thrown
+        errorFound := True
     }
 
     If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
-        SendMessage, 0x84, 0, vPosX|(vPosY<<16),, % "ahk_id " hWnd 
+        SendMessage, 0x84, 0, (vPosX & 0xFFFF) | (vPosY & 0xFFFF)<<16,, % "ahk_id " hWnd 
         If (ErrorLevel == 8)
             vName := "minimize" 
         Else If (ErrorLevel == 9)
@@ -177,7 +214,10 @@ WhichButton(vPosX, vPosY, hWnd) {
         ; vOutput .= "role text: " vRoleText1 "`r`n"
     ; else
     ; vOutput .= "role text (1): " vRoleText1 "`r`n" "role text (2): " vRoleText2 "`r`n"
-    vOutput .= "name: " vName ; "`r`n"
+    If !errorFound
+        vOutput .= "name: " vName ; "`r`n"
+    Else
+        vOutput .= "error: " vName ; "`r`n"
     Return vOutput
 }
 
@@ -437,18 +477,19 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
 MouseIsOverTitlebar(xPos := "", yPos := "") {
     try {
         oAcc := Acc_ObjectFromPoint(vChildId)
-    }
-    catch e {
-    }
-    
-    If oAcc {
-        vAccRoleText := Acc_GetRoleText(oAcc.accRole(vChildId))
-        
-        If (InStr(vAccRoleText,"title bar",false)) {
-            Return True
+        If oAcc {
+            vAccRoleText := Acc_GetRoleText(oAcc.accRole(vChildId))
+            
+            If (InStr(vAccRoleText,"title bar",false)) {
+                Return True
+            }
         }
     }
-        
+    catch e {
+        tooltip, error thrown
+        sleep, 500
+    }
+    
     SysGet, SM_CXBORDER, 5
     SysGet, SM_CYBORDER, 6
     SysGet, SM_CXFIXEDFRAME, 7
@@ -468,12 +509,12 @@ MouseIsOverTitlebar(xPos := "", yPos := "") {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
     
-    SendMessage, 0x84, 0, xPos|(yPos<<16),, % "ahk_id " WindowUnderMouseID 
-    If (ErrorLevel == 2)
+    WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+    SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
+    If (ErrorLevel == 2) && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos < (x+w-(3*45)))
         Return True
     
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    WinGetPosEx(WindowUnderMouseID,x,y,w,h)
 
     If    ((mClass != "Shell_TrayWnd") 
         && (mClass != "WorkerW")  
@@ -488,6 +529,7 @@ MouseIsOverTitlebar(xPos := "", yPos := "") {
     Else
         Return False
 }
+
 MouseIsOverCaptionButtons(xPos := "", yPos := "") {
     SysGet, SM_CXBORDER, 5
     SysGet, SM_CYBORDER, 6
@@ -508,7 +550,7 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
     
-    SendMessage, 0x84, 0, xPos|(yPos<<16),, % "ahk_id " WindowUnderMouseID 
+    SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
     If (ErrorLevel == 8) || (ErrorLevel == 9) || (ErrorLevel == 20)
         Return True
     
@@ -542,10 +584,10 @@ MouseIsOverTaskbarWidgets() {
 
 MouseIsOverTaskbar() {
     CoordMode, Mouse, Screen
-    MouseGetPos, , , WindowUnderMouseID
+    MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
     
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If (mClass == "Shell_TrayWnd")
+    If (InStr(mClass,"TrayWnd",false) && InStr(mClass,"Shell",false) && CtrlUnderMouseId != "ToolbarWindow323" && CtrlUnderMouseId != "TrayNotifyWnd1")
         Return True
     Else
         Return False
@@ -633,4 +675,68 @@ JEE_ProcessIsElevated(vPID)
 	DllCall("kernel32\CloseHandle", "Ptr",hToken)
 	DllCall("kernel32\CloseHandle", "Ptr",hProc)
 	return vRet ? vIsElevated : -1
+}
+
+;https://www.autohotkey.com/boards/viewtopic.php?f=6&t=54557
+MWAGetMonitorMouseIsIn(buffer := 0) ; we didn't actually need the "Monitor = 0"
+{
+    Global currMonWidth, currMonHeight
+    ; get the mouse coordinates first
+    Coordmode, Mouse, Screen    ; use Screen, so we can compare the coords with the sysget information`
+    MouseGetPos, Mx, My
+    ActiveMon := 0
+
+    SysGet, MonitorCount, 80    ; monitorcount, so we know how many monitors there are, and the number of loops we need to do
+    Loop, %MonitorCount%
+    {
+        SysGet, mon%A_Index%, Monitor, %A_Index%    ; "Monitor" will get the total desktop space of the monitor, including taskbars
+
+        If ( Mx >= (mon%A_Index%left + buffer) ) && ( Mx < (mon%A_Index%right - buffer) ) && ( My >= (mon%A_Index%top + buffer) ) && ( My < (mon%A_Index%bottom - buffer) )
+        {
+            currMonHeight := abs(mon%A_Index%bottom - mon%A_Index%top)
+            currMonWidth  := abs(mon%A_Index%right - mon%A_Index%left)
+            ActiveMon := A_Index
+            break
+        }
+    }
+    Return ActiveMon
+}
+
+;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
+IsWindowOnCurrMon(thisWindowHwnd, currentMonNum := 0) {
+    WinGet, state, MinMax, ahk_id %thisWindowHwnd%
+
+    If (state == -1)
+        Return True
+
+    If (state == 1)
+        buffer := 8
+    Else
+        buffer := 0
+    ;Get number of monitor
+    SysGet, monCount, MonitorCount
+
+    WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
+    ;Iterate through each monitor
+    Loop %monCount% {
+        Critical, On
+        ;Get Monitor working area
+        If (A_Index == currentMonNum) {
+            SysGet, workArea, Monitor, % A_Index
+
+            ; tooltip, % currentMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom
+
+            ;Check If the focus window in on the current monitor index
+            ; If ((A_Index == currentMonNum) && (X >= (workAreaLeft-buffer) && X <= workAreaRight) && (X+W <= (abs(workAreaRight-workAreaLeft) + 2*buffer)) && (Y >= (workAreaTop-buffer) && Y < (workAreaBottom-buffer))) {
+            ; https://math.stackexchange.com/questions/2449221/calculating-percentage-of-overlap-between-two-rectangles
+            If ((A_Index == currentMonNum) && ((max(X, workAreaLeft) - min(X+W,workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom)))/(W*H) > 0.50 ) {
+
+                ; tooltip, % currentMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom " -- " "True"
+                Critical, Off
+                Return True
+            }
+        }
+    }
+    Critical, Off
+    Return False
 }

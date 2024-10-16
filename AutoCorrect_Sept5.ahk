@@ -2005,16 +2005,59 @@ Return
 Return
 #If
 
-; #If !DesktopIconsVisible && IsOverDesktop() && !VolumeHover() && !moving
+#If !moving && MouseIsOverTitleBar()
+Mbutton::
+    Global movehWndId
+    MouseGetPos, , , movehWndId
+    WinActivate, ahk_id %movehWndId%
+    
+    loop % getTotalDesktops()
+    {
+        Menu, vdeskMenu, Add, Move to Desktop %A_Index%, SendWindow
+    }
+    Menu, vdeskMenu, Show
+Return
+#If
 
-; RButton::
-    ; DesktopIcons(True)
-    ; DesktopIconsVisible := True
-    ; sleep, 250
-    ; send {Click, Right}
-; Return
-; #If
-
+SendWindow:
+    Global movehWndId
+   
+    DetectHiddenWindows, On
+    WinSet, Transparent, 225, ahk_id %movehWndId%
+    sleep, 20
+    WinSet, Transparent, 200, ahk_id %movehWndId%
+    sleep, 20
+    WinSet, Transparent, 175, ahk_id %movehWndId%
+    sleep, 20
+    WinSet, Transparent, 150, ahk_id %movehWndId%
+    sleep, 20
+    WinSet, Transparent, 100, ahk_id %movehWndId%
+    sleep, 20
+    WinSet, Transparent, 50,  ahk_id %movehWndId%
+    sleep, 20
+    WinSet, Transparent, 0,   ahk_id %movehWndId%
+    sleep, 20
+    
+    If      (A_ThisMenuItem == "Move to Desktop 1")
+        MoveCurrentWindowToDesktop(1)
+    Else If (A_ThisMenuItem == "Move to Desktop 2")
+        MoveCurrentWindowToDesktop(2)
+    Else If (A_ThisMenuItem == "Move to Desktop 3")
+        MoveCurrentWindowToDesktop(3)
+    Else If (A_ThisMenuItem == "Move to Desktop 4")
+        MoveCurrentWindowToDesktop(4)
+    Else If (A_ThisMenuItem == "Move to Desktop 5")
+        MoveCurrentWindowToDesktop(5)
+    Else If (A_ThisMenuItem == "Move to Desktop 6")
+        MoveCurrentWindowToDesktop(6)
+    Else If (A_ThisMenuItem == "Move to Desktop 7")
+        MoveCurrentWindowToDesktop(7)
+    Else If (A_ThisMenuItem == "Move to Desktop 8")
+        MoveCurrentWindowToDesktop(8)
+        
+    WinSet, Transparent, 255, ahk_id %movehWndId%
+    DetectHiddenWindows, Off
+Return
 
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
@@ -2166,6 +2209,7 @@ WheelDown::send {Volume_Down}
     }
     else
         ComboActive := False
+        
     StopRecurssion := False
 Return
 #If
@@ -3177,7 +3221,7 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
 
-    SendMessage, 0x84, 0, xPos|(yPos<<16),, % "ahk_id " WindowUnderMouseID 
+    SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
     If (ErrorLevel == 2)
         Return True
         
@@ -3480,11 +3524,18 @@ Clip(Text="", Reselect="")
 ;-------------------------------------------------------------------------------
 ; https://github.com/radosi/virtualdesktop/tree/main
 ;-------------------------------------------------------------------------------
+getTotalDesktops()
+{
+    Global DesktopCount
+    mapDesktopsFromRegistry()
+    Return DesktopCount
+}
+
+
 getCurrentDesktop()
 {
     global CurrentDesktop
     mapDesktopsFromRegistry()
-    global CurrentDesktop
     ;    MsgBox %CurrentDesktop%
     ;    SetTimer, %CurrentDesktop%, Off  ; i.e. the timer turns itself off here.
 
