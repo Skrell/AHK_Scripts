@@ -2853,7 +2853,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     GoSub, DrawRect
 
     ; tooltip, %numWindows% found!
-    KeyWait, q, U
+    KeyWait, q, U T1
 
     counter++
     If (counter > numWindows)
