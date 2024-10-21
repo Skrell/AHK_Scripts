@@ -149,7 +149,6 @@ lbutton up::
 WhichButton(vPosX, vPosY, hWnd) {
     
     errorFound := False
-    oAcc := Acc_ObjectFromPoint(vChildID)
 
     ;get role number
     ; vRole := "", try vRole := oAcc.accRole(vChildID)
@@ -160,7 +159,9 @@ WhichButton(vPosX, vPosY, hWnd) {
     vName := "", 
     
     try {  
-        vName := oAcc.accName(vChildID)
+        oAcc := Acc_ObjectFromPoint(vChildID)
+        If oAcc
+            vName := oAcc.accName(vChildID)
     }
     catch e {
         tooltip, error thrown
@@ -551,7 +552,7 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
         MouseGetPos, xPos, yPos, WindowUnderMouseID
     
     SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
-    If (ErrorLevel == 8) || (ErrorLevel == 9) || (ErrorLevel == 20)
+    If ((ErrorLevel == 8) || (ErrorLevel == 9) || (ErrorLevel == 20))
         Return True
     
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%

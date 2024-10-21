@@ -645,7 +645,7 @@ prevChromeTab()
     DetectHiddenWindows, Off
     send ^+a
     loop {
-        WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1
+        WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe
         loop, % allChromeWindows
         {
             this_id := "ahk_id " . allChromeWindows%A_Index%
@@ -2014,6 +2014,7 @@ Mbutton::
     loop % getTotalDesktops()
     {
         Menu, vdeskMenu, Add, Move to Desktop %A_Index%, SendWindow
+        Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
     }
     Menu, vdeskMenu, Show
 Return
@@ -2256,7 +2257,6 @@ Return
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
 
-
     If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Left}
@@ -2265,10 +2265,13 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
-            If !GetKeyState("Lctrl","P")
+            If !GetKeyState("Lctrl","P") {
                 Send, {Lctrl Up}
-            sleep, 10
+                sleep, 10
+            }
+            BlockInput, On
             Send, ^{NumpadAdd}
+            BlockInput, Off
             sleep, 200
         }
     }
@@ -2288,10 +2291,13 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
-            If !GetKeyState("Lctrl","P")
+            If !GetKeyState("Lctrl","P") {
                 Send, {Lctrl Up}
-            sleep, 10
+                sleep, 10
+            }
+            BlockInput, On
             Send, ^{NumpadAdd}
+            BlockInput, Off
             sleep, 200
         }
     }
