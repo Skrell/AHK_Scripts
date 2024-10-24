@@ -5,15 +5,14 @@
 ; r = raw output
 
 
-dummyFunction1() {
-    static dummyStatic1 := VD.init()
-}
+; dummyFunction1() {
+    ; static dummyStatic1 := VD.init()
+; }
 ; the auto-exec section ends at the first hotkey/hotstring or return or exit or at the script end - whatever comes first; function definitions get ignored by the execution flow.
 #NoEnv
 #SingleInstance
 #InstallMouseHook
 #InstallKeybdHook
-#MaxHotkeysPerInterval 500
 #HotString EndChars ()[]{}:;,.?!`n `t
 
 ; #include %A_ScriptDir%\_VD.ahk
@@ -260,8 +259,15 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     If !StopRecurssion {
 
         DetectHiddenWindows, On
-
+        
         WinGetClass, vWinClass, % "ahk_id " hWnd
+        If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
+            WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
+        }
+        Else If (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "") {
+            Return
+        }
+                
         If !HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey" {
             loop 200 {
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
@@ -269,12 +275,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     break
                 sleep, 10
              }
-
-            If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
-                WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
-            }
-            Else If (vWinClass == "#32768")
-                Return
 
             WinGet, state, MinMax, Ahk_id %hWnd%
             If (state > -1 && vWinTitle != "") {
@@ -289,7 +289,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ;EVENT_SYSTEM_FOREGROUND := 0x3
             ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
-            If (vWinTitle == "" || (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "")) {
+            If (vWinTitle == "") {
+                DetectHiddenWindows, Off
                 Return
             }
 
@@ -331,33 +332,28 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     }
 
                     If (OutputVar2 == 1) {
-                        ControlFocus , DirectUIHWND2, % "ahk_id " hWnd
                         FocusedControl := "DirectUIHWND2"
-                        sleep, 10
                     }
                     Else If (OutputVar3 == 1) {
-                        ControlFocus , DirectUIHWND3, % "ahk_id " hWnd
                         FocusedControl := "DirectUIHWND3"
-                        sleep, 10
                     }
                     Else If (OutputVar1 == 1) {
-                        ControlFocus , SysListView321, % "ahk_id " hWnd
                         FocusedControl := "SysListView321"
-                        sleep, 20
                     }
-
+                    
+                    ControlFocus, %FocusedControl%, % "ahk_id " hWnd
+                    
                     ; tooltip, adjusted
                     WinGetClass, lClassCheck, A
                     If (lClassCheck == vWinClass) {
-                        ; tooltip, adjusted %vWinClass% %FocusedControl%
                         Send, ^{NumpadAdd}
                         sleep, 125
                     }
 
-                    If GetKeyState("Ctrl","P")
+                    If GetKeyState("Ctrl")
                         Send, {Ctrl Up}
 
-                    If GetKeyState("NumpadAdd","P")
+                    If GetKeyState("NumpadAdd")
                         Send, {NumpadAdd Up}
 
                     If initFocusedCtrl {
@@ -389,6 +385,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             else
                 ++i
         }
+        DetectHiddenWindows, Off
     }
     Return
 }
@@ -676,7 +673,7 @@ prevChromeTab()
             GoSub, DrawRect
             KeyWait, Esc, U T10
             If !CancelClose {
-                WinClose, ahk_id %escHwndID%
+                Send, !{F4}
                 loop 500 {
                     If !WinExist("ahk_id " . escHwndID)
                         break
@@ -684,24 +681,7 @@ prevChromeTab()
                 }
                 SetTimer, ClearRect, -10
                 Gui, GUI4Boarder: Hide
-                WinGet, allWindows, List
-                loop % allWindows {
-                    hwnd_id := allWindows%A_Index%
-                    WinGet, MMState, MinMax, ahk_id %hwnd_id%
-                    If (MMState > -1) {
-                        If (MonCount > 1) {
-                            currentMon := MWAGetMonitorMouseIsIn()
-                            currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
-                        }
-                        Else {
-                            currentMonHasActWin := True
-                        }
-                        If (currentMonHasActWin && IsAltTabWindow(hwnd_id)) {
-                            WinActivate, ahk_id %hwnd_id%
-                            Return
-                        }
-                    }
-                }
+                ActivateTopMostWindow()
             }
             Else
                 CancelClose := False
@@ -1154,15 +1134,19 @@ SetTimer, keyTrack, On
 Return
 
 #If !hitTAB
-$!q::
+!q::
     Gui, GUI4Boarder: Hide
+    
+    ActivateTopMostWindow()
+
+    DetectHiddenWindows, Off
     WinGet, activeProcessName, ProcessName, A
     WinGetClass, FullClass, A
-
+    
     HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
     GoSub, ClearRect
 
-    DrawingRect := False
+    DrawingRect  := False
     ClearingRect := False
 Return
 #If
@@ -1598,7 +1582,6 @@ Return
     CoordMode, Mouse, Window
     MouseGetPos, lbX1, lbY1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
-
     WinGetClass, lClass, ahk_id %lhwnd%
 
     If hitTAB {
@@ -1621,10 +1604,11 @@ Return
         && (A_TimeSincePriorHotkey < 550)
         && (abs(lbX1-lbX2) < 5 && abs(lbY1-lbY2) < 5)
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
+        
+        currentPath    := ""
+        StopRecurssion     := True
         ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %A_TimeSincePriorHotkey% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
 
-        StopRecurssion := True
-        currentPath    := ""
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321") {
                 Send, {Backspace}
@@ -1635,8 +1619,10 @@ Return
                 SetTimer, SetTimeout, -10
             }
         }
+        
         KeyWait, Lbutton, U T3
-        LbuttonEnabled := False
+        LbuttonEnabled     := False
+        
         If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
             try {
                 exEl := UIA.ElementFromHandle(lhwnd)
@@ -1654,29 +1640,28 @@ Return
                 ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                 UIA := UIA_Interface() ; Initialize UIA interface
                 UIA.ConnectionTimeout := 6000
-                LbuttonEnabled := True
-                StopRecurssion := False
+                LbuttonEnabled     := True
+                StopRecurssion     := False
                 Return
             }
 
             ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%
-
+            LbuttonEnabled     := True
+            StopRecurssion     := False
+            
             If (prevPath != currentPath) {
                 GoSub, SendCtrlAdd
             }
-            LbuttonEnabled := True
-            StopRecurssion := False
             Return
         }
         Else {
+            LbuttonEnabled     := True
+            StopRecurssion     := False
             GoSub, SendCtrlAdd
             sleep, 200
-            LbuttonEnabled := True
-            StopRecurssion := False
             Return
         }
     }
-
 
     PixelGetColor, LB_HexColor1, %lbX1%, %lbY1%, RGB
     lbX1 -= 1
@@ -1728,8 +1713,8 @@ Return
         && (timeDiff < 325)
         && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3  != 0xFFFFFF)
         && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323"))  {
-
-        SetTimer, SendCtrlAdd, -100
+        
+        SetTimer, SendCtrlAdd, -125
         }
     Else
         SetTimer, SendCtrlAdd, Off
@@ -1820,7 +1805,7 @@ Return
             titleEntry     := Trim(splitEntry2[3])
 
             WinGet, Path, ProcessPath, ahk_exe %procEntry%
-            If (minState == -1 ) ; && VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
+            If (minState == -1 )
                 finalEntry   := % desktopEntry ":  [" titleEntry "] (" procEntry ")"
             Else
                 finalEntry   := % desktopEntry ":  " titleEntry " (" procEntry ")"
@@ -2089,7 +2074,7 @@ SendCtrlAdd:
     ; CoordMode, Mouse, Screen
     If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd") {
         OutputVar1 := OutputVar2 := OutputVar3 := ""
-
+       
         loop 100 {
             ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
@@ -2098,7 +2083,7 @@ SendCtrlAdd:
                 break
             sleep, 10
         }
-
+        
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && vWinClass != "EVERYTHING_(1.5a)") {
                 try {
@@ -2124,9 +2109,10 @@ SendCtrlAdd:
             Else If (OutputVar3 == 1) {
                 FocusedControl := "DirectUIHWND3"
             }
+            
             BlockKeyboard(true)
             ; loop, 50 {
-                ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
+            ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
                 ; ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
                 ; If (FocusedControl == whatCtrl)
                     ; break
@@ -2265,14 +2251,18 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
-            If !GetKeyState("Lctrl","P") {
-                Send, {Lctrl Up}
+            If !GetKeyState("Ctrl") {
+                Send, {Ctrl Up}
                 sleep, 10
             }
             BlockInput, On
             Send, ^{NumpadAdd}
             BlockInput, Off
             sleep, 200
+            If !GetKeyState("Ctrl") {
+                Send, {Ctrl Up}
+                sleep, 10
+            }
         }
     }
     Hotkey, ~WheelUp, On
@@ -2291,14 +2281,18 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
-            If !GetKeyState("Lctrl","P") {
-                Send, {Lctrl Up}
+            If !GetKeyState("Ctrl") {
+                Send, {Ctrl Up}
                 sleep, 10
             }
             BlockInput, On
             Send, ^{NumpadAdd}
             BlockInput, Off
             sleep, 200
+            If !GetKeyState("Ctrl") {
+                Send, {Ctrl Up}
+                sleep, 10
+            }
         }
     }
     Hotkey, ~WheelDown, On
@@ -2550,7 +2544,7 @@ IsAltTabWindow(hWnd) {
    if (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
       return
    WinGetClass, winClass, ahk_id %hWnd%
-   if (winClass = "Windows.UI.Core.CoreWindow")
+   if (winClass = "Windows.UI.Core.CoreWindow" || winClass = "Shell_TrayWnd")
       return
    if (winClass = "ApplicationFrameWindow")
    {
@@ -3244,23 +3238,28 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
 
-    SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
-    If (ErrorLevel == 2)
-        Return True
-        
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    WinGetPosEx(WindowUnderMouseID,x,y,w,h)
-
-    If (mClass != "Shell_TrayWnd") && (mClass != "WorkerW")  && (mClass != "ProgMan") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-SM_CXBORDER-(45*3))) {
-        ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
-        Return True
+    If ((mClass != "Shell_TrayWnd") 
+        && (mClass != "WorkerW")  
+        && (mClass != "ProgMan")   
+        && (mClass != "TaskListThumbnailWnd") 
+        && (mClass != "#32768") 
+        && (mClass != "Net UI Tool Window")) {
+        
+        WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+        
+        SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
+        If ((yPos > y) && (yPos < (y+titlebarHeight)) && (ErrorLevel == 2))
+            Return True
+        Else If ((ErrorLevel != 12) && (mClass != "Chrome_WidgetWin_1") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-SM_CXBORDER-(45*3)))) {
+            ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
+            Return True
+        }
+        Else
+            Return False
     }
     Else
         Return False
-}
-
-MouseIsOverCloseButton(xPos := "", yPos := "") {
-
 }
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
@@ -3674,6 +3673,34 @@ MoveCurrentWindowToDesktop(desktopNumber) {
     ; switchDesktopByNumber(desktopNumber)
 }
 
+ActivateTopMostWindow() {
+    SysGet, MonCount, MonitorCount
+    DetectHiddenWindows, Off
+    Critical, On
+    WinGet, winList, List, 
+    loop % winList
+    {
+        hwndID := winList%A_Index%
+        If IsAltTabWindow(hwndId) {
+            WinGet, MMState, MinMax, ahk_id %hwndId%
+            If (MMState > -1) {
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                }
+                Else {
+                    currentMonHasActWin := True
+                }
+                If currentMonHasActWin {
+                    WinActivate, ahk_id %hwndID%
+                    break
+                }
+            }
+        }
+    }
+    Critical, Off
+    Return
+}
 ;-------------------------------------------------------------------------------
 ;-------------------------------------------------------------------------------
 
@@ -3850,52 +3877,6 @@ DynaRun(TempScript, pipename="")
         Return A_LastError,DllCall("CloseHandle",@,__PIPE_)
    DllCall("CloseHandle",@,__PIPE_)
    Return PID
-}
-
-WinActivated(process, class, Hwnd, title)
-{
-    Global lClass
-
-    WinGetClass, lClass, A
-    ControlGet, OutputVar1, Visible ,, SysListView321, %title%
-    ControlGet, OutputVar2, Visible ,, DirectUIHWND3,  %title%
-    ControlGet, OutputVar3, Visible ,, DirectUIHWND2,  %title%
-    ; WinGet, controlsAvail, ControlList, ahk_id %Hwnd%
-    ; Tooltip, %OutputVar1% - %OutputVar2% - %OutputVar3%
-    If (OutputVar1 == 1 && lClass == class) {
-        ControlFocus , SysListView321, %title%
-        SetTimer, SendCtrlAdd, -1
-    }
-    Else If (OutputVar2 == 1 && lClass == class) {
-        ControlFocus , DirectUIHWND3, %title%
-        SetTimer, SendCtrlAdd, -1
-    }
-    Else If (OutputVar3 == 1 && lClass == class) {
-        ControlFocus , DirectUIHWND2, %title%
-        SetTimer, SendCtrlAdd, -1
-    }
-
-    ; Loop, Parse,controlsAvail, `n
-    ; {
-        ; if (A_LoopField == "SysListView321") || ()
-        ; {
-            ; MsgBox, MicrosoftSilverlight1 control exists in IEFrame window so do the rest of your stuff here
-        ; }
-    ; }
-    ; a_Time := A_YEAR "/" A_MM "/" A_DD " " A_Hour ":" A_Min ":" A_Sec
-    ; a_Text := "Process:" A_Tab  process "`n"
-            ; . "Class:"   A_Tab  class   "`n"
-            ; . "Hwnd:"    A_Tab  Hwnd    "`n"
-            ; . "Title:"   A_Tab  title
-
-    ; ToolTip, %a_Text%, 540, 10
-    ; ToolTip, %title% - %OutputVar1% : %OutputVar2% : %OutputVar3%, 540, 10
-    ; SetTimer, ToolTipCancel, % "-" 2000
-    return
-
-    ToolTipCancel:
-        ToolTip
-        return
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=3951
@@ -4636,6 +4617,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::discrepencies::discrepancies
+::discrepency::discrepancy
 ::digestable::digestible
 ::i::I
 ::fo::of

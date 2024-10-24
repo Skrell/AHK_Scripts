@@ -476,21 +476,7 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
 }
 
 MouseIsOverTitlebar(xPos := "", yPos := "") {
-    try {
-        oAcc := Acc_ObjectFromPoint(vChildId)
-        If oAcc {
-            vAccRoleText := Acc_GetRoleText(oAcc.accRole(vChildId))
-            
-            If (InStr(vAccRoleText,"title bar",false)) {
-                Return True
-            }
-        }
-    }
-    catch e {
-        tooltip, error thrown
-        sleep, 500
-    }
-    
+
     SysGet, SM_CXBORDER, 5
     SysGet, SM_CYBORDER, 6
     SysGet, SM_CXFIXEDFRAME, 7
@@ -510,11 +496,6 @@ MouseIsOverTitlebar(xPos := "", yPos := "") {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
     
-    WinGetPosEx(WindowUnderMouseID,x,y,w,h)
-    SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
-    If (ErrorLevel == 2) && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos < (x+w-(3*45)))
-        Return True
-    
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
 
     If    ((mClass != "Shell_TrayWnd") 
@@ -522,10 +503,37 @@ MouseIsOverTitlebar(xPos := "", yPos := "") {
         && (mClass != "ProgMan")   
         && (mClass != "TaskListThumbnailWnd") 
         && (mClass != "#32768") 
-        && (mClass != "Net UI Tool Window") 
-        && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos < (x+w-(3*45)))) {
-        ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
-        Return True
+        && (mClass != "Net UI Tool Window")) {
+        
+        try {
+            oAcc := Acc_ObjectFromPoint(vChildId)
+            If oAcc {
+                vAccRoleText := Acc_GetRoleText(oAcc.accRole(vChildId))
+                
+                If (InStr(vAccRoleText,"title bar",false)) {
+                    Return True
+                }
+            }
+        }
+        catch e {
+            tooltip, error thrown
+            sleep, 500
+        }
+        
+        oAcc := ""
+        
+        WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+        SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
+        If ((yPos > y) && (yPos < (y+titlebarHeight)) && (xPos < (x+w-(3*45))) && (ErrorLevel == 2))
+            Return True
+        Else If ((ErrorLevel != 12) 
+                && (mClass != "Chrome_WidgetWin_1") 
+                && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos < (x+w-(3*45)))) {
+            ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
+            Return True
+        }
+        Else
+            Return False
     }
     Else
         Return False
@@ -560,12 +568,13 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
         && (mClass != "TaskListThumbnailWnd") 
         && (mClass != "#32768") 
         && (mClass != "Net UI Tool Window")) {
-    
+        
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
         SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
         If (((yPos > y) && (yPos < (y+titlebarHeight))) && ((ErrorLevel == 8) || (ErrorLevel == 9) || (ErrorLevel == 20)))
             Return True
-        Else If ((yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45)))) {
+        Else If ((ErrorLevel != 12) 
+                && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45)))) {
             ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
             Return True
         }
