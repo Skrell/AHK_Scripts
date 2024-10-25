@@ -2007,33 +2007,59 @@ Return
 
 SendWindow:
     Global movehWndId
-   
+    moveLeftConst := -1
+    moveRightConst := 1
+    moveConst := 0
+    targetDesktop := 0
     DetectHiddenWindows, On
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
     sw_x_org := sw_x
     
+    CurrentDesktop := getCurrentDesktop()
+    If      (A_ThisMenuItem == "Move to Desktop 1")
+        targetDesktop := 1
+    Else If (A_ThisMenuItem == "Move to Desktop 2")
+        targetDesktop := 2
+    Else If (A_ThisMenuItem == "Move to Desktop 3")
+        targetDesktop := 3
+    Else If (A_ThisMenuItem == "Move to Desktop 4")
+        targetDesktop := 4
+    Else If (A_ThisMenuItem == "Move to Desktop 5")
+        targetDesktop := 5
+    Else If (A_ThisMenuItem == "Move to Desktop 6")
+        targetDesktop := 6
+    Else If (A_ThisMenuItem == "Move to Desktop 7")
+        targetDesktop := 7
+    Else If (A_ThisMenuItem == "Move to Desktop 8")
+        targetDesktop := 8
+    
+    If (targetDesktop < CurrentDesktop)
+        moveConst := moveLeftConst
+    Else
+        moveConst := moveRightConst
+    
     WinSet, Transparent, 225, ahk_id %movehWndId%
-    sw_x += 15
+    sw_x += 15*moveConst
     WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 200, ahk_id %movehWndId%
-    sw_x += 15
+    sw_x += 15*moveConst
     WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 175, ahk_id %movehWndId%
-    sw_x += 15
+    sw_x += 15*moveConst
     WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 150, ahk_id %movehWndId%
-    sw_x += 15
+    sw_x += 15*moveConst
     WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 100, ahk_id %movehWndId%
-    sw_x += 15
+    sw_x += 15*moveConst
     WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 50,  ahk_id %movehWndId%
-    sw_x += 15
+    sw_x += 15*moveConst
     WinMove, ahk_id %movehWndId%,, %sw_x%
     sleep, 20
     WinSet, Transparent, 0,   ahk_id %movehWndId%
@@ -4594,7 +4620,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:seom::some
 :*:tyr::try
 :*:tyring::trying
-:*:tryin::trying
 :*:cmakel::CMakeLists.txt
 :*:cmaket::CMakeLists.txt
 :*:unfo::unfortunately, `
@@ -4611,12 +4636,16 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?*:sgin::sign  ; Covers subcatagories and catagories.
 :?*:fortuante::fortunate  ; Covers subcatagories and catagories.
 :?*:laod::load
+:?*:olad::load
+:?*:laod::load
+:?*:loda::load
 :?*:isntall::install
 :?*:insatll::install
 :?*:istall::install
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::tryin::trying
 ::discrepencies::discrepancies
 ::discrepency::discrepancy
 ::digestable::digestible
