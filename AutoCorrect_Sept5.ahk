@@ -14,6 +14,7 @@
 #InstallMouseHook
 #InstallKeybdHook
 #HotString EndChars ()[]{}:;,.?!`n `t
+#MaxhotKeysPerInterval 500
 
 ; #include %A_ScriptDir%\_VD.ahk
 ; DLL
@@ -268,7 +269,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Return
         }
                 
-        If !HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey" {
+        If (!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey") {
             loop 200 {
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
                 If (vWinTitle != "")
@@ -1998,7 +1999,7 @@ Mbutton::
     
     loop % getTotalDesktops()
     {
-        Menu, vdeskMenu, Add, Move to Desktop %A_Index%, SendWindow
+        Menu, vdeskMenu, Add,  Move to Desktop %A_Index%, SendWindow
         Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
     }
     Menu, vdeskMenu, Show
@@ -3018,13 +3019,17 @@ keyTrack() {
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
-                BlockKeyboard(true)
                 WinGetClass, testClass, A
                 If (testClass == currClass) {
+                    BlockKeyboard(true)
                     Send, ^{NumpadAdd}
+                    BlockKeyboard(false)
+                    If GetKeyState("Ctrl")
+                        Send, {Ctrl Up}
+                    If GetKeyState("NumpadAdd")
+                        Send, {NumpadAdd Up}
                 }
                 TimeOfLastKey := A_TickCount
-                BlockKeyboard(false)
             }
         }
         Return
