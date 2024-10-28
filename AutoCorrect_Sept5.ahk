@@ -469,7 +469,7 @@ Return
 +!a::
     Send, +{home}
     Hotstring("Reset")
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -481,35 +481,35 @@ Return
 !+;::
     Send, +{end}
     Hotstring("Reset")
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
 !+i::
     Send +{UP}
     Hotstring("Reset")
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
 !+k::
     Send +{DOWN}
     Hotstring("Reset")
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
 !+j::
     Send ^+{LEFT}
     Hotstring("Reset")
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
 !+l::
     Send ^+{RIGHT}
     Hotstring("Reset")
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -520,7 +520,7 @@ Return
     store := """" . store . """"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -531,7 +531,7 @@ Return
     store := "{" . store . "}"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -542,7 +542,7 @@ Return
     store := "{" . store . "}"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -553,7 +553,7 @@ Return
     store := "<" . store . ">"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -564,7 +564,7 @@ Return
     store := "<" . store . ">"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -575,7 +575,7 @@ Return
     store := "(" . store . ")"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -586,7 +586,7 @@ Return
     store := "(" . store . ")"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -600,13 +600,13 @@ Return
 
 !j::
     Send ^{LEFT}
-    If GetKeyState("LCtrl", "P")
+    If GetKeyState("LCtrl")
         Send, {LCtrl Up}
 Return
 
 !l::
     Send ^{RIGHT}
-    If GetKeyState("LCtrl", "P")
+    If GetKeyState("LCtrl")
         Send, {LCtrl Up}
 Return
 
@@ -627,7 +627,7 @@ Return
 ~+Space::
     GoSub, FixSlash
     GoSub, Hoty
-    If GetKeyState("LShift", "P")
+    If GetKeyState("LShift")
         Send, {LShift Up}
 Return
 
@@ -9197,8 +9197,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::worls::world
 ::worstened::worsened
 ::owudl::would
-::owuld::would
-::woudl::would
 ::wuould::would
 ::wouldbe::would be
 ::would of::would have

@@ -502,7 +502,7 @@ MouseIsOverTitlebar(xPos := "", yPos := "") {
         && (mClass != "WorkerW")  
         && (mClass != "ProgMan")   
         && (mClass != "TaskListThumbnailWnd") 
-        && (mClass != "#32768") 
+        && (!WinExist("ahk_class #32768")) 
         && (mClass != "Net UI Tool Window")) {
         
         try {
