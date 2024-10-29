@@ -169,7 +169,7 @@ WhichButton(vPosX, vPosY, hWnd) {
     }
 
     If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
-        SendMessage, 0x84, 0, (vPosX & 0xFFFF) | (vPosY & 0xFFFF)<<16,, % "ahk_id " hWnd 
+        SendMessage, 0x84, 0, (vPosX & 0xFFFF) | (vPosY & 0xFFFF)<<16,, ahk_id %hWnd%, , , , 500
         If (ErrorLevel == 8)
             vName := "minimize" 
         Else If (ErrorLevel == 9)
@@ -496,6 +496,9 @@ MouseIsOverTitlebar(xPos := "", yPos := "") {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
     
+    If !JEE_WinHasAltTabIcon(WindowUnderMouseID)
+        Return
+    
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
 
     If    ((mClass != "Shell_TrayWnd") 
@@ -523,7 +526,7 @@ MouseIsOverTitlebar(xPos := "", yPos := "") {
         oAcc := ""
         
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
-        SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
+        SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, ahk_id %WindowUnderMouseID%, , , , 500
         If ((yPos > y) && (yPos < (y+titlebarHeight)) && (xPos < (x+w-(3*45))) && (ErrorLevel == 2))
             Return True
         Else If ((ErrorLevel != 12) 
@@ -559,7 +562,10 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
         MouseGetPos, , , WindowUnderMouseID
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
-        
+    
+    If !JEE_WinHasAltTabIcon(WindowUnderMouseID)
+        Return
+    
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     
     If    ((mClass != "Shell_TrayWnd") 
@@ -570,7 +576,7 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
         && (mClass != "Net UI Tool Window")) {
         
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
-        SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID 
+        SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, ahk_id %WindowUnderMouseID%, , , , 500
         If (((yPos > y) && (yPos < (y+titlebarHeight))) && ((ErrorLevel == 8) || (ErrorLevel == 9) || (ErrorLevel == 20)))
             Return True
         Else If ((ErrorLevel != 12) 
