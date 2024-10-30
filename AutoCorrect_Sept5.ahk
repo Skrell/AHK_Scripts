@@ -269,7 +269,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Return
         }
                 
-        If (!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey") {
+        If ((!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey") || vWinClass == "#32770") {
             loop 200 {
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
                 If (vWinTitle != "")
@@ -2280,16 +2280,14 @@ Return
         If (FocusedControl == wuCtrl) {
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
-                sleep, 10
             }
             BlockInput, On
             Send, ^{NumpadAdd}
-            BlockInput, Off
             sleep, 200
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
-                sleep, 10
             }
+            BlockInput, Off
         }
     }
     Hotkey, ~WheelUp, On
@@ -2310,16 +2308,14 @@ Return
         If (FocusedControl == wuCtrl) {
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
-                sleep, 10
             }
             BlockInput, On
             Send, ^{NumpadAdd}
-            BlockInput, Off
             sleep, 200
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
-                sleep, 10
             }
+            BlockInput, Off
         }
     }
     Hotkey, ~WheelDown, On
