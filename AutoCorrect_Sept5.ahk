@@ -1677,6 +1677,8 @@ Return
     KeyWait, LButton, U T5
     CoordMode, Mouse, Window
     MouseGetPos, lbX2, lbY2,
+    prevPath := ""
+    currentPath := ""
 
     If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
         ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lhwnd%
@@ -1694,6 +1696,7 @@ Return
                     tabEl := targetEl
 
                 prevPath := tabEl.Name
+                currentPath := prevPath
             } catch e {
                 tooltip, TIMED OUT!!!!
                 UIA :=  ;// set to a different value
@@ -4476,6 +4479,22 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
+:?:succesful::successful
+:?:successfull::successful
+:?:succsessfull::successful
+:?:sucesful::successful
+:?:sucessful::successful
+:?:sucessfull::successful
+:?:succesfully::successfully
+:?:succesfully::successfully
+:?:succesfuly::successfully
+:?:successfuly::successfully
+:?:successfulyl::successfully
+:?:successully::successfully
+:?:sucesfully::successfully
+:?:sucesfuly::successfully
+:?:sucessfully::successfully
+:?:sucessfuly::successfully
 :?:bilites::bilities
 :?:bilties::bilities
 :?:blities::bilities
@@ -4531,6 +4550,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:ngi::ing
 :?:yda::day
 :?:groudn::ground
+:?:ation::ation
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -4643,9 +4663,11 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?*:isntall::install
 :?*:insatll::install
 :?*:istall::install
+:?*:instal::install
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::shoudlnt::shouldn't
 ::tryin::trying
 ::discrepencies::discrepancies
 ::discrepency::discrepancy
@@ -6636,7 +6658,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::funguses::fungi
 ::firc::furc
 ::furuther::further
-::futher::further
 ::futhermore::furthermore
 ::galatic::galactic
 ::galations::Galatians
@@ -8600,21 +8621,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::sucess::success
 ::succcesses::successes
 ::sucesses::successes
-::succesful::successful
-::successfull::successful
-::succsessfull::successful
-::sucesful::successful
-::sucessful::successful
-::sucessfull::successful
-::succesfully::successfully
-::succesfuly::successfully
-::successfuly::successfully
-::successfulyl::successfully
-::successully::successfully
-::sucesfully::successfully
-::sucesfuly::successfully
-::sucessfully::successfully
-::sucessfuly::successfully
 ::succesion::succession
 ::sucesion::succession
 ::sucession::succession
@@ -9006,9 +9012,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::unsucesful::unsuccessful
 ::unsucessful::unsuccessful
 ::unsucessfull::unsuccessful
-::unsuccesfully::unsuccessfully
-::unsucesfuly::unsuccessfully
-::unsucessfully::unsuccessfully
 ::unsuprised::unsurprised
 ::unsuprized::unsurprised
 ::unsurprized::unsurprised
