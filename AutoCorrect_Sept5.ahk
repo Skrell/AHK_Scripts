@@ -1136,8 +1136,9 @@ Return
 
 #If !hitTAB
 !q::
+    tooltip, swapping between windows of app
+    StopRecurssion := True
     Gui, GUI4Boarder: Hide
-    
     ActivateTopMostWindow()
 
     DetectHiddenWindows, Off
@@ -1149,6 +1150,8 @@ Return
 
     DrawingRect  := False
     ClearingRect := False
+    tooltip,
+    StopRecurssion := False
 Return
 #If
 
@@ -1580,6 +1583,8 @@ Return
 #MaxThreadsPerHotkey 2
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop())
 ~*LButton::
+    
+    StopRecurssion     := True
     CoordMode, Mouse, Window
     MouseGetPos, lbX1, lbY1, lhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
@@ -1607,7 +1612,7 @@ Return
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
         
         currentPath    := ""
-        StopRecurssion     := True
+        
         ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %A_TimeSincePriorHotkey% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
 
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
@@ -1625,43 +1630,44 @@ Return
         LbuttonEnabled     := False
         
         If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
-            try {
-                exEl := UIA.ElementFromHandle(lhwnd)
-                targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,5000)
+            ; try {
+                ; exEl := UIA.ElementFromHandle(lhwnd)
+                ; targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,5000)
 
-                If (targetEl.LocalizedControlType == "progress bar")
-                    tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
-                Else
-                    tabEl := targetEl
+                ; If (targetEl.LocalizedControlType == "progress bar")
+                    ; tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
+                ; Else
+                    ; tabEl := targetEl
 
-                currentPath := tabEl.Name
-            } catch e {
-                tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %A_TimeSincePriorHotkey% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
-                UIA :=  ;// set to a different value
-                ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                UIA := UIA_Interface() ; Initialize UIA interface
-                UIA.ConnectionTimeout := 6000
-                LbuttonEnabled     := True
-                StopRecurssion     := False
-                Return
-            }
+                ; currentPath := tabEl.Name
+            ; } catch e {
+                ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %A_TimeSincePriorHotkey% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
+                ; UIA :=  ;// set to a different value
+                ; ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                ; UIA := UIA_Interface() ; Initialize UIA interface
+                ; UIA.ConnectionTimeout := 6000
+                ; LbuttonEnabled     := True
+                ; StopRecurssion     := False
+                ; Return
+            ; }
 
-            ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%
+            ; ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%
             LbuttonEnabled     := True
             StopRecurssion     := False
+            currentPath := GetExplorerPath(lhwnd)
             
-            If (prevPath != currentPath) {
+            If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                 GoSub, SendCtrlAdd
             }
             Return
         }
-        Else {
+            Else {
             LbuttonEnabled     := True
             StopRecurssion     := False
             GoSub, SendCtrlAdd
             sleep, 200
             Return
-        }
+            }
     }
 
     PixelGetColor, LB_HexColor1, %lbX1%, %lbY1%, RGB
@@ -1681,32 +1687,34 @@ Return
     currentPath := ""
 
     If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
-        ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lhwnd%
-        ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lhwnd%
+        prevPath := GetExplorerPath(lhwnd)
+        ; tooltip, path is %prevPath%
+        ; ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lhwnd%
+        ; ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lhwnd%
 
-        If (OutputVar2 == 1 || OutputVar3 == 1) {
-            try {
-                exEl := UIA.ElementFromHandle(lhwnd)
-                targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,275)
-                ; targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
+        ; If (OutputVar2 == 1 || OutputVar3 == 1) {
+            ; try {
+                ; exEl := UIA.ElementFromHandle(lhwnd)
+                ; targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,275)
+                ; ; targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
 
-                If (targetEl.LocalizedControlType == "progress bar")
-                    tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
-                Else
-                    tabEl := targetEl
+                ; If (targetEl.LocalizedControlType == "progress bar")
+                    ; tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
+                ; Else
+                    ; tabEl := targetEl
 
-                prevPath := tabEl.Name
-                currentPath := prevPath
-            } catch e {
-                tooltip, TIMED OUT!!!!
-                UIA :=  ;// set to a different value
-                ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                UIA := UIA_Interface() ; Initialize UIA interface
-                UIA.ConnectionTimeout := 6000
-                LbuttonEnabled := True
-                Return
-            }
-        }
+                ; prevPath := tabEl.Name
+                ; currentPath := prevPath
+            ; } catch e {
+                ; tooltip, TIMED OUT!!!!
+                ; UIA :=  ;// set to a different value
+                ; ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                ; UIA := UIA_Interface() ; Initialize UIA interface
+                ; UIA.ConnectionTimeout := 6000
+                ; LbuttonEnabled := True
+                ; Return
+            ; }
+        ; }
     }
 
     rlsTime := A_TickCount
@@ -1722,7 +1730,9 @@ Return
         }
     Else
         SetTimer, SendCtrlAdd, Off
-
+    
+    StopRecurssion := False
+    
 Return
 #If
 
@@ -2773,7 +2783,9 @@ HandleChromeWindowsWithSameTitle(title := "") {
     }
     ; tooltip, %counter%
     WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
-    WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%, , 2
+    WinGetTitle, actTitle, % "ahk_id " windowsWithSameTitleList%counter%
+    tooltip, Active is %actTitle%
+    ; WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%, , 2
     GoSub, DrawRect
 
     KeyWait, q, U
@@ -2803,10 +2815,12 @@ HandleChromeWindowsWithSameTitle(title := "") {
         KeyWait, q, D  T.25
         If !ErrorLevel
         {
-            tooltip, Windows # %counter%
+            ; tooltip, Windows # %counter%
             WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
-            WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%, , 2
-
+            ; WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%, , 2
+            WinGetTitle, actTitle, % "ahk_id " windowsWithSameTitleList%counter%
+            tooltip, Active is %actTitle%
+            
             GoSub, DrawRect
 
             KeyWait, q, U  T.25
@@ -2873,6 +2887,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+    WinGetTitle, actTitle, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+    tooltip, Active is %actTitle%
 
     Critical, Off
     ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
@@ -2895,6 +2911,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             ; tooltip, Windows # [counter]
             WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
             ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
+            WinGetTitle, actTitle, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+            tooltip, Active is %actTitle%
             GoSub, DrawRect
 
             KeyWait, q, U
@@ -3945,20 +3963,30 @@ GetActiveExplorerPath()
 GetExplorerPath(hwnd:="") {
     if !hwnd
         hwnd := WinExist("A")
-    activeTab := 0
-    try ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
-    for w in ComObjCreate("Shell.Application").Windows {
-        if (w.hwnd != hwnd)
-            continue
-        if activeTab {
-            static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
-            shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
-            DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
-            if (thisTab != activeTab)
+    
+    WinGetClass, clCheck, ahk_id %hwnd%
+    
+    If (clCheck == "#32770") {
+        ; ControlFocus, ToolbarWindow323, ahk_id %hwnd%
+        ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+        return dir
+    }
+    else {
+        activeTab := 0
+        try ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
+        for w in ComObjCreate("Shell.Application").Windows {
+            if (w.hwnd != hwnd)
                 continue
-            ObjRelease(shellBrowser)
+            if activeTab {
+                static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
+                shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
+                DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
+                if (thisTab != activeTab)
+                    continue
+                ObjRelease(shellBrowser)
+            }
+            return w.Document.Folder.Self.Path
         }
-        return w.Document.Folder.Self.Path
     }
     return false
 }
@@ -4022,6 +4050,41 @@ IsGoogleDocWindow() {
     Else
         Return False
 }
+
+; ___________________________________
+
+;    Get Explorer Path https://www.autohotkey.com/boards/viewtopic.php?p=587509#p587509
+; ___________________________________
+
+; GetExplorerPath(explorerHwnd=0){
+    ; if(!explorerHwnd)
+        ; ExplorerHwnd:= winactive("ahk_class CabinetWClass")
+
+    ; if(!explorerHwnd){
+        ; WinGet, explorerHwnd, List, ahk_class CabinetWClass 
+        ; loop, % explorerHwnd
+        ; {
+            ; loopindex:= A_Index
+            ; for window in ComObjCreate("Shell.Application").Windows{
+                ; try{
+                    ; if (window.hwnd==explorerHwnd%loopindex%){
+                        ; folder:= window.Document.Folder.Self.Path
+                        ; if (instr(folder,"\"))
+                            ; return folder
+                    ; }
+                ; }
+            ; }
+        ; }
+    ; }else{
+        ; for window in ComObjCreate("Shell.Application").Windows{
+            ; try{
+                ; if (window.hwnd==explorerHwnd)
+                    ; return window.Document.Folder.Self.Path
+            ; }
+        ; }
+    ; }
+; return false
+; }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
