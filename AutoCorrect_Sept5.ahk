@@ -1604,11 +1604,21 @@ Return
         Return
 
     Gui, GUI4Boarder: Hide
+    
+    If (A_PriorHotkey == A_ThisHotkey
+        && (A_TimeSincePriorHotkey < 550)
+        && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)
+        && MouseIsOverTaskbar()) {
+        run, explorer.exe 
+        LbuttonEnabled     := True
+        StopRecurssion     := False
+        Return
+    }
 
     ; tooltip, %A_TimeSincePriorHotkey% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
-        && (abs(lbX1-lbX2) < 5 && abs(lbY1-lbY2) < 5)
+        && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
         
         currentPath    := ""
@@ -3964,31 +3974,38 @@ GetExplorerPath(hwnd:="") {
     if !hwnd
         hwnd := WinExist("A")
     
+    If !WinExist("ahk_id " . hwnd)
+        Return false
+    
     WinGetClass, clCheck, ahk_id %hwnd%
     
     If (clCheck == "#32770") {
         ; ControlFocus, ToolbarWindow323, ahk_id %hwnd%
         ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-        return dir
+        Return dir
     }
     else {
         activeTab := 0
         try ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
-        for w in ComObjCreate("Shell.Application").Windows {
-            if (w.hwnd != hwnd)
-                continue
-            if activeTab {
-                static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
-                shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
-                DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
-                if (thisTab != activeTab)
+        try {
+            for w in ComObjCreate("Shell.Application").Windows {
+                if (w.hwnd != hwnd)
                     continue
-                ObjRelease(shellBrowser)
-            }
-            return w.Document.Folder.Self.Path
+                if activeTab {
+                    static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
+                    shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
+                    DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
+                    if (thisTab != activeTab)
+                        continue
+                    ObjRelease(shellBrowser)
+                }
+                Return w.Document.Folder.Self.Path
+            } 
+        }catch e {
+            Return False
         }
     }
-    return false
+    Return false
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=60403
@@ -4085,6 +4102,18 @@ IsGoogleDocWindow() {
     ; }
 ; return false
 ; }
+
+MouseIsOverTaskbar() {
+    CoordMode, Mouse, Screen
+    MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
+    
+    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+    If (InStr(mClass,"TrayWnd",false) && InStr(mClass,"Shell",false) && CtrlUnderMouseId != "ToolbarWindow323" && CtrlUnderMouseId != "TrayNotifyWnd1")
+        Return True
+    Else
+        Return False
+}
+
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
