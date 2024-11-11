@@ -474,7 +474,10 @@ Return
 Return
 
 !;::
-    Send, {end}
+    If GetKeyState("a")
+        Send, +{end}
+    Else
+        Send, {end}
     Hotstring("Reset")
 Return
 
@@ -674,7 +677,8 @@ prevChromeTab()
             GoSub, DrawRect
             KeyWait, Esc, U T10
             If !CancelClose {
-                Send, !{F4}
+                Winclose, ahk_id %escHwndID%
+                WinKill , ahk_id %escHwndID%
                 loop 500 {
                     If !WinExist("ahk_id " . escHwndID)
                         break
@@ -1608,7 +1612,7 @@ Return
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
         && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)
-        && MouseIsOverTaskbar()) {
+        && MouseIsOverTaskbarBlank()) {
         run, explorer.exe 
         LbuttonEnabled     := True
         StopRecurssion     := False
@@ -1852,10 +1856,11 @@ Return
             }
             desktopEntryLast := desktopEntry
         }
+        
         If (totalMenuItemCount == 1 && onlyTitleFound != "") {
             GoSub, ActivateWindow
         }
-        Else {
+        Else If (totalMenuItemCount > 1) {
 
             Critical Off
 
@@ -1868,16 +1873,19 @@ Return
             drawY := CoordYCenterScreen()
             Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 y0
             ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
-            Critical Off
 
             ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
             DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-            Tooltip,
 
             ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
+            Gui, ShadowFrFull:  Hide
+            Menu, windows, deleteAll
         }
-        Gui, ShadowFrFull:  Hide
-        Menu, windows, deleteAll
+        Else {
+            tooltip, No windows found!
+            sleep 1000
+            tooltip,
+        }
     }
 Return
 
@@ -2324,6 +2332,12 @@ Return
     If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Right}
+    }
+    Else If (MouseIsOverTitleBar()) {
+        BlockInput, On
+        WinMinimize, ahk_id %wdID% 
+        sleep, 200
+        BlockInput, Off
     }
     Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
@@ -4108,12 +4122,20 @@ MouseIsOverTaskbar() {
     MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
     
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If (InStr(mClass,"TrayWnd",false) && InStr(mClass,"Shell",false) && CtrlUnderMouseId != "ToolbarWindow323" && CtrlUnderMouseId != "TrayNotifyWnd1")
+    If  InStr(mClass,"Shell",false) && (InStr(mClass,"TrayWnd",false) && CtrlUnderMouseId != "ToolbarWindow323" && CtrlUnderMouseId != "TrayNotifyWnd1")
         Return True
     Else
         Return False
 }
 
+MouseIsOverTaskbarBlank() {
+    Global UIA
+    MouseGetPos, , , hwnd
+    WinGetClass, cl, ahk_id %hwnd%
+    pt := UIA.ElementFromPoint(,,False)
+    try return ((ctrlType := pt.CurrentControlType) == 50033 && InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false))
+    	
+}
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
@@ -4637,6 +4659,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:lyl::lly
 :?:aingin::aining
 :?:ainign::aining
+:?:gin::ing
 :?:gni::ing
 :?:ign::ing
 :?:ngi::ing
@@ -9412,8 +9435,14 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::theres::there's
 ::theyd::they'd
 ::theyll::they'll
+::theyl'l::they'll
+::theyll'::they'll
 ::theyre::they're
+::theyr'e::they're
+::theyre'::they're
 ::theyve::they've
+::theyv'e::they've
+::theyve'::they've
 ::ti's::it's
 ::todays::today's
 ::w'ere::we're
