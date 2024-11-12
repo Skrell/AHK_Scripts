@@ -672,18 +672,21 @@ prevChromeTab()
 ~Esc::
     WinGet, escHwndID, ID, A
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 500 && escHwndID == escHwndID_old) {
-        DetectHiddenWindows, Off
         If IsAltTabWindow(escHwndID) {
+            DetectHiddenWindows, On
             GoSub, DrawRect
             KeyWait, Esc, U T10
             If !CancelClose {
                 Winclose, ahk_id %escHwndID%
-                WinKill , ahk_id %escHwndID%
-                loop 500 {
-                    If !WinExist("ahk_id " . escHwndID)
-                        break
-                    sleep, 10
+                If (WinExist("ahk_class #32770")) {
+                    loop 500 {
+                        If !WinExist("ahk_id " . escHwndID)
+                            break
+                        sleep, 10
+                    }
                 }
+                Else
+                    WinKill , ahk_id %escHwndID%
                 SetTimer, ClearRect, -10
                 Gui, GUI4Boarder: Hide
                 ActivateTopMostWindow()
@@ -696,6 +699,7 @@ prevChromeTab()
     DrawingRect := False
     ClearingRect := False
     escHwndID_old := escHwndID
+    DetectHiddenWindows, Off
 Return
 
 Esc & x::
@@ -4132,8 +4136,16 @@ MouseIsOverTaskbarBlank() {
     Global UIA
     MouseGetPos, , , hwnd
     WinGetClass, cl, ahk_id %hwnd%
-    pt := UIA.ElementFromPoint(,,False)
-    try return ((ctrlType := pt.CurrentControlType) == 50033 && InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false))
+    try {
+        If (InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false)) {
+            pt := UIA.ElementFromPoint(,,False)
+            return ((ctrlType := pt.CurrentControlType) == 50033)
+        }
+        Else
+            Return False
+    } catch e {
+        return False
+    }
     	
 }
 ;------------------------------------------------------------------------------
