@@ -39,7 +39,6 @@ Global skipCheck := False
 Global hwndVD
 Global forward := True
 Global cycling := False
-Global cyclingMin := False
 Global ValidWindows := []
 Global GroupedWindows := []
 Global RevMinnedWindows := []
@@ -65,7 +64,6 @@ Global v3 := 0
 Global v4 := 0
 Global DesktopIconsVisible := False
 Global DrawingRect := False
-Global ClearingRect := False
 Global LclickSelected := False
 Global StopRecurssion := False
 Global currMonHeight := 0
@@ -696,8 +694,6 @@ prevChromeTab()
         }
     }
     KeyWait, Esc, U T2
-    DrawingRect := False
-    ClearingRect := False
     escHwndID_old := escHwndID
     DetectHiddenWindows, Off
 Return
@@ -708,8 +704,6 @@ Esc & x::
     CancelClose := True
     sleep, 1500
     Tooltip,
-    DrawingRect := False
-    ClearingRect := False
 Return
 #If
 
@@ -933,80 +927,79 @@ Altup:
     Global startHighlight
     Global hitTAB
     Global LclickSelected
-    Global DrawingRect
 
     If !hitTAB
         Return
     Else {
-        WinGet, actWndID, ID, A
-        If (LclickSelected && cycling && (GroupedWindows.length() > 2)) {
+        cycling        := False
+        If (LclickSelected && (GroupedWindows.length() > 2)) {
             If (startHighlight) {
                 BlockInput, MouseMove
                 GoSub, FadeInWin1
+                GoSub, ClearRect
+                WinActivate, % "ahk_id " lbhwnd
                 BlockInput, MouseMoveOff
             }
         }
         Else {
+            WinGet, actWndID, ID, A
             If (GetKeyState("x","P") || (actWndID == GroupedWindows[1]) || (GroupedWindows.length() <= 1)) {
                 If (GetKeyState("x","P")) {
                     Gui, GUI4Boarder: Hide
                     GoSub, ResetWins
                 }
             }
-            Else If (cycling && startHighlight && (GroupedWindows.length() > 2)) {
+            Else If (startHighlight && (GroupedWindows.length() > 2)) {
                 GoSub, FadeInWin2
+                Gosub, ClearRect
+                WinActivate, % "ahk_id " GroupedWindows[cycleCount]
             }
         }
     }
 
-    Gosub, ClearRect
+    Critical, On
     cycleCount     := 1
-    KeyWait, x, U T1
     ValidWindows   := {}
     GroupedWindows := {}
-    cycling        := False
-    cyclingMin     := False
+    startHighlight := False
+    Critical, Off
+    Gosub, ClearRect
     hitTAB         := False
     LclickSelected := False
-    ; Gosub, ClearRect
-    startHighlight := False
     Gui, GUI4Boarder: Hide
-    ClearingRect := False
-    DrawingRect  := False
     tooltip,
 Return
 
 ;============================================================================================================================
 FadeInWin1:
     Critical, On
-    MouseGetPos, , , lclickHwndId
 
-    If (lclickHwndId != ValidWindows[1])
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    If (lclickHwndId != ValidWindows[2])
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    If (lclickHwndId != ValidWindows[3])
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
-        
-    WinSet, AlwaysOnTop, On , % "ahk_id " lclickHwndId
+    WinSet, AlwaysOnTop, On, ahk_id %lbhwnd%
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
-    If (ValidWindows.MaxIndex() >= 3) {
+    If (lbhwnd != ValidWindows[1] && Highlighter != ValidWindows[1] && ValidWindows.MaxIndex() >= 1)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+    If (lbhwnd != ValidWindows[2] && Highlighter != ValidWindows[2] && ValidWindows.MaxIndex() >= 2)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+    If (lbhwnd != ValidWindows[3] && Highlighter != ValidWindows[3] && ValidWindows.MaxIndex() >= 3)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+    If (lbhwnd != ValidWindows[4] && Highlighter != ValidWindows[4] && ValidWindows.MaxIndex() >= 4)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
+
+    If (lbhwnd != ValidWindows[4] &&ValidWindows.MaxIndex() >= 4) {
+        WinActivate, % "ahk_id " ValidWindows[4]
+    }
+    If (lbhwnd != ValidWindows[3] &&ValidWindows.MaxIndex() >= 3) {
         WinActivate, % "ahk_id " ValidWindows[3]
-        ; WinActivate, % "ahk_id " lclickHwndId
     }
-    If (ValidWindows.MaxIndex() >= 2) {
+    If (lbhwnd != ValidWindows[2] &&ValidWindows.MaxIndex() >= 2) {
         WinActivate, % "ahk_id " ValidWindows[2]
-        ; WinActivate, % "ahk_id " lclickHwndId
     }
-    If (ValidWindows.MaxIndex() >= 1) {
+    If (lbhwnd != ValidWindows[1] &&ValidWindows.MaxIndex() >= 1) {
         WinActivate, % "ahk_id " ValidWindows[1]
-        ; WinActivate, % "ahk_id " lclickHwndId
     }
 
-    WinSet, AlwaysOnTop, Off , % "ahk_id " lclickHwndId
-
-    If (ValidWindows.MaxIndex() >= 1 && lclickHwndId != ValidWindows[1]) {
+    If (ValidWindows.MaxIndex() >= 1 && Highlighter != ValidWindows[1] && lbhwnd != ValidWindows[1]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
@@ -1015,7 +1008,7 @@ FadeInWin1:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
     }
-    If (ValidWindows.MaxIndex() >= 2 && lclickHwndId != ValidWindows[2]) {
+    If (ValidWindows.MaxIndex() >= 2 && Highlighter != ValidWindows[2] && lbhwnd != ValidWindows[2]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
@@ -1024,7 +1017,7 @@ FadeInWin1:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
     }
-    If (ValidWindows.MaxIndex() >= 3 && lclickHwndId != ValidWindows[3]) {
+    If (ValidWindows.MaxIndex() >= 3 && Highlighter != ValidWindows[3] && lbhwnd != ValidWindows[3]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
@@ -1033,74 +1026,7 @@ FadeInWin1:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
     }
-    If (ValidWindows.MaxIndex() >= 4 && lclickHwndId != ValidWindows[4]) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
-        sleep 10
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
-    }
-    WinActivate, % "ahk_id " lclickHwndId
-    Critical, Off
-Return
-
-FadeInWin2:
-    Critical, On
-    If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1)
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2)
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3)
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
-
-    WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
-    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
-
-    If (ValidWindows.MaxIndex() >= 3) {
-        WinActivate, % "ahk_id " ValidWindows[3]
-        ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
-    }
-    If (ValidWindows.MaxIndex() >= 2) {
-        WinActivate, % "ahk_id " ValidWindows[2]
-        ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
-    }
-    If (ValidWindows.MaxIndex() >= 1) {
-        WinActivate, % "ahk_id " ValidWindows[1]
-        ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
-    }
-
-    WinSet, AlwaysOnTop, Off ,% "ahk_id " GroupedWindows[cycleCount]
-
-    If (ValidWindows.MaxIndex() >= 1 && cycleCount != 1) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        sleep 10
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        sleep 10
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        sleep 10
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
-    }
-    If (ValidWindows.MaxIndex() >= 2 && cycleCount != 2) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        sleep 10
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-        sleep 10
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-        sleep 10
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
-    }
-    If (ValidWindows.MaxIndex() >= 3 && cycleCount != 3) {
-        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        sleep 10
-        WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-        sleep 10
-        WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-        sleep 10
-        WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
-    }
-    If (ValidWindows.MaxIndex() >= 4 && cycleCount != 4) {
+    If (ValidWindows.MaxIndex() >= 4 && Highlighter != ValidWindows[4] && lbhwnd != ValidWindows[4]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
@@ -1110,7 +1036,76 @@ FadeInWin2:
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
     }
     
-    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+    ; WinActivate, % "ahk_id " lbhwnd
+    WinSet, AlwaysOnTop, Off , % "ahk_id " lbhwnd
+    Critical, Off
+Return
+
+FadeInWin2:
+    Critical, On
+    WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
+    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    
+    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) ; && cycleCount != 1)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) ;  && cycleCount != 2)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+    If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) ;  && cycleCount != 3)
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+
+    If (ValidWindows.MaxIndex() >= 3) {
+        WinActivate, % "ahk_id " ValidWindows[3]
+    }
+    If (ValidWindows.MaxIndex() >= 2) {
+        WinActivate, % "ahk_id " ValidWindows[2]
+    }
+    If (ValidWindows.MaxIndex() >= 1) {
+        WinActivate, % "ahk_id " ValidWindows[1]
+    }
+
+    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) ;  && cycleCount != 1) {
+    {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
+    }
+    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) ;  && cycleCount != 2) {
+    {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
+    }
+    If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) ;  && cycleCount != 3) {
+    {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
+    }
+    If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) ;  && cycleCount != 4) {
+    {
+        WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
+        sleep 10
+        WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
+    }
+    
+    ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+    WinSet, AlwaysOnTop, Off ,% "ahk_id " GroupedWindows[cycleCount]
     Critical, Off
 Return
 
@@ -1125,11 +1120,13 @@ ResetWins:
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
+#MaxThreadsPerHotkey 1
 $!Tab::
 SetTimer, track, Off
 SetTimer, keyTrack, Off
 Cycle(forward)
 GoSub, Altup
+GoSub, ClearRect
 SetTimer, track, On
 SetTimer, keyTrack, On
 Return
@@ -1138,6 +1135,7 @@ $!+Tab::
 SetTimer, track, Off
 SetTimer, keyTrack, Off
 Cycle(!forward)
+GoSub, ClearRect
 SetTimer, track, On
 SetTimer, keyTrack, On
 Return
@@ -1156,8 +1154,6 @@ Return
     HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
     GoSub, ClearRect
 
-    DrawingRect  := False
-    ClearingRect := False
     tooltip,
     StopRecurssion := False
 Return
@@ -1167,8 +1163,6 @@ Return
 !x::
     Gui, GUI4Boarder: Hide
     GoSub, ResetWins
-    DrawingRect := False
-    ClearingRect := False
 Return
 #If
 
@@ -1422,68 +1416,56 @@ Cycle(direction)
 }
 
 ClearRect:
-    ClearingRect := True
-    loop 15 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            WinSet, Transparent, 255, ahk_id %Highlighter%
-            ClearingRect := False
-            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-            Return
+    If DrawingRect {
+        DrawingRect := False
+        loop 15 {
+            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                WinSet, Transparent, 255, ahk_id %Highlighter%
+                WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                Return
+            }
+            sleep, 10
         }
-        sleep, 10
-    }
 
-    ; WinSet, Transparent, 225, ahk_id %Highlighter%
-    ; loop 5 {
-        ; If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            ; WinSet, Transparent, 255, ahk_id %Highlighter%
-            ; ClearingRect := False
-            ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-            ; Return
+        ; WinSet, Transparent, 225, ahk_id %Highlighter%
+        ; loop 5 {
+            ; If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                ; WinSet, Transparent, 255, ahk_id %Highlighter%
+                ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                ; Return
+            ; }
+            ; sleep 10
         ; }
-        ; sleep 10
-    ; }
-    WinSet, Transparent, 200, ahk_id %Highlighter%
-    loop 4 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            WinSet, Transparent, 255, ahk_id %Highlighter%
-            ClearingRect := False
-            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-            Return
+        WinSet, Transparent, 200, ahk_id %Highlighter%
+        loop 4 {
+            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                WinSet, Transparent, 255, ahk_id %Highlighter%
+                WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                Return
+            }
+            sleep 10
         }
-        sleep 10
-    }
-    WinSet, Transparent, 175, ahk_id %Highlighter%
-    loop 3 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            WinSet, Transparent, 255, ahk_id %Highlighter%
-            ClearingRect := False
-            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-            Return
+        WinSet, Transparent, 175, ahk_id %Highlighter%
+        loop 3 {
+            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                WinSet, Transparent, 255, ahk_id %Highlighter%
+                WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                Return
+            }
+            sleep 10
         }
-        sleep 10
-    }
-    WinSet, Transparent, 125, ahk_id %Highlighter%
-    loop 2 {
-        If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            WinSet, Transparent, 255, ahk_id %Highlighter%
-            ClearingRect := False
-            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-            Return
+        WinSet, Transparent, 125, ahk_id %Highlighter%
+        loop 2 {
+            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                WinSet, Transparent, 255, ahk_id %Highlighter%
+                WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                Return
+            }
+            sleep 10
         }
-        sleep 10
+        WinSet, Transparent, 50, ahk_id %Highlighter%
+        Gui, GUI4Boarder: Hide
     }
-    WinSet, Transparent, 50, ahk_id %Highlighter%
-    ; loop 1 {
-        ; If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-            ; WinSet, Transparent, 255, ahk_id %Highlighter%
-            ; ClearingRect := False
-            ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-            ; Return
-        ; }
-        ; sleep 10
-    ; }
-    Gui, GUI4Boarder: Hide
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
@@ -1594,17 +1576,16 @@ Return
     
     StopRecurssion     := True
     CoordMode, Mouse, Window
-    MouseGetPos, lbX1, lbY1, lhwnd, lctrlN
+    MouseGetPos, lbX1, lbY1, lbhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
-    WinGetClass, lClass, ahk_id %lhwnd%
+    WinGetClass, lClass, ahk_id %lbhwnd%
 
     If hitTAB {
-        WinGetTitle, actTitle, ahk_id %lhwnd%
+        WinGetTitle, actTitle, ahk_id %lbhwnd%
         Gui, GUI4Boarder: Hide
         tooltip, Selecting %actTitle%
         LclickSelected := True
         GoSub, DrawRect
-        KeyWait, LAlt, U T5
         Return
     }
 
@@ -1649,7 +1630,7 @@ Return
         
         If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
             ; try {
-                ; exEl := UIA.ElementFromHandle(lhwnd)
+                ; exEl := UIA.ElementFromHandle(lbhwnd)
                 ; targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,5000)
 
                 ; If (targetEl.LocalizedControlType == "progress bar")
@@ -1672,7 +1653,7 @@ Return
             ; ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%
             LbuttonEnabled     := True
             StopRecurssion     := False
-            currentPath := GetExplorerPath(lhwnd)
+            currentPath := GetExplorerPath(lbhwnd)
             
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                 GoSub, SendCtrlAdd
@@ -1705,14 +1686,14 @@ Return
     currentPath := ""
 
     If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
-        prevPath := GetExplorerPath(lhwnd)
+        prevPath := GetExplorerPath(lbhwnd)
         ; tooltip, path is %prevPath%
-        ; ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lhwnd%
-        ; ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lhwnd%
+        ; ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lbhwnd%
+        ; ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lbhwnd%
 
         ; If (OutputVar2 == 1 || OutputVar3 == 1) {
             ; try {
-                ; exEl := UIA.ElementFromHandle(lhwnd)
+                ; exEl := UIA.ElementFromHandle(lbhwnd)
                 ; targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,275)
                 ; ; targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
 
@@ -2977,6 +2958,11 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         WinSet, AlwaysOnTop, On, % "ahk_id " finalWindowsListWithProcAndClass[counter]
         WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
+        If finalWindowsListWithProcAndClass.MaxIndex() >= 4 {
+            WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[4]
+            If (isMin > -1)
+                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[4]
+        }
         If finalWindowsListWithProcAndClass.MaxIndex() >= 3 {
             WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[3]
             If (isMin > -1)
@@ -3279,8 +3265,6 @@ track() {
                     WinActivate, ahk_id %hwnd_id%
                     GoSub, DrawRect
                     GoSub, ClearRect
-                    DrawingRect := False
-                    ClearingRect := False
                     Gui, GUI4Boarder: Hide
                     previousMon := currentMon
                     Critical, Off
@@ -4262,7 +4246,7 @@ SetTitleMatchMode, 2
         && !WinActive("ahk_exe Conhost.exe")
         && !WinActive("ahk_exe bash.exe")
         && !WinActive("ahk_exe mintty.exe")
-        && !SearchingWindows && !hitTAB && !ClearingRect
+        && !SearchingWindows && !hitTAB
         && !GetKeyState("LAlt","P")
         && !GetKeyState("Ctrl","P")
         && !StopAutoFix
@@ -4317,6 +4301,7 @@ SetTitleMatchMode, 2
 ::unalign::
 ::unbenign::
 ::verisign::
+::plugin::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -4369,6 +4354,7 @@ SetTitleMatchMode, 2
 ::app::
 ::apps::
 ::cue::
+::jest::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
