@@ -1046,11 +1046,11 @@ FadeInWin2:
     WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     
-    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) ; && cycleCount != 1)
+    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1])
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) ;  && cycleCount != 2)
+    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) 
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) ;  && cycleCount != 3)
+    If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3])
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
 
     If (ValidWindows.MaxIndex() >= 3) {
@@ -1063,7 +1063,7 @@ FadeInWin2:
         WinActivate, % "ahk_id " ValidWindows[1]
     }
 
-    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) ;  && cycleCount != 1) {
+    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) 
     {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
         sleep 10
@@ -1073,7 +1073,7 @@ FadeInWin2:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
     }
-    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) ;  && cycleCount != 2) {
+    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) 
     {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
         sleep 10
@@ -1083,7 +1083,7 @@ FadeInWin2:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
     }
-    If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) ;  && cycleCount != 3) {
+    If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) 
     {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
         sleep 10
@@ -1093,7 +1093,7 @@ FadeInWin2:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
     }
-    If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) ;  && cycleCount != 4) {
+    If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4])
     {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
         sleep 10
@@ -1126,7 +1126,6 @@ SetTimer, track, Off
 SetTimer, keyTrack, Off
 Cycle(forward)
 GoSub, Altup
-GoSub, ClearRect
 SetTimer, track, On
 SetTimer, keyTrack, On
 Return
@@ -1144,7 +1143,6 @@ Return
 !q::
     tooltip, swapping between windows of app
     StopRecurssion := True
-    Gui, GUI4Boarder: Hide
     ActivateTopMostWindow()
 
     DetectHiddenWindows, Off
@@ -4776,7 +4774,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?*:isntall::install
 :?*:insatll::install
 :?*:istall::install
-:?*:instal::install
+:?*:intall::install
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
@@ -7161,7 +7159,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::insensative::insensitive
 ::inseperable::inseparable
 ::insistance::insistence
-::instaleld::installed
 ::instatance::instance
 ::instade::instead
 ::insted::instead
@@ -9517,7 +9514,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::oyu::you
 ::yaer::year
 ::descriptoins::descriptions
-::installa::installation
 ::amn::man
 ::fro::for
 ::intesreting::interesting
@@ -9862,7 +9858,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::plesae::please
 ::feb::Feb
 ::actaully::actually
-::isntall::install
 ::Porbably::Probably
 ::unfotunately::unfortunately
 ::defitintion::definition
