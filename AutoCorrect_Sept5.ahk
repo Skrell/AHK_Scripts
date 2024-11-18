@@ -1626,43 +1626,21 @@ Return
         KeyWait, Lbutton, U T3
         LbuttonEnabled     := False
         
-        If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
-            ; try {
-                ; exEl := UIA.ElementFromHandle(lbhwnd)
-                ; targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,5000)
-
-                ; If (targetEl.LocalizedControlType == "progress bar")
-                    ; tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
-                ; Else
-                    ; tabEl := targetEl
-
-                ; currentPath := tabEl.Name
-            ; } catch e {
-                ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %A_TimeSincePriorHotkey% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
-                ; UIA :=  ;// set to a different value
-                ; ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                ; UIA := UIA_Interface() ; Initialize UIA interface
-                ; UIA.ConnectionTimeout := 6000
-                ; LbuttonEnabled     := True
-                ; StopRecurssion     := False
-                ; Return
-            ; }
-
-            ; ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%
-            LbuttonEnabled     := True
-            StopRecurssion     := False
+        If (lClass == "CabinetWClass" || lClass == "#32770") {
             currentPath := GetExplorerPath(lbhwnd)
+            ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%
             
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                 GoSub, SendCtrlAdd
             }
-            Return
-        }
-            Else {
             LbuttonEnabled     := True
             StopRecurssion     := False
+            Return
+        }
+        Else {
             GoSub, SendCtrlAdd
-            sleep, 200
+            LbuttonEnabled     := True
+            StopRecurssion     := False
             Return
             }
     }
@@ -1677,42 +1655,15 @@ Return
 
     initTime := A_TickCount
 
+    currentPath := ""
+    prevPath := ""
+    If ((lClass == "CabinetWClass" || lClass == "#32770") && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
+        prevPath := GetExplorerPath(lbhwnd)
+    }
+    
     KeyWait, LButton, U T5
     CoordMode, Mouse, Window
     MouseGetPos, lbX2, lbY2,
-    prevPath := ""
-    currentPath := ""
-
-    If (lClass == "CabinetWClass" || lClass == "#32770") && !(lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323") {
-        prevPath := GetExplorerPath(lbhwnd)
-        ; tooltip, path is %prevPath%
-        ; ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lbhwnd%
-        ; ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lbhwnd%
-
-        ; If (OutputVar2 == 1 || OutputVar3 == 1) {
-            ; try {
-                ; exEl := UIA.ElementFromHandle(lbhwnd)
-                ; targetEl := exEl.WaitElementExist("ClassName=ShellTabWindowClass OR ControlType=ProgressBar",,,,275)
-                ; ; targetEl := exEl.FindFirstBy("ClassName=ShellTabWindowClass OR ControlType=ProgressBar")
-
-                ; If (targetEl.LocalizedControlType == "progress bar")
-                    ; tabEl := targetEl.FindFirstBy("ControlType=ToolBar")
-                ; Else
-                    ; tabEl := targetEl
-
-                ; prevPath := tabEl.Name
-                ; currentPath := prevPath
-            ; } catch e {
-                ; tooltip, TIMED OUT!!!!
-                ; UIA :=  ;// set to a different value
-                ; ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                ; UIA := UIA_Interface() ; Initialize UIA interface
-                ; UIA.ConnectionTimeout := 6000
-                ; LbuttonEnabled := True
-                ; Return
-            ; }
-        ; }
-    }
 
     rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
@@ -1721,7 +1672,7 @@ Return
     If ((abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)
         && (timeDiff < 325)
         && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3  != 0xFFFFFF)
-        && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "ToolbarWindow323"))  {
+        && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
         
         SetTimer, SendCtrlAdd, -125
         }
@@ -1729,7 +1680,7 @@ Return
         SetTimer, SendCtrlAdd, Off
     
     StopRecurssion := False
-    
+    LbuttonEnabled := True
 Return
 #If
 
@@ -2863,9 +2814,9 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     Global MonCount, VD, Highlighter
 
     currentMon := MWAGetMonitorMouseIsIn()
+    Critical, On
     finalWindowsListWithProcAndClass := []
     counter := 2
-    Critical, On
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
 
     loop % windowsListWithSameProcessAndClass
@@ -3740,8 +3691,11 @@ ActivateTopMostWindow() {
     {
         hwndID := winList%A_Index%
         If IsAltTabWindow(hwndId) {
-            WinGet, MMState, MinMax, ahk_id %hwndId%
-            If (MMState > -1) {
+            WinGet, mmState, MinMax, ahk_id %hwndId%
+            WinGet, procName, ProcessName, ahk_id %hwndId%
+            If (procName == "Zoom.exe")
+                continue
+            If (mmState > -1) {
                 If (MonCount > 1) {
                     currentMon := MWAGetMonitorMouseIsIn()
                     currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
@@ -3982,6 +3936,8 @@ GetExplorerPath(hwnd:="") {
     If (clCheck == "#32770") {
         ; ControlFocus, ToolbarWindow323, ahk_id %hwnd%
         ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+        If (dir == "" || !InStr(dir,"address",false))
+            ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
         Return dir
     }
     else {

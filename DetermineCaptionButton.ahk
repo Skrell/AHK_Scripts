@@ -1,6 +1,6 @@
 ; https://www.autohotkey.com/boards/viewtopic.php?t=31119#p145253
 ;get information from object under cursor, 'AccViewer Basic' (cf. AccViewer.ahk)
-; #q:: 
+; #q::
    ; WinGet, procName, ProcessName, A
    ; If (procName == "chrome.exe") {
         ; MouseGetPos, , , hWnd
@@ -122,21 +122,27 @@ lbutton up::
 
     vName := WhichButton(vPosX, vPosY, hWnd)
 
-    If (InStr(vName,"minimize",false))
-        WinMinimize, ahk_id %hWnd%
-    If (InStr(vName,"maximize",false)) {
-        WinGet, state, MinMax, ahk_id %hWnd%
-        If (state == 0)
-            WinMaximize, ahk_id %hWnd%
-        Else
-            WinRestore, ahk_id %hWnd%
+    If (InStr(vName,"minimize",false)) {
+        ; WinMinimize, ahk_id %hWnd%
+        Send, {Click, left}
     }
-    If (InStr(vName,"close",false))
-        WinClose, ahk_id %hWnd%
-    If (InStr(vName,"restore",false))
-        WinRestore, ahk_id %hWnd%
-
-    If (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))
+    Else If (InStr(vName,"maximize",false)) {
+        ; WinGet, state, MinMax, ahk_id %hWnd%
+        ; If (state == 0)
+            ; WinMaximize, ahk_id %hWnd%
+        ; Else
+            ; WinRestore, ahk_id %hWnd%
+        Send, {Click, left}
+    }
+    Else If (InStr(vName,"close",false)) {
+        ; WinClose, ahk_id %hWnd%
+        Send, {Click, left}
+    }
+    Else If (InStr(vName,"restore",false)) {
+        ; WinRestore, ahk_id %hWnd%
+        Send, {Click, left}
+    }
+    Else If (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))
         Send, {Click, left}
 
     ; vOutput .= "value: " vValue "`r`n"
@@ -613,6 +619,22 @@ MouseIsOverTaskbar() {
         Return False
 }
 
+MouseIsOverBlankTaskbar() {
+    oAcc := Acc_ObjectFromPoint(vChildId)
+    vAccRoleNum := oAcc.accRole(vChildId)
+    vAccName := oAcc.accName(vChildId)
+    oAcc := ""
+    
+    tooltip, %vAccRoleNum% and %vAccName%
+    
+    ;ROLE_SYSTEM_TOOLBAR := 0x16
+    if (vAccRoleNum = 0x16) && (vAccName = "Running applications")
+        MsgBox, % "is empty part of taskbar: y"
+    else
+        MsgBox, % "is empty part of taskbar: n"
+    return
+}
+
 ; https://www.autohotkey.com/boards/viewtopic.php?t=37184
 ;gives you roughly the correct results (tested on Windows 7)
 ;JEE_WinIsAltTab
@@ -760,3 +782,4 @@ IsWindowOnCurrMon(thisWindowHwnd, currentMonNum := 0) {
     Critical, Off
     Return False
 }
+
