@@ -2243,10 +2243,10 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
+            BlockInput, On
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
             }
-            BlockInput, On
             Send, ^{NumpadAdd}
             sleep, 200
             If !GetKeyState("Ctrl") {
@@ -2277,10 +2277,10 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
+            BlockInput, On
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
             }
-            BlockInput, On
             Send, ^{NumpadAdd}
             sleep, 200
             If !GetKeyState("Ctrl") {
@@ -2812,7 +2812,10 @@ HandleChromeWindowsWithSameTitle(title := "") {
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     Global MonCount, VD, Highlighter
-
+    SetTimer, track, Off
+    windowsToMinimize := []
+    lastActWinID      := ""
+    
     currentMon := MWAGetMonitorMouseIsIn()
     Critical, On
     finalWindowsListWithProcAndClass := []
@@ -2838,6 +2841,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     numWindows := finalWindowsListWithProcAndClass.length()
     If (numWindows <= 1) {
         Tooltip, Only %numWindows% Windows found!
+        SetTimer, track, On
         sleep, 2000
         Tooltip,
         Return
@@ -2861,15 +2865,21 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         counter := 1
     }
 
+    hwndId := finalWindowsListWithProcAndClass[counter]
+
     loop
     {
         KeyWait, q, D  T.25
+
         If !ErrorLevel
         {
-            ; tooltip, Windows # [counter]
-            WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
-            ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
-            WinGetTitle, actTitle, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+            WinGet, mmState, MinMax, ahk_id %hwndId%
+            If (MonCount > 1 && mmState == -1) {
+                windowsToMinimize.push(hwndId)
+            }
+            WinActivate, ahk_id %hwndId%
+            lastActWinID := hwndId
+            WinGetTitle, actTitle, ahk_id %hwndId%
             tooltip, Active is %actTitle%
             GoSub, DrawRect
 
@@ -2897,6 +2907,13 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
     }
     until (!GetKeyState("LAlt", "P"))
+
+    loop % windowsToMinimize.length()
+    {
+        tempId := windowsToMinimize[A_Index]
+        If (tempId != lastActWinID)
+            WinMinimize, ahk_id %tempId%
+    }
 
     BlockKeyboard(true)
     counter := counter - 1
@@ -2931,6 +2948,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         WinSet, AlwaysOnTop, Off, % "ahk_id " finalWindowsListWithProcAndClass[counter]
     }
     BlockKeyboard(false)
+    SetTimer, track, On
 }
 
 FrameShadow(HGui) {
@@ -3039,28 +3057,7 @@ track() {
     WinGetClass, classId, ahk_id %hwndId%
     WinGet, targetProc, ProcessName, ahk_id %hwndId%
 
-
     CoordMode Mouse
-
-    If (currentMon > 0)
-        lastMon := currentMon
-
-    ; currentVD := VD.getCurrentDesktopNum()
-
-    ; If (currentVd < VD.getCount())
-        ; nextVD := currentVD + 1
-    ; Else
-        ; nextVD := currentVD
-
-    ; If (currentVd > 1)
-        ; prevVD := currentVD - 1
-    ; Else
-        ; prevVD := currentVD
-
-    ; If (classId == "CabinetWClass" || classId == "#32770") {
-        ; ie := GetIEobject()
-        ; tooltip, % ie.Busy "-" ie.ReadyState
-    ; }
 
     If (LbuttonHeld && !GetKeyState("Lbutton", "P"))
     {
@@ -3078,7 +3075,6 @@ track() {
     }
 
     lastX := x, lastY := y,
-    MWAGetMonitorMouseIsIn()
     If WinActive("ahk_class ZPContentViewWndClass") {
         WinGetPos, x, y, w, h, ahk_class ZPContentViewWndClass
         If (w == currMonWidth && h == currMonHeight) {
@@ -3199,15 +3195,14 @@ track() {
     If (MonCount > 1 && !GetKeyState("LButton","P")) {
         currentMon := MWAGetMonitorMouseIsIn(40)
         If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
-            ; tooltip, currentMon is %currentMon% and lastMon was %previousMon%
             DetectHiddenWindows, Off
             Critical, On
-            WinGet, currID, ID, A
             WinGet, allWindows, List
             loop % allWindows {
                 hwnd_id := allWindows%A_Index%
                 WinGet, isMin, MinMax, ahk_id %hwnd_id%
                 WinGet, whatProc, ProcessName, ahk_id %hwnd_id%
+                Critical, Off
                 currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
 
                 If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
@@ -3216,15 +3211,16 @@ track() {
                     GoSub, ClearRect
                     Gui, GUI4Boarder: Hide
                     previousMon := currentMon
-                    Critical, Off
                     return
                 }
             }
         }
         Critical, Off
     }
-    ; PrevActiveWindHwnd := actwndId
-    previousMon := currentMon
+    
+    If (MonCount > 1 && !GetKeyState("LButton","P")) {
+        previousMon := currentMon
+    }
 }
 
 MouseIsOverTitleBar(xPos := "", yPos := "") {
@@ -3273,6 +3269,7 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
 IsWindowOnCurrMon(thisWindowHwnd, currentMonNum := 0) {
+    X := Y := W := H := 0
     WinGet, state, MinMax, ahk_id %thisWindowHwnd%
 
     If (state == -1)
@@ -3285,7 +3282,8 @@ IsWindowOnCurrMon(thisWindowHwnd, currentMonNum := 0) {
     ;Get number of monitor
     SysGet, monCount, MonitorCount
 
-    WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
+    ; WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
+    WinGetPosEx(thisWindowHwnd, X, Y, W, H)
     ;Iterate through each monitor
     Loop %monCount% {
         Critical, On
@@ -4256,6 +4254,8 @@ SetTitleMatchMode, 2
 ::unbenign::
 ::verisign::
 ::plugin::
+::complain::
+::login::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -9339,6 +9339,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::coudln't::couldn't
 ::coudn't::couldn't
 ::couldnt::couldn't
+::coudlnt::couldn't
 ::didint::didn't
 ::didnt::didn't
 ::didtn::didn't
