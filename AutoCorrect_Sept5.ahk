@@ -1147,9 +1147,9 @@ Return
 
     DetectHiddenWindows, Off
     WinGet, activeProcessName, ProcessName, A
-    WinGetClass, FullClass, A
+    WinGetClass, activeClassName, A
     
-    HandleWindowsWithSameProcessAndClass(activeProcessName, FullClass)
+    HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
     GoSub, ClearRect
 
     tooltip,
@@ -2826,7 +2826,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     {
         hwndID := windowsListWithSameProcessAndClass%A_Index%
         If (MonCount > 1) {
-            currentMon := MWAGetMonitorMouseIsIn()
             currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
         }
         Else {
@@ -2899,6 +2898,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                         {
                             counter := 1
                         }
+                        hwndId := finalWindowsListWithProcAndClass[counter]
                     }
                     Else
                         break
@@ -3691,7 +3691,8 @@ ActivateTopMostWindow() {
         If IsAltTabWindow(hwndId) {
             WinGet, mmState, MinMax, ahk_id %hwndId%
             WinGet, procName, ProcessName, ahk_id %hwndId%
-            If (procName == "Zoom.exe")
+            WinGet, ExStyle, ExStyle, ahk_id %hwndId%
+            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip if zoom or always on top window
                 continue
             If (mmState > -1) {
                 If (MonCount > 1) {
@@ -4256,6 +4257,7 @@ SetTitleMatchMode, 2
 ::plugin::
 ::complain::
 ::login::
+::constrain::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -4309,6 +4311,7 @@ SetTitleMatchMode, 2
 ::apps::
 ::cue::
 ::jest::
+::boil::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
