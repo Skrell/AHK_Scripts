@@ -1,3 +1,119 @@
+::iarrhea::diarrhea
+::darrhea::diarrhea
+::dirrhea::diarrhea
+::diarhea::diarrhea
+::diarrea::diarrhea
+::diarrha::diarrhea
+::diarrhe::diarrhea
+::idarrhea::diarrhea
+::dairrhea::diarrhea
+::dirarhea::diarrhea
+::diarhrea::diarrhea
+::diarreha::diarrhea
+::diarrhae::diarrhea
+::eil::veil
+::vil::veil
+::vel::veil
+::vei::veil
+::viel::veil
+::veli::veil
+::ulleted::bulleted
+::blleted::bulleted
+::buleted::bulleted
+::bullted::bulleted
+::bulleed::bulleted
+::bulletd::bulleted
+::bullete::bulleted
+::ublleted::bulleted
+::bluleted::bulleted
+::bulelted::bulleted
+::bullteed::bulleted
+::bulleetd::bulleted
+::bulletde::bulleted
+::ogue::rogue
+::rgue::rogue
+::roue::rogue
+::roge::rogue
+::rogu::rogue
+::orgue::rogue
+::rgoue::rogue
+::rogeu::rogue
+::ude::rude
+::rde::rude
+::rue::rude
+::rud::rude
+::urde::rude
+::rdue::rude
+::rued::rude
+::ining::lining
+::lning::lining
+::liing::lining
+::linng::lining
+::linig::lining
+::linin::lining
+::ilning::lining
+::lniing::lining
+::liinng::lining
+::linnig::lining
+::linign::lining
+::eantime::meantime
+::mantime::meantime
+::mentime::meantime
+::meatime::meantime
+::meanime::meantime
+::meantme::meantime
+::meantie::meantime
+::meantim::meantime
+::emantime::meantime
+::maentime::meantime
+::menatime::meantime
+::meatnime::meantime
+::meanitme::meantime
+::meantmie::meantime
+::meantiem::meantime
+::ater::hater
+::hter::hater
+::haer::hater
+::hatr::hater
+::ahter::hater
+::htaer::hater
+::haetr::hater
+::hatre::hater
+::utomate::automate
+::atomate::automate
+::auomate::automate
+::autmate::automate
+::autoate::automate
+::automte::automate
+::automae::automate
+::automat::automate
+::uatomate::automate
+::atuomate::automate
+::auotmate::automate
+::autmoate::automate
+::autoamte::automate
+::automtae::automate
+::automaet::automate
+::omplain::complain
+::cmplain::complain
+::coplain::complain
+::comlain::complain
+::compain::complain
+::complin::complain
+::complan::complain
+::complai::complain
+::ocmplain::complain
+::cmoplain::complain
+::copmlain::complain
+::comlpain::complain
+::compalin::complain
+::complian::complain
+::complani::complain
+::ays::lays
+::lys::lays
+::alys::lays
+::lyas::lays
+::lasy::lays
 ::riage::triage
 ::tiage::triage
 ::trage::triage
@@ -309,13 +425,6 @@
 ::iled::lied
 ::leid::lied
 ::lide::lied
-::ick::dick
-::dck::dick
-::dik::dick
-::dic::dick
-::idck::dick
-::dcik::dick
-::dikc::dick
 ::oting::noting
 ::nting::noting
 ::noing::noting
@@ -340,8 +449,6 @@
 ::hanidng::handing
 ::handnig::handing
 ::handign::handing
-::et::bet
-::bt::bet
 ::ebt::bet
 ::bte::bet
 ::ets::bets
@@ -715,9 +822,6 @@
 ::codgeen::codegen
 ::codeegn::codegen
 ::codegne::codegen
-::ay::lay
-::ly::lay
-::la::lay
 ::aly::lay
 ::lya::lay
 ::aying::laying
@@ -754,8 +858,6 @@
 ::shoulnd't::shouldn't
 ::should'nt::shouldn't
 ::shouldnt'::shouldn't
-::oe::owe
-::ow::owe
 ::woe::owe
 ::oew::owe
 ::wed::owed
@@ -1616,16 +1718,10 @@
 ::honetsly::honestly
 ::honeslty::honestly
 ::honestyl::honestly
-::te::the
-::th::the
 ::hte::the
 ::teh::the
-::nd::and
-::ad::and
 ::nad::and
 ::adn::and
-::fr::for
-::fo::for
 ::ofr::for
 ::fro::for
 ::tat::that
@@ -1646,18 +1742,10 @@
 ::iwth::with
 ::wtih::with
 ::wiht::with
-::ou::you
-::yu::you
-::yo::you
 ::oyu::you
 ::yuo::you
-::ot::not
-::nt::not
 ::ont::not
 ::nto::not
-::re::are
-::ae::are
-::ar::are
 ::rae::are
 ::aer::are
 ::rom::from
@@ -1670,8 +1758,6 @@
 ::oyur::your
 ::yuor::your
 ::yoru::your
-::ll::all
-::al::all
 ::lal::all
 ::hve::have
 ::hae::have
@@ -1679,9 +1765,6 @@
 ::ahve::have
 ::hvae::have
 ::haev::have
-::ew::new
-::nw::new
-::ne::new
 ::enw::new
 ::nwe::new
 ::ore::more
@@ -1691,8 +1774,6 @@
 ::omre::more
 ::mroe::more
 ::moer::more
-::ws::was
-::wa::was
 ::aws::was
 ::wsa::was
 ::wll::will
@@ -1706,8 +1787,6 @@
 ::ohme::home
 ::hmoe::home
 ::hoem::home
-::cn::can
-::ca::can
 ::acn::can
 ::cna::can
 ::bout::about
@@ -1725,8 +1804,6 @@
 ::apge::page
 ::pgae::page
 ::paeg::page
-::hs::has
-::ha::has
 ::ahs::has
 ::hsa::has
 ::earch::search
@@ -1744,11 +1821,8 @@
 ::fre::free
 ::rfee::free
 ::fere::free
-::ut::but
-::bu::but
 ::ubt::but
 ::btu::but
-::ur::our
 ::uor::our
 ::oru::our
 ::noe::one
@@ -1798,7 +1872,6 @@
 ::iste::site
 ::stie::site
 ::siet::site
-::ma::may
 ::amy::may
 ::mya::may
 ::wat::what
@@ -1832,10 +1905,7 @@
 ::nesw::news
 ::uot::out
 ::otu::out
-::se::use
-::ue::use
 ::ues::use
-::ny::any
 ::nay::any
 ::ayn::any
 ::tere::there
@@ -1843,7 +1913,6 @@
 ::htere::there
 ::tehre::there
 ::theer::there
-::ee::see
 ::ese::see
 ::nly::only
 ::oly::only
@@ -1893,13 +1962,8 @@
 ::busniess::business
 ::busienss::business
 ::businses::business
-::ho::who
-::wo::who
-::wh::who
 ::hwo::who
 ::woh::who
-::eb::web
-::wb::web
 ::ewb::web
 ::wbe::web
 ::lso::also
@@ -1917,8 +1981,6 @@
 ::ehlp::help
 ::hlep::help
 ::hepl::help
-::gt::get
-::ge::get
 ::egt::get
 ::gte::get
 ::iew::view
@@ -1960,7 +2022,6 @@
 ::wuold::would
 ::wolud::would
 ::woudl::would
-::hw::how
 ::ohw::how
 ::wre::were
 ::wee::were
@@ -2005,7 +2066,6 @@
 ::cilck::click
 ::clcik::click
 ::clikc::click
-::ts::its
 ::ist::its
 ::ike::like
 ::lke::like
@@ -2056,8 +2116,6 @@
 ::abck::back
 ::bcak::back
 ::bakc::back
-::op::top
-::tp::top
 ::otp::top
 ::tpo::top
 ::eople::people
@@ -2071,7 +2129,6 @@
 ::pepole::people
 ::peolpe::people
 ::peopel::people
-::hd::had
 ::ahd::had
 ::hda::had
 ::lst::list
@@ -2111,8 +2168,6 @@
 ::eyar::year
 ::yaer::year
 ::yera::year
-::dy::day
-::da::day
 ::ady::day
 ::dya::day
 ::ito::into
@@ -2128,7 +2183,6 @@
 ::eamil::email
 ::emial::email
 ::emali::email
-::tw::two
 ::tow::two
 ::ealth::health
 ::halth::health
@@ -2195,7 +2249,6 @@
 ::msuic::music
 ::muisc::music
 ::musci::music
-::uy::buy
 ::uby::buy
 ::byu::buy
 ::ata::data
@@ -2255,8 +2308,6 @@
 ::opst::post
 ::psot::post
 ::pots::post
-::er::her
-::hr::her
 ::ehr::her
 ::ity::city
 ::cty::city
@@ -2265,7 +2316,6 @@
 ::icty::city
 ::ctiy::city
 ::ciyt::city
-::dd::add
 ::olicy::policy
 ::plicy::policy
 ::poicy::policy
@@ -2361,7 +2411,6 @@
 ::messgae::message
 ::messaeg::message
 ::fter::after
-::ater::after
 ::afer::after
 ::aftr::after
 ::afte::after
@@ -2390,8 +2439,6 @@
 ::hten::then
 ::tehn::then
 ::thne::then
-::jn::Jan
-::ja::Jan
 ::jan::Jan
 ::ajn::Jan
 ::jna::Jan
@@ -2494,7 +2541,6 @@
 ::lniks::links
 ::likns::links
 ::linsk::links
-::sh::she
 ::hse::she
 ::seh::she
 ::eview::review
@@ -2595,6 +2641,7 @@
 ::mayn::many
 ::ser::user
 ::uer::user
+::usr::user
 ::suer::user
 ::uesr::user
 ::usre::user
@@ -2605,7 +2652,6 @@
 ::sadi::said
 ::oes::does
 ::odes::does
-::st::set
 ::nder::under
 ::uder::under
 ::uner::under
@@ -2687,8 +2733,6 @@
 ::ful::full
 ::ufll::full
 ::flul::full
-::ap::map
-::mp::map
 ::mpa::map
 ::eviews::reviews
 ::rviews::reviews
@@ -2735,10 +2779,8 @@
 ::gmaes::games
 ::gaems::games
 ::gamse::games
-::wy::way
 ::awy::way
 ::wya::way
-::ays::days
 ::dys::days
 ::das::days
 ::adys::days
@@ -2926,7 +2968,6 @@
 ::reoprt::report
 ::reprot::report
 ::repotr::report
-::ff::off
 ::fof::off
 ::ember::member
 ::mmber::member
@@ -2985,8 +3026,6 @@
 ::hoetls::hotels
 ::hotles::hotels
 ::hotesl::hotels
-::id::did
-::di::did
 ::idd::did
 ::ddi::did
 ::snd::send
@@ -3099,7 +3138,6 @@
 ::natinoal::national
 ::natioanl::national
 ::nationla::national
-::cr::car
 ::acr::car
 ::cra::car
 ::esign::design
@@ -3207,8 +3245,6 @@
 ::pohne::phone
 ::phnoe::phone
 ::phoen::phone
-::vd::dvd
-::dv::dvd
 ::vdd::dvd
 ::ddv::dvd
 ::hipping::shipping
@@ -3396,7 +3432,6 @@
 ::umch::much
 ::mcuh::much
 ::muhc::much
-::ign::sign
 ::sgn::sign
 ::isgn::sign
 ::sgin::sign
@@ -3510,7 +3545,6 @@
 ::seciton::section
 ::sectoin::section
 ::sectino::section
-::wn::own
 ::ound::found
 ::fond::found
 ::foud::found
@@ -3704,8 +3738,6 @@
 ::palce::place
 ::plcae::place
 ::plaec::place
-::ed::end
-::en::end
 ::edn::end
 ::ollowing::following
 ::fllowing::following
@@ -3737,8 +3769,6 @@
 ::downolad::download
 ::downlaod::download
 ::downloda::download
-::im::him
-::hm::him
 ::ihm::him
 ::hmi::him
 ::ithout::without
@@ -3754,9 +3784,8 @@
 ::witohut::without
 ::withuot::without
 ::withotu::without
-::pr::per
-::pe::per
 ::epr::per
+::pre::per
 ::ccess::access
 ::acess::access
 ::accss::access
@@ -3815,9 +3844,6 @@
 ::psots::posts
 ::potss::posts
 ::posst::posts
-::ig::big
-::bg::big
-::bi::big
 ::ibg::big
 ::bgi::big
 ::edia::media
@@ -3829,8 +3855,6 @@
 ::mdeia::media
 ::meida::media
 ::medai::media
-::aw::law
-::lw::law
 ::alw::law
 ::lwa::law
 ::ontrol::control
@@ -3887,7 +3911,6 @@
 ::isze::size
 ::szie::size
 ::siez::size
-::rt::art
 ::atr::art
 ::ersonal::personal
 ::prsonal::personal
@@ -4075,8 +4098,6 @@
 ::duirng::during
 ::durnig::during
 ::durign::during
-::sa::USA
-::ua::USA
 ::usa::USA
 ::sua::USA
 ::uas::USA
@@ -4208,9 +4229,6 @@
 ::olve::love
 ::lvoe::love
 ::loev::love
-::ld::old
-::od::old
-::ol::old
 ::lod::old
 ::odl::old
 ::ohn::john
@@ -4290,7 +4308,6 @@
 ::descripiton::description
 ::descriptoin::description
 ::descriptino::description
-::nn::non
 ::onn::non
 ::nno::non
 ::nsurance::insurance
@@ -4323,7 +4340,6 @@
 ::anohter::another
 ::anotehr::another
 ::anothre::another
-::hy::why
 ::wyh::why
 ::shll::shall
 ::shal::shall
@@ -4465,7 +4481,6 @@
 ::otols::tools
 ::tolos::tools
 ::toosl::tools
-::lo::low
 ::olw::low
 ::lwo::low
 ::eply::reply
@@ -4581,7 +4596,6 @@
 ::oyrk::York
 ::yrok::York
 ::yokr::York
-::mn::man
 ::amn::man
 ::mna::man
 ::ard::card
@@ -4697,9 +4711,6 @@
 ::coruse::course
 ::cousre::course
 ::coures::course
-::ob::job
-::jb::job
-::jo::job
 ::ojb::job
 ::jbo::job
 ::anada::Canada
@@ -4755,7 +4766,6 @@
 ::traiinng::training
 ::trainnig::training
 ::trainign::training
-::oo::too
 ::oto::too
 ::redit::credit
 ::cedit::credit
@@ -4882,9 +4892,6 @@
 ::esatte::estate
 ::esttae::estate
 ::estaet::estate
-::ox::box
-::bx::box
-::bo::box
 ::obx::box
 ::bxo::box
 ::onditions::conditions
@@ -4937,8 +4944,6 @@
 ::phtoos::photos
 ::phoots::photos
 ::photso::photos
-::gy::gay
-::ga::gay
 ::agy::gay
 ::gya::gay
 ::hread::thread
@@ -5156,8 +5161,6 @@
 ::featrues::features
 ::featuers::features
 ::featurse::features
-::ir::air
-::ai::air
 ::iar::air
 ::ari::air
 ::ndustry::industry
@@ -5203,9 +5206,6 @@
 ::provdied::provided
 ::proviedd::provided
 ::providde::provided
-::es::yes
-::ys::yes
-::ye::yes
 ::eys::yes
 ::yse::yes
 ::equired::required
@@ -5233,7 +5233,6 @@
 ::seocnd::second
 ::secnod::second
 ::secodn::second
-::ht::hot
 ::oht::hot
 ::hto::hot
 ::ccessories::accessories
@@ -5310,7 +5309,6 @@
 ::bteter::better
 ::betetr::better
 ::bettre::better
-::sy::say
 ::asy::say
 ::sya::say
 ::uestions::questions
@@ -5385,9 +5383,6 @@
 ::ocme::come
 ::cmoe::come
 ::coem::come
-::ec::Dec
-::dc::Dec
-::de::Dec
 ::dec::Dec
 ::edc::Dec
 ::dce::Dec
@@ -5453,7 +5448,6 @@
 ::artilces::articles
 ::articels::articles
 ::articlse::articles
-::sn::San
 ::san::San
 ::asn::San
 ::sna::San
@@ -5637,9 +5631,6 @@
 ::stanadrd::standard
 ::standrad::standard
 ::standadr::standard
-::ax::tax
-::tx::tax
-::ta::tax
 ::atx::tax
 ::txa::tax
 ::erson::person
@@ -5675,7 +5666,6 @@
 ::ess::less
 ::lss::less
 ::elss::less
-::go::got
 ::ogt::got
 ::gto::got
 ::bog::blog
@@ -5743,8 +5733,6 @@
 ::stuednt::student
 ::studnet::student
 ::studetn::student
-::lt::let
-::le::let
 ::elt::let
 ::lte::let
 ::rograms::programs
@@ -5819,8 +5807,6 @@
 ::isde::side
 ::sdie::side
 ::sied::side
-::ct::act
-::ac::act
 ::atc::act
 ::roblem::problem
 ::poblem::problem
@@ -5835,9 +5821,7 @@
 ::prolbem::problem
 ::probelm::problem
 ::problme::problem
-::rd::red
 ::erd::red
-::rde::red
 ::gve::give
 ::gie::give
 ::giv::give
@@ -5983,9 +5967,6 @@
 ::craete::create
 ::cretae::create
 ::creaet::create
-::ey::key
-::ky::key
-::ke::key
 ::eky::key
 ::kye::key
 ::ody::body
@@ -6039,8 +6020,6 @@
 ::ifeld::field
 ::feild::field
 ::fiedl::field
-::fw::few
-::fe::few
 ::efw::few
 ::fwe::few
 ::aest::east
@@ -6065,7 +6044,6 @@
 ::signle::single
 ::sinlge::single
 ::singel::single
-::ag::age
 ::aeg::age
 ::ctivities::activities
 ::ativities::activities
@@ -6234,11 +6212,8 @@
 ::txeas::Texas
 ::teaxs::Texas
 ::texsa::Texas
-::oc::Oct
 ::oct::Oct
 ::otc::Oct
-::py::pay
-::pa::pay
 ::apy::pay
 ::pya::pay
 ::fou::four
@@ -6384,11 +6359,8 @@
 ::wirte::write
 ::wrtie::write
 ::wriet::write
-::wr::war
 ::awr::war
 ::wra::war
-::ov::Nov
-::nv::Nov
 ::nov::Nov
 ::onv::Nov
 ::nvo::Nov
@@ -6485,8 +6457,6 @@
 ::reqeust::request
 ::requset::request
 ::requets::request
-::fx::fax
-::fa::fax
 ::afx::fax
 ::fxa::fax
 ::hina::china
@@ -6570,7 +6540,6 @@
 ::professinoal::professional
 ::professioanl::professional
 ::professionla::professional
-::yt::yet
 ::eyt::yet
 ::yte::yet
 ::onth::month
@@ -6638,8 +6607,6 @@
 ::ahnd::hand
 ::hnad::hand
 ::hadn::hand
-::un::sun
-::su::sun
 ::usn::sun
 ::snu::sun
 ::ards::cards
@@ -6706,8 +6673,6 @@
 ::meeitng::meeting
 ::meetnig::meeting
 ::meetign::meeting
-::ss::rss
-::rs::rss
 ::srs::rss
 ::ecome::become
 ::bcome::become
@@ -6913,8 +6878,6 @@
 ::enregy::energy
 ::enegry::energy
 ::eneryg::energy
-::rn::run
-::ru::run
 ::urn::run
 ::rnu::run
 ::elivery::delivery
@@ -6969,8 +6932,6 @@
 ::stoires::stories
 ::storeis::stories
 ::storise::stories
-::pt::put
-::pu::put
 ::upt::put
 ::ptu::put
 ::omputers::computers
@@ -7013,9 +6974,6 @@
 ::reprots::reports
 ::repotrs::reports
 ::reporst::reports
-::ry::try
-::ty::try
-::tr::try
 ::rty::try
 ::tyr::try
 ::elcome::welcome
@@ -7319,8 +7277,6 @@
 ::motnhs::months
 ::monhts::months
 ::montsh::months
-::og::log
-::lg::log
 ::olg::log
 ::lgo::log
 ::afety::safety
@@ -7350,8 +7306,6 @@
 ::sre::sure
 ::sur::sure
 ::srue::sure
-::aq::faq
-::fq::faq
 ::afq::faq
 ::fqa::faq
 ::rade::trade
@@ -7496,8 +7450,6 @@
 ::dvaid::david
 ::daivd::david
 ::davdi::david
-::fn::fun
-::fu::fun
 ::ufn::fun
 ::fnu::fun
 ::lready::already
@@ -7591,12 +7543,10 @@
 ::ogld::gold
 ::glod::gold
 ::godl::gold
-::fb::feb
 ::efb::feb
 ::fbe::feb
 ::iving::living
 ::lving::living
-::liing::living
 ::livng::living
 ::livig::living
 ::livin::living
@@ -7605,8 +7555,6 @@
 ::liivng::living
 ::livnig::living
 ::livign::living
-::ep::sep
-::sp::sep
 ::esp::sep
 ::spe::sep
 ::ollection::collection
@@ -7647,8 +7595,6 @@
 ::arst::arts
 ::olt::lot
 ::lto::lot
-::sk::ask
-::ak::ask
 ::sak::ask
 ::aks::ask
 ::isplay::display
@@ -7774,8 +7720,6 @@
 ::whehter::whether
 ::whetehr::whether
 ::whethre::whether
-::du::due
-::ude::due
 ::deu::due
 ::lectronics::electronics
 ::eectronics::electronics
@@ -7877,7 +7821,6 @@
 ::weahter::weather
 ::weatehr::weather
 ::weathre::weather
-::mr::mar
 ::amr::mar
 ::mra::mar
 ::lad::land
@@ -7941,8 +7884,6 @@
 ::frnace::France
 ::fracne::France
 ::franec::France
-::ro::pro
-::po::pro
 ::rpo::pro
 ::por::pro
 ::egion::region
@@ -8103,8 +8044,6 @@
 ::sytle::style
 ::stlye::style
 ::styel::style
-::rl::url
-::ul::url
 ::rul::url
 ::ulr::url
 ::ront::front
@@ -8149,8 +8088,6 @@
 ::prats::parts
 ::patrs::parts
 ::parst::parts
-::ug::Aug
-::au::Aug
 ::aug::Aug
 ::uag::Aug
 ::agu::Aug
@@ -8256,7 +8193,6 @@
 ::eihter::either
 ::eitehr::either
 ::eithre::either
-::ao::ago
 ::gao::ago
 ::aog::ago
 ::ocument::document
@@ -8396,9 +8332,6 @@
 ::tihng::thing
 ::thnig::thing
 ::thign::thing
-::ia::via
-::va::via
-::vi::via
 ::iva::via
 ::vai::via
 ::ceap::cheap
@@ -8427,7 +8360,6 @@
 ::finnace::finance
 ::finacne::finance
 ::finanec::finance
-::rue::true
 ::tue::true
 ::tre::true
 ::tru::true
@@ -8512,8 +8444,6 @@
 ::toipcs::topics
 ::topcis::topics
 ::topisc::topics
-::bd::bad
-::ba::bad
 ::abd::bad
 ::bda::bad
 ::ndividual::individual
@@ -8921,8 +8851,6 @@
 ::lniux::linux
 ::liunx::linux
 ::linxu::linux
-::jl::Jul
-::ju::Jul
 ::ujl::Jul
 ::jlu::Jul
 ::roduction::production
@@ -9984,8 +9912,6 @@
 ::standrads::standards
 ::standadrs::standards
 ::standarsd::standards
-::il::oil
-::oi::oil
 ::iol::oil
 ::oli::oil
 ::ibt::bit
@@ -10292,7 +10218,6 @@
 ::agnecy::agency
 ::agecny::agency
 ::agenyc::agency
-::ing::king
 ::kng::king
 ::kig::king
 ::kin::king
@@ -10601,7 +10526,6 @@
 ::administraiton::administration
 ::administratoin::administration
 ::administratino::administration
-::br::bar
 ::abr::bar
 ::nstitute::institute
 ::istitute::institute
@@ -10646,7 +10570,6 @@
 ::dobule::double
 ::doulbe::double
 ::doubel::double
-::dg::dog
 ::odg::dog
 ::dgo::dog
 ::uild::build
@@ -10930,8 +10853,6 @@
 ::aksed::asked
 ::asekd::asked
 ::askde::asked
-::eu::eur
-::eru::eur
 ::mnd::mind
 ::imnd::mind
 ::mnid::mind
@@ -10975,11 +10896,6 @@
 ::caisno::casino
 ::casnio::casino
 ::casion::casino
-::df::pdf
-::pf::pdf
-::pd::pdf
-::dpf::pdf
-::pfd::pdf
 ::olst::lost
 ::lsot::lost
 ::tor::tour
@@ -11188,8 +11104,6 @@
 ::ceratin::certain
 ::certian::certain
 ::certani::certain
-::sr::usr
-::urs::usr
 ::xecutive::executive
 ::eecutive::executive
 ::excutive::executive
@@ -11225,6 +11139,28 @@
 ::lwoer::lower
 ::loewr::lower
 ::lowre::lower
+::owers::lowers
+::lwers::lowers
+::loers::lowers
+::lowrs::lowers
+::lowes::lowers
+::olwers::lowers
+::lwoers::lowers
+::loewrs::lowers
+::lowres::lowers
+::lowesr::lowers
+::lwered::lowered
+::loered::lowered
+::lowred::lowered
+::loweed::lowered
+::lowerd::lowered
+::lowere::lowered
+::olwered::lowered
+::lwoered::lowered
+::loewred::lowered
+::lowreed::lowered
+::loweerd::lowered
+::lowerde::lowered
 ::ecessary::necessary
 ::ncessary::necessary
 ::neessary::necessary
@@ -11292,13 +11228,9 @@
 ::clotihng::clothing
 ::clothnig::clothing
 ::clothign::clothing
-::mo::Mon
 ::mon::Mon
 ::omn::Mon
 ::mno::Mon
-::om::com
-::cm::com
-::co::com
 ::ocm::com
 ::cmo::com
 ::articular::particular
@@ -11364,7 +11296,6 @@
 ::ohur::hour
 ::huor::hour
 ::horu::hour
-::gs::gas
 ::ags::gas
 ::gsa::gas
 ::sills::skills
@@ -11374,9 +11305,6 @@
 ::siklls::skills
 ::sklils::skills
 ::skilsl::skills
-::ix::six
-::sx::six
-::si::six
 ::isx::six
 ::sxi::six
 ::ush::bush
@@ -11485,7 +11413,6 @@
 ::etens::teens
 ::tenes::teens
 ::teesn::teens
-::rpe::pre
 ::uge::huge
 ::hge::huge
 ::hue::huge
@@ -11520,9 +11447,6 @@
 ::faciliites::facilities
 ::faciliteis::facilities
 ::facilitise::facilities
-::ip::zip
-::zp::zip
-::zi::zip
 ::izp::zip
 ::zpi::zip
 ::ibd::bid
@@ -11985,8 +11909,6 @@
 ::registraiton::registration
 ::registratoin::registration
 ::registratino::registration
-::ri::Fri
-::fi::Fri
 ::fri::Fri
 ::rfi::Fri
 ::hursday::Thursday
@@ -12246,7 +12168,6 @@
 ::relesaes::releases
 ::releaess::releases
 ::releasse::releases
-::wd::Wed
 ::ewd::Wed
 ::omes::homes
 ::hmes::homes
@@ -12439,11 +12360,8 @@
 ::cne::cnet
 ::ncet::cnet
 ::cnte::cnet
-::td::ltd
 ::tld::ltd
 ::ldt::ltd
-::os::los
-::ls::los
 ::ols::los
 ::ocus::focus
 ::fcus::focus
@@ -12518,8 +12436,6 @@
 ::responsbile::responsible
 ::responsilbe::responsible
 ::responsibel::responsible
-::nc::inc
-::ic::inc
 ::icn::inc
 ::ommunications::communications
 ::cmmunications::communications
@@ -12545,7 +12461,6 @@
 ::communicatoins::communications
 ::communicatinos::communications
 ::communicatiosn::communications
-::wi::win
 ::iwn::win
 ::wni::win
 ::ssociated::associated
@@ -12969,7 +12884,6 @@
 ::ahppy::happy
 ::hpapy::happy
 ::hapyp::happy
-::tu::Tue
 ::ute::Tue
 ::teu::Tue
 ::mith::smith
@@ -13382,7 +13296,6 @@
 ::probbaly::probably
 ::probalby::probably
 ::probabyl::probably
-::hu::Thu
 ::thu::Thu
 ::htu::Thu
 ::tuh::Thu
@@ -13398,7 +13311,6 @@
 ::renatls::rentals
 ::rentlas::rentals
 ::rentasl::rentals
-::ea::sea
 ::esa::sea
 ::uilt::built
 ::bilt::built
@@ -13437,7 +13349,6 @@
 ::lbood::blood
 ::bolod::blood
 ::blodo::blood
-::cu::cut
 ::uct::cut
 ::ctu::cut
 ::orldwide::worldwide
@@ -13636,8 +13547,6 @@
 ::storng::strong
 ::strnog::strong
 ::strogn::strong
-::el::tel
-::tl::tel
 ::etl::tel
 ::tle::tel
 ::arolina::Carolina
@@ -13753,7 +13662,6 @@
 ::accommodatino::accommodation
 ::wners::owners
 ::oners::owners
-::owers::owners
 ::ownrs::owners
 ::ownes::owners
 ::woners::owners
@@ -13841,8 +13749,6 @@
 ::opportuinty::opportunity
 ::opportuntiy::opportunity
 ::opportuniyt::opportunity
-::kt::kit
-::ki::kit
 ::ikt::kit
 ::kti::kit
 ::lassic::classic
@@ -14144,7 +14050,6 @@
 ::seletced::selected
 ::selecetd::selected
 ::selectde::selected
-::oy::boy
 ::oby::boy
 ::byo::boy
 ::mazon::amazon
@@ -14267,7 +14172,6 @@
 ::forawrd::forward
 ::forwrad::forward
 ::forwadr::forward
-::lowers::flowers
 ::fowers::flowers
 ::flwers::flowers
 ::floers::flowers
@@ -14443,7 +14347,6 @@
 ::urle::rule
 ::rlue::rule
 ::ruel::rule
-::mc::mac
 ::amc::mac
 ::mca::mac
 ::ousing::housing
@@ -14465,9 +14368,6 @@
 ::tkaes::takes
 ::taeks::takes
 ::takse::takes
-::ii::iii
-::mt::gmt
-::gm::gmt
 ::mgt::gmt
 ::gtm::gmt
 ::brng::bring
@@ -14505,7 +14405,6 @@
 ::searhces::searches
 ::searcehs::searches
 ::searchse::searches
-::mx::max
 ::amx::max
 ::mxa::max
 ::rying::trying
@@ -14569,9 +14468,6 @@
 ::otld::told
 ::tlod::told
 ::todl::told
-::ml::xml
-::xl::xml
-::xm::xml
 ::mxl::xml
 ::xlm::xml
 ::raffic::traffic
@@ -14656,7 +14552,6 @@
 ::vlaid::valid
 ::vaild::valid
 ::valdi::valid
-::bn::bin
 ::ibn::bin
 ::bni::bin
 ::odern::modern
@@ -15211,7 +15106,6 @@
 ::turst::trust
 ::trsut::trust
 ::truts::trust
-::vn::van
 ::avn::van
 ::vna::van
 ::ontains::contains
@@ -15414,7 +15308,6 @@
 ::rpev::prev
 ::perv::prev
 ::prve::prev
-::ds::ads
 ::asd::ads
 ::ary::mary
 ::mry::mary
@@ -15510,7 +15403,6 @@
 ::organizatoins::organizations
 ::organizatinos::organizations
 ::organizatiosn::organizations
-::pp::pop
 ::opp::pop
 ::ppo::pop
 ::ilter::filter
@@ -16195,8 +16087,6 @@
 ::charatcer::character
 ::characetr::character
 ::charactre::character
-::sb::usb
-::ub::usb
 ::ubs::usb
 ::aintenance::maintenance
 ::mintenance::maintenance
@@ -16287,8 +16177,6 @@
 ::plcaes::places
 ::plaecs::places
 ::placse::places
-::hp::php
-::ph::php
 ::hpp::php
 ::pph::php
 ::retty::pretty
@@ -16374,7 +16262,6 @@
 ::youreslf::yourself
 ::yourslef::yourself
 ::yoursefl::yourself
-::tc::etc
 ::ect::etc
 ::wnter::winter
 ::witer::winter
@@ -16573,7 +16460,6 @@
 ::woo::wood
 ::owod::wood
 ::wodo::wood
-::ms::msn
 ::smn::msn
 ::mns::msn
 ::tself::itself
@@ -16810,7 +16696,6 @@
 ::instructoins::instructions
 ::instructinos::instructions
 ::instructiosn::instructions
-::mi::min
 ::imn::min
 ::heory::theory
 ::teory::theory
@@ -17223,7 +17108,6 @@
 ::jesrey::jersey
 ::jeresy::jersey
 ::jersye::jersey
-::ft::fat
 ::aft::fat
 ::fta::fat
 ::ully::fully
@@ -17256,7 +17140,6 @@
 ::elecrtic::electric
 ::electirc::electric
 ::electrci::electric
-::sw::saw
 ::asw::saw
 ::swa::saw
 ::nstruments::instruments
@@ -17400,7 +17283,6 @@
 ::rtip::trip
 ::tirp::trip
 ::trpi::trip
-::ps::pst
 ::spt::pst
 ::wrth::worth
 ::woth::worth
@@ -17537,7 +17419,6 @@
 ::capmus::campus
 ::camups::campus
 ::campsu::campus
-::tm::tom
 ::otm::tom
 ::tmo::tom
 ::howing::showing
@@ -17658,7 +17539,6 @@
 ::fictoin::fiction
 ::fictino::fiction
 ::ehar::hear
-::haer::hear
 ::hera::hear
 ::ometimes::sometimes
 ::smetimes::sometimes
@@ -17883,7 +17763,6 @@
 ::implementaiton::implementation
 ::implementatoin::implementation
 ::implementatino::implementation
-::tn::ten
 ::etn::ten
 ::tne::ten
 ::hts::hits
@@ -17941,7 +17820,6 @@
 ::referecnes::references
 ::referenecs::references
 ::referencse::references
-::ie::die
 ::dei::die
 ::resented::presented
 ::pesented::presented
@@ -18509,7 +18387,6 @@
 ::afrcian::African
 ::afriacn::African
 ::africna::African
-::gu::guy
 ::ugy::guy
 ::gyu::guy
 ::itles::titles
@@ -18588,10 +18465,8 @@
 ::bbile::bible
 ::bilbe::bible
 ::bibel::bible
-::ev::dev
 ::edv::dev
 ::dve::dev
-::cp::cup
 ::ucp::cup
 ::cpu::cup
 ::asket::basket
@@ -18625,8 +18500,6 @@
 ::wekely::weekly
 ::weelky::weekly
 ::weekyl::weekly
-::vl::vol
-::vo::vol
 ::ovl::vol
 ::vlo::vol
 ::nstallation::installation
@@ -19453,7 +19326,6 @@
 ::loest::lowest
 ::lowst::lowest
 ::lowet::lowest
-::lowes::lowest
 ::olwest::lowest
 ::lwoest::lowest
 ::loewst::lowest
@@ -19679,7 +19551,6 @@
 ::sotne::stone
 ::stnoe::stone
 ::stoen::stone
-::bb::bob
 ::obb::bob
 ::bbo::bob
 ::ommerce::commerce
@@ -19880,7 +19751,6 @@
 ::ocffee::coffee
 ::cfofee::coffee
 ::cofefe::coffee
-::ww::www
 ::ettings::settings
 ::sttings::settings
 ::setings::settings
@@ -20008,7 +19878,6 @@
 ::holiadys::holidays
 ::holidyas::holidays
 ::holidasy::holidays
-::ce::ice
 ::cie::ice
 ::iec::ice
 ::pnk::pink
@@ -20159,9 +20028,7 @@
 ::csott::Scott
 ::soctt::Scott
 ::sctot::Scott
-::lc::llc
 ::lcl::llc
-::sc::sec
 ::esc::sec
 ::sce::sec
 ::ecommend::recommend
@@ -20218,7 +20085,6 @@
 ::miunte::minute
 ::mintue::minute
 ::minuet::minute
-::bs::bus
 ::bsu::bus
 ::rovider::provider
 ::povider::provider
@@ -20548,8 +20414,6 @@
 ::techniuqes::techniques
 ::techniqeus::techniques
 ::techniquse::techniques
-::bm::ibm
-::ib::ibm
 ::bim::ibm
 ::imb::ibm
 ::ohnson::Johnson
@@ -20800,7 +20664,6 @@
 ::himeslf::himself
 ::himslef::himself
 ::himsefl::himself
-::nr::nor
 ::onr::nor
 ::nro::nor
 ::omponent::component
@@ -20858,7 +20721,6 @@
 ::snata::Santa
 ::satna::Santa
 ::sanat::Santa
-::md::mid
 ::imd::mid
 ::mdi::mid
 ::uarantee::guarantee
@@ -21239,8 +21101,6 @@
 ::creaitng::creating
 ::creatnig::creating
 ::creatign::creating
-::jm::Jim
-::ji::Jim
 ::jim::Jim
 ::ijm::Jim
 ::jmi::Jim
@@ -21406,6 +21266,7 @@
 ::apartmnets::apartments
 ::apartmetns::apartments
 ::apartmenst::apartments
+::ick::pick
 ::ipck::pick
 ::pcik::pick
 ::pikc::pick
@@ -21618,7 +21479,6 @@
 ::sohps::shops
 ::shpos::shops
 ::shosp::shops
-::dl::Del
 ::edl::Del
 ::dle::Del
 ::fforts::efforts
@@ -21947,7 +21807,6 @@
 ::recoevry::recovery
 ::recovrey::recovery
 ::recoveyr::recovery
-::je::Joe
 ::joe::Joe
 ::oje::Joe
 ::jeo::Joe
@@ -22094,8 +21953,6 @@
 ::sloid::solid
 ::soild::solid
 ::soldi::solid
-::cs::cds
-::cd::cds
 ::dcs::cds
 ::csd::cds
 ::resentation::presentation
@@ -23255,8 +23112,6 @@
 ::daamge::damage
 ::damgae::damage
 ::damaeg::damage
-::ab::lab
-::lb::lab
 ::alb::lab
 ::lba::lab
 ::eserve::reserve
@@ -23284,8 +23139,6 @@
 ::recpies::recipes
 ::recieps::recipes
 ::recipse::recipes
-::vs::cvs
-::cv::cvs
 ::vcs::cvs
 ::csv::cvs
 ::amma::gamma
@@ -23791,8 +23644,6 @@
 ::varibale::variable
 ::varialbe::variable
 ::variabel::variable
-::ve::ave
-::av::ave
 ::vae::ave
 ::aev::ave
 ::dvertisement::advertisement
@@ -24179,6 +24030,7 @@
 ::applicabel::applicable
 ::isc::disc
 ::dsc::disc
+::dic::disc
 ::idsc::disc
 ::dsic::disc
 ::dics::disc
@@ -24658,8 +24510,6 @@
 ::aflls::falls
 ::flals::falls
 ::falsl::falls
-::pc::pic
-::pi::pic
 ::ipc::pic
 ::pci::pic
 ::oul::soul
@@ -25120,7 +24970,6 @@
 ::ovid::void
 ::viod::void
 ::vodi::void
-::ining::dining
 ::dning::dining
 ::diing::dining
 ::dinng::dining
@@ -25187,7 +25036,6 @@
 ::daokta::Dakota
 ::daktoa::Dakota
 ::dakoat::Dakota
-::tg::tag
 ::atg::tag
 ::tga::tag
 ::nterview::interview
@@ -25227,6 +25075,7 @@
 ::framewrok::framework
 ::framewokr::framework
 ::dsk::disk
+::dik::disk
 ::idsk::disk
 ::dsik::disk
 ::diks::disk
@@ -25252,7 +25101,6 @@
 ::uqeen::queen
 ::qeuen::queen
 ::quene::queen
-::vh::vhs
 ::hvs::vhs
 ::vsh::vhs
 ::redits::credits
@@ -25426,7 +25274,6 @@
 ::enlrage::enlarge
 ::enlagre::enlarge
 ::enlareg::enlarge
-::ra::ray
 ::rya::ray
 ::requently::frequently
 ::fequently::frequently
@@ -25697,7 +25544,6 @@
 ::exatcly::exactly
 ::exaclty::exactly
 ::exactyl::exactly
-::dr::dry
 ::rdy::dry
 ::dyr::dry
 ::xplore::explore
@@ -25947,7 +25793,6 @@
 ::natiosn::nations
 ::oute::route
 ::rute::route
-::roue::route
 ::rout::route
 ::orute::route
 ::ruote::route
@@ -26819,7 +26664,6 @@
 ::anrdew::Andrew
 ::anderw::Andrew
 ::andrwe::Andrew
-::vr::var
 ::avr::var
 ::vra::var
 ::erform::perform
@@ -27596,7 +27440,6 @@
 ::displyaed::displayed
 ::displaeyd::displayed
 ::displayde::displayed
-::mm::mom
 ::omm::mom
 ::mmo::mom
 ::educed::reduced
@@ -27718,7 +27561,6 @@
 ::reviweed::reviewed
 ::revieewd::reviewed
 ::reviewde::reviewed
-::rw::row
 ::orw::row
 ::rwo::row
 ::orecast::forecast
@@ -27849,8 +27691,6 @@
 ::irse::rise
 ::rsie::rise
 ::ries::rise
-::sd::usd
-::ud::usd
 ::uds::usd
 ::leep::sleep
 ::seep::sleep
@@ -28539,7 +28379,6 @@
 ::meainng::meaning
 ::meannig::meaning
 ::meanign::meaning
-::ti::tip
 ::itp::tip
 ::tpi::tip
 ::econdary::secondary
@@ -28871,7 +28710,6 @@
 ::chirst::Christ
 ::chrsit::Christ
 ::chrits::Christ
-::dn::Dan
 ::dan::Dan
 ::ogs::dogs
 ::dgs::dogs
@@ -28991,8 +28829,6 @@
 ::preivew::preview
 ::preveiw::preview
 ::previwe::preview
-::fy::fly
-::fl::fly
 ::lfy::fly
 ::fyl::fly
 ::anner::manner
@@ -29599,7 +29435,6 @@
 ::smoikng::smoking
 ::smoknig::smoking
 ::smokign::smoking
-::bc::bbc
 ::bcb::bbc
 ::ecomes::becomes
 ::bcomes::becomes
@@ -29661,7 +29496,6 @@
 ::rtees::trees
 ::teres::trees
 ::trese::trees
-::vg::avg
 ::vag::avg
 ::agv::avg
 ::chieve::achieve
@@ -29775,7 +29609,6 @@
 ::neraby::nearby
 ::neabry::nearby
 ::nearyb::nearby
-::rm::ROM
 ::rmo::ROM
 ::crried::carried
 ::caried::carried
@@ -30086,7 +29919,6 @@
 ::eaiser::easier
 ::easeir::easier
 ::easire::easier
-::rc::src
 ::rsc::src
 ::scr::src
 ::iability::liability
@@ -30363,11 +30195,8 @@
 ::colck::clock
 ::clcok::clock
 ::clokc::clock
-::dt::dot
 ::odt::dot
 ::dto::dot
-::iv::hiv
-::hv::hiv
 ::ihv::hiv
 ::hvi::hiv
 ::dentity::identity
@@ -30572,7 +30401,6 @@
 ::noto::onto
 ::otno::onto
 ::onot::onto
-::sl::dsl
 ::sdl::dsl
 ::dls::dsl
 ::lanet::planet
@@ -30623,9 +30451,6 @@
 ::reicpe::recipe
 ::recpie::recipe
 ::reciep::recipe
-::um::zum
-::zm::zum
-::zu::zum
 ::uzm::zum
 ::zmu::zum
 ::ermit::permit
@@ -30654,7 +30479,6 @@
 ::rpoof::proof
 ::porof::proof
 ::profo::proof
-::na::dna
 ::nda::dna
 ::iff::diff
 ::dff::diff
@@ -30806,8 +30630,6 @@
 ::miane::Maine
 ::manie::Maine
 ::maien::Maine
-::ql::sql
-::sq::sql
 ::qsl::sql
 ::slq::sql
 ::epresent::represent
@@ -31104,11 +30926,8 @@
 ::marketpalce::marketplace
 ::marketplcae::marketplace
 ::marketplaec::marketplace
-::vil::evil
-::eil::evil
 ::evl::evil
 ::evi::evil
-::veil::evil
 ::eivl::evil
 ::evli::evil
 ::aare::aware
@@ -31234,7 +31053,6 @@
 ::suggetsed::suggested
 ::suggesetd::suggested
 ::suggestde::suggested
-::gp::gps
 ::pgs::gps
 ::gsp::gps
 ::emains::remains
@@ -31288,6 +31106,7 @@
 ::concernde::concerned
 ::uro::euro
 ::euo::euro
+::eur::euro
 ::uero::euro
 ::eruo::euro
 ::euor::euro
@@ -31370,8 +31189,6 @@
 ::usaeg::usage
 ::acp::cap
 ::cpa::cap
-::nk::ink
-::ik::ink
 ::nik::ink
 ::ikn::ink
 ::harts::charts
@@ -31790,7 +31607,6 @@
 ::reservatoins::reservations
 ::reservatinos::reservations
 ::reservatiosn::reservations
-::pn::pin
 ::ipn::pin
 ::pni::pin
 ::laystation::playstation
@@ -31980,8 +31796,6 @@
 ::estabilsh::establish
 ::establsih::establish
 ::establihs::establish
-::nu::gnu
-::gn::gnu
 ::ngu::gnu
 ::appened::happened
 ::hppened::happened
@@ -32831,7 +32645,6 @@
 ::affetced::affected
 ::affecetd::affected
 ::affectde::affected
-::li::lib
 ::ilb::lib
 ::lbi::lib
 ::bie::bike
@@ -32949,7 +32762,6 @@
 ::andesron::Anderson
 ::anderosn::Anderson
 ::andersno::Anderson
-::uc::utc
 ::haracteristics::characteristics
 ::caracteristics::characteristics
 ::chracteristics::characteristics
@@ -33467,7 +33279,6 @@
 ::atlatnic::Atlantic
 ::atlanitc::Atlantic
 ::atlantci::Atlantic
-::wt::wet
 ::ewt::wet
 ::wte::wet
 ::ircumstances::circumstances
@@ -34100,7 +33911,6 @@
 ::chocoalte::chocolate
 ::chocoltae::chocolate
 ::chocolaet::chocolate
-::pb::pub
 ::upb::pub
 ::pbu::pub
 ::ortion::portion
@@ -35450,7 +35260,6 @@
 ::elgs::legs
 ::lges::legs
 ::lesg::legs
-::sm::Sam
 ::asm::Sam
 ::sma::Sam
 ::tick::stick
@@ -35914,8 +35723,6 @@
 ::presnets::presents
 ::presetns::presents
 ::presenst::presents
-::ef::ref
-::rf::ref
 ::erf::ref
 ::rfe::ref
 ::tnk::tank
@@ -35982,7 +35789,6 @@
 ::anvy::navy
 ::nvay::navy
 ::nayv::navy
-::kd::kid
 ::ikd::kid
 ::kdi::kid
 ::egulatory::regulatory
@@ -36405,7 +36211,6 @@
 ::idsh::dish
 ::dsih::dish
 ::dihs::dish
-::lays::plays
 ::plys::plays
 ::lpays::plays
 ::palys::plays
@@ -37162,8 +36967,6 @@
 ::saivng::saving
 ::savnig::saving
 ::savign::saving
-::nl::NFL
-::nf::NFL
 ::nfl::NFL
 ::fnl::NFL
 ::nlf::NFL
@@ -37941,10 +37744,8 @@
 ::cathloic::catholic
 ::cathoilc::catholic
 ::catholci::catholic
-::oa::oak
 ::aok::oak
 ::oka::oak
-::vt::vat
 ::avt::vat
 ::vta::vat
 ::wareness::awareness
@@ -38318,7 +38119,6 @@
 ::attcaks::attacks
 ::attakcs::attacks
 ::attacsk::attacks
-::km::Kim
 ::kim::Kim
 ::ikm::Kim
 ::kmi::Kim
@@ -39913,7 +39713,6 @@
 ::chatrer::charter
 ::charetr::charter
 ::chartre::charter
-::fg::fig
 ::ifg::fig
 ::fgi::fig
 ::arbara::Barbara
@@ -40353,7 +40152,6 @@
 ::foramts::formats
 ::formtas::formats
 ::formast::formats
-::tb::tab
 ::atb::tab
 ::tba::tab
 ::epends::depends
@@ -40834,8 +40632,6 @@
 ::lpot::plot
 ::polt::plot
 ::plto::plot
-::qy::qty
-::qt::qty
 ::tqy::qty
 ::qyt::qty
 ::ossibly::possibly
@@ -42059,7 +41855,6 @@
 ::pursaunt::pursuant
 ::pursunat::pursuant
 ::pursuatn::pursuant
-::ci::sci
 ::csi::sci
 ::abric::fabric
 ::fbric::fabric
@@ -43186,7 +42981,6 @@
 ::heaitng::heating
 ::heatnig::heating
 ::heatign::heating
-::eg::leg
 ::elg::leg
 ::lge::leg
 ::eck::neck
@@ -43360,7 +43154,6 @@
 ::libreal::liberal
 ::libearl::liberal
 ::liberla::liberal
-::jy::jay
 ::ajy::jay
 ::jya::jay
 ::rips::trips
@@ -43747,8 +43540,6 @@
 ::approahces::approaches
 ::approacehs::approaches
 ::approachse::approaches
-::iz::biz
-::bz::biz
 ::ibz::biz
 ::bzi::biz
 ::larm::alarm
@@ -43868,7 +43659,6 @@
 ::nagle::angle
 ::agnle::angle
 ::anlge::angle
-::rb::rob
 ::orb::rob
 ::rbo::rob
 ::inyl::vinyl
@@ -44625,7 +44415,6 @@
 ::careuflly::carefully
 ::carefluly::carefully
 ::carefulyl::carefully
-::jt::jet
 ::ejt::jet
 ::jte::jet
 ::roductivity::productivity
@@ -45059,7 +44848,6 @@
 ::hitlon::Hilton
 ::hilotn::Hilton
 ::hiltno::Hilton
-::kn::ken
 ::ekn::ken
 ::roteins::proteins
 ::poteins::proteins
@@ -45084,8 +44872,6 @@
 ::hroror::horror
 ::hororr::horror
 ::horrro::horror
-::xp::exp
-::ex::exp
 ::xep::exp
 ::epx::exp
 ::amiliar::familiar
@@ -45818,6 +45604,7 @@
 ::drity::dirty
 ::ditry::dirty
 ::diryt::dirty
+::dck::deck
 ::edck::deck
 ::dcek::deck
 ::dekc::deck
@@ -46136,7 +45923,6 @@
 ::hraris::Harris
 ::harirs::Harris
 ::harrsi::Harris
-::mh::mph
 ::pmh::mph
 ::mhp::mph
 ::binging::bringing
@@ -46782,7 +46568,6 @@
 ::rohde::rhode
 ::rhdoe::rhode
 ::rhoed::rhode
-::nb::NBA
 ::nba::NBA
 ::bna::NBA
 ::nab::NBA
@@ -47642,7 +47427,6 @@
 ::rger::roger
 ::roer::roger
 ::rogr::roger
-::roge::roger
 ::orger::roger
 ::rgoer::roger
 ::roegr::roger
@@ -48440,7 +48224,6 @@
 ::diegst::digest
 ::digset::digest
 ::digets::digest
-::rg::reg
 ::erg::reg
 ::rge::reg
 ::odging::lodging
@@ -49188,8 +48971,6 @@
 ::queires::queries
 ::quereis::queries
 ::querise::queries
-::mw::BMW
-::bw::BMW
 ::bmw::BMW
 ::mbw::BMW
 ::bwm::BMW
@@ -49651,8 +49432,8 @@
 ::shareawre::shareware
 ::sharewrae::shareware
 ::sharewaer::shareware
-::rp::rep
 ::erp::rep
+::rpe::rep
 ::herry::cherry
 ::cerry::cherry
 ::chrry::cherry
@@ -50686,7 +50467,6 @@
 ::regarldess::regardless
 ::regardelss::regardless
 ::regardlses::regardless
-::ln::LAN
 ::lna::LAN
 ::nemy::enemy
 ::eemy::enemy
@@ -51662,7 +51442,6 @@
 ::complint::complaint
 ::complant::complaint
 ::complait::complaint
-::complain::complaint
 ::ocmplaint::complaint
 ::cmoplaint::complaint
 ::copmlaint::complaint
@@ -53635,7 +53414,6 @@
 ::showtmies::showtimes
 ::showtiems::showtimes
 ::showtimse::showtimes
-::cl::cal
 ::acl::cal
 ::ortions::portions
 ::prtions::portions
@@ -53998,7 +53776,6 @@
 ::quartrely::quarterly
 ::quartelry::quarterly
 ::quarteryl::quarterly
-::pm::rpm
 ::prm::rpm
 ::rmp::rpm
 ::rofits::profits
@@ -54227,7 +54004,6 @@
 ::automted::automated
 ::automaed::automated
 ::automatd::automated
-::automate::automated
 ::uatomated::automated
 ::atuomated::automated
 ::auotmated::automated
@@ -54391,9 +54167,6 @@
 ::litearry::literary
 ::literray::literary
 ::literayr::literary
-::gg::egg
-::hz::MHz
-::mz::MHz
 ::mhz::MHz
 ::hmz::MHz
 ::mzh::MHz
@@ -55065,7 +54838,6 @@
 ::impcats::impacts
 ::impatcs::impacts
 ::impacst::impacts
-::rv::rev
 ::erv::rev
 ::rve::rev
 ::ospel::gospel
@@ -55173,7 +54945,6 @@
 ::inking::linking
 ::lnking::linking
 ::liking::linking
-::lining::linking
 ::linkng::linking
 ::linkig::linking
 ::linkin::linking
@@ -55452,7 +55223,6 @@
 ::copoer::cooper
 ::cooepr::cooper
 ::coopre::cooper
-::yc::NYC
 ::nyc::NYC
 ::ync::NYC
 ::ncy::NYC
@@ -55873,7 +55643,6 @@
 ::judiical::judicial
 ::judicail::judicial
 ::judicila::judicial
-::io::Rio
 ::roi::Rio
 ::djustment::adjustment
 ::ajustment::adjustment
@@ -57091,7 +56860,6 @@
 ::interveniton::intervention
 ::interventoin::intervention
 ::interventino::intervention
-::fd::fed
 ::efd::fed
 ::fde::fed
 ::lugin::plugin
@@ -57716,7 +57484,6 @@
 ::carfeul::careful
 ::careufl::careful
 ::careflu::careful
-::xt::ext
 ::xet::ext
 ::etx::ext
 ::bam::beam
@@ -58364,7 +58131,6 @@
 ::turkihs::turkish
 ::caol::coal
 ::cola::coal
-::cy::cry
 ::rcy::cry
 ::cyr::cry
 ::essaging::messaging
@@ -58428,7 +58194,6 @@
 ::inetnt::intent
 ::intnet::intent
 ::intetn::intent
-::zo::zoo
 ::ozo::zoo
 ::argely::largely
 ::lrgely::largely
@@ -58529,8 +58294,6 @@
 ::sopke::spoke
 ::spkoe::spoke
 ::spoek::spoke
-::ka::aka
-::aa::aka
 ::kaa::aka
 ::aak::aka
 ::rrow::arrow
@@ -59877,7 +59640,6 @@
 ::ilte::lite
 ::ltie::lite
 ::liet::lite
-::hb::hub
 ::uhb::hub
 ::hbu::hub
 ::argeted::targeted
@@ -60738,7 +60500,6 @@
 ::photohsop::photoshop
 ::photosohp::photoshop
 ::photoshpo::photoshop
-::ch::chi
 ::hci::chi
 ::cih::chi
 ::rabia::Arabia
@@ -61049,7 +60810,6 @@
 ::confidenital::confidential
 ::confidentail::confidential
 ::confidentila::confidential
-::fc::rfc
 ::frc::rfc
 ::rcf::rfc
 ::tatutory::statutory
@@ -61147,7 +60907,6 @@
 ::jugdes::judges
 ::judegs::judges
 ::judgse::judges
-::eo::seo
 ::eso::seo
 ::etired::retired
 ::rtired::retired
@@ -61259,7 +61018,6 @@
 ::bracleet::bracelet
 ::braceelt::bracelet
 ::bracelte::bracelet
-::ns::ins
 ::nis::ins
 ::ggs::eggs
 ::gegs::eggs
@@ -61865,7 +61623,6 @@
 ::contsets::contests
 ::contetss::contests
 ::contesst::contests
-::lu::flu
 ::lfu::flu
 ::ranslate::translate
 ::tanslate::translate
@@ -63296,7 +63053,6 @@
 ::pantyohse::pantyhose
 ::pantyhsoe::pantyhose
 ::pantyhoes::pantyhose
-::pl::plc
 ::lpc::plc
 ::pcl::plc
 ::roke::broke
@@ -63377,8 +63133,6 @@
 ::compleixty::complexity
 ::complextiy::complexity
 ::complexiyt::complexity
-::sg::msg
-::mg::msg
 ::smg::msg
 ::mgs::msg
 ::onstantly::constantly
@@ -63920,8 +63674,6 @@
 ::refreral::referral
 ::referarl::referral
 ::referrla::referral
-::hl::nhl
-::nh::nhl
 ::hnl::nhl
 ::nlh::nhl
 ::urveillance::surveillance
@@ -64123,7 +63875,6 @@
 ::reuetrs::reuters
 ::reutres::reuters
 ::reutesr::reuters
-::gl::gel
 ::egl::gel
 ::gle::gel
 ::tdd::todd
@@ -65694,7 +65445,6 @@
 ::scenairo::scenario
 ::scenaroi::scenario
 ::lvers::lovers
-::loers::lovers
 ::lovrs::lovers
 ::olvers::lovers
 ::lvoers::lovers
@@ -66289,7 +66039,6 @@
 ::syndicaiton::syndication
 ::syndicatoin::syndication
 ::syndicatino::syndication
-::ym::gym
 ::ygm::gym
 ::gmy::gym
 ::elebration::celebration
@@ -67522,7 +67271,6 @@
 ::reprodcued::reproduced
 ::reproduecd::reproduced
 ::reproducde::reproduced
-::hn::hon
 ::hno::hon
 ::adle::dale
 ::dlae::dale
@@ -68214,7 +67962,6 @@
 ::footewar::footwear
 ::footwaer::footwear
 ::footwera::footwear
-::vc::vic
 ::ivc::vic
 ::vci::vic
 ::eijing::Beijing
@@ -69443,7 +69190,6 @@
 ::baseilne::baseline
 ::baselnie::baseline
 ::baselien::baseline
-::cb::cab
 ::acb::cab
 ::ngry::angry
 ::anry::angry
@@ -69777,7 +69523,6 @@
 ::seaitng::seating
 ::seatnig::seating
 ::seatign::seating
-::dm::dam
 ::dma::dam
 ::cnn::CNN
 ::ncn::CNN
@@ -75252,7 +74997,6 @@
 ::barirer::barrier
 ::barreir::barrier
 ::barrire::barrier
-::rgue::argue
 ::ague::argue
 ::arue::argue
 ::argu::argue
@@ -75815,7 +75559,6 @@
 ::cliincs::clinics
 ::clincis::clinics
 ::clinisc::clinics
-::cw::cow
 ::ocw::cow
 ::cwo::cow
 ::anitoba::Manitoba
@@ -79692,7 +79435,6 @@
 ::evaluaitng::evaluating
 ::evaluatnig::evaluating
 ::evaluatign::evaluating
-::lp::lip
 ::ilp::lip
 ::lpi::lip
 ::ubcommittee::subcommittee
@@ -80991,7 +80733,6 @@
 ::noevls::novels
 ::novles::novels
 ::novesl::novels
-::rr::rrp
 ::rpr::rrp
 ::ecipients::recipients
 ::rcipients::recipients
@@ -81811,7 +81552,6 @@
 ::reprinst::reprints
 ::ahrt::hart
 ::hrat::hart
-::hatr::hart
 ::ernard::bernard
 ::brnard::bernard
 ::benard::bernard
@@ -84032,8 +83772,6 @@
 ::discsuses::discusses
 ::discusess::discusses
 ::discussse::discusses
-::ui::GUI
-::gi::GUI
 ::gui::GUI
 ::ugi::GUI
 ::giu::GUI
@@ -84995,7 +84733,6 @@
 ::euegne::Eugene
 ::eugnee::Eugene
 ::eugeen::Eugene
-::pg::pig
 ::ipg::pig
 ::pgi::pig
 ::etric::metric
@@ -85015,7 +84752,6 @@
 ::comliant::compliant
 ::compiant::compliant
 ::compliat::compliant
-::complian::compliant
 ::ocmpliant::compliant
 ::cmopliant::compliant
 ::copmliant::compliant
@@ -85847,7 +85583,6 @@
 ::bunrer::burner
 ::burenr::burner
 ::burnre::burner
-::yr::yrs
 ::rys::yrs
 ::ysr::yrs
 ::nvestigator::investigator
@@ -86099,7 +85834,6 @@
 ::freelnace::freelance
 ::freelacne::freelance
 ::freelanec::freelance
-::uo::duo
 ::udo::duo
 ::xcessive::excessive
 ::ecessive::excessive
@@ -86547,7 +86281,6 @@
 ::trbies::tribes
 ::triebs::tribes
 ::tribse::tribes
-::vp::VIP
 ::vip::VIP
 ::ivp::VIP
 ::vpi::VIP
@@ -86834,7 +86567,6 @@
 ::nutritinoal::nutritional
 ::nutritioanl::nutritional
 ::nutritionla::nutritional
-::ya::yea
 ::eya::yea
 ::ercy::mercy
 ::mrcy::mercy
@@ -87668,7 +87400,6 @@
 ::accreditaiton::accreditation
 ::accreditatoin::accreditation
 ::accreditatino::accreditation
-::wv::wav
 ::awv::wav
 ::wva::wav
 ::lackberry::blackberry
@@ -89102,8 +88833,6 @@
 ::parliamenatry::parliamentary
 ::parliamentray::parliamentary
 ::parliamentayr::parliamentary
-::bj::obj
-::oj::obj
 ::boj::obj
 ::refix::prefix
 ::pefix::prefix
@@ -89311,7 +89040,6 @@
 ::handabgs::handbags
 ::handbgas::handbags
 ::handbasg::handbags
-::jr::jar
 ::ajr::jar
 ::jra::jar
 ::omerset::somerset
@@ -90153,7 +89881,6 @@
 ::ujnk::junk
 ::jnuk::junk
 ::jukn::junk
-::wx::wax
 ::awx::wax
 ::wxa::wax
 ::ucy::Lucy
@@ -93051,7 +92778,6 @@
 ::rasies::raises
 ::raiess::raises
 ::raisse::raises
-::em::gem
 ::egm::gem
 ::uplicate::duplicate
 ::dplicate::duplicate
@@ -93711,7 +93437,6 @@
 ::ruge::rouge
 ::oruge::rouge
 ::ruoge::rouge
-::rogue::rouge
 ::roueg::rouge
 ::yast::yeast
 ::yest::yeast
@@ -94674,7 +94399,6 @@
 ::reasoinng::reasoning
 ::reasonnig::reasoning
 ::reasonign::reasoning
-::lz::Liz
 ::liz::Liz
 ::ilz::Liz
 ::lzi::Liz
@@ -95215,12 +94939,6 @@
 ::ald::bald
 ::abld::bald
 ::badl::bald
-::raps::craps
-::crap::craps
-::rcaps::craps
-::carps::craps
-::crpas::craps
-::crasp::craps
 ::uji::Fuji
 ::fui::Fuji
 ::fuj::Fuji
@@ -95627,7 +95345,6 @@
 ::patsor::pastor
 ::pasotr::pastor
 ::pastro::pastor
-::mu::mud
 ::umd::mud
 ::mdu::mud
 ::alvin::Calvin
@@ -96324,7 +96041,6 @@
 ::superintenednt::superintendent
 ::superintendnet::superintendent
 ::superintendetn::superintendent
-::dp::dip
 ::idp::dip
 ::dpi::dip
 ::amba::samba
@@ -96870,7 +96586,6 @@
 ::explaiinng::explaining
 ::explainnig::explaining
 ::explainign::explaining
-::yn::yen
 ::eyn::yen
 ::yne::yen
 ::srips::strips
@@ -98577,7 +98292,6 @@
 ::produly::proudly
 ::prouldy::proudly
 ::proudyl::proudly
-::px::pix
 ::ipx::pix
 ::pxi::pix
 ::ecessity::necessity
@@ -99189,7 +98903,6 @@
 ::ventrues::ventures
 ::ventuers::ventures
 ::venturse::ventures
-::ni::nil
 ::nli::nil
 ::uffing::buffing
 ::bffing::buffing
@@ -99293,7 +99006,6 @@
 ::tribunla::tribunal
 ::uled::ruled
 ::rled::ruled
-::rued::ruled
 ::ruld::ruled
 ::urled::ruled
 ::rlued::ruled
@@ -101643,7 +101355,6 @@
 ::positioinng::positioning
 ::positionnig::positioning
 ::positionign::positioning
-::hater::heater
 ::heter::heater
 ::ehater::heater
 ::haeter::heater
@@ -102120,7 +101831,6 @@
 ::clsoes::closes
 ::cloess::closes
 ::closse::closes
-::eq::seq
 ::esq::seq
 ::sqe::seq
 ::sychiatry::psychiatry
@@ -103983,6 +103693,7 @@
 ::creautre::creature
 ::creatrue::creature
 ::creatuer::creature
+::urs::ours
 ::ors::ours
 ::ous::ours
 ::uors::ours
@@ -105021,7 +104732,6 @@
 ::termianls::terminals
 ::terminlas::terminals
 ::terminasl::terminals
-::rude::crude
 ::cude::crude
 ::crde::crude
 ::crud::crude
@@ -145111,7 +144821,6 @@
 ::vastnses::vastness
 ::ein::vein
 ::vin::vein
-::vei::vein
 ::vien::vein
 ::veni::vein
 ::eins::veins
