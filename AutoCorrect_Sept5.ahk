@@ -58,10 +58,6 @@ Global onlyTitleFound := ""
 Global nil
 Global CancelClose := False
 Global lastWinMinHwndId := 0x999999
-Global v1 := 0
-Global v2 := 0
-Global v3 := 0
-Global v4 := 0
 Global DesktopIconsVisible := False
 Global DrawingRect := False
 Global LclickSelected := False
@@ -274,6 +270,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     break
                 sleep, 10
              }
+
+            If (InStr(vWinTitle, "Save As", false)) {
+                WinActivate, % "ahk_id " hWnd
+                Return
+            }
 
             WinGet, state, MinMax, Ahk_id %hWnd%
             If (state > -1 && vWinTitle != "") {
@@ -634,6 +635,28 @@ Return
 
 ~^Backspace::
     Hotstring("Reset")
+Return
+
+$F2::
+    LbuttonEnabled := False
+    StopRecurssion := True
+    SetTimer, track, Off
+    SetTimer, keyTrack, Off
+    KeyWait, F2, U T1
+    Send, {F2}
+    sleep, 150
+    ; ControlFocus, Edit1, A
+    result := UIA.GetFocusedElement()
+    ; ControlFocus, Edit1, A
+    ; tooltip, % "name is " result.value
+    loop {
+        If GetKeyState("Enter") || GetKeyState("Lbutton") || GetKeyState("Esc")
+            break
+    }
+    SetTimer, track, On
+    SetTimer, keyTrack, On
+    StopRecurssion := False
+    LbuttonEnabled := True
 Return
 
 ; Ctl+Tab in chrome to goto recent
@@ -2911,8 +2934,10 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     loop % windowsToMinimize.length()
     {
         tempId := windowsToMinimize[A_Index]
-        If (tempId != lastActWinID)
+        If (tempId != lastActWinID) {
             WinMinimize, ahk_id %tempId%
+            sleep, 100
+        }
     }
 
     BlockKeyboard(true)
