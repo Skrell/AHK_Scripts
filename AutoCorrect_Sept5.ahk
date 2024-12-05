@@ -41,7 +41,6 @@ Global forward := True
 Global cycling := False
 Global ValidWindows := []
 Global GroupedWindows := []
-Global RevMinnedWindows := []
 Global PrevActiveWindows := []
 Global minWinArray := []
 Global allWinArray := []
@@ -71,7 +70,9 @@ Global LastKey2 :=
 Global LastKey3 :=
 Global X_PriorPriorHotKey :=
 Global StopAutoFix := False
-Global X1, X2, Y1, Y2 := 0
+Global disableEnter := False
+Global disableWheeldown := False
+Global pauseWheel  := False
 
 Process, Priority,, High
 
@@ -235,8 +236,19 @@ Hoty:
         SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
 FixSlash:
-    If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)
+    If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_ThisHotKey == "~/")
+        disableEnter := True
+    Else if (!IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, Substr(A_ThisHotKey,2,1), false)))
+        disableEnter := False
+        
+    If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999) {
         SendInput, % "{BS}{BS}{?}{SPACE}"
+        disableEnter := False
+    }
+    Else If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "Enter" && A_TimeSincePriorHotkey<999) {
+        SendInput, % "{BS}{BS}{?}{ENTER}"
+        disableEnter := False
+    }
     X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
 
     ;------------------------------------------------------------------------------
@@ -612,12 +624,20 @@ Return
         Send, {LCtrl Up}
 Return
 
+#If disableEnter
+Enter::
+    GoSub, FixSlash
+    GoSub, Hoty
+Return
+#If
+
+#If !disableEnter
 ~Enter::
-    WinGetClass, lClass, A
     ControlGetFocus, currCtrl, A
     If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3"|| currCtrl == "Edit1")
         GoSub, SendCtrlAdd
 Return
+#If
 
 #+s::Return
 
@@ -626,6 +646,7 @@ Return
     GoSub, Hoty
 Return
 
+; duplicate hotkey in case shift is accidentally  held as a result of attempting to type a '?'
 ~+Space::
     GoSub, FixSlash
     GoSub, Hoty
@@ -2261,6 +2282,7 @@ Return
     If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Left}
+        sleep, 200
     }
     Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
@@ -2281,25 +2303,33 @@ Return
     Hotkey, ~WheelUp, On
 Return
 
+#If MouseIsOverTitleBar() || disableWheeldown
+WheelDown::
+    disableWheeldown := True
+    MouseGetPos, , , wdID, 
+    WinMinimize, ahk_id %wdID% 
+    sleep, 500
+    disableWheeldown := False
+Return
+#If
+
+#If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
 ~WheelDown::
-    Hotkey, ~WheelDown, Off
+    ; Hotkey, ~WheelDown, Off
+    pauseWheel := True
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
 
     If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Right}
-    }
-    Else If (MouseIsOverTitleBar()) {
-        BlockInput, On
-        WinMinimize, ahk_id %wdID% 
         sleep, 200
-        BlockInput, Off
     }
     Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
+            Critical, On
             BlockInput, On
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
@@ -2310,11 +2340,13 @@ Return
                 Send, {Ctrl Up}
             }
             BlockInput, Off
+            Critical, Off
         }
     }
-    Hotkey, ~WheelDown, On
+    pauseWheel := False
+    ; Hotkey, ~WheelDown, On
 Return
-
+#If
 
 /* ;
 ***********************************
@@ -2870,6 +2902,11 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     }
 
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
+    WinGet, mmState, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+    If (MonCount > 1 && mmState == -1) {
+        windowsToMinimize.push(finalWindowsListWithProcAndClass[counter])
+        lastActWinID := finalWindowsListWithProcAndClass[counter]
+    }
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
     WinGetTitle, actTitle, % "ahk_id " finalWindowsListWithProcAndClass[counter]
     tooltip, Active is %actTitle%
@@ -2930,6 +2967,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
     }
     until (!GetKeyState("LAlt", "P"))
+    
+    WinActivate, ahk_id %lastActWinID%
 
     loop % windowsToMinimize.length()
     {
@@ -2937,6 +2976,12 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         If (tempId != lastActWinID) {
             WinMinimize, ahk_id %tempId%
             sleep, 100
+        }
+        Else {
+            If !IsWindowOnCurrMon(tempId, currentMon) {
+                WinActivate, ahk_id %tempId%
+                Send, #+{Left}
+            }
         }
     }
 
@@ -4283,6 +4328,7 @@ SetTitleMatchMode, 2
 ::complain::
 ::login::
 ::constrain::
+::begin::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -4639,7 +4685,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:lyl::lly
 :?:aingin::aining
 :?:ainign::aining
-:?:gin::ing
 :?:gni::ing
 :?:ign::ing
 :?:ngi::ing
