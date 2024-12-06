@@ -686,21 +686,28 @@ prevChromeTab()
     Global StopRecurssion
     StopRecurssion := True
     DetectHiddenWindows, Off
-    send ^+a
-    loop {
+    SendInput, ^+{a}
+    loop 100
+    {
         WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe
-        loop, % allChromeWindows
+        loop % allChromeWindows
         {
             this_id := "ahk_id " . allChromeWindows%A_Index%
-            WinGet, procName, ProcessName, %this_id%
             WinGetTitle, titID, %this_id%
-            If (titID == "" && procName == "chrome.exe")
+            If (titID == "")
                 break
         }
-        If (titID == "" && procName == "chrome.exe")
+        If (titID == "")
             break
+        sleep, 20
     }
-    send, {Enter}
+    sleep, 250
+    ; WinActivate, ahk_id %this_id%
+    ControlFocus, Chrome_RenderWidgetHostHWND1, ahk_id %this_id%
+    SendInput, {Enter}
+    ; tooltip, switched!
+    ; sleep, 1000
+    ; tooltip,
     StopRecurssion := False
 }
 
@@ -2288,6 +2295,7 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
+            Critical, On
             BlockInput, On
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
@@ -2298,6 +2306,7 @@ Return
                 Send, {Ctrl Up}
             }
             BlockInput, Off
+            Critical, Off
         }
     }
     Hotkey, ~WheelUp, On
