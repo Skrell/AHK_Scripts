@@ -92,7 +92,14 @@ Return
         loop % windowsFromProc
         {
             hwndID := windowsFromProc%A_Index%
-            WinClose, ahk_id %hwndID%
+            If (MonCount > 1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                If currentMonHasActWin
+                    WinClose, ahk_id %hwndID%
+            }
+            Else
+                WinClose, ahk_id %hwndID%
         }
     }
     If (InStr(vName,"minimize",false)) {

@@ -451,7 +451,7 @@ Return
     WinActivate, ahk_class #32770
     ControlGet, mOutput, Visible ,, Edit1, A
     If (mOutput == 1) {
-        ControlGetFocus, Edit1, A
+        ControlFocus, Edit1, A
         Send, {Enter}
         sleep, 50
     }
@@ -461,7 +461,7 @@ Return
     WinActivate, ahk_class #32770
     ControlGet, mOutput, Visible ,, Edit1, A
     If (mOutput == 1) {
-        ControlGetFocus, Edit1, A
+        ControlFocus, Edit1, A
         Send, +{Enter}
         sleep, 50
     }
@@ -692,22 +692,29 @@ prevChromeTab()
         WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe
         loop % allChromeWindows
         {
-            this_id := "ahk_id " . allChromeWindows%A_Index%
-            WinGetTitle, titID, %this_id%
+            this_id := allChromeWindows%A_Index%
+            WinGetTitle, titID, ahk_id %this_id%
             If (titID == "")
                 break
         }
         If (titID == "")
             break
         sleep, 20
+        If (A_Index == 99) {
+            StopRecurssion := False
+            Return
+        }
     }
     sleep, 250
-    ; WinActivate, ahk_id %this_id%
-    ControlFocus, Chrome_RenderWidgetHostHWND1, ahk_id %this_id%
+    WinActivate, ahk_id %this_id%
+    ; ControlFocus, Chrome_RenderWidgetHostHWND1, ahk_id %this_id%
     SendInput, {Enter}
-    ; tooltip, switched!
-    ; sleep, 1000
-    ; tooltip,
+    sleep, 150
+    If WinExist("ahk_id " . this_id) && WinActive("ahk_id " . this_id)
+        SendInput, {tab}{tab}{Enter}
+    tooltip, switched!
+    sleep, 1000
+    tooltip,
     StopRecurssion := False
 }
 
@@ -4020,8 +4027,8 @@ GetExplorerPath(hwnd:="") {
     }
     else {
         activeTab := 0
-        try ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
         try {
+            ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
             for w in ComObjCreate("Shell.Application").Windows {
                 if (w.hwnd != hwnd)
                     continue
@@ -4033,10 +4040,20 @@ GetExplorerPath(hwnd:="") {
                         continue
                     ObjRelease(shellBrowser)
                 }
-                Return w.Document.Folder.Self.Path
+                If (w.Document.Folder.Self.Path == 0) {
+                    ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+                    If (dir == "" || !InStr(dir,"address",false))
+                        ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+                    Return dir
+                }
+                Else
+                    Return w.Document.Folder.Self.Path
             } 
         }catch e {
-            Return False
+            ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+            If (dir == "" || !InStr(dir,"address",false))
+                ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+            Return dir
         }
     }
     Return false
@@ -4102,6 +4119,13 @@ IsGoogleDocWindow() {
         Return False
 }
 
+IsEditCtrl() {
+    ControlGetFocus, whatCtrl, A
+    If InStr(whatCtrl,"Edit",False)
+        Return True
+    Else
+        Return False
+}
 ; ___________________________________
 
 ;    Get Explorer Path https://www.autohotkey.com/boards/viewtopic.php?p=587509#p587509
@@ -4278,11 +4302,13 @@ SetTitleMatchMode, 2
         && !WinActive("ahk_exe Conhost.exe")
         && !WinActive("ahk_exe bash.exe")
         && !WinActive("ahk_exe mintty.exe")
-        && !SearchingWindows && !hitTAB
+        && !SearchingWindows 
+        && !hitTAB
         && !GetKeyState("LAlt","P")
         && !GetKeyState("Ctrl","P")
         && !StopAutoFix
         && !IsGoogleDocWindow()
+        && !IsEditCtrl()
 
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 
