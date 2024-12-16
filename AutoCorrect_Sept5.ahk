@@ -249,7 +249,10 @@ FixSlash:
         SendInput, % "{BS}{BS}{?}{ENTER}"
         disableEnter := False
     }
-    X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
+    If (StrLen(A_PriorHotkey) == 2)
+        X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
+    Else
+        X_PriorPriorHotKey := 
 
     ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
@@ -766,7 +769,7 @@ Return
 #If
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
-; #MaxThreadsPerHotkey 2
+; #MaxThreadsPerHotkey 1
 ; #MaxThreadsBuffer On
 
 !0::
@@ -995,7 +998,7 @@ Altup:
                 BlockInput, MouseMove
                 GoSub, FadeInWin1
                 GoSub, ClearRect
-                WinActivate, % "ahk_id " lbhwnd
+                ; WinActivate, % "ahk_id " lbhwnd
                 BlockInput, MouseMoveOff
             }
         }
@@ -1010,7 +1013,7 @@ Altup:
             Else If (startHighlight && (GroupedWindows.length() > 2)) {
                 GoSub, FadeInWin2
                 Gosub, ClearRect
-                WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+                ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
             }
         }
     }
@@ -1032,6 +1035,9 @@ Return
 FadeInWin1:
     Critical, On
 
+    WinSet, AlwaysOnTop, Off, ahk_id %lbhwnd%
+    WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+    
     WinSet, AlwaysOnTop, On, ahk_id %lbhwnd%
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
@@ -1045,17 +1051,33 @@ FadeInWin1:
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
 
     If (lbhwnd != ValidWindows[4] &&ValidWindows.MaxIndex() >= 4) {
-        WinActivate, % "ahk_id " ValidWindows[4]
+        ; WinActivate, % "ahk_id " ValidWindows[4]
+            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[4]
+            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[4]
+            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (lbhwnd != ValidWindows[3] &&ValidWindows.MaxIndex() >= 3) {
-        WinActivate, % "ahk_id " ValidWindows[3]
+        ; WinActivate, % "ahk_id " ValidWindows[3]
+            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[3]
+            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
+            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (lbhwnd != ValidWindows[2] &&ValidWindows.MaxIndex() >= 2) {
-        WinActivate, % "ahk_id " ValidWindows[2]
+        ; WinActivate, % "ahk_id " ValidWindows[2]
+            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[2]
+            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
+            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (lbhwnd != ValidWindows[1] &&ValidWindows.MaxIndex() >= 1) {
-        WinActivate, % "ahk_id " ValidWindows[1]
+        ; WinActivate, % "ahk_id " ValidWindows[1]
+            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[1]
+            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
+            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
+    
+    WinSet, AlwaysOnTop, On, ahk_id %lbhwnd%
+    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    WinActivate, % "ahk_id " lbhwnd
 
     If (ValidWindows.MaxIndex() >= 1 && Highlighter != ValidWindows[1] && lbhwnd != ValidWindows[1]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
@@ -1101,6 +1123,9 @@ Return
 
 FadeInWin2:
     Critical, On
+    WinSet, AlwaysOnTop, Off ,% "ahk_id " GroupedWindows[cycleCount]
+    WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+    
     WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     
@@ -1112,14 +1137,27 @@ FadeInWin2:
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
 
     If (ValidWindows.MaxIndex() >= 3) {
-        WinActivate, % "ahk_id " ValidWindows[3]
+        ; WinActivate, % "ahk_id " ValidWindows[3]
+            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[3]
+            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
+            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (ValidWindows.MaxIndex() >= 2) {
-        WinActivate, % "ahk_id " ValidWindows[2]
+        ; WinActivate, % "ahk_id " ValidWindows[2]
+            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[2]
+            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
+            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (ValidWindows.MaxIndex() >= 1) {
-        WinActivate, % "ahk_id " ValidWindows[1]
+        ; WinActivate, % "ahk_id " ValidWindows[1]
+            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[1]
+            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
+            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
+
+    WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
+    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
 
     If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) 
     {
@@ -1178,7 +1216,7 @@ ResetWins:
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
-#MaxThreadsPerHotkey 1
+; #MaxThreadsPerHotkey 2
 $!Tab::
 SetTimer, track, Off
 SetTimer, keyTrack, Off
@@ -1355,6 +1393,7 @@ Cycle(direction)
     Global MonCount
     Global startHighlight
     Global hitTAB
+    Global lbhwnd
     static prev_cl, prev_exe
     hitTAB := True
     prev_cl  := ""
@@ -1436,10 +1475,24 @@ Cycle(direction)
     KeyWait, Tab, U
     cycling := True
     If cycling {
+        ; tooltip, cycling
         loop {
             If (GroupedWindows.length() >= 2 && cycling)
             {
-                KeyWait, Tab, D  T.25
+                
+                KeyWait, Lbutton, D  T.1
+                If !ErrorLevel {
+                    MouseGetPos, , , lbhwnd, 
+                    WinGetTitle, actTitle, ahk_id %lbhwnd%
+                    Gui, GUI4Boarder: Hide
+                    tooltip, Selecting %actTitle%
+                    LclickSelected := True
+                    GoSub, DrawRect
+                    WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
+                    KeyWait, Lbutton, U
+                }
+            
+                KeyWait, Tab, D  T.1
                 If !ErrorLevel
                 {
                     If direction {
@@ -1449,7 +1502,10 @@ Cycle(direction)
                             cycleCount += 1
                         WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                         WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
+                        WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
+                        tooltip, current is %tits%
                         GoSub, DrawRect
+                        WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
                     }
                     Else {
@@ -1459,7 +1515,10 @@ Cycle(direction)
                             cycleCount -= 1
                         WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                         WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
+                        WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
+                        tooltip, current is %tits%
                         GoSub, DrawRect
+                        WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
                     }
                     If (cycleCount > 2)
@@ -1626,24 +1685,15 @@ SetTimeout:
     DynaRun(ExprTimeout, whatev1)
 Return
 
-#MaxThreadsPerHotkey 2
-#If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop())
-~*LButton::
+; #MaxThreadsPerHotkey 2
+#If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB)
+~LButton::
     
     StopRecurssion     := True
     CoordMode, Mouse, Window
     MouseGetPos, lbX1, lbY1, lbhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
     WinGetClass, lClass, ahk_id %lbhwnd%
-
-    If hitTAB {
-        WinGetTitle, actTitle, ahk_id %lbhwnd%
-        Gui, GUI4Boarder: Hide
-        tooltip, Selecting %actTitle%
-        LclickSelected := True
-        GoSub, DrawRect
-        Return
-    }
 
     If MouseIsOverTitleBar(lbX1, lbY1)
         Return
@@ -1691,12 +1741,14 @@ Return
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                 GoSub, SendCtrlAdd
             }
+            sleep, 100
             LbuttonEnabled     := True
             StopRecurssion     := False
             Return
         }
         Else {
             GoSub, SendCtrlAdd
+            sleep, 100
             LbuttonEnabled     := True
             StopRecurssion     := False
             Return
