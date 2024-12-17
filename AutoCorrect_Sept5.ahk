@@ -471,6 +471,8 @@ Return
 Return
 #IfWinActive
 
+~Backspace::Return
+
 CapsLock::
     Send {Delete}
 Return
@@ -1503,7 +1505,7 @@ Cycle(direction)
                         WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                         WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                         WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
-                        tooltip, current is %tits%
+                        tooltip, %tits%
                         GoSub, DrawRect
                         WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
@@ -1516,7 +1518,7 @@ Cycle(direction)
                         WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                         WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                         WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
-                        tooltip, current is %tits%
+                        tooltip, %tits%
                         GoSub, DrawRect
                         WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
@@ -1586,7 +1588,7 @@ Return
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
     ; Critical, On
-    Gui, GUI4Boarder: Hide
+    ; Gui, GUI4Boarder: Hide
     DrawingRect := True
     WinGet, activeWin, ID, A
     x := y := w := h := 0
