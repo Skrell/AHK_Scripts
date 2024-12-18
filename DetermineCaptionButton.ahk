@@ -131,7 +131,7 @@ lbutton up::
 
     If (InStr(vName,"minimize",false)) {
         ; WinMinimize, ahk_id %hWnd%
-        Send, {Click, left}
+        Send, {Lbutton Down}{Lbutton Up}
     }
     Else If (InStr(vName,"maximize",false)) {
         ; WinGet, state, MinMax, ahk_id %hWnd%
@@ -139,18 +139,18 @@ lbutton up::
             ; WinMaximize, ahk_id %hWnd%
         ; Else
             ; WinRestore, ahk_id %hWnd%
-        Send, {Click, left}
+        Send, {Lbutton Down}{Lbutton Up}
     }
     Else If (InStr(vName,"close",false)) {
         ; WinClose, ahk_id %hWnd%
-        Send, {Click, left}
+        Send, {Lbutton Down}{Lbutton Up}
     }
     Else If (InStr(vName,"restore",false)) {
         ; WinRestore, ahk_id %hWnd%
-        Send, {Click, left}
+        Send, {Lbutton Down}{Lbutton Up}
     }
     Else If (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))
-        Send, {Click, left}
+        Send, {Lbutton Down}{Lbutton Up}
 
     ; vOutput .= "value: " vValue "`r`n"
     ToolTip, % vName
