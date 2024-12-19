@@ -672,12 +672,13 @@ $F2::
     Send, {F2}
     sleep, 150
     ; ControlFocus, Edit1, A
-    result := UIA.GetFocusedElement()
+    ; result := UIA.GetFocusedElement()
     ; ControlFocus, Edit1, A
     ; tooltip, % "name is " result.value
-    loop {
+    loop 500 {
         If GetKeyState("Enter") || GetKeyState("Lbutton") || GetKeyState("Esc")
             break
+        sleep, 10
     }
     SetTimer, track, On
     SetTimer, keyTrack, On
@@ -995,27 +996,23 @@ Altup:
         Return
     Else {
         cycling        := False
-        If (LclickSelected && (GroupedWindows.length() > 2)) {
+        WinGet, actWndID, ID, A
+        If (LclickSelected && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
             If (startHighlight) {
                 BlockInput, MouseMove
                 GoSub, FadeInWin1
-                GoSub, ClearRect
-                ; WinActivate, % "ahk_id " lbhwnd
                 BlockInput, MouseMoveOff
             }
         }
         Else {
-            WinGet, actWndID, ID, A
-            If (GetKeyState("x","P") || (actWndID == GroupedWindows[1]) || (GroupedWindows.length() <= 1)) {
+            If (GetKeyState("x","P") || actWndID == ValidWindows[1] || GroupedWindows.length() <= 1) {
                 If (GetKeyState("x","P")) {
                     Gui, GUI4Boarder: Hide
                     GoSub, ResetWins
                 }
             }
-            Else If (startHighlight && (GroupedWindows.length() > 2)) {
+            Else If (startHighlight && (GroupedWindows.length() > 2)  && actWndID != ValidWindows[1]) {
                 GoSub, FadeInWin2
-                Gosub, ClearRect
-                ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
             }
         }
     }
@@ -1239,7 +1236,7 @@ Return
 
 #If !hitTAB
 !q::
-    tooltip, swapping between windows of app
+    ; tooltip, swapping between windows of app
     StopRecurssion := True
     ActivateTopMostWindow()
 
@@ -1250,7 +1247,7 @@ Return
     HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
     GoSub, ClearRect
 
-    tooltip,
+    ; tooltip,
     StopRecurssion := False
 Return
 #If
@@ -1487,9 +1484,10 @@ Cycle(direction)
                     MouseGetPos, , , lbhwnd, 
                     WinGetTitle, actTitle, ahk_id %lbhwnd%
                     Gui, GUI4Boarder: Hide
-                    tooltip, Selecting %actTitle%
+                    ; tooltip, Selecting %actTitle%
                     LclickSelected := True
                     GoSub, DrawRect
+                    DrawWindowTitlePopup(actTitle)
                     WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                     KeyWait, Lbutton, U
                 }
@@ -1505,8 +1503,9 @@ Cycle(direction)
                         WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                         WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                         WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
-                        tooltip, %tits%
+                        ; tooltip, %tits%
                         GoSub, DrawRect
+                        DrawWindowTitlePopup(tits)
                         WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
                     }
@@ -1518,8 +1517,9 @@ Cycle(direction)
                         WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                         WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                         WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
-                        tooltip, %tits%
+                        ; tooltip, %tits%
                         GoSub, DrawRect
+                        DrawWindowTitlePopup(tits)
                         WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
                     }
@@ -1528,6 +1528,7 @@ Cycle(direction)
                 }
             }
         } until (!GetKeyState("LAlt", "P"))
+        Gui, WindowTitle: Destroy
     }
     Return
 }
@@ -1704,7 +1705,7 @@ Return
     
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
-        && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)
+        && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && MouseIsOverTaskbarBlank()) {
         run, explorer.exe 
         LbuttonEnabled     := True
@@ -2823,117 +2824,6 @@ realHwnd(hwnd)
 *****************************
 */
 
-
-; Extracts the application title from the window's full title
-ExtractAppTitle(FullTitle) {
-    Return SubStr(FullTitle, InStr(FullTitle, " ", False, -1) + 1)
-}
-
-; Switch a "Chrome App or Chrome Website Shortcut" open windows based on the same application title
-HandleChromeWindowsWithSameTitle(title := "") {
-    currentMon := MWAGetMonitorMouseIsIn()
-    AppTitle := ExtractAppTitle(title)
-    windowsWithSameTitleList := []
-    ; SetTitleMatchMode, 2
-    ; WinGet, windowsWithSameTitleList, List, %AppTitle%
-    WinGet, windowsWithSameClass, List, ahk_class Chrome_WidgetWin_1
-
-    loop % windowsWithSameClass
-    {
-        hwndID := windowsWithSameClass%A_index%
-        WinGet, procName, ProcessName, ahk_id %hwndID%
-        ; tooltip, %procName%
-        If (procName == "chrome.exe")
-            windowsWithSameTitleList.push(hwndID)
-    }
-    numWindows := windowsWithSameTitleList.length()
-
-    tooltip, %numWindows% total
-    counter := 2
-
-    hwndId := windowsWithSameTitleList%counter%
-    loop  {
-        If !(IsWindowOnCurrMon(hwndId, currentMon)) {
-            counter++
-            If (counter > numWindows)
-            {
-                counter := 1
-            }
-            hwndId := windowsWithSameTitleList%counter%
-        }
-        Else
-            break
-    }
-    ; tooltip, %counter%
-    WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
-    WinGetTitle, actTitle, % "ahk_id " windowsWithSameTitleList%counter%
-    tooltip, Active is %actTitle%
-    ; WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%, , 2
-    GoSub, DrawRect
-
-    KeyWait, q, U
-
-    counter++
-    If (counter > numWindows)
-    {
-        counter := 1
-    }
-
-    hwndId := windowsWithSameTitleList%counter%
-    loop  {
-        If !(IsWindowOnCurrMon(hwndId, currentMon)) {
-            counter++
-            If (counter > numWindows)
-            {
-                counter := 1
-            }
-            hwndId := windowsWithSameTitleList%counter%
-        }
-        Else
-            break
-    }
-
-    loop
-    {
-        KeyWait, q, D  T.25
-        If !ErrorLevel
-        {
-            ; tooltip, Windows # %counter%
-            WinActivate, % "ahk_id " windowsWithSameTitleList%counter%
-            ; WinWaitActive, % "ahk_id " windowsWithSameTitleList%counter%, , 2
-            WinGetTitle, actTitle, % "ahk_id " windowsWithSameTitleList%counter%
-            tooltip, Active is %actTitle%
-            
-            GoSub, DrawRect
-
-            KeyWait, q, U  T.25
-            If !ErrorLevel
-            {
-                counter++
-                If (counter > numWindows)
-                {
-                    counter := 1
-                }
-                hwndId := windowsWithSameTitleList%counter%
-                loop  {
-                    If !(IsWindowOnCurrMon(hwndId, currentMon)) {
-                        counter++
-                        If (counter > numWindows)
-                        {
-                            counter := 1
-                        }
-                        hwndId := windowsWithSameTitleList%counter%
-                    }
-                    Else
-                        break
-                }
-            }
-        }
-    }
-    until (!GetKeyState("LAlt", "P"))
-    ; tooltip,
-}
-
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     Global MonCount, VD, Highlighter
@@ -2979,12 +2869,12 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     }
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
     WinGetTitle, actTitle, % "ahk_id " finalWindowsListWithProcAndClass[counter]
-    tooltip, Active is %actTitle%
+    ; tooltip, Active is %actTitle%
 
     Critical, Off
     ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
     GoSub, DrawRect
-
+    DrawWindowTitlePopup(actTitle, True)
     ; tooltip, %numWindows% found!
     KeyWait, q, U T1
 
@@ -3009,8 +2899,9 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             WinActivate, ahk_id %hwndId%
             lastActWinID := hwndId
             WinGetTitle, actTitle, ahk_id %hwndId%
-            tooltip, Active is %actTitle%
+            ; tooltip, Active is %actTitle%
             GoSub, DrawRect
+            DrawWindowTitlePopup(actTitle, True)
 
             KeyWait, q, U
             If !ErrorLevel
@@ -3037,6 +2928,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
     }
     until (!GetKeyState("LAlt", "P"))
+    Gui, WindowTitle: Destroy
     
     WinActivate, ahk_id %lastActWinID%
 
@@ -4241,6 +4133,36 @@ MouseIsOverTaskbarBlank() {
         return False
     }
     	
+}
+
+DrawWindowTitlePopup(vtext := "", showFullTitle := False) {
+    Gui, WindowTitle: Destroy
+    
+    If !InStr(vtext, " - ", false)
+        showFullTitle := True
+    
+    If showFullTitle {
+        If (StrLen(vtext) > 40) {
+            vtext := SubStr(vtext, 1, 40) . "..."
+        }
+    }
+    Else {
+        strArray := StrSplit(vtext, "-")
+        lastIdx  := strArray.MaxIndex()
+        vtext := trim(strArray[lastIdx])
+    }
+    
+    CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
+    Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndTEST ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
+    Gui, WindowTitle: Color, %CustomColor%
+    Gui, WindowTitle: Font, s28  ; Set a large font size (32-point).
+    Gui, WindowTitle: Add, Text, cWhite, %vtext%  ; XX & YY serve to auto-size the window.
+    ; drawX := CoordXCenterScreen()
+    ; drawY := CoordYCenterScreen()
+    Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
+    ; WinGetPos, x, y, w , h, ahk_id %TEST%
+    WinSet, Transparent, 200, ahk_id %TEST%
+    ; WinMove, ahk_id %TEST%,, x-floor(w/2), y-floor(h/2)
 }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
