@@ -1478,16 +1478,15 @@ Cycle(direction)
         loop {
             If (GroupedWindows.length() >= 2 && cycling)
             {
-                
                 KeyWait, Lbutton, D  T.1
                 If !ErrorLevel {
                     MouseGetPos, , , lbhwnd, 
                     WinGetTitle, actTitle, ahk_id %lbhwnd%
-                    Gui, GUI4Boarder: Hide
-                    ; tooltip, Selecting %actTitle%
+                    WinGet, pp, ProcessPath , ahk_id %lbhwnd%
+                    
                     LclickSelected := True
                     GoSub, DrawRect
-                    DrawWindowTitlePopup(actTitle)
+                    DrawWindowTitlePopup(actTitle, pp)
                     WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                     KeyWait, Lbutton, U
                 }
@@ -1503,9 +1502,10 @@ Cycle(direction)
                         WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                         WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                         WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
-                        ; tooltip, %tits%
+                        WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
+
                         GoSub, DrawRect
-                        DrawWindowTitlePopup(tits)
+                        DrawWindowTitlePopup(tits, pp)
                         WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
                     }
@@ -1517,9 +1517,9 @@ Cycle(direction)
                         WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                         WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                         WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
-                        ; tooltip, %tits%
+                        WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
                         GoSub, DrawRect
-                        DrawWindowTitlePopup(tits)
+                        DrawWindowTitlePopup(tits, pp)
                         WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
                     }
@@ -2869,12 +2869,12 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     }
     WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
     WinGetTitle, actTitle, % "ahk_id " finalWindowsListWithProcAndClass[counter]
-    ; tooltip, Active is %actTitle%
+    WinGet, pp, ProcessPath , % "ahk_id " finalWindowsListWithProcAndClass[counter]
 
     Critical, Off
     ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
     GoSub, DrawRect
-    DrawWindowTitlePopup(actTitle, True)
+    DrawWindowTitlePopup(actTitle, pp, True)
     ; tooltip, %numWindows% found!
     KeyWait, q, U T1
 
@@ -2899,9 +2899,10 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             WinActivate, ahk_id %hwndId%
             lastActWinID := hwndId
             WinGetTitle, actTitle, ahk_id %hwndId%
-            ; tooltip, Active is %actTitle%
+            WinGet, pp, ProcessPath , ahk_id %hwndId%
+            
             GoSub, DrawRect
-            DrawWindowTitlePopup(actTitle, True)
+            DrawWindowTitlePopup(actTitle, pp, True)
 
             KeyWait, q, U
             If !ErrorLevel
@@ -4135,9 +4136,9 @@ MouseIsOverTaskbarBlank() {
     	
 }
 
-DrawWindowTitlePopup(vtext := "", showFullTitle := False) {
+DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     Gui, WindowTitle: Destroy
-    
+
     If !InStr(vtext, " - ", false)
         showFullTitle := True
     
@@ -4155,8 +4156,10 @@ DrawWindowTitlePopup(vtext := "", showFullTitle := False) {
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndTEST ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
-    Gui, WindowTitle: Font, s28  ; Set a large font size (32-point).
-    Gui, WindowTitle: Add, Text, cWhite, %vtext%  ; XX & YY serve to auto-size the window.
+    Gui, WindowTitle: Font, s32  ; Set a large font size (32-point).
+    Gui, WindowTitle: Add, Picture, xm-20 w48 h48, %pathToExe%
+    Gui, WindowTitle: Add, Text, xp+64 cWhite, %vtext%  ; XX & YY serve to auto-size the window.
+
     ; drawX := CoordXCenterScreen()
     ; drawY := CoordYCenterScreen()
     Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
