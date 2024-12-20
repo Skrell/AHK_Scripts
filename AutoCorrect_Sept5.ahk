@@ -4156,9 +4156,9 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndTEST ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
-    Gui, WindowTitle: Font, s32  ; Set a large font size (32-point).
+    Gui, WindowTitle: Font, s24  ; Set a large font size (32-point).
     Gui, WindowTitle: Add, Picture, xm-20 w48 h48, %pathToExe%
-    Gui, WindowTitle: Add, Text, xp+64 cWhite, %vtext%  ; XX & YY serve to auto-size the window.
+    Gui, WindowTitle: Add, Text, xp+64 yp+8 cWhite, %vtext%  ; XX & YY serve to auto-size the window.
 
     ; drawX := CoordXCenterScreen()
     ; drawY := CoordYCenterScreen()
