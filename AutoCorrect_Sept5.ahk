@@ -30,7 +30,7 @@ Global CurrentDesktop := 1
 SetBatchLines -1
 SetWinDelay   -1
 SetControlDelay -1
-SetKeyDelay, 5
+SetKeyDelay, 1
 SendMode, Input
 
 Global moving := False
@@ -283,11 +283,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
                 If (vWinTitle != "")
                     break
-                sleep, 10
+                sleep, 5
              }
 
-            If (InStr(vWinTitle, "Save As", false)) {
+            If (vWinTitle == "") {
+                DetectHiddenWindows, Off
+                Return
+            }
+            Else If (InStr(vWinTitle, "Save As", false)) {
                 WinActivate, % "ahk_id " hWnd
+                DetectHiddenWindows, Off
                 Return
             }
 
@@ -304,19 +309,18 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ;EVENT_SYSTEM_FOREGROUND := 0x3
             ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
-            If (vWinTitle == "") {
-                DetectHiddenWindows, Off
-                Return
-            }
-
             Critical, On
 
             prevActiveWindows.push(hWnd)
 
             ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length()
-
-            WinGetClass, lClassCheck, A
-            If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == vWinClass) {
+            loop 200
+            {
+                If WinExist("ahk_id " hWnd)
+                    break
+                sleep, 5
+            }
+            If (!GetKeyState("LCtrl") && !GetKeyState("LShift")) {
                 OutputVar1 := OutputVar2 := OutputVar3 := ""
 
                 loop 200 {
@@ -325,7 +329,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
                     If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                         break
-                    sleep, 10
+                    sleep, 5
                 }
 
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
@@ -335,9 +339,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         ControlGetFocus, initFocusedCtrl , % "ahk_id " hWnd
                         If (initFocusedCtrl != "")
                             break
-                        sleep, 10
+                        sleep, 5
                     }
-                    ; tooltip, waiting for shell
+                    
                     If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                         If (vWinClass != "EVERYTHING_(1.5a)") {
                             exEl := UIA.ElementFromHandle(hWnd)
@@ -359,8 +363,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     ControlFocus, %FocusedControl%, % "ahk_id " hWnd
                     
                     ; tooltip, adjusted
-                    WinGetClass, lClassCheck, A
-                    If (lClassCheck == vWinClass) {
+                    WinGet, testID, ID, A
+                    If (testID == hWnd) {
                         Send, ^{NumpadAdd}
                         sleep, 125
                     }
@@ -377,13 +381,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
                             If (testCtrlFocus == initFocusedCtrl)
                                 break
-                            sleep, 10
+                            sleep, 5
                         }
                     }
 
                     If (testCtrlFocus == "Edit1") {
                         ControlGet, rText, Selected,,Edit1, % "ahk_id " hWnd
-                        If (StrLen(rText) <= 1)
+                        If (StrLen(rText) == 1)
                             Send, {Backspace}
                     }
                     BlockKeyboard(false)
@@ -749,7 +753,8 @@ prevChromeTab()
                 }
                 Else
                     WinKill , ahk_id %escHwndID%
-                SetTimer, ClearRect, -10
+                ; SetTimer, ClearRect, -1
+                GoSub, ClearRect
                 Gui, GUI4Boarder: Hide
                 ActivateTopMostWindow()
             }
@@ -1050,25 +1055,21 @@ FadeInWin1:
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
 
     If (lbhwnd != ValidWindows[4] &&ValidWindows.MaxIndex() >= 4) {
-        ; WinActivate, % "ahk_id " ValidWindows[4]
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[4]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[4]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (lbhwnd != ValidWindows[3] &&ValidWindows.MaxIndex() >= 3) {
-        ; WinActivate, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (lbhwnd != ValidWindows[2] &&ValidWindows.MaxIndex() >= 2) {
-        ; WinActivate, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (lbhwnd != ValidWindows[1] &&ValidWindows.MaxIndex() >= 1) {
-        ; WinActivate, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
@@ -1115,7 +1116,6 @@ FadeInWin1:
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
     }
     
-    ; WinActivate, % "ahk_id " lbhwnd
     WinSet, AlwaysOnTop, Off , % "ahk_id " lbhwnd
     Critical, Off
 Return
@@ -1136,19 +1136,16 @@ FadeInWin2:
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
 
     If (ValidWindows.MaxIndex() >= 3) {
-        ; WinActivate, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (ValidWindows.MaxIndex() >= 2) {
-        ; WinActivate, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (ValidWindows.MaxIndex() >= 1) {
-        ; WinActivate, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
@@ -1199,7 +1196,6 @@ FadeInWin2:
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
     }
     
-    ; WinActivate, % "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, Off ,% "ahk_id " GroupedWindows[cycleCount]
     Critical, Off
 Return
@@ -2177,7 +2173,7 @@ SendCtrlAdd:
     }
 
     ; CoordMode, Mouse, Screen
-    If (!GetKeyState("LCtrl","P" ) && !GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd") {
+    If (!GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd") {
         OutputVar1 := OutputVar2 := OutputVar3 := ""
        
         loop 100 {
@@ -2190,7 +2186,7 @@ SendCtrlAdd:
         }
         
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
-            If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && vWinClass != "EVERYTHING_(1.5a)") {
+            If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && !InStr(vWinClass, "EVERYTHING", True)) {
                 try {
                     exEl := UIA.ElementFromHandle(lIdCheck)
                     shellEl := exEl.FindFirstByName("Items View")
@@ -4153,18 +4149,25 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
         vtext := trim(strArray[lastIdx])
     }
     
+    
+    
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndTEST ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
     Gui, WindowTitle: Font, s24  ; Set a large font size (32-point).
-    Gui, WindowTitle: Add, Picture, xm-20 w48 h48, %pathToExe%
+    If InStr(pathToExe, "ApplicationFrameHost", false) {
+        Gui, WindowTitle: Add, Picture, xm-20 w48 h48 Icon3, %A_WinDir%\System32\SHELL32.dll
+    }
+    Else {
+        Gui, WindowTitle: Add, Picture, xm-20 w48 h48, %pathToExe%
+    }
     Gui, WindowTitle: Add, Text, xp+64 yp+8 cWhite, %vtext%  ; XX & YY serve to auto-size the window.
 
     ; drawX := CoordXCenterScreen()
     ; drawY := CoordYCenterScreen()
     Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
     ; WinGetPos, x, y, w , h, ahk_id %TEST%
-    WinSet, Transparent, 200, ahk_id %TEST%
+    WinSet, Transparent, 225, ahk_id %TEST%
     ; WinMove, ahk_id %TEST%,, x-floor(w/2), y-floor(h/2)
 }
 ;------------------------------------------------------------------------------
