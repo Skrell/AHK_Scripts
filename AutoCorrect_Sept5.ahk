@@ -1734,13 +1734,20 @@ Return
         LbuttonEnabled     := False
         
         If (lClass == "CabinetWClass" || lClass == "#32770") {
-            currentPath := GetExplorerPath(lbhwnd)
+            loop 100 {
+                currentPath := GetExplorerPath(lbhwnd)
+                If (prevPath != currentPath)
+                    break
+                sleep, 2
+            }
             ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%
             
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                 GoSub, SendCtrlAdd
             }
-            sleep, 100
+            
+            If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF))
+                sleep, 100
             LbuttonEnabled     := True
             StopRecurssion     := False
             Return
@@ -2163,14 +2170,16 @@ SendWindow:
     DetectHiddenWindows, Off
 Return
 
+
+
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
-    WinGet, lIdCheck, ID, A
 
     If (lClassCheck != lClass) {
         SetTimer, SendCtrlAdd, Off
         Return
     }
+    WinGet, lIdCheck, ID, A
 
     ; CoordMode, Mouse, Screen
     If (!GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd") {
@@ -2182,7 +2191,7 @@ SendCtrlAdd:
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                 break
-            sleep, 10
+            sleep, 5
         }
         
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
@@ -2212,13 +2221,14 @@ SendCtrlAdd:
             }
             
             BlockKeyboard(true)
-            ; loop, 50 {
-            ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
-                ; ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
-                ; If (FocusedControl == whatCtrl)
-                    ; break
-                ; sleep, 10
-                ; }
+            loop, 50 {
+                ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
+                ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
+                If (FocusedControl == whatCtrl)
+                    break
+                sleep, 5
+            }
+                
             WinGet, lIdCheck2, ID, A
             If (lIdCheck == lIdCheck2) {
                 Send, ^{NumpadAdd}
@@ -2231,7 +2241,7 @@ SendCtrlAdd:
                     ControlGetFocus, testCtrlFocus , ahk_id %lIdCheck%
                     If (testCtrlFocus == "SysTreeView321")
                         break
-                    sleep, 10
+                    sleep, 5
                 }
             }
             BlockKeyboard(false)
