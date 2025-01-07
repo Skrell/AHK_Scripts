@@ -360,7 +360,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         FocusedControl := "SysListView321"
                     }
                     
-                    ControlFocus, %FocusedControl%, % "ahk_id " hWnd
+                    loop, 100 {
+                        ControlFocus, %FocusedControl%, % "ahk_id " hWnd
+                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        If (testCtrlFocus == FocusedControl)
+                            break
+                        sleep, 5
+                    }
                     
                     ; tooltip, adjusted
                     WinGet, testID, ID, A
@@ -739,7 +745,7 @@ prevChromeTab()
     WinGet, escHwndID, ID, A
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 500 && escHwndID == escHwndID_old) {
         If IsAltTabWindow(escHwndID) {
-            DetectHiddenWindows, On
+            ; DetectHiddenWindows, On
             GoSub, DrawRect
             KeyWait, Esc, U T10
             If !CancelClose {
@@ -750,6 +756,7 @@ prevChromeTab()
                             break
                         sleep, 10
                     }
+                    tooltip, waiting...
                 }
                 Else
                     WinKill , ahk_id %escHwndID%
@@ -4074,7 +4081,7 @@ IsGoogleDocWindow() {
 
 IsEditCtrl() {
     ControlGetFocus, whatCtrl, A
-    If InStr(whatCtrl,"Edit",False)
+    If InStr(whatCtrl,"Edit",True)
         Return True
     Else
         Return False
@@ -9714,7 +9721,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::mhz::Mhz
 ::quartus::Quartus
 ::cuodl::could
-::optino::option
 ::dma::DMA
 ::moer::more
 ::thoguhts::thoughts
@@ -9732,7 +9738,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::diong::doing
 ::makgni::making
 ::simplist::simplest
-::optinos::options
 ::defintinon::definition
 ::requriements::requirements
 ::contniue::continue
