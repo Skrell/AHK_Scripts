@@ -143,12 +143,12 @@ Expr =
     #KeyHistory 0
     SetBatchLines -1
     ListLines Off
-
+    DetectHiddenWindows, Off
     WinWait, ahk_class #32768,, 3000
     If ErrorLevel
         ExitApp
 
-    sleep, 200
+    sleep, 125
     Send, {DOWN}
     Return
 
@@ -649,7 +649,8 @@ Return
 #If !disableEnter
 ~Enter::
     ControlGetFocus, currCtrl, A
-    If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3"|| currCtrl == "Edit1")
+    WinGetClass, currCl, A
+    If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3" || (currCl == "CabinetWClass" && currCtrl == "Edit1") || (currCl == "#32770" && currCtrl == "Edit1"))
         GoSub, SendCtrlAdd
 Return
 #If
@@ -784,7 +785,7 @@ Return
 #If
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
-; #MaxThreadsPerHotkey 1
+#MaxThreadsPerHotkey 1
 ; #MaxThreadsBuffer On
 
 !0::
@@ -1807,7 +1808,7 @@ Return
 Return
 #If
 
-#MaxThreadsPerHotkey 1
+; #MaxThreadsPerHotkey 1
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
@@ -1944,6 +1945,7 @@ Return
             tooltip,
         }
     }
+    StopRecurssion := False
 Return
 
 ActivateWindow:
