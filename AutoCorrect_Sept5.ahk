@@ -746,7 +746,7 @@ prevChromeTab()
     WinGet, escHwndID, ID, A
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 500 && escHwndID == escHwndID_old) {
         If IsAltTabWindow(escHwndID) {
-            ; DetectHiddenWindows, On
+            DetectHiddenWindows, On
             GoSub, DrawRect
             KeyWait, Esc, U T10
             If !CancelClose {
@@ -2178,8 +2178,6 @@ SendWindow:
     WinSet, Transparent, 255, ahk_id %movehWndId%
     DetectHiddenWindows, Off
 Return
-
-
 
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
@@ -4843,6 +4841,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::legitamite::legitimate
 ::shoudlnt::shouldn't
 ::tryin::trying
 ::discrepencies::discrepancies
