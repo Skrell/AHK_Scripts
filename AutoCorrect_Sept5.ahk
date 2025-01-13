@@ -744,27 +744,40 @@ prevChromeTab()
 #If !SearchingWindows && !hitTAB
 ~Esc::
     WinGet, escHwndID, ID, A
+    StopRecurssion := True
+    executedOnce := False
+
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 500 && escHwndID == escHwndID_old) {
         If IsAltTabWindow(escHwndID) {
-            DetectHiddenWindows, On
+            ; DetectHiddenWindows, Off
             GoSub, DrawRect
             KeyWait, Esc, U T10
             If !CancelClose {
                 Winclose, ahk_id %escHwndID%
-                If (WinExist("ahk_class #32770")) {
-                    loop 500 {
-                        If !WinExist("ahk_id " . escHwndID)
-                            break
-                        sleep, 10
+                loop 50 {
+                    If !WinExist("ahk_id " . escHwndID)
+                        break
+                    sleep, 100
+                    If WinExist("ahk_class #32770") && !executedOnce {
+                        executedOnce := True
+                        WinSet, AlwaysOnTop, On, ahk_class #32770
+                        GoSub, SendCtrlAdd
+                        GoSub, DrawRect
+                        break
                     }
-                    tooltip, waiting...
                 }
-                Else
+                If (WinExist("ahk_id " . escHwndID) && !executedOnce)
                     WinKill , ahk_id %escHwndID%
-                ; SetTimer, ClearRect, -1
+                Else
+                    ActivateTopMostWindow()
+                
+                
+                loop 50 {
+                    If !WinExist("ahk_id " . escHwndID)
+                        break
+                    sleep 100
+                }
                 GoSub, ClearRect
-                Gui, GUI4Boarder: Hide
-                ActivateTopMostWindow()
             }
             Else
                 CancelClose := False
@@ -772,7 +785,8 @@ prevChromeTab()
     }
     KeyWait, Esc, U T2
     escHwndID_old := escHwndID
-    DetectHiddenWindows, Off
+    StopRecurssion := False
+    ; DetectHiddenWindows, Off
 Return
 
 Esc & x::
@@ -4813,7 +4827,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:nay::any
 :*:soem::some
 :*:seom::some
-:*:tyr::try
 :*:tyring::trying
 :*:cmakel::CMakeLists.txt
 :*:cmaket::CMakeLists.txt
@@ -4841,6 +4854,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::catelog::catalog
 ::legitamite::legitimate
 ::shoudlnt::shouldn't
 ::tryin::trying
@@ -4851,6 +4865,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::fo::of
 ::fi::If
 ::ry::try
+::tyr::try
 ::rying::trying
 ::htp:::http:
 ::http:\\::http://
