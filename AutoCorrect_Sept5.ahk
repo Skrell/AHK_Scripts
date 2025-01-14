@@ -747,9 +747,9 @@ prevChromeTab()
     StopRecurssion := True
     executedOnce := False
 
-    If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 500 && escHwndID == escHwndID_old) {
+    If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 550 && escHwndID == escHwndID_old) {
         If IsAltTabWindow(escHwndID) {
-            ; DetectHiddenWindows, Off
+            DetectHiddenWindows, Off
             GoSub, DrawRect
             KeyWait, Esc, U T10
             If !CancelClose {
@@ -758,26 +758,32 @@ prevChromeTab()
                     If !WinExist("ahk_id " . escHwndID)
                         break
                     sleep, 100
-                    If WinExist("ahk_class #32770") && !executedOnce {
+
+                    WinGetTitle, actTitle, A
+                    WinGetClass, actClass, A
+
+                    If (((WinActive("ahk_class #32770") && InStr(actTitle, "Save", false)) || InStr(actClass, "dialog", false)) && !executedOnce) {
+                        WinGet, hwndID, ID, A
                         executedOnce := True
                         WinSet, AlwaysOnTop, On, ahk_class #32770
                         GoSub, SendCtrlAdd
-                        GoSub, DrawRect
+                        WinWaitClose, ahk_id %hwndID%
                         break
                     }
                 }
-                If (WinExist("ahk_id " . escHwndID) && !executedOnce)
+                If (WinExist("ahk_id " . escHwndID) && !executedOnce) {
                     WinKill , ahk_id %escHwndID%
-                Else
-                    ActivateTopMostWindow()
-                
-                
-                loop 50 {
-                    If !WinExist("ahk_id " . escHwndID)
-                        break
-                    sleep 100
+                    loop 50 {
+                        If !WinExist("ahk_id " . escHwndID)
+                            break
+                        sleep 100
+                    }
+                    GoSub, ClearRect
                 }
-                GoSub, ClearRect
+                Else {
+                    GoSub, ClearRect
+                    ActivateTopMostWindow()
+                }
             }
             Else
                 CancelClose := False
@@ -786,7 +792,6 @@ prevChromeTab()
     KeyWait, Esc, U T2
     escHwndID_old := escHwndID
     StopRecurssion := False
-    ; DetectHiddenWindows, Off
 Return
 
 Esc & x::
@@ -1676,7 +1681,8 @@ DrawRect:
     Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NA, Table awaiting Action
     WinSet, Region, %outerX%-%outerY%  %outerX2%-%outerY%  %outerX2%-%outerY2%  %outerX%-%outerY2%  %outerX%-%outerY%  %innerX%-%innerY%  %innerX2%-%innerY%  %innerX2%-%innerY2%  %innerX%-%innerY2%  %innerX%-%innerY%, ahk_id %Highlighter%
 
-    WinSet, Transparent, off, ahk_id %Highlighter%
+    WinSet, Transparent, Off, ahk_id %Highlighter%
+    WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, ahk_id %activeWin%
     WinWaitActive, ahk_id %activeWin%, , 2
@@ -1706,8 +1712,26 @@ SetTimeout:
     DynaRun(ExprTimeout, whatev1)
 Return
 
+#If MouseIsOverTaskbarBlank()
+~Lbutton::
+    StopRecurssion     := True
+    MouseGetPos, lbX1, lbY1,
+    If (A_PriorHotkey == A_ThisHotkey
+        && (A_TimeSincePriorHotkey < 550)
+        && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)) {
+        run, explorer.exe 
+        StopRecurssion     := False
+        Return
+    }
+    
+    KeyWait, LButton, U T5
+    MouseGetPos, lbX2, lbY2,
+    StopRecurssion     := False
+Return
+#If
+
 ; #MaxThreadsPerHotkey 2
-#If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB)
+#If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
 ~LButton::
     
     StopRecurssion     := True
@@ -1716,25 +1740,25 @@ Return
     SetTimer, SendCtrlAdd, Off
     WinGetClass, lClass, ahk_id %lbhwnd%
 
-    If MouseIsOverTitleBar(lbX1, lbY1)
-        Return
+    ; If MouseIsOverTitleBar(lbX1, lbY1)
+        ; Return
 
     Gui, GUI4Boarder: Hide
     
-    If (A_PriorHotkey == A_ThisHotkey
-        && (A_TimeSincePriorHotkey < 550)
-        && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && MouseIsOverTaskbarBlank()) {
-        run, explorer.exe 
-        LbuttonEnabled     := True
-        StopRecurssion     := False
-        Return
-    }
+    ; If (A_PriorHotkey == A_ThisHotkey
+        ; && (A_TimeSincePriorHotkey < 550)
+        ; && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
+        ; && MouseIsOverTaskbarBlank()) {
+        ; run, explorer.exe 
+        ; LbuttonEnabled     := True
+        ; StopRecurssion     := False
+        ; Return
+    ; }
 
     ; tooltip, %A_TimeSincePriorHotkey% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
-        && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)
+        && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
         
         currentPath    := ""
@@ -1807,7 +1831,7 @@ Return
     timeDiff := rlsTime - initTime
     ; tooltip, %timeDiff% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
 
-    If ((abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)
+    If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < 325)
         && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3  != 0xFFFFFF)
         && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
@@ -4180,8 +4204,6 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
         vtext := trim(strArray[lastIdx])
     }
     
-    
-    
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndTEST ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
@@ -4194,12 +4216,12 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     }
     Gui, WindowTitle: Add, Text, xp+64 yp+8 cWhite, %vtext%  ; XX & YY serve to auto-size the window.
 
-    ; drawX := CoordXCenterScreen()
-    ; drawY := CoordYCenterScreen()
+    drawX := CoordXCenterScreen()
+    drawY := CoordYCenterScreen()
     Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
-    ; WinGetPos, x, y, w , h, ahk_id %TEST%
+    WinGetPos, x, y, w , h, ahk_id %TEST%
     WinSet, Transparent, 225, ahk_id %TEST%
-    ; WinMove, ahk_id %TEST%,, x-floor(w/2), y-floor(h/2)
+    WinMove, ahk_id %TEST%,, drawX-floor(w/2), drawY-floor(h/2)
 }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
