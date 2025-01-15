@@ -1793,7 +1793,7 @@ Return
             }
             
             If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF))
-                sleep, 100
+                sleep, 50
             LbuttonEnabled     := True
             StopRecurssion     := False
             Return
@@ -4858,6 +4858,21 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:envi::environment `
 :*:simult::simultaneous`
 :*:follwo::follow
+:*:ncorrect::incorrect
+:*:icorrect::incorrect
+:*:inorrect::incorrect
+:*:incrrect::incorrect
+:*:incorect::incorrect
+:*:incorrct::incorrect
+:*:incorret::incorrect
+:*:incorrec::incorrect
+:*:nicorrect::incorrect
+:*:icnorrect::incorrect
+:*:inocrrect::incorrect
+:*:incrorect::incorrect
+:*:incorerct::incorrect
+:*:incorrcet::incorrect
+:*:incorretc::incorrect
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
