@@ -755,14 +755,17 @@ prevChromeTab()
             If !CancelClose {
                 Winclose, ahk_id %escHwndID%
                 loop 50 {
-                    If !WinExist("ahk_id " . escHwndID)
+                    If !WinExist("ahk_id " . escHwndID) {
+                        GoSub, ClearRect
+                        ActivateTopMostWindow()
                         break
-                    sleep, 100
+                    }
+                    sleep, 125
 
                     WinGetTitle, actTitle, A
                     WinGetClass, actClass, A
 
-                    If (((WinActive("ahk_class #32770") && InStr(actTitle, "Save", false)) || InStr(actClass, "dialog", false)) && !executedOnce) {
+                    If ((WinActive("ahk_class #32770") || InStr(actClass, "dialog", false)) && !executedOnce) {
                         WinGet, hwndID, ID, A
                         executedOnce := True
                         WinSet, AlwaysOnTop, On, ahk_class #32770
@@ -770,19 +773,20 @@ prevChromeTab()
                         WinWaitClose, ahk_id %hwndID%
                         break
                     }
+                    If !executedOnce
+                        Winclose, ahk_id %escHwndID%
                 }
+                
                 If (WinExist("ahk_id " . escHwndID) && !executedOnce) {
                     WinKill , ahk_id %escHwndID%
                     loop 50 {
-                        If !WinExist("ahk_id " . escHwndID)
+                        If !WinExist("ahk_id " . escHwndID) {
+                            GoSub, ClearRect
+                            ActivateTopMostWindow()
                             break
-                        sleep 100
+                        }
+                        sleep 125
                     }
-                    GoSub, ClearRect
-                }
-                Else {
-                    GoSub, ClearRect
-                    ActivateTopMostWindow()
                 }
             }
             Else
