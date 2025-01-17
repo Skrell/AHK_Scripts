@@ -786,6 +786,7 @@ prevChromeTab()
                             break
                         }
                         sleep 125
+                        WinKill , ahk_id %escHwndID%
                     }
                 }
             }
