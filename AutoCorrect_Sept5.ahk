@@ -393,8 +393,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                     If (testCtrlFocus == "Edit1") {
                         ControlGet, rText, Selected,,Edit1, % "ahk_id " hWnd
+                        tooltip, found %rText%
                         If (StrLen(rText) == 1)
                             Send, {Backspace}
+                        sleep, 2000
+                        tooltip
                     }
                     BlockKeyboard(false)
                 }
@@ -1715,6 +1718,13 @@ Return
 
 SetTimeout:
     DynaRun(ExprTimeout, whatev1)
+Return
+
+!Lbutton::
+    If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550))
+        Send, {ENTER}
+    Else
+        Send, {click, Left}
 Return
 
 #If MouseIsOverTaskbarBlank()
@@ -3291,7 +3301,6 @@ track() {
                 hwnd_id := allWindows%A_Index%
                 WinGet, isMin, MinMax, ahk_id %hwnd_id%
                 WinGet, whatProc, ProcessName, ahk_id %hwnd_id%
-                Critical, Off
                 currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
 
                 If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
@@ -3300,6 +3309,7 @@ track() {
                     GoSub, ClearRect
                     Gui, GUI4Boarder: Hide
                     previousMon := currentMon
+                    Critical, Off
                     return
                 }
             }
@@ -4458,6 +4468,7 @@ SetTitleMatchMode, 2
 ::cue::
 ::jest::
 ::boil::
+::logger::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
