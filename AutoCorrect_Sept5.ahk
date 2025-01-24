@@ -393,11 +393,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                     If (testCtrlFocus == "Edit1") {
                         ControlGet, rText, Selected,,Edit1, % "ahk_id " hWnd
-                        tooltip, found %rText%
-                        If (StrLen(rText) == 1)
+                        If (rText != "") {
+                            tooltip, found %rText%
                             Send, {Backspace}
-                        sleep, 2000
-                        tooltip
+                        }
                     }
                     BlockKeyboard(false)
                 }
