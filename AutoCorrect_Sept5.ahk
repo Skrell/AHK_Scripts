@@ -1567,7 +1567,7 @@ ClearRect:
     If DrawingRect {
         DrawingRect := False
         loop 15 {
-            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
@@ -1586,7 +1586,7 @@ ClearRect:
         ; }
         WinSet, Transparent, 200, ahk_id %Highlighter%
         loop 4 {
-            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            If !ComboActive &&(GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
@@ -1595,7 +1595,7 @@ ClearRect:
         }
         WinSet, Transparent, 175, ahk_id %Highlighter%
         loop 3 {
-            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            If !ComboActive &&(GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
@@ -1604,7 +1604,7 @@ ClearRect:
         }
         WinSet, Transparent, 125, ahk_id %Highlighter%
         loop 2 {
-            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            If !ComboActive &&(GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
@@ -2127,11 +2127,6 @@ ActivateWindow:
     Process, Close, tempScript
 Return
 
-#If moving
-~RButton::
-    ComboActive := False
-Return
-#If
 
 #If MouseIsOverTitleBar()
 Mbutton::
@@ -2329,6 +2324,20 @@ explorerGetPath(hwnd := 0) { ; https://www.autohotkey.com/boards/viewtopic.php?p
  Return False
 }
 
+#If MouseIsOverTitleBar()
+~Lbutton & Rbutton::
+    ComboActive := True
+    MouseGetPos, , , hwndId
+    WinGetTitle, winTitle, ahk_id %hwndId%
+    BlockInput, MouseMove
+    GoSub, DrawRect
+    sleep, 100
+    GoSub, ClearRect
+    WinSet, AlwaysOnTop, toggle, ahk_id %hwndId%
+    BlockInput, MouseMoveOff
+Return
+#If
+
 LWin & WheelUp::send {Volume_Up}
 LWin & WheelDown::send {Volume_Down}
 
@@ -2363,20 +2372,26 @@ WheelDown::send {Volume_Down}
 ; Return
 ; #If
 
+#If moving
+~RButton::
+    ComboActive := False
+Return
+#If
+
 #If !moving && !IsOverDesktop()
 *RButton::
     StopRecurssion := True
     ComboActive := False
-    loop 300 {
-        If !(GetKeyState("RButton", "P"))
+    loop 600 {
+        If !(GetKeyState("RButton"))
         {
             break
         }
-        sleep 10
+        sleep 5
     }
     If !ComboActive
     {
-        If GetKeyState("Lshift","P")
+        If GetKeyState("Lshift")
             Send, +{Click, Right}
         Else
             Send, {Click, Right}
@@ -2394,7 +2409,7 @@ RButton & WheelUp::
     ComboActive := True
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
-    Send {LCtrl down}{Home}{LCtrl up}
+    Send, {LCtrl down}{Home}{LCtrl up}
 Return
 #If
 
@@ -2404,7 +2419,7 @@ RButton & WheelDown::
     ComboActive := True
     MouseGetPos, , , target
     WinActivate, ahk_id %target%
-    Send {LCtrl down}{End}{LCtrl up}
+    Send, {LCtrl down}{End}{LCtrl up}
 Return
 #If
 
@@ -3164,7 +3179,7 @@ track() {
         WinGet, actwndId, ID, A
     }
 
-    If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "") {
+    If ((abs(x - lastX) > 10 || abs(y - lastY) > 10) && lastX != "") {
         moving := True
         If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770")
             sleep 250
