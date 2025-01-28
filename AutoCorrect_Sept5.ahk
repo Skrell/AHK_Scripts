@@ -753,10 +753,12 @@ prevChromeTab()
         If IsAltTabWindow(escHwndID) {
             DetectHiddenWindows, Off
             GoSub, DrawRect
+            WinGetTitle, tit, ahk_id %escHwndID%
+            tooltip Close %tit% ? 
             KeyWait, Esc, U T10
             If !CancelClose {
                 Winclose, ahk_id %escHwndID%
-                loop 50 {
+                loop 10 {
                     If !WinExist("ahk_id " . escHwndID) {
                         GoSub, ClearRect
                         ActivateTopMostWindow()
@@ -764,15 +766,14 @@ prevChromeTab()
                     }
                     sleep, 125
 
-                    WinGetTitle, actTitle, A
                     WinGetClass, actClass, A
 
                     If ((WinActive("ahk_class #32770") || InStr(actClass, "dialog", false)) && !executedOnce) {
-                        WinGet, hwndID, ID, A
+                        WinGet, dialog_hwndID, ID, A
                         executedOnce := True
                         WinSet, AlwaysOnTop, On, ahk_class #32770
                         GoSub, SendCtrlAdd
-                        WinWaitClose, ahk_id %hwndID%
+                        WinWaitClose, ahk_id %dialog_hwndID%
                         break
                     }
                     If !executedOnce
@@ -799,6 +800,7 @@ prevChromeTab()
     KeyWait, Esc, U T2
     escHwndID_old := escHwndID
     StopRecurssion := False
+    tooltip
 Return
 
 Esc & x::
@@ -1245,7 +1247,7 @@ ResetWins:
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
-; #MaxThreadsPerHotkey 2
+#MaxThreadsPerHotkey 2
 $!Tab::
 SetTimer, track, Off
 SetTimer, keyTrack, Off
@@ -1281,6 +1283,8 @@ Return
     StopRecurssion := False
 Return
 #If
+
+#MaxThreadsPerHotkey 1
 
 #If hitTAB
 !x::
@@ -2330,9 +2334,15 @@ explorerGetPath(hwnd := 0) { ; https://www.autohotkey.com/boards/viewtopic.php?p
     MouseGetPos, , , hwndId
     WinGetTitle, winTitle, ahk_id %hwndId%
     BlockInput, MouseMove
+    WinGet, ExStyle, ExStyle, ahk_id %hwndId%
+    If (ExStyle & 0x8)
+        Gui, GUI4Boarder: Color, 0x00FF00
+    Else
+        Gui, GUI4Boarder: Color, 0xFF0000
     GoSub, DrawRect
     sleep, 100
     GoSub, ClearRect
+    Gui, GUI4Boarder: Color, %border_color%
     WinSet, AlwaysOnTop, toggle, ahk_id %hwndId%
     BlockInput, MouseMoveOff
 Return
@@ -3135,8 +3145,6 @@ keyTrack() {
                     BlockKeyboard(true)
                     Send, ^{NumpadAdd}
                     BlockKeyboard(false)
-                    If GetKeyState("Ctrl")
-                        Send, {Ctrl Up}
                     If GetKeyState("NumpadAdd")
                         Send, {NumpadAdd Up}
                 }
@@ -3155,6 +3163,13 @@ keyTrack() {
         LastKey1 := A_PriorHotkey
         TimeOfLastKey := A_TickCount
     }
+    
+    If GetKeyState("Alt") && !GetKeyState("Alt","P")
+        Send, {Alt Up}
+    If GetKeyState("Ctrl") && !GetKeyState("Ctrl","P")
+        Send, {Ctrl Up}
+    If GetKeyState("Shift") && !GetKeyState("Shift","P")
+        Send, {Shift Up}
 
 Return
 }
@@ -4921,6 +4936,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::ave::have
+::ad::had
 ::catelog::catalog
 ::legitamite::legitimate
 ::shoudlnt::shouldn't
