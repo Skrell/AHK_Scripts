@@ -483,8 +483,6 @@ Return
 Return
 #IfWinActive
 
-~Backspace::Return
-
 CapsLock::
     Send {Delete}
 Return
@@ -1247,7 +1245,6 @@ ResetWins:
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
-#MaxThreadsPerHotkey 2
 $!Tab::
 SetTimer, track, Off
 SetTimer, keyTrack, Off
@@ -1283,8 +1280,6 @@ Return
     StopRecurssion := False
 Return
 #If
-
-#MaxThreadsPerHotkey 1
 
 #If hitTAB
 !x::
@@ -1570,13 +1565,13 @@ Cycle(direction)
 ClearRect:
     If DrawingRect {
         DrawingRect := False
-        loop 15 {
+        loop 30 {
             If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
             }
-            sleep, 10
+            sleep, 5
         }
 
         ; WinSet, Transparent, 225, ahk_id %Highlighter%
@@ -1589,31 +1584,31 @@ ClearRect:
             ; sleep 10
         ; }
         WinSet, Transparent, 200, ahk_id %Highlighter%
-        loop 4 {
-            If !ComboActive &&(GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+        loop 8 {
+            If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
             }
-            sleep 10
+            sleep 5
         }
         WinSet, Transparent, 175, ahk_id %Highlighter%
-        loop 3 {
-            If !ComboActive &&(GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+        loop 6 {
+            If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
             }
-            sleep 10
+            sleep 5
         }
         WinSet, Transparent, 125, ahk_id %Highlighter%
-        loop 2 {
-            If !ComboActive &&(GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+        loop 4 {
+            If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
             }
-            sleep 10
+            sleep 5
         }
         WinSet, Transparent, 50, ahk_id %Highlighter%
         Gui, GUI4Boarder: Hide
@@ -4936,6 +4931,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::precident::precedent
 ::ave::have
 ::ad::had
 ::catelog::catalog
