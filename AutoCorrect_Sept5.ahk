@@ -1062,11 +1062,10 @@ Altup:
     GroupedWindows := {}
     startHighlight := False
     Critical, Off
-    Gosub, ClearRect
     hitTAB         := False
     LclickSelected := False
-    Gui, GUI4Boarder: Hide
-    tooltip,
+    Gosub, ClearRect
+    ; tooltip,
 Return
 
 ;============================================================================================================================
@@ -1246,6 +1245,7 @@ ResetWins:
 Return
 
 $!Tab::
+ComboActive := False
 SetTimer, track, Off
 SetTimer, keyTrack, Off
 Cycle(forward)
@@ -1255,6 +1255,7 @@ SetTimer, keyTrack, On
 Return
 
 $!+Tab::
+ComboActive := False
 SetTimer, track, Off
 SetTimer, keyTrack, Off
 Cycle(!forward)
@@ -1267,6 +1268,7 @@ Return
 !q::
     ; tooltip, swapping between windows of app
     StopRecurssion := True
+    ComboActive := False
     ActivateTopMostWindow()
 
     DetectHiddenWindows, Off
@@ -1563,31 +1565,27 @@ Cycle(direction)
 }
 
 ClearRect:
+    ; tooltip, comboactive is %ComboActive%
     If DrawingRect {
         DrawingRect := False
         loop 30 {
             If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                Gui, GUI4Boarder: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                ; tooltip, exiting early
                 Return
             }
             sleep, 5
         }
 
-        ; WinSet, Transparent, 225, ahk_id %Highlighter%
-        ; loop 5 {
-            ; If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-                ; WinSet, Transparent, 255, ahk_id %Highlighter%
-                ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-                ; Return
-            ; }
-            ; sleep 10
-        ; }
         WinSet, Transparent, 200, ahk_id %Highlighter%
         loop 8 {
             If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                Gui, GUI4Boarder: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                ; tooltip, exiting early
                 Return
             }
             sleep 5
@@ -1595,8 +1593,10 @@ ClearRect:
         WinSet, Transparent, 175, ahk_id %Highlighter%
         loop 6 {
             If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                Gui, GUI4Boarder: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                ; tooltip, exiting early
                 Return
             }
             sleep 5
@@ -1604,8 +1604,10 @@ ClearRect:
         WinSet, Transparent, 125, ahk_id %Highlighter%
         loop 4 {
             If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                Gui, GUI4Boarder: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                ; tooltip, exiting early
                 Return
             }
             sleep 5
@@ -1781,11 +1783,11 @@ Return
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321") {
                 Send, {Backspace}
-                SetTimer, SetTimeout, -10
+                SetTimer, SetTimeout, -1
             }
             Else {
                 Send, !{Up}
-                SetTimer, SetTimeout, -10
+                SetTimer, SetTimeout, -1
             }
         }
         
@@ -3130,7 +3132,7 @@ keyTrack() {
     WinGetClass, currClass, A
     If (currCtrl == "Edit1") {
         StopAutoFix := True
-        If ((A_TickCount-TimeOfLastKey) > 400 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
+        If ((A_TickCount-TimeOfLastKey) > 650 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
             ControlGet, OutputVar1, Visible ,, SysListView321, A
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
