@@ -78,12 +78,12 @@ Process, Priority,, High
 
 UIA := UIA_Interface() ; Initialize UIA interface
 UIA.ConnectionTimeout := 6000
-cacheRequest := UIA.CreateCacheRequest()
-cacheRequest.TreeScope := 5 ; Set TreeScope to include the starting element and all descendants as well
-cacheRequest.AddProperty("ControlType") ; Add all the necessary properties that DumpAll uses: ControlType, LocalizedControlType, AutomationId, Name, Value, ClassName, AcceleratorKey
-cacheRequest.AddProperty("LocalizedControlType")
-cacheRequest.AddProperty("Name")
-cacheRequest.AddProperty("ClassName")
+; cacheRequest := UIA.CreateCacheRequest()
+; cacheRequest.TreeScope := 5 ; Set TreeScope to include the starting element and all descendants as well
+; cacheRequest.AddProperty("ControlType") ; Add all the necessary properties that DumpAll uses: ControlType, LocalizedControlType, AutomationId, Name, Value, ClassName, AcceleratorKey
+; cacheRequest.AddProperty("LocalizedControlType")
+; cacheRequest.AddProperty("Name")
+; cacheRequest.AddProperty("ClassName")
 
 Menu, Tray, Icon
 Menu, Tray, NoStandard
@@ -262,7 +262,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     Global prevActiveWindows
     Global StopRecurssion
     Global UIA
-    Global cacheRequest
     static exEl, shellEl, listEl
     CoordMode, Mouse, Screen
 
@@ -1807,8 +1806,8 @@ Return
                 GoSub, SendCtrlAdd
             }
             
-            If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF))
-                sleep, 50
+            ; If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF))
+                ; sleep, 50
             LbuttonEnabled     := True
             StopRecurssion     := False
             Return
@@ -1987,7 +1986,8 @@ Return
 
             ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
             DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-
+            
+            DynaRun(Expr, tempScript)
             ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
             Gui, ShadowFrFull:  Hide
             Menu, windows, deleteAll
@@ -2735,6 +2735,7 @@ JEE_WinHasAltTabIcon(hWnd)
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399
 IsAltTabWindow(hWnd) {
    static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
+   
    if (VirtualDesktopExist = "")
    {
       OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
@@ -2927,6 +2928,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     loop % windowsListWithSameProcessAndClass
     {
         hwndID := windowsListWithSameProcessAndClass%A_Index%
+        WinGetTitle, tit, ahk_id %hwndID%
+        
         If (MonCount > 1) {
             currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
         }
@@ -2934,7 +2937,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             currentMonHasActWin := True
         }
 
-        If (currentMonHasActWin) {
+        If (currentMonHasActWin && tit != "") {
             finalWindowsListWithProcAndClass.push(hwndID)
         }
     }
