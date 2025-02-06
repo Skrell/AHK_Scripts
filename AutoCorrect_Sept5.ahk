@@ -15,6 +15,7 @@
 #InstallKeybdHook
 #HotString EndChars ()[]{}:;,.?!`n `t
 #MaxhotKeysPerInterval 500
+#KeyHistory 10
 
 ; #include %A_ScriptDir%\_VD.ahk
 ; DLL
@@ -230,10 +231,10 @@ Hoty:
         return
     }
     else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && StrLen(A_ThisHotKey) == 3 && inStr(keys, Substr(A_ThisHotKey,3,1))) {
-        SendInput % "{BS}" . SubStr(A_ThisHotKey,3,1)
+        Send % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
     else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 3) {
-        SendInput % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+        Send % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
 FixSlash:
     If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_ThisHotKey == "~/")
@@ -242,11 +243,11 @@ FixSlash:
         disableEnter := False
         
     If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999) {
-        SendInput, % "{BS}{BS}{?}{SPACE}"
+        Send, % "{BS}{BS}{?}{SPACE}"
         disableEnter := False
     }
     Else If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "Enter" && A_TimeSincePriorHotkey<999) {
-        SendInput, % "{BS}{BS}{?}{ENTER}"
+        Send, % "{BS}{BS}{?}{ENTER}"
         disableEnter := False
     }
     If (StrLen(A_PriorHotkey) == 2)
@@ -333,7 +334,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
                     BlockKeyboard(true)
-                    ; tooltip, here
+                    tooltip, 
                     loop, 100 {
                         ControlGetFocus, initFocusedCtrl , % "ahk_id " hWnd
                         If (initFocusedCtrl != "")
@@ -366,8 +367,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             break
                         sleep, 5
                     }
-                    
-                    ; tooltip, adjusted
+
                     WinGet, testID, ID, A
                     If (testID == hWnd) {
                         Send, ^{NumpadAdd}
@@ -387,14 +387,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             If (testCtrlFocus == initFocusedCtrl)
                                 break
                             sleep, 5
-                        }
-                    }
-
-                    If (testCtrlFocus == "Edit1") {
-                        ControlGet, rText, Selected,,Edit1, % "ahk_id " hWnd
-                        If (rText != "") {
-                            tooltip, found %rText%
-                            Send, {Backspace}
                         }
                     }
                     BlockKeyboard(false)
@@ -427,19 +419,19 @@ Return
 CapsCorrectionFront($) {
     tofix := $.Value(2)
     StringLower, fixed, tofix
-    SendInput, % $.Value(1) fixed $.Value(3)
+    Send, % $.Value(1) fixed $.Value(3)
 Return
 }
 
 CapsCorrectionBack($) {
     tofix := $.Value(2)
     StringLower, fixed, tofix
-    SendInput, % $.Value(1) fixed
+    Send, % $.Value(1) fixed
 Return
 }
 
 QuestionMarkorrection($) {
-    SendInput, % $.Value(1) "?" $.Value(2)
+    Send, % $.Value(1) "?" $.Value(2)
 Return
 }
 
@@ -702,7 +694,7 @@ prevChromeTab()
     Global StopRecurssion
     StopRecurssion := True
     DetectHiddenWindows, Off
-    SendInput, ^+{a}
+    Send, ^+{a}
     loop 100
     {
         WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe
@@ -724,10 +716,10 @@ prevChromeTab()
     sleep, 250
     WinActivate, ahk_id %this_id%
     ; ControlFocus, Chrome_RenderWidgetHostHWND1, ahk_id %this_id%
-    SendInput, {Enter}
+    Send, {Enter}
     sleep, 150
     If WinExist("ahk_id " . this_id) && WinActive("ahk_id " . this_id)
-        SendInput, {tab}{tab}{Enter}
+        Send, {tab}{tab}{Enter}
     tooltip, switched!
     sleep, 1000
     tooltip,
@@ -744,16 +736,22 @@ prevChromeTab()
 ~Esc::
     WinGet, escHwndID, ID, A
     StopRecurssion := True
-    executedOnce := False
+    executedOnce   := False
 
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 550 && escHwndID == escHwndID_old) {
+        DetectHiddenWindows, Off
         If IsAltTabWindow(escHwndID) {
-            DetectHiddenWindows, Off
             GoSub, DrawRect
             WinGetTitle, tit, ahk_id %escHwndID%
-            tooltip Close %tit% ? 
-            KeyWait, Esc, U T10
+            loop {
+                tooltip Close `"%tit%`" ?
+                sleep, 10
+                If !GetKeyState("Esc")
+                    break
+            }
+
             If !CancelClose {
+                tooltip, Waiting for `"%tit%`" to close...
                 Winclose, ahk_id %escHwndID%
                 loop 10 {
                     If !WinExist("ahk_id " . escHwndID) {
@@ -793,11 +791,11 @@ prevChromeTab()
             Else
                 CancelClose := False
         }
+        tooltip
     }
-    KeyWait, Esc, U T2
+
     escHwndID_old := escHwndID
     StopRecurssion := False
-    tooltip
 Return
 
 Esc & x::
@@ -1966,14 +1964,12 @@ Return
             }
             desktopEntryLast := desktopEntry
         }
+        Critical Off
         
         If (totalMenuItemCount == 1 && onlyTitleFound != "") {
             GoSub, ActivateWindow
         }
         Else If (totalMenuItemCount > 1) {
-
-            Critical Off
-
             CoordMode, Mouse, Screen
             CoordMode, Menu, Screen
             ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
@@ -1993,8 +1989,10 @@ Return
             Menu, windows, deleteAll
         }
         Else {
-            tooltip, No windows found!
-            sleep 1000
+            loop 100 {
+                tooltip, No windows found!
+                sleep, 10
+            }
             tooltip,
         }
     }
@@ -2944,9 +2942,11 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     numWindows := finalWindowsListWithProcAndClass.length()
     If (numWindows <= 1) {
-        Tooltip, Only %numWindows% Windows found!
         SetTimer, track, On
-        sleep, 2000
+        loop 100 {
+            Tooltip, Only %numWindows% window found!
+            sleep, 10
+        }
         Tooltip,
         Return
     }
@@ -3128,7 +3128,7 @@ keyTrack() {
     ; Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
     ; Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
     Global StopAutoFix
-    Static LastKey1, LastKey2, LastKey3, LastKey4, LastKey5 := ""
+    Static LastKey1 := ""
     Static TimeOfLastKey := 0
 
     ControlGetFocus, currCtrl, A
@@ -3144,9 +3144,18 @@ keyTrack() {
                 If (testClass == currClass) {
                     BlockKeyboard(true)
                     Send, ^{NumpadAdd}
-                    BlockKeyboard(false)
-                    If GetKeyState("NumpadAdd")
+                    If GetKeyState("Ctrl") && !GetKeyState("Ctrl", "P")
+                        Send, {Ctrl Up}
+
+                    If GetKeyState("NumpadAdd") && !GetKeyState("NumpadAdd", "P")
                         Send, {NumpadAdd Up}
+                
+                    ControlGet, rText, Selected,,Edit1, A
+                    If (rText != "") {
+                        tooltip, found %rText%
+                        Send, {Backspace}
+                    }
+                    BlockKeyboard(false)
                 }
                 TimeOfLastKey := A_TickCount
             }
@@ -3658,19 +3667,19 @@ Clip(Text="", Reselect="")
             SetTimer, %A_ThisFunc%, Off
         LongCopy := A_TickCount, Clipboard := "", LongCopy -= A_TickCount ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
         If (Text = "") {
-            SendInput, ^c
+            Send, ^c
             ClipWait, LongCopy ? 0.6 : 0.2, True
         } Else {
             Clipboard := LastClip := Text
             ClipWait, 10
-            SendInput, ^v
+            Send, ^v
         }
         SetTimer, %A_ThisFunc%, -700
         Sleep 20 ; Short sleep in case Clip() is followed by more keystrokes such as {Enter}
         If (Text = "")
             Return LastClip := Clipboard
         Else If ReSelect and ((ReSelect = True) or (StrLen(Text) < 3000))
-            SendInput, % "{Shift Down}{Left " StrLen(StrReplace(Text, "`r")) "}{Shift Up}"
+            Send, % "{Shift Down}{Left " StrLen(StrReplace(Text, "`r")) "}{Shift Up}"
     }
     Return
     Clip:
@@ -4371,7 +4380,7 @@ SetTitleMatchMode, 2
     ; ; Otherwise, move the InputBox's insertion point to where the user will type the abbreviation.
     ; Send {HOME}
     ; Loop % StrLen(Hotstring) + 4
-        ; SendInput {Right}e
+        ; Send {Right}e
     ; SetTimer, MoveCaret, Off
 ; Return
 
@@ -4918,6 +4927,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:incorerct::incorrect
 :*:incorrcet::incorrect
 :*:incorretc::incorrect
+:*:methodo::methodology `
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
