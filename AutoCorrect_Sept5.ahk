@@ -1562,10 +1562,10 @@ Cycle(direction)
 }
 
 ClearRect:
-    ; tooltip, comboactive is %ComboActive%
+    Critical, On
     If DrawingRect {
         DrawingRect := False
-        loop 30 {
+        loop 20 {
             If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 Gui, GUI4Boarder: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
@@ -1612,6 +1612,7 @@ ClearRect:
         WinSet, Transparent, 50, ahk_id %Highlighter%
         Gui, GUI4Boarder: Hide
     }
+    Critical, Off
 Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
