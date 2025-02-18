@@ -88,11 +88,14 @@ UIA.ConnectionTimeout := 6000
 
 Menu, Tray, Icon
 Menu, Tray, NoStandard
+Menu, Tray, Add, Menu, Routine
 Menu, Tray, Add, Run at startup, Startup
 Menu, Tray, Add, &Suspend, Suspend_label
 Menu, Tray, Add, Reload, Reload_label
 Menu, Tray, Add, Exit, Exit_label
-Menu, Tray, Default, &Suspend
+; Menu, Tray, Default, &Suspend
+Menu, Tray, Default, Menu
+Menu, Tray, Add
 Menu, Tray, Click, 1
 
 SysGet, MonNum, MonitorPrimary
@@ -144,7 +147,7 @@ Expr =
     #KeyHistory 0
     SetBatchLines -1
     ListLines Off
-    DetectHiddenWindows, Off
+    DetectHiddenWindows, On
     WinWait, ahk_class #32768,, 3000
     If ErrorLevel
         ExitApp
@@ -1027,7 +1030,7 @@ Altup:
     Global startHighlight
     Global hitTAB
     Global LclickSelected
-
+    BlockKeyboard(true)
     If !hitTAB
         Return
     Else {
@@ -1053,14 +1056,13 @@ Altup:
         }
     }
 
-    Critical, On
     cycleCount     := 1
     ValidWindows   := {}
     GroupedWindows := {}
     startHighlight := False
-    Critical, Off
     hitTAB         := False
     LclickSelected := False
+    BlockKeyboard(false)
     Gosub, ClearRect
     ; tooltip,
 Return
@@ -1564,52 +1566,32 @@ Cycle(direction)
 ClearRect:
     Critical, On
     If DrawingRect {
-        DrawingRect := False
-        loop 20 {
+        loop 5 {
+            DrawingRect := False
             If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                Critical, Off
                 Gui, GUI4Boarder: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-                ; tooltip, exiting early
                 Return
             }
             sleep, 5
         }
-
-        WinSet, Transparent, 200, ahk_id %Highlighter%
-        loop 8 {
+        
+        decrement_amount := 15
+        loop % floor(255/decrement_amount)
+        {
+            current_trans := 255-(decrement_amount * A_Index)
+            WinSet, Transparent, %current_trans%, ahk_id %Highlighter%
             If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+                Critical, Off
                 Gui, GUI4Boarder: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-                ; tooltip, exiting early
                 Return
             }
             sleep 5
         }
-        WinSet, Transparent, 175, ahk_id %Highlighter%
-        loop 6 {
-            If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-                Gui, GUI4Boarder: Hide
-                WinSet, Transparent, 255, ahk_id %Highlighter%
-                WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-                ; tooltip, exiting early
-                Return
-            }
-            sleep 5
-        }
-        WinSet, Transparent, 125, ahk_id %Highlighter%
-        loop 4 {
-            If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
-                Gui, GUI4Boarder: Hide
-                WinSet, Transparent, 255, ahk_id %Highlighter%
-                WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-                ; tooltip, exiting early
-                Return
-            }
-            sleep 5
-        }
-        WinSet, Transparent, 50, ahk_id %Highlighter%
         Gui, GUI4Boarder: Hide
     }
     Critical, Off
@@ -1617,8 +1599,7 @@ Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
-    ; Critical, On
-    ; Gui, GUI4Boarder: Hide
+    Gui, GUI4Boarder: Hide
     DrawingRect := True
     WinGet, activeWin, ID, A
     x := y := w := h := 0
@@ -1683,7 +1664,7 @@ DrawRect:
         newW:=w+4*border_thickness
         newH:=h+4*border_thickness
     }
-
+    Critical, On
     Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NA, Table awaiting Action
     WinSet, Region, %outerX%-%outerY%  %outerX2%-%outerY%  %outerX2%-%outerY2%  %outerX%-%outerY2%  %outerX%-%outerY%  %innerX%-%innerY%  %innerX2%-%innerY%  %innerX2%-%innerY2%  %innerX%-%innerY2%  %innerX%-%innerY%, ahk_id %Highlighter%
 
@@ -1692,26 +1673,7 @@ DrawRect:
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, ahk_id %activeWin%
     WinWaitActive, ahk_id %activeWin%, , 2
-    ; Critical, Off
-Return
-
-UpdateInputBoxTitle:
-    If WinExist("Type Up to 3 Letters of a Window Title to Search") && !StopCheck {
-        WinActivate, Type Up to 3 Letters of a Window Title to Search
-        WinSet, AlwaysOnTop, On, Type Up to 3 Letters of a Window Title to Search
-        StopCheck := True
-    }
-
-    ControlGetText, memotext, Edit1, Type Up to 3 Letters of a Window Title to Search
-    StringLen, memolength, memotext
-
-    If (memolength >= 3 || InStr(memotext, " ")) {
-        UserInputTrimmed := Trim(memotext)
-        Send, {ENTER}
-    }
-    else {
-        UserInputTrimmed := UserInput
-    }
+    Critical, Off
 Return
 
 SetTimeout:
@@ -1774,6 +1736,7 @@ Return
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
         
+        SetTimer, SendCtrlAdd, Off
         currentPath    := ""
         
         ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %A_TimeSincePriorHotkey% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
@@ -1817,7 +1780,7 @@ Return
             LbuttonEnabled     := True
             StopRecurssion     := False
             Return
-            }
+        }
     }
 
     PixelGetColor, LB_HexColor1, %lbX1%, %lbY1%, RGB
@@ -1861,16 +1824,36 @@ Return
 
 ; #MaxThreadsPerHotkey 1
 
+UpdateInputBoxTitle:
+    If (WinExist("Type Up to 3 Letters of a Window Title to Search") && !StopCheck) {
+        WinSet, AlwaysOnTop, On, Type Up to 3 Letters of a Window Title to Search
+        StopCheck := True
+    }
+
+    ControlGetText, memotext, Edit1, Type Up to 3 Letters of a Window Title to Search
+    StringLen, memolength, memotext
+
+    If (memolength >= 3 || (memolength >= 1 && InStr(memotext, " "))) {
+        UserInputTrimmed := Trim(memotext)
+        Send, {ENTER}
+    }
+    else {
+        UserInputTrimmed := memotext
+    }
+    WinSet, ExStyle, +0x80, ahk_class #32770 ; 0x80 is WS_EX_TOOLWINDOW
+Return
+
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
     UserInputTrimmed :=
-    StopCheck := False
+    StopCheck        := False
     SearchingWindows := True
-    StopRecurssion := True
-    SetTimer, UpdateInputBoxTitle, 50
+    StopRecurssion   := True
+    BlockKeyboard(True)
+    SetTimer, UpdateInputBoxTitle, 10
+    BlockKeyboard(False)
     InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
     SetTimer, UpdateInputBoxTitle, off
-    SearchingWindows := False
 
     If ErrorLevel
     {
@@ -1997,7 +1980,8 @@ Return
             tooltip,
         }
     }
-    StopRecurssion := False
+    StopRecurssion   := False
+    SearchingWindows := False
 Return
 
 ActivateWindow:
@@ -2026,7 +2010,7 @@ ActivateWindow:
     fulltitle := Trim(fulltitle)
     ; msgbox, %fulltitle%
 
-; cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    ; cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     ; desknum := VD.getDesktopNumOfWindow(fulltitle)
     ; If (desknum < cdt)
     ; {
@@ -4276,6 +4260,26 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     WinGetPos, x, y, w , h, ahk_id %TEST%
     WinSet, Transparent, 225, ahk_id %TEST%
     WinMove, ahk_id %TEST%,, drawX-floor(w/2), drawY-floor(h/2)
+}
+
+Routine:
+  ShowMenu(MenuGetHandle("Tray"), False, TrayMenuParams()*)
+Return
+
+TrayMenuParams() {      ; Original function is TaskbarEdge() by SKAN @ tiny.cc/taskbaredge
+Local    ; This modfied version to be passed as parameter to ShowMenu() @ tiny.cc/showmenu
+  VarSetCapacity(var,84,0), v:=&var,   DllCall("GetCursorPos","Ptr",v+76)
+  X:=NumGet(v+76,"Int"), Y:=NumGet(v+80,"Int"),  NumPut(40,v+0,"Int64")
+  hMonitor := DllCall("MonitorFromPoint", "Int64",NumGet(v+76,"Int64"), "Int",0, "Ptr")
+  DllCall("GetMonitorInfo", "Ptr",hMonitor, "Ptr",v)
+  DllCall("GetWindowRect", "Ptr",WinExist("ahk_class Shell_SecondaryTrayWnd"), "Ptr",v+68)
+  DllCall("SubtractRect", "Ptr",v+52, "Ptr",v+4, "Ptr",v+68)
+  DllCall("GetWindowRect", "Ptr",WinExist("ahk_class Shell_TrayWnd"), "Ptr",v+36)
+  DllCall("SubtractRect", "Ptr",v+20, "Ptr",v+52, "Ptr",v+36)
+  Loop % (8, offset:=0)
+    v%A_Index% := NumGet(v+0, offset+=4, "Int")
+Return ( v3>v7 ? [v7, Y, 0x18] : v4>v8 ? [X, v8, 0x24]
+       : v5>v1 ? [v5, Y, 0x10] : v6>v2 ? [X, v6, 0x04] : [0,0,0] )
 }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
