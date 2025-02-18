@@ -147,7 +147,7 @@ Expr =
     #KeyHistory 0
     SetBatchLines -1
     ListLines Off
-    DetectHiddenWindows, On
+    DetectHiddenWindows, Off
     WinWait, ahk_class #32768,, 3000
     If ErrorLevel
         ExitApp
