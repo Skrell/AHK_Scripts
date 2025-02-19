@@ -95,7 +95,7 @@ Menu, Tray, Add, Reload, Reload_label
 Menu, Tray, Add, Exit, Exit_label
 ; Menu, Tray, Default, &Suspend
 Menu, Tray, Default, Menu
-Menu, Tray, Add
+; Menu, Tray, Add
 Menu, Tray, Click, 1
 
 SysGet, MonNum, MonitorPrimary
@@ -1825,6 +1825,7 @@ Return
 ; #MaxThreadsPerHotkey 1
 
 UpdateInputBoxTitle:
+    WinSet, ExStyle, +0x80, ahk_class #32770 ; 0x80 is WS_EX_TOOLWINDOW
     If (WinExist("Type Up to 3 Letters of a Window Title to Search") && !StopCheck) {
         WinSet, AlwaysOnTop, On, Type Up to 3 Letters of a Window Title to Search
         StopCheck := True
@@ -1836,11 +1837,12 @@ UpdateInputBoxTitle:
     If (memolength >= 3 || (memolength >= 1 && InStr(memotext, " "))) {
         UserInputTrimmed := Trim(memotext)
         Send, {ENTER}
+        SetTimer, UpdateInputBoxTitle, off
+        Return
     }
     else {
         UserInputTrimmed := memotext
     }
-    WinSet, ExStyle, +0x80, ahk_class #32770 ; 0x80 is WS_EX_TOOLWINDOW
 Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
@@ -1850,7 +1852,7 @@ Return
     SearchingWindows := True
     StopRecurssion   := True
     BlockKeyboard(True)
-    SetTimer, UpdateInputBoxTitle, 10
+    SetTimer, UpdateInputBoxTitle, 5
     BlockKeyboard(False)
     InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
     SetTimer, UpdateInputBoxTitle, off
@@ -1929,7 +1931,7 @@ Return
                 finalEntry   := % desktopEntry ":  [" titleEntry "] (" procEntry ")"
             Else
                 finalEntry   := % desktopEntry ":  " titleEntry " (" procEntry ")"
-
+            tooltip, searching for %UserInputTrimmed%
             If (!InStr(finalEntry, UserInputTrimmed))
                 continue
 
@@ -1982,6 +1984,7 @@ Return
     }
     StopRecurssion   := False
     SearchingWindows := False
+    tooltip,
 Return
 
 ActivateWindow:
