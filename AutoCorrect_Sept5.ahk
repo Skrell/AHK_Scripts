@@ -15,7 +15,7 @@
 #InstallKeybdHook
 #HotString EndChars ()[]{}:;,.?!`n `t
 #MaxhotKeysPerInterval 500
-#KeyHistory 10
+#KeyHistory 25
 
 ; #include %A_ScriptDir%\_VD.ahk
 ; DLL
@@ -86,17 +86,17 @@ UIA.ConnectionTimeout := 6000
 ; cacheRequest.AddProperty("Name")
 ; cacheRequest.AddProperty("ClassName")
 
-Menu, Tray, Icon
-Menu, Tray, NoStandard
-Menu, Tray, Add, Menu, Routine
-Menu, Tray, Add, Run at startup, Startup
-Menu, Tray, Add, &Suspend, Suspend_label
-Menu, Tray, Add, Reload, Reload_label
-Menu, Tray, Add, Exit, Exit_label
-; Menu, Tray, Default, &Suspend
-Menu, Tray, Default, Menu
-; Menu, Tray, Add
-Menu, Tray, Click, 1
+; Menu, Tray, Icon
+; Menu, Tray, NoStandard
+; Menu, Tray, Add, Menu, Routine
+; Menu, Tray, Add, Run at startup, Startup
+; Menu, Tray, Add, &Suspend, Suspend_label
+; Menu, Tray, Add, Reload, Reload_label
+; Menu, Tray, Add, Exit, Exit_label
+; ; Menu, Tray, Default, &Suspend
+; Menu, Tray, Default, Menu
+; ; Menu, Tray, Add
+; Menu, Tray, Click, 1
 
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
@@ -1847,6 +1847,8 @@ Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
+    SetTimer, track,    off
+    SetTimer, keyTrack, off
     UserInputTrimmed :=
     StopCheck        := False
     SearchingWindows := True
@@ -1859,6 +1861,8 @@ Return
 
     If ErrorLevel
     {
+        SetTimer, track,    on
+        SetTimer, keyTrack, on
         Return
     }
     else
@@ -1895,6 +1899,8 @@ Return
             Tooltip,
             StopRecurssion := False
             Critical, Off
+            SetTimer, track,    on
+            SetTimer, keyTrack, on
             Return
         }
 
@@ -1931,7 +1937,7 @@ Return
                 finalEntry   := % desktopEntry ":  [" titleEntry "] (" procEntry ")"
             Else
                 finalEntry   := % desktopEntry ":  " titleEntry " (" procEntry ")"
-            tooltip, searching for %UserInputTrimmed%
+            ; tooltip, searching for %UserInputTrimmed%
             If (!InStr(finalEntry, UserInputTrimmed))
                 continue
 
@@ -1984,7 +1990,9 @@ Return
     }
     StopRecurssion   := False
     SearchingWindows := False
-    tooltip,
+    ; tooltip,
+    SetTimer, track,    on
+    SetTimer, keyTrack, on
 Return
 
 ActivateWindow:
@@ -3121,7 +3129,7 @@ keyTrack() {
 
     ControlGetFocus, currCtrl, A
     WinGetClass, currClass, A
-    If (currCtrl == "Edit1") {
+    If (currCtrl == "Edit1" && InStr(currClass, "EVERYTHING", true)) {
         StopAutoFix := True
         If ((A_TickCount-TimeOfLastKey) > 650 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
             ControlGet, OutputVar1, Visible ,, SysListView321, A
@@ -3172,6 +3180,7 @@ Return
 }
 
 track() {
+    ListLines Off
     Global MonCount, MonNum, moving
     Static x, y, lastX, lastY, lastMon, currentMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
@@ -3336,6 +3345,7 @@ track() {
                     Gui, GUI4Boarder: Hide
                     previousMon := currentMon
                     Critical, Off
+                    ListLines On
                     return
                 }
             }
@@ -3346,6 +3356,7 @@ track() {
     If (MonCount > 1 && !GetKeyState("LButton","P")) {
         previousMon := currentMon
     }
+    ListLines On
 }
 
 MouseIsOverTitleBar(xPos := "", yPos := "") {
@@ -4785,13 +4796,11 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:;nt::'nt
 :?:;d::'d
 :?:;s::'s
-::sice::since
 :?:sice::sive
 :?:t hem:: them
 :?:toin::tion
 :?:iotn::tion
 :?:soin::sion
-:?:aition::ation
 :?:emnt::ment
 :?:mnet::ment
 :?:oitn::oint
@@ -4803,7 +4812,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:toins::tions
 :?:emnts::ments
 :?:ghz::Ghz
+:?:aition::ation
 :?:aotin::ation
+:?:ation::ation
 :?:gbe::GbE
 :?:noin::nion
 :?:iosn::ions
@@ -4822,7 +4833,10 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:ngi::ing
 :?:yda::day
 :?:groudn::ground
-:?:ation::ation
+:?:aliyt::ality
+:?:laity::ality
+:?:altiy::ality
+:?:alit::ality
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -4898,7 +4912,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:recepient::recipient
 :*:reccomend::recommend
 :*:recquir::requir
-:*:requirment::requirement
 :*:respomd::respond
 :*:repons::respons
 :*:ressurect::resurrect
@@ -9858,7 +9871,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::makgni::making
 ::simplist::simplest
 ::defintinon::definition
-::requriements::requirements
 ::contniue::continue
 ::resepct::respect
 ::fof::for
