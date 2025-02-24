@@ -86,17 +86,21 @@ UIA.ConnectionTimeout := 6000
 ; cacheRequest.AddProperty("Name")
 ; cacheRequest.AddProperty("ClassName")
 
-; Menu, Tray, Icon
-; Menu, Tray, NoStandard
-; Menu, Tray, Add, Menu, Routine
-; Menu, Tray, Add, Run at startup, Startup
-; Menu, Tray, Add, &Suspend, Suspend_label
-; Menu, Tray, Add, Reload, Reload_label
-; Menu, Tray, Add, Exit, Exit_label
-; ; Menu, Tray, Default, &Suspend
-; Menu, Tray, Default, Menu
-; ; Menu, Tray, Add
-; Menu, Tray, Click, 1
+Menu, Tray, Icon
+Menu, Tray, NoStandard
+Menu, Tray, Add, Menu, Routine
+Menu, Tray, Add, Run at startup, Startup
+Menu, Tray, Add, &Suspend, Suspend_label
+Menu, Tray, Add, Reload, Reload_label
+Menu, Tray, Add, Exit, Exit_label
+; Menu, Tray, Default, &Suspend
+Menu, Tray, Default, Menu
+Menu, Tray, Add
+Menu, Tray, Add, Key History, keyhist_label
+Menu, Tray, Add, List Hotkeys, listHotkeys_label
+Menu, Tray, Add, List Vars, listVars_label
+Menu, Tray, Add, List Lines, listLines_label
+Menu, Tray, Click, 1
 
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
@@ -225,8 +229,49 @@ DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallbac
 SetTimer track, 100
 SetTimer keyTrack, 1
 
-
 Return
+
+Startup:
+    Menu, Tray, Togglecheck, Run at startup
+    IfExist, %A_Startup%/AutoCorrect.lnk
+        FileDelete, %A_Startup%/AutoCorrect.lnk
+    else 
+        FileCreateShortcut, % H_Compiled ? A_AhkPath : A_ScriptFullPath, %A_Startup%/AutoCorrect.lnk
+Return
+
+Tray_SingleLclick:
+    msgbox You left-clicked tray icon
+Return
+
+Reload_label:
+    Reload
+Return
+
+Suspend_label:
+    Menu, Tray, Togglecheck, &Suspend
+    Suspend
+Return
+
+Exit_label:
+    exitapp
+Return
+
+keyhist_label:
+    KeyHistory
+Return
+
+listHotkeys_label:
+    ListHotkeys
+Return
+
+listVars_label:
+    ListVars
+Return
+
+listLines_label:
+    ListLines
+Return
+
 
 Hoty:
     CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 && A_PriorHotKey != "~+SPACE") ? CapCount+1 : 1
@@ -1263,7 +1308,7 @@ SetTimer, track, On
 SetTimer, keyTrack, On
 Return
 
-#If !hitTAB
+; #If !hitTAB
 !q::
     ; tooltip, swapping between windows of app
     StopRecurssion := True
@@ -1280,7 +1325,7 @@ Return
     ; tooltip,
     StopRecurssion := False
 Return
-#If
+; #If
 
 #If hitTAB
 !x::
@@ -1470,7 +1515,7 @@ Cycle(direction)
                                 Else {
                                     Critical, Off
                                     GoSub, DrawRect
-                                    If !GetKeyState("Alt","P")
+                                    If !GetKeyState("Alt","P") || GetKeyState("q","P")
                                         Return
                                 }
                             }
@@ -1481,7 +1526,7 @@ Cycle(direction)
                                 Critical, Off
                                 GoSub, DrawRect
                             }
-                            If ((GroupedWindows.MaxIndex() > 3) && !GetKeyState("Alt","P")) {
+                            If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("Alt","P") || GetKeyState("q","P"))) {
                                 Critical, Off
                                 Return
                             }
@@ -1557,7 +1602,7 @@ Cycle(direction)
                         startHighlight := True
                 }
             }
-        } until (!GetKeyState("LAlt", "P"))
+        } until (!GetKeyState("LAlt", "P") || GetKeyState("q","P"))
         Gui, WindowTitle: Destroy
     }
     Return
@@ -2908,7 +2953,7 @@ realHwnd(hwnd)
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    Global MonCount, VD, Highlighter
+    Global MonCount, VD, Highlighter, hitTAB
     SetTimer, track, Off
     windowsToMinimize := []
     lastActWinID      := ""
@@ -2975,7 +3020,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     loop
     {
         KeyWait, q, D  T.25
-
+        
         If !ErrorLevel
         {
             WinGet, mmState, MinMax, ahk_id %hwndId%
@@ -3013,10 +3058,16 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                 }
             }
         }
+        WinGetClass, testCl, A
+        If (testCl != activeClass) {
+            ; tooltip, %testCl% - %activeClass%
+            Return
+        }
     }
     until (!GetKeyState("LAlt", "P"))
     Gui, WindowTitle: Destroy
-    
+   
+   
     WinActivate, ahk_id %lastActWinID%
 
     loop % windowsToMinimize.length()
@@ -3095,30 +3146,6 @@ HideTrayTip() {
     }
 }
 
-Startup:
-    Menu, Tray, Togglecheck, Run at startup
-    IfExist, %A_Startup%/AutoCorrect.lnk
-        FileDelete, %A_Startup%/AutoCorrect.lnk
-    else FileCreateShortcut, % H_Compiled ? A_AhkPath : A_ScriptFullPath, %A_Startup%/AutoCorrect.lnk
-Return
-
-Tray_SingleLclick:
-    msgbox You left-clicked tray icon
-Return
-
-Reload_label:
-    Reload
-Return
-
-Suspend_label:
-    Menu, Tray, Togglecheck, &Suspend
-    Suspend
-Return
-
-Exit_label:
-    exitapp
-Return
-
 keyTrack() {
     ; Static DisableCheck := False
     ; Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
@@ -3146,11 +3173,6 @@ keyTrack() {
                     If GetKeyState("NumpadAdd") && !GetKeyState("NumpadAdd", "P")
                         Send, {NumpadAdd Up}
                 
-                    ControlGet, rText, Selected,,Edit1, A
-                    If (rText != "") {
-                        tooltip, found %rText%
-                        Send, {Backspace}
-                    }
                     BlockKeyboard(false)
                 }
                 TimeOfLastKey := A_TickCount
@@ -4224,7 +4246,7 @@ MouseIsOverTaskbar() {
 
 MouseIsOverTaskbarBlank() {
     Global UIA
-    MouseGetPos, , , hwnd
+    MouseGetPos, x, y, hwnd
     WinGetClass, cl, ahk_id %hwnd%
     try {
         If (InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false)) {
@@ -4929,7 +4951,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:cmaket::CMakeLists.txt
 :*:unfo::unfortunately, `
 :*:Unfo::Unfortunately, `
-:*:priv::privilege `
+:*:privi::privilege `
+:*:prive::privilege `
 :*:envi::environment `
 :*:simult::simultaneous`
 :*:follwo::follow
