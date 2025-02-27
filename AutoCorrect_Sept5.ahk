@@ -74,6 +74,9 @@ Global StopAutoFix := False
 Global disableEnter := False
 Global disableWheeldown := False
 Global pauseWheel  := False
+Global EVENT_SYSTEM_MENUPOPUPSTART := 0x0006
+Global EVENT_SYSTEM_MENUPOPUPEND   := 0x0007
+Global TimeOfLastKey := 0
 
 Process, Priority,, High
 
@@ -146,25 +149,67 @@ Expr =
 (
     #NoEnv
     #NoTrayIcon
-    #SingleInstance, On
-    #Persistent
     #KeyHistory 0
+    #Persistent
+    #WinActivateForce
+    ListLines Off
+    SetBatchLines -1
+    DetectHiddenWindows, Off
+    ; tooltip, started
+    WinWait, ahk_class #32768,, 3000
+    ; tooltip, done waiting
+    If ErrorLevel
+        ExitApp
+        
+    sleep, 125
+
+    SendInput, {DOWN}
+    ; https://www.autohotkey.com/board/topic/11157-popup-menu-sometimes-doesnt-have-focus/page-2
+    ; MouseMove, %x%, %y%
+    
+    
+    ; Input, SingleKey, L1, {Lbutton}{ESC}{ENTER}, *
+    Return
+    
+    ~ENTER::
+        ExitApp
+    return
+    
+    ~ESC::
+        ExitApp
+    return
+    
+    ~LBUTTON::
+        ExitApp
+    return
+    
+    SPACE::
+        SendInput, {DOWN}
+    return
+)
+
+ExprAltUp = 
+(
+    #NoEnv
+    #NoTrayIcon
+    #KeyHistory 0
+    #Persistent
+    #WinActivateForce
     SetBatchLines -1
     ListLines Off
     DetectHiddenWindows, Off
-    WinWait, ahk_class #32768,, 3000
-    If ErrorLevel
-        ExitApp
-
-    sleep, 125
-    Send, {DOWN}
-    Return
-
+    
     ~Alt Up::
-    Send, {Esc}
-    If WinExist("ahk_class #32768")
-        WinClose, ahk_class #32768
-    ExitApp
+        WinGetClass, testcl, A
+        If (testcl == "#32770")
+            ExitApp
+        Else {
+            Send, {Esc}
+            If WinExist("ahk_class #32768")
+                WinClose, ahk_class #32768
+            ExitApp
+        }
+    Return
 )
 
 ExprTimeout =
@@ -225,11 +270,16 @@ sleep, 50
 
 ;EVENT_SYSTEM_FOREGROUND := 0x3
 DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+ winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
 
 SetTimer track, 100
 SetTimer keyTrack, 1
 
 Return
+
+OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
+    ; tooltip, pop!
+}
 
 Startup:
     Menu, Tray, Togglecheck, Run at startup
@@ -325,6 +375,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         Else If (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "") {
             Return
         }
+        ; Else If (vWinClass == "Autohotkey") {
+            ; pw := 0
+            ; ph := 0
+            ; WinGetPos, px, py, pw, ph, ahk_id %hWnd%
+            ; tooltip, here
+            ; WinMove, ahk_class %hWnd%, , (A_ScreenWidth/2)-(pw/2), (A_ScreenHeight/2)-(ph/2)
+        ; }
                 
         If ((!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey") || vWinClass == "#32770") {
             loop 200 {
@@ -689,8 +746,10 @@ Return
 ~Enter::
     ControlGetFocus, currCtrl, A
     WinGetClass, currCl, A
-    If (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3" || (currCl == "CabinetWClass" && currCtrl == "Edit1") || (currCl == "#32770" && currCtrl == "Edit1"))
+    WinGetTitle, currTit, A
+    If (!InStr(currTit, "Type Up to 3", true) && (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3" || (currCl == "CabinetWClass" && currCtrl == "Edit1") || (currCl == "#32770" && currCtrl == "Edit1"))) {
         GoSub, SendCtrlAdd
+    }
 Return
 #If
 
@@ -1334,9 +1393,18 @@ Return
 Return
 #If
 
-RunDynRun:
+RunDynaExpr:
     DynaRun(Expr, tempScript)
 Return
+
+RunDynaAltUp:
+    DynaRun(ExprAltUp, tempScript)
+Return
+
+RunDynaExprTimeout:
+    DynaRun(ExprTimeout, whatev1)
+Return
+
 
 !Capslock::
     StopRecurssion := True
@@ -1430,7 +1498,7 @@ Return
 
     Critical Off
 
-    GoSub, RunDynRun
+    SetTimer, RunDynaAltUp, -1
 
     CoordMode, Mouse, Screen
     CoordMode, Menu, Screen
@@ -1721,10 +1789,6 @@ DrawRect:
     Critical, Off
 Return
 
-SetTimeout:
-    DynaRun(ExprTimeout, whatev1)
-Return
-
 !Lbutton::
     If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550))
         Send, {ENTER}
@@ -1789,11 +1853,11 @@ Return
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321") {
                 Send, {Backspace}
-                SetTimer, SetTimeout, -1
+                SetTimer, RunDynaExprTimeout, -1
             }
             Else {
                 Send, !{Up}
-                SetTimer, SetTimeout, -1
+                SetTimer, RunDynaExprTimeout, -1
             }
         }
         
@@ -1879,7 +1943,7 @@ UpdateInputBoxTitle:
     ControlGetText, memotext, Edit1, Type Up to 3 Letters of a Window Title to Search
     StringLen, memolength, memotext
 
-    If (memolength >= 3 || (memolength >= 1 && InStr(memotext, " "))) {
+    If ((memolength >= 3 && (A_TickCount-TimeOfLastKey > 400)) || (memolength >= 1 && InStr(memotext, " "))) {
         UserInputTrimmed := Trim(memotext)
         Send, {ENTER}
         SetTimer, UpdateInputBoxTitle, off
@@ -1893,7 +1957,7 @@ Return
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
     SetTimer, track,    off
-    SetTimer, keyTrack, off
+    ; SetTimer, keyTrack, off
     UserInputTrimmed :=
     StopCheck        := False
     SearchingWindows := True
@@ -1903,11 +1967,11 @@ Return
     BlockKeyboard(False)
     InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
     SetTimer, UpdateInputBoxTitle, off
-
+    ; tooltip, searching %UserInputTrimmed%
     If ErrorLevel
     {
         SetTimer, track,    on
-        SetTimer, keyTrack, on
+        ; SetTimer, keyTrack, on
         Return
     }
     else
@@ -1945,7 +2009,7 @@ Return
             StopRecurssion := False
             Critical, Off
             SetTimer, track,    on
-            SetTimer, keyTrack, on
+            ; SetTimer, keyTrack, on
             Return
         }
 
@@ -2007,22 +2071,20 @@ Return
             GoSub, ActivateWindow
         }
         Else If (totalMenuItemCount > 1) {
+            SetTimer, RunDynaExpr, -1
             CoordMode, Mouse, Screen
             CoordMode, Menu, Screen
             ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
-            ; drawX := A_ScreenWidth/2
-            ; drawY := A_ScreenHeight/2
             drawX := CoordXCenterScreen()
             drawY := CoordYCenterScreen()
-            Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 y0
+            ; Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 y0
             ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
-
+            sleep, 100
             ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
-            DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-            
-            DynaRun(Expr, tempScript)
-            ShowMenu(MenuGetHandle("windows"), False, drawX, drawY, 0x14)
-            Gui, ShadowFrFull:  Hide
+            ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+            ; Menu, windows, show, % A_ScreenWidth/4, % A_ScreenHeight/3 
+            ShowMenuX("windows", drawX, drawY, 0x14)                        
+            ; Gui, ShadowFrFull:  Hide
             Menu, windows, deleteAll
         }
         Else {
@@ -2035,9 +2097,8 @@ Return
     }
     StopRecurssion   := False
     SearchingWindows := False
-    ; tooltip,
     SetTimer, track,    on
-    SetTimer, keyTrack, on
+    ; SetTimer, keyTrack, on
 Return
 
 ActivateWindow:
@@ -2140,29 +2201,32 @@ ActivateWindow:
     ; }
     ; else
     ; {
-        If (fulltitle == "Calculator") {
-            ; https://www.autohotkey.com/boards/viewtopic.php?t=43997
-            WinGet, CalcIDs, List, Calculator
-            If (CalcIDs = 1) ; Calc is NOT minimized
-                CalcID := CalcIDs1
-            else
-                CalcID := CalcIDs2 ; Calc is Minimized use 2nd ID
-            WinActivate, ahk_id %CalcID%
-        }
-        Else
-            WinActivate, %fulltitle%
-
-        WinGet, hwndId, ID, A
-        currentMon := MWAGetMonitorMouseIsIn()
-        currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
-        If !currentMonHasActWin {
-            Send, #+{Left}
-            sleep, 150
-         }
-        GoSub, DrawRect
-        If GetKeyState("Lalt","P")
-            Keywait, Lalt, U T3
-        GoSub, ClearRect
+    If (fulltitle == "Calculator") {
+        ; https://www.autohotkey.com/boards/viewtopic.php?t=43997
+        WinGet, CalcIDs, List, Calculator
+        If (CalcIDs = 1) ; Calc is NOT minimized
+            CalcID := CalcIDs1
+        else
+            CalcID := CalcIDs2 ; Calc is Minimized use 2nd ID
+        WinActivate, ahk_id %CalcID%
+    }
+    Else
+        WinActivate, %fulltitle%
+    
+    ; tooltip, activating %fulltitle%
+    sleep, 125
+    WinGet, hwndId, ID, A
+    currentMon := MWAGetMonitorMouseIsIn()
+    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+    If !currentMonHasActWin {
+        Send, #+{Left}
+        sleep, 150
+     }
+    GoSub, DrawRect
+    If GetKeyState("Lalt","P")
+        Keywait, Lalt, U T3
+    sleep, 150
+    GoSub, ClearRect
     ; }
     Process, Close, tempScript
 Return
@@ -2613,6 +2677,38 @@ ShowMenu(hMenu, MenuLoop:=0, X:=0, Y:=0, Flags:=0) {            ; Ver 0.61 by SK
 
     Return R
 }
+; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=81064#p533551
+ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ;  ShowMenu v0.63 by SKAN on D39F/D689 @ autohotkey.com/r?t=81064
+Local
+  If   hMenu Is Not Integer
+       hMenu := MenuGetHandle(hMenu)
+
+  If ( X=""  Or  Y="" ) {
+       CMM := A_CoordModeMouse
+       CoordMode, Mouse, Screen
+       MouseGetPos, XX, YY
+       CoordMode, Mouse, %CMM%
+       X := X="" ? XX : X
+       Y := Y="" ? YY : Y
+  }
+
+  Flags    &= ~0x180                              ;  disallow flags TPM_RETURNCMD (0x100), TPM_NONOTIFY (0x80)
+  pWnd     := DllCall("User32\GetForegroundWindow", "Ptr")
+  DllCall("User32\SetForegroundWindow","Ptr",mWnd := A_ScriptHwnd)
+
+  ; Old_IsCritical := A_IsCritical
+  ; Critical On
+
+  R := DllCall("User32\TrackPopupMenuEx", "Ptr",hMenu, "UInt",Flags, "Int",X, "Int",Y, "Ptr",mWnd, "Ptr",0, "UInt")
+  Sleep, 50                                       ;  wait for WM_COMMAND... DllCall("WaitMessage") too late, sucks!
+  DllCall("User32\PostMessage", "Ptr",mWnd, "Int",0, "Ptr",0, "Ptr",0)
+
+  If DllCall("User32\GetForegroundWindow", "Ptr") = mWnd  And Not  WinActive("ahk_id " mWnd)
+     DllCall("User32\SetForegroundWindow","Ptr",pWnd)
+
+  ; Critical %Old_IsCritical%
+Return R
+}
 
 IsWindow(hWnd){
     WinGet, dwStyle, Style, ahk_id %hWnd%
@@ -2644,30 +2740,34 @@ MyTimer() {
    WinWait, ahk_class #32768,, 3000
 
    WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
-   WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh,
-   ; WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh,
+   menux := menux + 10
+   menuy := menuy + 10
+   ; WinMove, ahk_class #32768, , %menux%, %menuy%
+   MouseMove, %menux%, %menuy%
+   
+   ; WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh,
+   ; ; WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh,
+   ; WinSet, TransColor, FF00FF 50, ahk_id %IGUIF%
+   ; sleep, 20
+   ; ; WinSet, TransColor, FF00FF 50, ahk_id %IGUIF2%
+   ; sleep, 20
+   ; WinSet, TransColor, FF00FF 100, ahk_id %IGUIF%
+   ; sleep, 20
+   ; ; WinSet, TransColor, FF00FF 100, ahk_id %IGUIF2%
+   ; sleep, 20
+   ; WinSet, TransColor, FF00FF 150, ahk_id %IGUIF%
+   ; sleep, 20
+   ; ; WinSet, TransColor, FF00FF 150, ahk_id %IGUIF2%
+   ; sleep, 20
+   ; WinSet, TransColor, FF00FF 200, ahk_id %IGUIF%
+   ; sleep, 20
+   ; ; WinSet, TransColor, FF00FF 200, ahk_id %IGUIF2%
+   ; sleep, 20
+   ; WinSet, TransColor, FF00FF 254, ahk_id %IGUIF%
+   ; sleep, 20
+   ; ; WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2%
 
-   WinSet, TransColor, FF00FF 50, ahk_id %IGUIF%
-   sleep, 20
-   ; WinSet, TransColor, FF00FF 50, ahk_id %IGUIF2%
-   sleep, 20
-   WinSet, TransColor, FF00FF 100, ahk_id %IGUIF%
-   sleep, 20
-   ; WinSet, TransColor, FF00FF 100, ahk_id %IGUIF2%
-   sleep, 20
-   WinSet, TransColor, FF00FF 150, ahk_id %IGUIF%
-   sleep, 20
-   ; WinSet, TransColor, FF00FF 150, ahk_id %IGUIF2%
-   sleep, 20
-   WinSet, TransColor, FF00FF 200, ahk_id %IGUIF%
-   sleep, 20
-   ; WinSet, TransColor, FF00FF 200, ahk_id %IGUIF2%
-   sleep, 20
-   WinSet, TransColor, FF00FF 254, ahk_id %IGUIF%
-   sleep, 20
-   ; WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2%
-
-   WinSet, AlwaysOnTop, on,  ahk_class #32768
+   ; WinSet, AlwaysOnTop, on,  ahk_class #32768
 }
 
 MyFader() {
@@ -3147,12 +3247,10 @@ HideTrayTip() {
 }
 
 keyTrack() {
-    ; Static DisableCheck := False
-    ; Static Lowers := "abcdefghijklmnopqrstuvwxyz" ; For If inStr.
-    ; Static Uppers := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ; For If inStr.
+    ListLines, Off
     Global StopAutoFix
     Static LastKey1 := ""
-    Static TimeOfLastKey := 0
+    Global TimeOfLastKey
 
     ControlGetFocus, currCtrl, A
     WinGetClass, currClass, A
@@ -3178,6 +3276,7 @@ keyTrack() {
                 TimeOfLastKey := A_TickCount
             }
         }
+        ListLines, On
         Return
     }
     Else If (currClass == "XLMAIN") {
@@ -3197,7 +3296,8 @@ keyTrack() {
         Send, {Ctrl Up}
     If GetKeyState("Shift") && !GetKeyState("Shift","P")
         Send, {Shift Up}
-
+        
+    ListLines, On
 Return
 }
 
@@ -4250,8 +4350,8 @@ MouseIsOverTaskbarBlank() {
     WinGetClass, cl, ahk_id %hwnd%
     try {
         If (InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false)) {
-            pt := UIA.ElementFromPoint(,,False)
-            return ((ctrlType := pt.CurrentControlType) == 50033)
+            pt := UIA.ElementFromPoint(x,y,False)
+            return (pt.CurrentControlType == 50033)
         }
         Else
             Return False
@@ -4493,6 +4593,7 @@ SetTitleMatchMode, 2
 ::login::
 ::constrain::
 ::begin::
+::mic::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -4548,6 +4649,7 @@ SetTitleMatchMode, 2
 ::jest::
 ::boil::
 ::logger::
+::activate::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
@@ -4990,6 +5092,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::fucniton::function
+::waas::was
+::haad::had
 ::precident::precedent
 ::ave::have
 ::ad::had
