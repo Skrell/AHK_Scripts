@@ -179,7 +179,7 @@ Expr =
         ExitApp
     return
     
-    ~LBUTTON::
+    ~*LBUTTON::
         ExitApp
     return
     
@@ -204,7 +204,8 @@ ExprAltUp =
         If (testcl == "#32770")
             ExitApp
         Else {
-            Send, {Esc}
+            If WinExist("ahk_class #32768")
+                Send, {ENTER}
             If WinExist("ahk_class #32768")
                 WinClose, ahk_class #32768
             ExitApp
@@ -1134,11 +1135,19 @@ Altup:
     Global startHighlight
     Global hitTAB
     Global LclickSelected
-    BlockKeyboard(true)
-    If !hitTAB
+    
+    cycling        := False
+    If !hitTAB {
+        cycleCount     := 1
+        ValidWindows   := {}
+        GroupedWindows := {}
+        startHighlight := False
+        hitTAB         := False
+        LclickSelected := False
         Return
+    }
     Else {
-        cycling        := False
+        BlockKeyboard(true)
         WinGet, actWndID, ID, A
         If (LclickSelected && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
             If (startHighlight) {
@@ -1371,7 +1380,7 @@ Return
 !q::
     ; tooltip, swapping between windows of app
     StopRecurssion := True
-    ComboActive := False
+    ComboActive    := False
     ActivateTopMostWindow()
 
     DetectHiddenWindows, Off
@@ -3057,6 +3066,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     SetTimer, track, Off
     windowsToMinimize := []
     lastActWinID      := ""
+    hitTAB := False
     
     currentMon := MWAGetMonitorMouseIsIn()
     Critical, On
@@ -3160,13 +3170,11 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
         WinGetClass, testCl, A
         If (testCl != activeClass) {
-            ; tooltip, %testCl% - %activeClass%
             Return
         }
     }
     until (!GetKeyState("LAlt", "P"))
     Gui, WindowTitle: Destroy
-   
    
     WinActivate, ahk_id %lastActWinID%
 
