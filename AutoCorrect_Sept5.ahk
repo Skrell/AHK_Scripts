@@ -476,15 +476,21 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                     WinGet, testID, ID, A
                     If (testID == hWnd) {
-                        Send, ^{NumpadAdd}
-                        sleep, 125
+                        ; Send, ^{NumpadAdd}
+                        Send, {Lctrl DOWN}
+                        sleep, 5
+                        Send, {NumpadAdd}
+                        sleep, 5,
+                        Send, {Lctrl UP}
+                        ; sleep, 125
+                        sleep, 10
                     }
 
-                    If GetKeyState("Ctrl")
-                        Send, {Ctrl Up}
+                    ; If GetKeyState("Ctrl")
+                        ; Send, {Ctrl Up}
 
-                    If GetKeyState("NumpadAdd")
-                        Send, {NumpadAdd Up}
+                    ; If GetKeyState("NumpadAdd")
+                        ; Send, {NumpadAdd Up}
 
                     If initFocusedCtrl {
                         loop, 100 {
@@ -592,7 +598,7 @@ Return
 +!a::
     Send, +{home}
     Hotstring("Reset")
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -607,35 +613,35 @@ Return
 !+;::
     Send, +{end}
     Hotstring("Reset")
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
 !+i::
     Send +{UP}
     Hotstring("Reset")
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
 !+k::
     Send +{DOWN}
     Hotstring("Reset")
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
 !+j::
     Send ^+{LEFT}
     Hotstring("Reset")
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
 !+l::
     Send ^+{RIGHT}
     Hotstring("Reset")
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -646,7 +652,7 @@ Return
     store := """" . store . """"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -657,7 +663,7 @@ Return
     store := "{" . store . "}"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -668,7 +674,7 @@ Return
     store := "{" . store . "}"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -679,7 +685,7 @@ Return
     store := "<" . store . ">"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -690,7 +696,7 @@ Return
     store := "<" . store . ">"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -701,7 +707,7 @@ Return
     store := "(" . store . ")"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -712,7 +718,7 @@ Return
     store := "(" . store . ")"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -765,7 +771,7 @@ Return
 ~+Space::
     GoSub, FixSlash
     GoSub, Hoty
-    If GetKeyState("LShift")
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
         Send, {LShift Up}
 Return
 
@@ -1469,8 +1475,8 @@ Return
 
     desktopEntryLast := ""
 
-    ; Menu, minWindows, Add
-    ; Menu, minWindows, deleteAll
+    Menu, minWindows, Add
+    Menu, minWindows, deleteAll
     For k, ft in winArraySort
     {
         splitEntry1 := StrSplit(ft , "^")
@@ -1952,21 +1958,20 @@ UpdateInputBoxTitle:
     ControlGetText, memotext, Edit1, Type Up to 3 Letters of a Window Title to Search
     StringLen, memolength, memotext
 
-    If ((memolength >= 3 && (A_TickCount-TimeOfLastKey > 400)) || (memolength >= 1 && InStr(memotext, " "))) {
+    If ((memolength >= 2 && (A_TickCount-TimeOfLastKey > 400)) || (memolength >= 1 && InStr(memotext, " "))) {
         UserInputTrimmed := Trim(memotext)
         Send, {ENTER}
         SetTimer, UpdateInputBoxTitle, off
         Return
     }
     else {
-        UserInputTrimmed := memotext
+        UserInputTrimmed := Trim(memotext)
     }
 Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
     SetTimer, track,    off
-    ; SetTimer, keyTrack, off
     UserInputTrimmed :=
     StopCheck        := False
     SearchingWindows := True
@@ -1980,7 +1985,6 @@ Return
     If ErrorLevel
     {
         SetTimer, track,    on
-        ; SetTimer, keyTrack, on
         Return
     }
     else
@@ -2034,8 +2038,8 @@ Return
 
         desktopEntryLast := ""
 
-        ; Menu, windows, Add
-        ; Menu, windows, deleteAll
+        Menu, windows, Add
+        Menu, windows, deleteAll
         For k, ft in winArraySort
         {
             splitEntry1 := StrSplit(ft , "^")
@@ -2111,10 +2115,12 @@ Return
 Return
 
 ActivateWindow:
+    BlockKeyboard(true)
     Gui, ShadowFrFull:  Hide
     ; Gui, ShadowFrFull2: Hide
     DetectHiddenWindows, On
     thisMenuItem := ""
+    result := {}
 
     If (totalMenuItemCount == 1 && onlyTitleFound != "")
         thisMenuItem := onlyTitleFound
@@ -2128,13 +2134,14 @@ ActivateWindow:
     ; msgbox, %fulltitle%
     fulltitle := RegExReplace(fulltitle, "^Desktop\s\d+\s*\:\s?", "")
     fulltitle := Trim(fulltitle)
-    ; msgbox, %fulltitle%
-    fulltitle := RegExReplace(fulltitle, "^\[?", "")
-    fulltitle := Trim(fulltitle)
-    ; msgbox, %fulltitle%
-    fulltitle := RegExReplace(fulltitle, "\]?$", "")
-    fulltitle := Trim(fulltitle)
-    ; msgbox, %fulltitle%
+    RegExMatch(fulltitle, "O)(\]$)", result)
+    ; msgbox, % fulltitle " with " result.Count()
+    If (result.Count() > 0) {
+        fulltitle := RegExReplace(fulltitle, "^\[", "")
+        fulltitle := Trim(fulltitle)
+        fulltitle := RegExReplace(fulltitle, "\]?\s*$", "")
+        fulltitle := Trim(fulltitle)
+    }
 
     ; cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     ; desknum := VD.getDesktopNumOfWindow(fulltitle)
@@ -2232,12 +2239,11 @@ ActivateWindow:
         sleep, 150
      }
     GoSub, DrawRect
-    If GetKeyState("Lalt","P")
-        Keywait, Lalt, U T3
     sleep, 150
     GoSub, ClearRect
     ; }
     Process, Close, tempScript
+    BlockKeyboard(false)
 Return
 
 
@@ -2510,7 +2516,7 @@ Return
     }
     If !ComboActive
     {
-        If GetKeyState("Lshift")
+        If GetKeyState("LShift") && !GetKeyState("LShift","P")
             Send, +{Click, Right}
         Else
             Send, {Click, Right}
@@ -4602,6 +4608,7 @@ SetTitleMatchMode, 2
 ::constrain::
 ::begin::
 ::mic::
+::poke::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
