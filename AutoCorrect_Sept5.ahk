@@ -77,6 +77,8 @@ Global pauseWheel  := False
 Global EVENT_SYSTEM_MENUPOPUPSTART := 0x0006
 Global EVENT_SYSTEM_MENUPOPUPEND   := 0x0007
 Global TimeOfLastKey := 0
+Global lbX1
+Global lbX2
 
 Process, Priority,, High
 
@@ -217,7 +219,7 @@ ExprTimeout =
 (
     #NoEnv
     #NoTrayIcon
-    #SingleInstance, On
+    #SingleInstance, Off
     #Persistent
     #KeyHistory 0
     SetBatchLines -1
@@ -473,24 +475,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             break
                         sleep, 5
                     }
-
+                    ; tooltip, about to send to %testCtrlFocus%
                     WinGet, testID, ID, A
                     If (testID == hWnd) {
-                        ; Send, ^{NumpadAdd}
-                        Send, {Lctrl DOWN}
-                        sleep, 5
-                        Send, {NumpadAdd}
-                        sleep, 5,
-                        Send, {Lctrl UP}
-                        ; sleep, 125
+                        sleep, 125
+                        Send, ^{NumpadAdd}
                         sleep, 10
                     }
-
-                    ; If GetKeyState("Ctrl")
-                        ; Send, {Ctrl Up}
-
-                    ; If GetKeyState("NumpadAdd")
-                        ; Send, {NumpadAdd Up}
 
                     If initFocusedCtrl {
                         loop, 100 {
@@ -501,6 +492,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             sleep, 5
                         }
                     }
+                    ; tooltip, returned to edit
                     BlockKeyboard(false)
                 }
             }
@@ -1409,15 +1401,15 @@ Return
 #If
 
 RunDynaExpr:
-    DynaRun(Expr, tempScript)
+    DynaRun(Expr, Expr_Name)
 Return
 
 RunDynaAltUp:
-    DynaRun(ExprAltUp, tempScript)
+    DynaRun(ExprAltUp, ExprAltUp_Name)
 Return
 
 RunDynaExprTimeout:
-    DynaRun(ExprTimeout, whatev1)
+    DynaRun(ExprTimeout, ExprTimeout_Name)
 Return
 
 
@@ -1829,19 +1821,15 @@ Return
 Return
 #If
 
-; #MaxThreadsPerHotkey 2
+#MaxThreadsPerHotkey 2
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
 ~LButton::
     
     StopRecurssion     := True
-    CoordMode, Mouse, Window
+    CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, lbhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
     WinGetClass, lClass, ahk_id %lbhwnd%
-
-    ; If MouseIsOverTitleBar(lbX1, lbY1)
-        ; Return
-
     Gui, GUI4Boarder: Hide
     
     ; If (A_PriorHotkey == A_ThisHotkey
@@ -1853,17 +1841,17 @@ Return
         ; StopRecurssion     := False
         ; Return
     ; }
-
-    ; tooltip, %A_TimeSincePriorHotkey% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
+    
+    ; If (A_TimeSincePriorHotkey < 250)
+        ; tooltip, %A_TimeSincePriorHotkey% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2% - %A_ThisHotkey% - %A_PriorHotkey%
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
         
-        SetTimer, SendCtrlAdd, Off
         currentPath    := ""
-        
-        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %A_TimeSincePriorHotkey% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
+
+        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
 
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321") {
@@ -1886,14 +1874,11 @@ Return
                     break
                 sleep, 2
             }
-            ; tooltip, %currentPath% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%
             
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
-                GoSub, SendCtrlAdd
+                Send, ^{NumpadAdd}
             }
             
-            ; If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF))
-                ; sleep, 50
             LbuttonEnabled     := True
             StopRecurssion     := False
             Return
@@ -1906,7 +1891,8 @@ Return
             Return
         }
     }
-
+    
+    CoordMode, Pixel, Screen
     PixelGetColor, LB_HexColor1, %lbX1%, %lbY1%, RGB
     lbX1 -= 1
     lbY1 -= 1
@@ -1924,7 +1910,7 @@ Return
     }
     
     KeyWait, LButton, U T5
-    CoordMode, Mouse, Window
+    CoordMode, Mouse, screen
     MouseGetPos, lbX2, lbY2,
 
     rlsTime := A_TickCount
@@ -1933,9 +1919,9 @@ Return
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < 325)
-        && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3  != 0xFFFFFF)
+        && ((LB_HexColor1 != 0xFFFFFF) || (LB_HexColor2 != 0xFFFFFF) || (LB_HexColor3  != 0xFFFFFF))
         && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
-        
+
         SetTimer, SendCtrlAdd, -125
         }
     Else
@@ -1946,7 +1932,7 @@ Return
 Return
 #If
 
-; #MaxThreadsPerHotkey 1
+#MaxThreadsPerHotkey 1
 
 UpdateInputBoxTitle:
     WinSet, ExStyle, +0x80, ahk_class #32770 ; 0x80 is WS_EX_TOOLWINDOW
@@ -2128,6 +2114,7 @@ ActivateWindow:
         thisMenuItem := A_ThisMenuItem
 
     SetTitleMatchMode, 3
+    SetTitleMatchMode, Fast
 
     fulltitle := RegExReplace(thisMenuItem, "\(\S+\.\S+\)$", "")
     fulltitle := Trim(fulltitle)
@@ -2239,10 +2226,11 @@ ActivateWindow:
         sleep, 150
      }
     GoSub, DrawRect
-    sleep, 150
+    sleep, 200
     GoSub, ClearRect
     ; }
-    Process, Close, tempScript
+    Process, Close, Expr_Name
+    Process, Close, ExprAltUp_Name
     BlockKeyboard(false)
 Return
 
@@ -2346,6 +2334,7 @@ SendWindow:
 Return
 
 SendCtrlAdd:
+    tooltip, Sent
     WinGetClass, lClassCheck, A
 
     If (lClassCheck != lClass) {
