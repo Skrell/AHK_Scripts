@@ -201,18 +201,15 @@ ExprAltUp =
     ListLines Off
     DetectHiddenWindows, Off
     
+    #IfWinNotActive ahk_class #32770
     ~Alt Up::
-        WinGetClass, testcl, A
-        If (testcl == "#32770")
-            ExitApp
-        Else {
-            If WinExist("ahk_class #32768")
-                Send, {ENTER}
-            If WinExist("ahk_class #32768")
-                WinClose, ahk_class #32768
-            ExitApp
-        }
+        If WinExist("ahk_class #32768")
+            Send, {ENTER}
+        If WinExist("ahk_class #32768")
+            WinClose, ahk_class #32768
+        ExitApp
     Return
+    #IfWinNotActive
 )
 
 ExprTimeout =
@@ -576,7 +573,7 @@ Return
         sleep, 50
     }
 Return
-#IfWinActive
+#IfWinExist
 
 CapsLock::
     Send {Delete}
@@ -859,6 +856,7 @@ prevChromeTab()
             If !CancelClose {
                 tooltip, Waiting for `"%tit%`" to close...
                 Winclose, ahk_id %escHwndID%
+                
                 loop 10 {
                     If !WinExist("ahk_id " . escHwndID) {
                         GoSub, ClearRect
@@ -877,8 +875,10 @@ prevChromeTab()
                         WinWaitClose, ahk_id %dialog_hwndID%
                         break
                     }
-                    If !executedOnce
-                        Winclose, ahk_id %escHwndID%
+                    If !executedOnce && WinExist("ahk_id " . escHwndID) {
+                        WinGet, kill_pid, PID, ahk_id %escHwndID%
+                        Process, Close, %kill_pid%
+                    }
                 }
                 
                 If (WinExist("ahk_id " . escHwndID) && !executedOnce) {
@@ -1821,6 +1821,20 @@ Return
 Return
 #If
 
+KeepCenteringTimer:
+    MouseGetPos, , , , lctrlN
+    If (GetKeyState("Lbutton","P") || GetKeyState("Rbutton","P") || GetKeyState("LAlt","P") ) {
+        SetTimer, KeepCenteringTimer, Off
+        Return
+    }
+    Else If  (lctrlN != "SysListView321" && lctrlN != "DirectUIHWND2" && lctrlN != "DirectUIHWND3") {
+        SetTimer, KeepCenteringTimer, Off
+        Return
+    }
+    Else
+        Send, ^{NumpadAdd}
+Return
+
 #MaxThreadsPerHotkey 2
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
 ~LButton::
@@ -1875,16 +1889,17 @@ Return
                 sleep, 2
             }
             
-            If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
-                Send, ^{NumpadAdd}
-            }
+            If (prevPath != "" && currentPath != "" && prevPath != currentPath)
+                SetTimer, SendCtrlAdd, -1
+                ; SetTimer, KeepCenteringTimer, 5
             
             LbuttonEnabled     := True
             StopRecurssion     := False
             Return
         }
         Else {
-            GoSub, SendCtrlAdd
+            ; SetTimer, KeepCenteringTimer, 5
+            SetTimer, SendCtrlAdd, -1
             sleep, 100
             LbuttonEnabled     := True
             StopRecurssion     := False
@@ -1919,7 +1934,7 @@ Return
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < 325)
-        && ((LB_HexColor1 != 0xFFFFFF) || (LB_HexColor2 != 0xFFFFFF) || (LB_HexColor3  != 0xFFFFFF))
+        && ((LB_HexColor1 == 0xFFFFFF) || (LB_HexColor2 == 0xFFFFFF) || (LB_HexColor3  == 0xFFFFFF))
         && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
 
         SetTimer, SendCtrlAdd, -125
@@ -2341,10 +2356,10 @@ SendCtrlAdd:
         SetTimer, SendCtrlAdd, Off
         Return
     }
-    WinGet, lIdCheck, ID, A
 
     ; CoordMode, Mouse, Screen
-    If (!GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd") {
+    If (!GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
+        WinGet, lIdCheck, ID, A
         OutputVar1 := OutputVar2 := OutputVar3 := ""
        
         loop 100 {
@@ -2357,7 +2372,7 @@ SendCtrlAdd:
         }
         
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
-            If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && !InStr(vWinClass, "EVERYTHING", True)) {
+            If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
                 try {
                     exEl := UIA.ElementFromHandle(lIdCheck)
                     shellEl := exEl.FindFirstByName("Items View")
@@ -2394,7 +2409,7 @@ SendCtrlAdd:
             WinGet, lIdCheck2, ID, A
             If (lIdCheck == lIdCheck2) {
                 Send, ^{NumpadAdd}
-                sleep, 125
+                ; sleep, 125
             }
 
             If (lctrlN == "SysTreeView321") {
