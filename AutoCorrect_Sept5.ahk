@@ -1934,11 +1934,14 @@ Return
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < 325)
-        && ((LB_HexColor1 == 0xFFFFFF) || (LB_HexColor2 == 0xFFFFFF) || (LB_HexColor3  == 0xFFFFFF))
-        && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
+        && ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF))
+        && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
 
         SetTimer, SendCtrlAdd, -125
         }
+    Else If (lctrlN == "SysTreeView321") && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3  != 0xFFFFFF) {
+        SetTimer, SendCtrlAdd, -125
+    }
     Else
         SetTimer, SendCtrlAdd, Off
     
@@ -2349,7 +2352,6 @@ SendWindow:
 Return
 
 SendCtrlAdd:
-    tooltip, Sent
     WinGetClass, lClassCheck, A
 
     If (lClassCheck != lClass) {
@@ -2362,13 +2364,13 @@ SendCtrlAdd:
         WinGet, lIdCheck, ID, A
         OutputVar1 := OutputVar2 := OutputVar3 := ""
        
-        loop 100 {
+        loop 500 {
             ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                 break
-            sleep, 5
+            sleep, 1
         }
         
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
@@ -2398,27 +2400,28 @@ SendCtrlAdd:
             }
             
             BlockKeyboard(true)
-            loop, 50 {
+            loop, 250 {
                 ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
                 ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
                 If (FocusedControl == whatCtrl)
                     break
-                sleep, 5
+                sleep, 1
             }
                 
             WinGet, lIdCheck2, ID, A
             If (lIdCheck == lIdCheck2) {
                 Send, ^{NumpadAdd}
-                ; sleep, 125
+                tooltip, sent to %whatCtrl%
             }
 
             If (lctrlN == "SysTreeView321") {
-                loop, 100 {
+                sleep, 125
+                loop, 500 {
                     ControlFocus , SysTreeView321, ahk_id %lIdCheck%
                     ControlGetFocus, testCtrlFocus , ahk_id %lIdCheck%
                     If (testCtrlFocus == "SysTreeView321")
                         break
-                    sleep, 5
+                    sleep, 1
                 }
             }
             BlockKeyboard(false)
