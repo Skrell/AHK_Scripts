@@ -1628,7 +1628,7 @@ Cycle(direction)
         loop {
             If (GroupedWindows.length() >= 2 && cycling)
             {
-                KeyWait, Lbutton, D  T.1
+                KeyWait, Lbutton, D  T0.1
                 If !ErrorLevel {
                     MouseGetPos, , , lbhwnd, 
                     WinGetTitle, actTitle, ahk_id %lbhwnd%
@@ -1641,7 +1641,7 @@ Cycle(direction)
                     KeyWait, Lbutton, U
                 }
             
-                KeyWait, Tab, D  T.1
+                KeyWait, Tab, D  T0.1
                 If !ErrorLevel
                 {
                     If direction {
@@ -2368,13 +2368,14 @@ SendCtrlAdd:
             ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %lIdCheck%
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %lIdCheck%
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %lIdCheck%
+            ControlGet, HasEdit, Visible ,, Edit1,  ahk_id %lIdCheck%
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                 break
             sleep, 1
         }
         
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
-            If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
+            If ((lClassCheck == "CabinetWClass" || (lClassCheck == "#32770" && HasEdit == 1))) {
                 try {
                     exEl := UIA.ElementFromHandle(lIdCheck)
                     shellEl := exEl.FindFirstByName("Items View")
@@ -2387,44 +2388,48 @@ SendCtrlAdd:
                     UIA.ConnectionTimeout := 6000
                     Return
                 }
-            }
 
-            If (OutputVar1 == 1) {
-                FocusedControl := "SysListView321"
-            }
-            Else If (OutputVar2 == 1) {
-                FocusedControl := "DirectUIHWND2"
-            }
-            Else If (OutputVar3 == 1) {
-                FocusedControl := "DirectUIHWND3"
-            }
-            
-            BlockKeyboard(true)
-            loop, 250 {
-                ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
-                ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
-                If (FocusedControl == whatCtrl)
-                    break
-                sleep, 1
-            }
+                If (OutputVar1 == 1) {
+                    FocusedControl := "SysListView321"
+                }
+                Else If (OutputVar2 == 1) {
+                    FocusedControl := "DirectUIHWND2"
+                }
+                Else If (OutputVar3 == 1) {
+                    FocusedControl := "DirectUIHWND3"
+                }
                 
-            WinGet, lIdCheck2, ID, A
-            If (lIdCheck == lIdCheck2) {
-                Send, ^{NumpadAdd}
-                tooltip, sent to %whatCtrl%
-            }
-
-            If (lctrlN == "SysTreeView321") {
-                sleep, 125
-                loop, 500 {
-                    ControlFocus , SysTreeView321, ahk_id %lIdCheck%
-                    ControlGetFocus, testCtrlFocus , ahk_id %lIdCheck%
-                    If (testCtrlFocus == "SysTreeView321")
+                BlockKeyboard(true)
+                loop, 250 {
+                    ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
+                    ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
+                    If (FocusedControl == whatCtrl)
                         break
                     sleep, 1
                 }
+                    
+                WinGet, lIdCheck2, ID, A
+                If (lIdCheck == lIdCheck2) {
+                    Send, ^{NumpadAdd}
+                    tooltip, sent to %whatCtrl%
+                }
+
+                If (lctrlN == "SysTreeView321") {
+                    sleep, 125
+                    loop, 500 {
+                        ControlFocus , SysTreeView321, ahk_id %lIdCheck%
+                        ControlGetFocus, testCtrlFocus , ahk_id %lIdCheck%
+                        If (testCtrlFocus == "SysTreeView321")
+                            break
+                        sleep, 1
+                    }
+                }
+                BlockKeyboard(false)
             }
-            BlockKeyboard(false)
+            Else {
+                Send, ^{NumpadAdd}
+                tooltip, sent
+            }
         }
     }
 Return
@@ -3142,8 +3147,22 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     loop
     {
-        KeyWait, q, D  T.25
-        
+        KeyWait, Lbutton, D T0.1
+        If !ErrorLevel {
+            MouseGetPos, , , lbhwnd, 
+            WinGetTitle, actTitle, ahk_id %lbhwnd%
+            WinGet, pp, ProcessPath , ahk_id %lbhwnd%
+            
+            LclickSelected := True
+            GoSub, DrawRect
+            DrawWindowTitlePopup(actTitle, pp, True)
+            WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
+            lastActWinID := lbhwnd
+
+            KeyWait, Lbutton, U
+        }
+    
+        KeyWait, q, D T0.1
         If !ErrorLevel
         {
             WinGet, mmState, MinMax, ahk_id %hwndId%
@@ -3152,6 +3171,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             }
             WinActivate, ahk_id %hwndId%
             lastActWinID := hwndId
+
             WinGetTitle, actTitle, ahk_id %hwndId%
             WinGet, pp, ProcessPath , ahk_id %hwndId%
             
@@ -3188,7 +3208,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     }
     until (!GetKeyState("LAlt", "P"))
     Gui, WindowTitle: Destroy
-   
+    
     WinActivate, ahk_id %lastActWinID%
 
     loop % windowsToMinimize.length()
@@ -3212,7 +3232,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         counter := finalWindowsListWithProcAndClass.MaxIndex()
 
     If (counter > 2) {
-        WinSet, AlwaysOnTop, On, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+        WinSet, AlwaysOnTop, On, % "ahk_id " lastActWinID
         WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
         If finalWindowsListWithProcAndClass.MaxIndex() >= 4 {
@@ -3233,10 +3253,10 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         If finalWindowsListWithProcAndClass.MaxIndex() >= 1 {
             WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[1]
             If (isMin > -1)
-                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
+                WinActivate, % "ahk_id " lastActWinID
         }
 
-        WinSet, AlwaysOnTop, Off, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+        WinSet, AlwaysOnTop, Off, % "ahk_id " lastActWinID
     }
     BlockKeyboard(false)
     SetTimer, track, On
@@ -5114,6 +5134,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::reuse::re-use
 ::fucniton::function
 ::waas::was
 ::haad::had
