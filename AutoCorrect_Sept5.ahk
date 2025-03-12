@@ -438,8 +438,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
 
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
-                    BlockKeyboard(true)
-                    tooltip, 
+                    ; BlockKeyboard(true)
+                    BlockInput, On
                     loop, 100 {
                         ControlGetFocus, initFocusedCtrl , % "ahk_id " hWnd
                         If (initFocusedCtrl != "")
@@ -490,7 +490,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         }
                     }
                     ; tooltip, returned to edit
-                    BlockKeyboard(false)
+                    ; BlockKeyboard(false)
+                    BlockInput, Off
                 }
             }
             Critical, Off
@@ -1838,7 +1839,7 @@ Return
 #MaxThreadsPerHotkey 2
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
 ~LButton::
-    
+    tooltip,
     StopRecurssion     := True
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, lbhwnd, lctrlN
@@ -1878,7 +1879,7 @@ Return
             }
         }
         
-        KeyWait, Lbutton, U T3
+        ; KeyWait, Lbutton, U T3
         LbuttonEnabled     := False
         
         If (lClass == "CabinetWClass" || lClass == "#32770") {
@@ -2399,7 +2400,7 @@ SendCtrlAdd:
                     FocusedControl := "DirectUIHWND3"
                 }
                 
-                BlockKeyboard(true)
+                BlockInput, On
                 loop, 250 {
                     ControlFocus, %FocusedControl%, ahk_id %lIdCheck%
                     ControlGetFocus, whatCtrl, ahk_id %lIdCheck%
@@ -2424,7 +2425,7 @@ SendCtrlAdd:
                         sleep, 1
                     }
                 }
-                BlockKeyboard(false)
+                BlockInput, Off
             }
             Else {
                 Send, ^{NumpadAdd}
@@ -2560,8 +2561,10 @@ RButton & WheelDown::
 Return
 #If
 
+#If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
 ~WheelUp::
-    Hotkey, ~WheelUp, Off
+    ; Hotkey, ~WheelDown, Off
+    pauseWheel := True
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
 
@@ -2574,7 +2577,6 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
-            Critical, On
             BlockInput, On
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
@@ -2585,11 +2587,12 @@ Return
                 Send, {Ctrl Up}
             }
             BlockInput, Off
-            Critical, Off
         }
     }
-    Hotkey, ~WheelUp, On
+    ; Hotkey, ~WheelUp, On
+    pauseWheel := False
 Return
+#If
 
 #If MouseIsOverTitleBar() || disableWheeldown
 WheelDown::
@@ -2617,7 +2620,6 @@ Return
         ControlFocus , %wuCtrl%, % "ahk_id " wdID
         ControlGetFocus, FocusedControl, A
         If (FocusedControl == wuCtrl) {
-            Critical, On
             BlockInput, On
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
@@ -2628,7 +2630,6 @@ Return
                 Send, {Ctrl Up}
             }
             BlockInput, Off
-            Critical, Off
         }
     }
     pauseWheel := False
@@ -4980,7 +4981,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:ghz::Ghz
 :?:aition::ation
 :?:aotin::ation
-:?:ation::ation
 :?:gbe::GbE
 :?:noin::nion
 :?:iosn::ions
