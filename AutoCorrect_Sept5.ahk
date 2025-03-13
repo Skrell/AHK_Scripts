@@ -2545,9 +2545,10 @@ Return
 RButton & WheelUp::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
-    MouseGetPos, , , target
-    WinActivate, ahk_id %target%
-    Send, {LCtrl down}{Home}{LCtrl up}
+    MouseGetPos, , , targetID, targetCtrl
+    WinActivate, ahk_id %targetID%
+    ControlFocus, %targetCtrl%, ahk_id %targetID%
+    Send, ^{Home}
 Return
 #If
 
@@ -2555,9 +2556,10 @@ Return
 RButton & WheelDown::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
-    MouseGetPos, , , target
-    WinActivate, ahk_id %target%
-    Send, {LCtrl down}{End}{LCtrl up}
+    MouseGetPos, , , targetID, targetCtrl
+    WinActivate, ahk_id %targetID%
+    ControlFocus, %targetCtrl%, ahk_id %targetID%
+    Send, ^{End}
 Return
 #If
 
@@ -4388,19 +4390,24 @@ MouseIsOverTaskbar() {
 
 MouseIsOverTaskbarBlank() {
     Global UIA
-    MouseGetPos, x, y, hwnd
+    MouseGetPos, x, y, hwnd, hctrl
     WinGetClass, cl, ahk_id %hwnd%
     try {
-        If (InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false)) {
-            pt := UIA.ElementFromPoint(x,y,False)
-            return (pt.CurrentControlType == 50033)
+        If (InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false) && hctrl != "TrayNotifyWnd1") {
+            If WinExist("ahk_class TaskListThumbnailWnd") {
+                return False
+            }
+            Else {
+                pt := UIA.ElementFromPoint(x,y,False)
+                ; tooltip, % "val is " pt.CurrentControlType
+                return (pt.CurrentControlType == 50033)
+            }
         }
         Else
             Return False
     } catch e {
         return False
     }
-    	
 }
 
 DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
@@ -4637,6 +4644,7 @@ SetTitleMatchMode, 2
 ::begin::
 ::mic::
 ::poke::
+::arose::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
