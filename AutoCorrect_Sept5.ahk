@@ -334,25 +334,28 @@ Hoty:
     else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 3) {
         Send % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
+    disableEnter := False
+    If StopAutoFix
+        X_PriorPriorHotKey := 
 FixSlash:
-    If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_ThisHotKey == "~/")
+    If !IsGoogleDocWindow() && (!StopAutoFix && StrLen(A_PriorHotkey) == 2 && inStr(keys, Substr(A_PriorHotkey,2,1), false) && A_ThisHotKey == "~/")
         disableEnter := True
-    Else if (!IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, Substr(A_ThisHotKey,2,1), false)))
-        disableEnter := False
+    ; Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, Substr(A_ThisHotKey,2,1), false)))
+        ; disableEnter := False
         
-    If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999) {
+    ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
+    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)) {
         Send, % "{BS}{BS}{?}{SPACE}"
         disableEnter := False
     }
-    Else If !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "Enter" && A_TimeSincePriorHotkey<999) {
-        Send, % "{BS}{BS}{?}{ENTER}"
+    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "Enter" && A_TimeSincePriorHotkey<999)) {
+        Send, % "{BS}{?}{ENTER}"
         disableEnter := False
     }
-    If (StrLen(A_PriorHotkey) == 2)
+    If (StrLen(A_PriorHotkey) == 2) && inStr(keys, Substr(A_PriorHotkey,2,1), false)  
         X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
-    Else
-        X_PriorPriorHotKey := 
-
+    ; Else
+        ; X_PriorPriorHotKey := A_PriorHotkey
     ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
@@ -581,58 +584,62 @@ CapsLock::
 Return
 
 !a::
+    StopAutoFix := true
     Send, {home}
     Hotstring("Reset")
+    StopAutoFix := false
 Return
 
 +!a::
+    StopAutoFix := true
     Send, +{home}
     Hotstring("Reset")
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
+    StopAutoFix := false
 Return
 
 !;::
+    StopAutoFix := true
     If GetKeyState("a")
         Send, +{end}
     Else
         Send, {end}
     Hotstring("Reset")
+    StopAutoFix := false
 Return
 
 !+;::
+    StopAutoFix := true
     Send, +{end}
     Hotstring("Reset")
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
+    StopAutoFix := false
 Return
 
 !+i::
+    StopAutoFix := true
     Send +{UP}
     Hotstring("Reset")
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
+    StopAutoFix := false
 Return
 
 !+k::
+    StopAutoFix := true
     Send +{DOWN}
     Hotstring("Reset")
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
+    StopAutoFix := false
 Return
 
 !+j::
+    StopAutoFix := true
     Send ^+{LEFT}
     Hotstring("Reset")
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
+    StopAutoFix := false
 Return
 
 !+l::
+    StopAutoFix := true
     Send ^+{RIGHT}
     Hotstring("Reset")
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
+    StopAutoFix := false
 Return
 
 !+'::
@@ -642,8 +649,6 @@ Return
     store := """" . store . """"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
 Return
 
 !+[::
@@ -653,8 +658,6 @@ Return
     store := "{" . store . "}"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
 Return
 
 !+]::
@@ -664,8 +667,6 @@ Return
     store := "{" . store . "}"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
 Return
 
 !+<::
@@ -675,8 +676,6 @@ Return
     store := "<" . store . ">"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
 Return
 
 !+>::
@@ -686,8 +685,6 @@ Return
     store := "<" . store . ">"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
 Return
 
 !+(::
@@ -697,8 +694,6 @@ Return
     store := "(" . store . ")"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
 Return
 
 !+)::
@@ -708,34 +703,43 @@ Return
     store := "(" . store . ")"
     Clip(store)
     Critical, Off
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
 Return
 
 !i::
+    StopAutoFix := true
     Send {UP}
+    Hotstring("Reset")
+    StopAutoFix := false
 Return
 
 !k::
+    StopAutoFix := true
     Send {DOWN}
+    Hotstring("Reset")
+    StopAutoFix := false
 Return
 
 !j::
+    StopAutoFix := true
     Send ^{LEFT}
     If GetKeyState("LCtrl")
         Send, {LCtrl Up}
+    StopAutoFix := false
 Return
 
 !l::
+    StopAutoFix := true
     Send ^{RIGHT}
     If GetKeyState("LCtrl")
         Send, {LCtrl Up}
+    StopAutoFix := false
 Return
 
 #If disableEnter
 Enter::
     GoSub, FixSlash
-    GoSub, Hoty
+    ; GoSub, Hoty
+    disableEnter := false
 Return
 #If
 
@@ -753,16 +757,13 @@ Return
 #+s::Return
 
 ~Space::
+    ; GoSub, Hoty
     GoSub, FixSlash
-    GoSub, Hoty
 Return
 
 ; duplicate hotkey in case shift is accidentally  held as a result of attempting to type a '?'
 ~+Space::
-    GoSub, FixSlash
     GoSub, Hoty
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, {LShift Up}
 Return
 
 ~^Backspace::
@@ -1885,7 +1886,7 @@ Return
         If (lClass == "CabinetWClass" || lClass == "#32770") {
             loop 100 {
                 currentPath := GetExplorerPath(lbhwnd)
-                If (prevPath != currentPath)
+                If (currentPath != "")
                     break
                 sleep, 2
             }
@@ -5103,6 +5104,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:cmaket::CMakeLists.txt
 :*:unfo::unfortunately, `
 :*:Unfo::Unfortunately, `
+:*:chara::character
+:*:chars::characters
 :*:privi::privilege `
 :*:prive::privilege `
 :*:envi::environment `
