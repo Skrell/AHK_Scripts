@@ -1837,6 +1837,34 @@ KeepCenteringTimer:
         Send, ^{NumpadAdd}
 Return
 
+#If MouseIsOverTitleBar()
+^LButton::
+    MouseGetPos, , , actID, 
+    WinGet, targetProcess, ProcessName, ahk_id %actID%
+    WinGetClass, targetClass, ahk_id %actID%
+    WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+    loop % windowsFromProc 
+    {
+        hwndID := windowsFromProc%A_Index%
+        WinGet, isMin, MinMax, ahk_id %hwndId%
+        If (isMin == 0) {
+            If (MonCount > 1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                If currentMonHasActWin
+                    WinSet, AlwaysOnTop, On, ahk_id %hwndId%
+                    WinSet, AlwaysOnTop, Off, ahk_id %hwndId%
+            }
+            Else {
+                WinSet, AlwaysOnTop, On, ahk_id %hwndId%
+                WinSet, AlwaysOnTop, Off, ahk_id %hwndId%
+            }
+        }
+    }
+    WinActivate, ahk_id %actID%
+Return
+#If
+
 #MaxThreadsPerHotkey 2
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
 ~LButton::
@@ -3175,7 +3203,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             }
             WinActivate, ahk_id %hwndId%
             lastActWinID := hwndId
-
             WinGetTitle, actTitle, ahk_id %hwndId%
             WinGet, pp, ProcessPath , ahk_id %hwndId%
             
@@ -3213,8 +3240,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     until (!GetKeyState("LAlt", "P"))
     Gui, WindowTitle: Destroy
     
-    WinActivate, ahk_id %lastActWinID%
-
     loop % windowsToMinimize.length()
     {
         tempId := windowsToMinimize[A_Index]
@@ -3236,32 +3261,33 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         counter := finalWindowsListWithProcAndClass.MaxIndex()
 
     If (counter > 2) {
-        WinSet, AlwaysOnTop, On, % "ahk_id " lastActWinID
+        WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
+        WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
         WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
-        If finalWindowsListWithProcAndClass.MaxIndex() >= 4 {
+        If (finalWindowsListWithProcAndClass.MaxIndex() >= 4 && finalWindowsListWithProcAndClass[4] != lastActWinID) {
             WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[4]
             If (isMin > -1)
                 WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[4]
         }
-        If finalWindowsListWithProcAndClass.MaxIndex() >= 3 {
+        If (finalWindowsListWithProcAndClass.MaxIndex() >= 3 && finalWindowsListWithProcAndClass[3] != lastActWinID) {
             WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[3]
             If (isMin > -1)
                 WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[3]
         }
-        If finalWindowsListWithProcAndClass.MaxIndex() >= 2 {
+        If (finalWindowsListWithProcAndClass.MaxIndex() >= 2 &&  finalWindowsListWithProcAndClass[2] != lastActWinID) {
             WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[2]
             If (isMin > -1)
                 WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[2]
         }
-        If finalWindowsListWithProcAndClass.MaxIndex() >= 1 {
+        If (finalWindowsListWithProcAndClass.MaxIndex() >= 1 && finalWindowsListWithProcAndClass[1] != lastActWinID) {
             WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[1]
             If (isMin > -1)
-                WinActivate, % "ahk_id " lastActWinID
+                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
         }
-
-        WinSet, AlwaysOnTop, Off, % "ahk_id " lastActWinID
     }
+    WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
+    WinActivate, ahk_id %lastActWinID%
     BlockKeyboard(false)
     SetTimer, track, On
 }
