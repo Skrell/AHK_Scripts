@@ -76,7 +76,7 @@ Global disableWheeldown := False
 Global pauseWheel  := False
 Global EVENT_SYSTEM_MENUPOPUPSTART := 0x0006
 Global EVENT_SYSTEM_MENUPOPUPEND   := 0x0007
-Global TimeOfLastKey := 0
+Global TimeOfLastKey := A_TickCount
 Global lbX1
 Global lbX2
 
@@ -324,21 +324,22 @@ Return
 
 
 Hoty:
-    CapCount := (SubStr(A_PriorHotKey,2,1)="+" && A_TimeSincePriorHotkey<999 && A_PriorHotKey != "~+SPACE") ? CapCount+1 : 1
+    CapCount := (SubStr(A_PriorHotKey,2,1)="+" && inStr(keys, Substr(A_PriorHotkey,3,1)) && A_TimeSincePriorHotkey<999 && StrLen(A_PriorHotkey) == 3) ? CapCount+1 : 1
+    ; tooltip %A_PriorHotkey% - %CapCount%
     If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && (SubStr(A_ThisHotKey,2,1)=="'" || SubStr(A_ThisHotKey,2,1)=="-")) {
         return
     }
     else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && StrLen(A_ThisHotKey) == 3 && inStr(keys, Substr(A_ThisHotKey,3,1))) {
         Send % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
-    else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 3) {
+    else If !IsGoogleDocWindow() && (!StopAutoFix && (CapCount == 3 || (CapCount == 2 && A_ThisHotkey == "~Space") )) {
         Send % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
-    disableEnter := False
     If StopAutoFix
         X_PriorPriorHotKey := 
 FixSlash:
-    If !IsGoogleDocWindow() && (!StopAutoFix && StrLen(A_PriorHotkey) == 2 && inStr(keys, Substr(A_PriorHotkey,2,1), false) && A_ThisHotKey == "~/")
+    TimeOfLastKey := A_TickCount
+    If !IsGoogleDocWindow() && (!StopAutoFix && StrLen(A_PriorHotkey) == 2 && inStr(keys, subStr(A_PriorHotKey, 2, 1), false) && A_ThisHotkey == "~/")
         disableEnter := True
     ; Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, Substr(A_ThisHotKey,2,1), false)))
         ; disableEnter := False
@@ -449,7 +450,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             break
                         sleep, 5
                     }
-                    
+                    ; tooltip, init focus is %initFocusedCtrl%
                     If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                         If (vWinClass != "EVERYTHING_(1.5a)") {
                             exEl := UIA.ElementFromHandle(hWnd)
@@ -581,6 +582,7 @@ Return
 
 CapsLock::
     Send {Delete}
+    TimeOfLastKey := A_TickCount
 Return
 
 !a::
@@ -757,7 +759,7 @@ Return
 #+s::Return
 
 ~Space::
-    ; GoSub, Hoty
+    GoSub, Hoty
     GoSub, FixSlash
 Return
 
@@ -768,6 +770,14 @@ Return
 
 ~^Backspace::
     Hotstring("Reset")
+Return
+
+~$Backspace::
+    TimeOfLastKey := A_TickCount
+Return
+
+~$Delete::
+    TimeOfLastKey := A_TickCount
 Return
 
 $F2::
@@ -1820,6 +1830,64 @@ Return
     KeyWait, LButton, U T5
     MouseGetPos, lbX2, lbY2,
     StopRecurssion     := False
+Return
+#If
+
+#If MouseIsOverTaskbarWidgets()
+~^Lbutton::
+    StopRecurssion := True
+    SetTimer, track, Off
+	SetTimer, keyTrack, Off
+    DetectHiddenWindows, Off
+    SysGet, MonCount, MonitorCount
+
+    KeyWait, Lbutton, U T3
+
+    sleep, 125
+    WinGet, winList, List, 
+    loop % winList
+    {
+        hwndID := winList%A_Index%
+        If IsAltTabWindow(hwndId) {
+            WinGet, targetID, ID, ahk_id %hwndID%
+            break
+        }
+    }
+    WinGetClass, targetClass, ahk_id %targetID%
+
+    If (targetClass != "Windows.UI.Core.CoreWindow" && targetClass != "TaskListThumbnailWnd") {
+        WinGet, targetProcess, ProcessName, ahk_id %targetID%
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc 
+        {
+            hwndID := windowsFromProc%A_Index%
+            WinGet, isMin, MinMax, ahk_id %hwndId%
+            If (isMin == -1) {
+                WinRestore, ahk_id %hwndId%
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                    If !currentMonHasActWin
+                        WinMinimize, ahk_id %hwndId%
+                }
+            }
+            Else If (isMin == 0) {
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                    If currentMonHasActWin
+                        WinActivate, ahk_id %hwndId%
+                }
+                Else {
+                    WinActivate, ahk_id %hwndId%
+                }
+            }
+        }
+    }
+    WinActivate, ahk_id %targetID%
+    SetTimer, track, On
+	SetTimer, keyTrack, On
+    StopRecurssion := False
 Return
 #If
 
@@ -3320,14 +3388,14 @@ HideTrayTip() {
 keyTrack() {
     ListLines, Off
     Global StopAutoFix
-    Static LastKey1 := ""
     Global TimeOfLastKey
 
     ControlGetFocus, currCtrl, A
     WinGetClass, currClass, A
     If (currCtrl == "Edit1" && InStr(currClass, "EVERYTHING", true)) {
         StopAutoFix := True
-        If ((A_TickCount-TimeOfLastKey) > 650 && A_PriorKey != "Enter" && A_PriorKey != "LButton") {
+        If ((A_TickCount-TimeOfLastKey) < 650 && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
+            SetTimer, keyTrack, Off
             ControlGet, OutputVar1, Visible ,, SysListView321, A
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
@@ -3336,37 +3404,18 @@ keyTrack() {
                 If (testClass == currClass) {
                     BlockKeyboard(true)
                     Send, ^{NumpadAdd}
-                    If GetKeyState("Ctrl") && !GetKeyState("Ctrl", "P")
-                        Send, {Ctrl Up}
-
-                    If GetKeyState("NumpadAdd") && !GetKeyState("NumpadAdd", "P")
-                        Send, {NumpadAdd Up}
-                
                     BlockKeyboard(false)
+                    sleep, 400
                 }
-                TimeOfLastKey := A_TickCount
             }
+            SetTimer, keyTrack, On
         }
-        ListLines, On
-        Return
     }
     Else If (currClass == "XLMAIN") {
         StopAutoFix := True
     }
     Else
         StopAutoFix := False
-
-    If (LastKey1 != A_PriorHotkey) {
-        LastKey1 := A_PriorHotkey
-        TimeOfLastKey := A_TickCount
-    }
-    
-    If GetKeyState("Alt") && !GetKeyState("Alt","P")
-        Send, {Alt Up}
-    If GetKeyState("Ctrl") && !GetKeyState("Ctrl","P")
-        Send, {Ctrl Up}
-    If GetKeyState("Shift") && !GetKeyState("Shift","P")
-        Send, {Shift Up}
         
     ListLines, On
 Return
@@ -4409,7 +4458,18 @@ MouseIsOverTaskbar() {
     MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
     
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If  InStr(mClass,"Shell",false) && (InStr(mClass,"TrayWnd",false) && CtrlUnderMouseId != "ToolbarWindow323" && CtrlUnderMouseId != "TrayNotifyWnd1")
+    If (InStr(mClass,"TrayWnd",false) && InStr(mClass,"Shell",false) && CtrlUnderMouseId != "ToolbarWindow323" && CtrlUnderMouseId != "TrayNotifyWnd1")
+        Return True
+    Else
+        Return False
+}
+
+MouseIsOverTaskbarWidgets() {
+    CoordMode, Mouse, Screen
+    MouseGetPos, , , WindowUnderMouseID
+    
+    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+    If (mClass == "TaskListThumbnailWnd" || mClass == "Windows.UI.Core.CoreWindow")
         Return True
     Else
         Return False
