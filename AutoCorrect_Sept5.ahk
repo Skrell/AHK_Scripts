@@ -79,6 +79,8 @@ Global EVENT_SYSTEM_MENUPOPUPEND   := 0x0007
 Global TimeOfLastKey := A_TickCount
 Global lbX1
 Global lbX2
+Global currentMon := 0
+Global previousMon := 0
 
 Process, Priority,, High
 
@@ -429,7 +431,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     break
                 sleep, 5
             }
-            If (!GetKeyState("LCtrl") && !GetKeyState("LShift")) {
+            ; If (!GetKeyState("LCtrl") && !GetKeyState("LShift")) {
                 OutputVar1 := OutputVar2 := OutputVar3 := ""
 
                 loop 200 {
@@ -497,7 +499,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     ; BlockKeyboard(false)
                     BlockInput, Off
                 }
-            }
+            ; }
             Critical, Off
         }
 
@@ -1906,30 +1908,71 @@ KeepCenteringTimer:
 Return
 
 #If MouseIsOverTitleBar()
-^LButton::
-    MouseGetPos, , , actID, 
-    WinGet, targetProcess, ProcessName, ahk_id %actID%
-    WinGetClass, targetClass, ahk_id %actID%
-    WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-    loop % windowsFromProc 
-    {
-        hwndID := windowsFromProc%A_Index%
-        WinGet, isMin, MinMax, ahk_id %hwndId%
-        If (isMin == 0) {
-            If (MonCount > 1) {
-                currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
-                If currentMonHasActWin
-                    WinSet, AlwaysOnTop, On, ahk_id %hwndId%
-                    WinSet, AlwaysOnTop, Off, ahk_id %hwndId%
-            }
-            Else {
-                WinSet, AlwaysOnTop, On, ahk_id %hwndId%
-                WinSet, AlwaysOnTop, Off, ahk_id %hwndId%
+~^LButton::
+    DetectHiddenWindows, Off
+    SetTimer, track, Off
+    MouseGetPos, mx1, my1, actID,
+    KeyWait, Lbutton, U T5
+    MouseGetPos, mx2, my2, ,
+    If (MonCount > 1)
+        currentMon := MWAGetMonitorMouseIsIn()
+        
+    If (abs(mx2-mx1) < 15 && abs(my2-my1) < 15) {
+        WinSet, AlwaysOnTop, On, ahk_id %actID%
+        WinGet, targetProcess, ProcessName, ahk_id %actID%
+        WinGetClass, targetClass, ahk_id %actID%
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc 
+        {
+            hwndID := windowsFromProc%A_Index%
+            WinGet, isMin, MinMax, ahk_id %hwndId%
+            If (isMin == 0) {
+                If (MonCount > 1) {
+                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                    If currentMonHasActWin
+                        ; WinSet, AlwaysOnTop, On, ahk_id %hwndId%
+                        ; WinSet, AlwaysOnTop, Off, ahk_id %hwndId%
+                        WinActivate, ahk_id %hwndId%
+                }
+                Else {
+                    ; WinSet, AlwaysOnTop, On, ahk_id %hwndId%
+                    ; WinSet, AlwaysOnTop, Off, ahk_id %hwndId%
+                    WinActivate, ahk_id %hwndId%
+                }
             }
         }
+        WinActivate, ahk_id %actID%
+        WinSet, AlwaysOnTop, Off, ahk_id %actID%
+        WinActivate, ahk_id %actID%
     }
-    WinActivate, ahk_id %actID%
+    Else {
+        WinSet, AlwaysOnTop, On, ahk_id %actID%
+        WinGet, targetProcess, ProcessName, ahk_id %actID%
+        WinGetClass, targetClass, ahk_id %actID%
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc 
+        {
+            hwndID := windowsFromProc%A_Index%
+            WinGet, isMin, MinMax, ahk_id %hwndId%
+            If (isMin == 0) {
+                If (MonCount > 1) {
+                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                    If !currentMonHasActWin {
+                        WinActivate, ahk_id %hwndId%
+                        Send, #+{Left} 
+                    }
+                }
+                Else {
+                    break
+                }
+            }
+        }
+        WinActivate, ahk_id %actID%
+        WinSet, AlwaysOnTop, Off, ahk_id %actID%
+        WinActivate, ahk_id %actID%
+        previousMon := currentMon
+    }
+    SetTimer, track, On
 Return
 #If
 
@@ -3423,10 +3466,9 @@ Return
 
 track() {
     ListLines Off
-    Global MonCount, MonNum, moving
-    Static x, y, lastX, lastY, lastMon, currentMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
+    Global MonCount, MonNum, moving, currentMon, previousMon
+    Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
-    Static previousMon := 0
 
     WinGet, actwndId, ID, A
     MouseGetPos x, y, hwndId
@@ -5231,6 +5273,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::outtage::outage
 ::reuse::re-use
 ::fucniton::function
 ::waas::was
