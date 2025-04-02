@@ -334,7 +334,7 @@ Hoty:
     else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && StrLen(A_ThisHotKey) == 3 && inStr(keys, Substr(A_ThisHotKey,3,1))) {
         Send % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
-    else If !IsGoogleDocWindow() && (!StopAutoFix && (CapCount == 3 || (CapCount == 2 && A_ThisHotkey == "~Space") )) {
+    else If !IsGoogleDocWindow() && (!StopAutoFix && (CapCount == 3 || (CapCount == 2 && (A_ThisHotkey == "~Space" || A_ThisHotkey == "~." || A_ThisHotkey == "~?" || A_ThisHotkey == "~!") ))) {
         Send % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
     If StopAutoFix
@@ -711,31 +711,29 @@ Return
 
 !i::
     StopAutoFix := true
-    Send {UP}
+    Send, {UP}
     Hotstring("Reset")
     StopAutoFix := false
 Return
 
 !k::
     StopAutoFix := true
-    Send {DOWN}
+    Send, {DOWN}
     Hotstring("Reset")
     StopAutoFix := false
 Return
 
 !j::
     StopAutoFix := true
-    Send ^{LEFT}
-    If GetKeyState("LCtrl")
-        Send, {LCtrl Up}
+    Send, ^{LEFT}
+    ; Send, {LEFT}
+    ; Send, ^{RIGHT}
     StopAutoFix := false
 Return
 
 !l::
     StopAutoFix := true
-    Send ^{RIGHT}
-    If GetKeyState("LCtrl")
-        Send, {LCtrl Up}
+    Send, ^{RIGHT}
     StopAutoFix := false
 Return
 
@@ -3239,7 +3237,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     {
         hwndID := windowsListWithSameProcessAndClass%A_Index%
         WinGetTitle, tit, ahk_id %hwndID%
-        
+        WinGet, mmState, MinMax, ahk_id %hwndID%
         If (MonCount > 1) {
             currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
         }
@@ -3247,7 +3245,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             currentMonHasActWin := True
         }
 
-        If (currentMonHasActWin && tit != "") {
+        If (currentMonHasActWin && tit != ""  && mmState > -1) {
             finalWindowsListWithProcAndClass.push(hwndID)
         }
     }
