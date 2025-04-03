@@ -324,14 +324,13 @@ listLines_label:
     ListLines
 Return
 
-
 Hoty:
-    CapCount := (SubStr(A_PriorHotKey,2,1)="+" && inStr(keys, Substr(A_PriorHotkey,3,1)) && A_TimeSincePriorHotkey<999 && StrLen(A_PriorHotkey) == 3) ? CapCount+1 : 1
+    CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey<999) ? CapCount+1 : 1 ; note that CapCount is ALWAYS at least 1
     ; tooltip %A_PriorHotkey% - %CapCount%
     If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && (SubStr(A_ThisHotKey,2,1)=="'" || SubStr(A_ThisHotKey,2,1)=="-")) {
         return
     }
-    else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && StrLen(A_ThisHotKey) == 3 && inStr(keys, Substr(A_ThisHotKey,3,1))) {
+    else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && IsThisHotKeyCapital()) {
         Send % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
     else If !IsGoogleDocWindow() && (!StopAutoFix && (CapCount == 3 || (CapCount == 2 && (A_ThisHotkey == "~Space" || A_ThisHotkey == "~." || A_ThisHotkey == "~?" || A_ThisHotkey == "~!") ))) {
@@ -339,13 +338,12 @@ Hoty:
     }
     If StopAutoFix
         X_PriorPriorHotKey := 
+Return
+
 FixSlash:
     TimeOfLastKey := A_TickCount
-    If !IsGoogleDocWindow() && (!StopAutoFix && StrLen(A_PriorHotkey) == 2 && inStr(keys, subStr(A_PriorHotKey, 2, 1), false) && A_ThisHotkey == "~/")
+    If !IsGoogleDocWindow() && (!StopAutoFix && IsPriorHotKeyLetterKey()) && A_ThisHotkey == "~/"
         disableEnter := True
-    ; Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, Substr(A_ThisHotKey,2,1), false)))
-        ; disableEnter := False
-        
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
     If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)) {
         Send, % "{BS}{BS}{?}{SPACE}"
@@ -355,11 +353,28 @@ FixSlash:
         Send, % "{BS}{?}{ENTER}"
         disableEnter := False
     }
-    If (StrLen(A_PriorHotkey) == 2) && inStr(keys, Substr(A_PriorHotkey,2,1), false)  
-        X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1)
-    ; Else
-        ; X_PriorPriorHotKey := A_PriorHotkey
-    ;------------------------------------------------------------------------------
+    If IsPriorHotKeyLowerCase()   ; as long as a letter key is pressed we record the priorprior hotkey
+        X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1) ; record the letter key pressed
+    If IsPriorHotKeyCapital()
+        X_PriorPriorHotKey := Substr(A_PriorHotkey,3,1) ; record only the letter key pressed if captialized
+Return
+;------------------------------------------------------------------------------
+IsPriorHotKeyLetterKey() {
+    return (IsPriorHotKeyCapital() || IsPriorHotKeyLowerCase())
+}
+IsPriorHotKeyCapital() {
+    Global keys
+    return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,2,1)="+" && inStr(keys, Substr(A_PriorHotkey,3,1), false))
+}
+IsPriorHotKeyLowerCase() {
+    Global keys
+    return (StrLen(A_PriorHotkey) == 2 && inStr(keys, Substr(A_PriorHotkey,2,1), false))
+}
+IsThisHotKeyCapital() {
+    Global keys
+    return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,2,1)="+" && inStr(keys, Substr(A_ThisHotKey,3,1), false))
+}
+;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
@@ -524,24 +539,24 @@ PreventRecur() {
 Return
 }
 
-CapsCorrectionFront($) {
-    tofix := $.Value(2)
-    StringLower, fixed, tofix
-    Send, % $.Value(1) fixed $.Value(3)
-Return
-}
+; CapsCorrectionFront($) {
+    ; tofix := $.Value(2)
+    ; StringLower, fixed, tofix
+    ; Send, % $.Value(1) fixed $.Value(3)
+; Return
+; }
 
-CapsCorrectionBack($) {
-    tofix := $.Value(2)
-    StringLower, fixed, tofix
-    Send, % $.Value(1) fixed
-Return
-}
+; CapsCorrectionBack($) {
+    ; tofix := $.Value(2)
+    ; StringLower, fixed, tofix
+    ; Send, % $.Value(1) fixed
+; Return
+; }
 
-QuestionMarkorrection($) {
-    Send, % $.Value(1) "?" $.Value(2)
-Return
-}
+; QuestionMarkorrection($) {
+    ; Send, % $.Value(1) "?" $.Value(2)
+; Return
+; }
 
 ~^Enter::
 DetectHiddenWindows, Off
@@ -778,6 +793,14 @@ Return
 
 ~$Delete::
     TimeOfLastKey := A_TickCount
+Return
+
+~$Left::
+    X_PriorPriorHotKey := 
+Return
+
+~$Right::
+    X_PriorPriorHotKey := 
 Return
 
 $F2::
@@ -3224,12 +3247,13 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     Global MonCount, VD, Highlighter, hitTAB
     SetTimer, track, Off
     windowsToMinimize := []
+    minimizedWindows  := []
+    finalWindowsListWithProcAndClass := []
     lastActWinID      := ""
     hitTAB := False
     
     currentMon := MWAGetMonitorMouseIsIn()
     Critical, On
-    finalWindowsListWithProcAndClass := []
     counter := 2
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
 
@@ -3238,19 +3262,29 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         hwndID := windowsListWithSameProcessAndClass%A_Index%
         WinGetTitle, tit, ahk_id %hwndID%
         WinGet, mmState, MinMax, ahk_id %hwndID%
-        If (MonCount > 1) {
+        If (MonCount > 1 && mmState > -1) {
             currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
         }
-        Else {
+        Else If (mmState > -1) {
             currentMonHasActWin := True
         }
 
         If (currentMonHasActWin && tit != ""  && mmState > -1) {
             finalWindowsListWithProcAndClass.push(hwndID)
         }
+        Else If (mmState == -1) {
+            minimizedWindows.push(hwndID)
+        }
+    }
+
+    loop % minimizedWindows.length()
+    {
+        minHwndID := minimizedWindows[A_Index]
+        finalWindowsListWithProcAndClass.push(minHwndID)
     }
 
     numWindows := finalWindowsListWithProcAndClass.length()
+
     If (numWindows <= 1) {
         SetTimer, track, On
         loop 100 {
@@ -3272,10 +3306,10 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     WinGet, pp, ProcessPath , % "ahk_id " finalWindowsListWithProcAndClass[counter]
 
     Critical, Off
-    ; tooltip,% counter " - " finalWindowsListWithProcAndClass[counter]
+    
     GoSub, DrawRect
     DrawWindowTitlePopup(actTitle, pp, True)
-    ; tooltip, %numWindows% found!
+    
     KeyWait, q, U T1
 
     counter++
