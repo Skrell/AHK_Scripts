@@ -20,9 +20,18 @@
 ; #include %A_ScriptDir%\_VD.ahk
 ; DLL
 hVirtualDesktopAccessor := DllCall("LoadLibrary", "Str", A_ScriptDir . "\VirtualDesktopAccessor.dll", "Ptr")
-global IsWindowOnDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "IsWindowOnDesktopNumber", "Ptr")
-global MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "MoveWindowToDesktopNumber", "Ptr")
-global GoToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "GoToDesktopNumber", "Ptr")
+
+GetDesktopCountProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetDesktopCount", "Ptr")
+GoToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GoToDesktopNumber", "Ptr")
+GetCurrentDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetCurrentDesktopNumber", "Ptr")
+IsWindowOnCurrentVirtualDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsWindowOnCurrentVirtualDesktop", "Ptr")
+IsWindowOnDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsWindowOnDesktopNumber", "Ptr")
+MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "MoveWindowToDesktopNumber", "Ptr")
+IsPinnedWindowProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsPinnedWindow", "Ptr")
+GetDesktopNameProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetDesktopName", "Ptr")
+SetDesktopNameProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "SetDesktopName", "Ptr")
+CreateDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "CreateDesktop", "Ptr")
+RemoveDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "RemoveDesktop", "Ptr")
 
 Global CurrentDesktop := 1
 
@@ -949,18 +958,20 @@ Return
 #If
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
-#MaxThreadsPerHotkey 1
+; #MaxThreadsPerHotkey 1
 ; #MaxThreadsBuffer On
 
 !0::
     DetectHiddenWindows, On
     wndIdOnDesk := getForemostWindowIdOnDesktop(2)
     WinGetClass, cl, ahk_id %wndIdOnDesk%
-    tooltip, class is %cl%
+    total := GetDesktopCount() 
+    tooltip, class is %cl% of %total% desktops
     DetectHiddenWindows, Off
 Return
 
 !1::
+    ; tooltip, Switching...
     StopRecurssion := True
     CurrentDesktop := getCurrentDesktop()
     If GetKeyState("Lbutton", "P") {
@@ -1024,11 +1035,16 @@ Return
         }
         sleep 250
     }
+    while (1 != getCurrentDesktop()) 
+    {
+        sleep, 25
+    }
     StopRecurssion := False
-
+    ; Tooltip, Done 1
 Return
 
 !2::
+    ; tooltip, Switching...
     StopRecurssion := True
     CurrentDesktop := getCurrentDesktop()
     If GetKeyState("Lbutton", "P") {
@@ -1083,11 +1099,16 @@ Return
         }
         sleep 250
     }
+    while (2 != getCurrentDesktop()) 
+    {
+        sleep, 25
+    }
     StopRecurssion := False
-
+    ; Tooltip, Done 2
 Return
 
 !3::
+    ; tooltip, Switching...
     StopRecurssion := True
     CurrentDesktop := getCurrentDesktop()
     If GetKeyState("Lbutton", "P") {
@@ -1152,7 +1173,12 @@ Return
         }
         sleep 250
     }
+    while (3 != getCurrentDesktop()) 
+    {
+        sleep, 25
+    }
     StopRecurssion := False
+    ; Tooltip, Done 3
 Return
 
 ; #MaxThreadsBuffer Off
@@ -2008,18 +2034,6 @@ Return
     WinGetClass, lClass, ahk_id %lbhwnd%
     Gui, GUI4Boarder: Hide
     
-    ; If (A_PriorHotkey == A_ThisHotkey
-        ; && (A_TimeSincePriorHotkey < 550)
-        ; && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        ; && MouseIsOverTaskbarBlank()) {
-        ; run, explorer.exe 
-        ; LbuttonEnabled     := True
-        ; StopRecurssion     := False
-        ; Return
-    ; }
-    
-    ; If (A_TimeSincePriorHotkey < 250)
-        ; tooltip, %A_TimeSincePriorHotkey% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2% - %A_ThisHotkey% - %A_PriorHotkey%
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
@@ -3064,8 +3078,9 @@ JEE_WinHasAltTabIcon(hWnd)
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399
 IsAltTabWindow(hWnd) {
-   static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
    
+   static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
+
    if (VirtualDesktopExist = "")
    {
       OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
@@ -3075,21 +3090,21 @@ IsAltTabWindow(hWnd) {
          VirtualDesktopExist := 1
    }
    if !DllCall("IsWindowVisible", "uptr", hWnd)
-      return
+      return false
    DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
    if (cloaked = DWM_CLOAKED_SHELL)
-      return
+      return false
    if (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
-      return
+      return false
    WinGetClass, winClass, ahk_id %hWnd%
    if (winClass = "Windows.UI.Core.CoreWindow" || winClass = "Shell_TrayWnd")
-      return
+      return false
    if (winClass = "ApplicationFrameWindow")
    {
       varsetcapacity(ApplicationViewCloakType, 4, 0)
       DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
       if (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
-         return
+         return false
    }
    ; if !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test if window is shown on any monitor. alt-tab shows any window even if window is out of monitor.
    ;   return
@@ -3097,14 +3112,14 @@ IsAltTabWindow(hWnd) {
    if (exStyles & WS_EX_APPWINDOW)
    {
       if DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
-         return
+         return false
       if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
          return true
       else
-         return
+         return false
    }
    if (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)
-      return
+      return false
    loop
    {
       hwndPrev := hwnd
@@ -3112,95 +3127,19 @@ IsAltTabWindow(hWnd) {
       if !hwnd
       {
          if DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
-            return
+            return false
          if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
             return true
          else
-            return
+            return false
       }
       if DllCall("IsWindowVisible", "uptr", hwnd)
-         return
+         return false
       WinGet, exStyles, ExStyle, ahk_id %hwnd%
       if ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
-         return
+         return false
    }
 }
-   ; DetectHiddenWindows, On
-
-   ; WinGetTitle, tit, ahk_id %hWnd%
-   ; WinGet, vPID, PID, % "ahk_id " hWnd
-   ; WinGet, vProc, ProcessName, ahk_id %hWnd%
-
-   ; If (tit == "" or vProc == "qrivi_ssam.exe")
-      ; Return
-
-   ; If (ProcessIsElevated(vPID))
-      ; Return
-
-   ; static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
-   ; If (VirtualDesktopExist = "")
-   ; {
-      ; OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
-      ; If (OSbuildNumber < 14393)
-         ; VirtualDesktopExist := 0
-      ; else
-         ; VirtualDesktopExist := 1
-   ; }
-   ; If !DllCall("IsWindowVisible", "uptr", hWnd)
-      ; Return
-   ; DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
-   ; ; If (cloaked = DWM_CLOAKED_SHELL)
-   ; ; Return
-   ; If (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
-      ; Return
-   ; WinGetClass, winClass, ahk_id %hWnd%
-   ; If (winClass = "Windows.UI.Core.CoreWindow")
-      ; Return
-   ; If (winClass = "ApplicationFrameWindow")
-   ; {
-      ; varsetcapacity(ApplicationViewCloakType, 4, 0)
-      ; DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
-      ; If (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
-         ; Return
-   ; }
-   ; ; If !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test If window is shown on any monitor. alt-tab shows any window even If window is out of monitor.
-   ; ;   Return
-   ; WinGet, exStyles, ExStyle, ahk_id %hWnd%
-   ; If (exStyles & WS_EX_APPWINDOW)
-   ; {
-      ; If DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
-         ; Return
-      ; If (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
-         ; Return true
-      ; else If (VD.getDesktopNumOfWindow(tit) > 0)
-            ; Return true
-      ; else
-         ; Return
-   ; }
-   ; If (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)
-      ; Return
-   ; loop
-   ; {
-      ; hwndPrev := hwnd
-      ; hwnd := DllCall("GetWindow", "uptr", hwnd, "uint", GW_OWNER, "ptr")
-      ; If !hwnd
-      ; {
-         ; If DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
-            ; Return
-         ; If (VirtualDesktopExist == 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
-            ; Return true
-         ; else If (VD.getDesktopNumOfWindow(tit) > 0)
-            ; Return true
-         ; else
-            ; Return
-      ; }
-      ; If DllCall("IsWindowVisible", "uptr", hwnd)
-         ; Return
-      ; WinGet, exStyles, ExStyle, ahk_id %hwnd%
-      ; If ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
-         ; Return
-   ; }
-; }
 
 GetLastActivePopup(hwnd)
 {
@@ -3210,14 +3149,14 @@ GetLastActivePopup(hwnd)
    Return hwnd
 }
 
-IsWindowOnCurrentVirtualDesktop(hwnd)
-{
-   static IVirtualDesktopManager
-   If !IVirtualDesktopManager
-      IVirtualDesktopManager := ComObjCreate(CLSID_VirtualDesktopManager := "{AA509086-5CA9-4C25-8F95-589D3C07B48A}", IID_IVirtualDesktopManager := "{A5CD92FF-29BE-454C-8D04-D82879FB3F1B}")
-   DllCall(NumGet(NumGet(IVirtualDesktopManager+0), 3*A_PtrSize), "ptr", IVirtualDesktopManager, "uptr", hwnd, "int*", onCurrentDesktop)   ; IsWindowOnCurrentVirtualDesktop
-   Return onCurrentDesktop
-}
+; IsWindowOnCurrentVirtualDesktop(hwnd)
+; {
+   ; static IVirtualDesktopManager
+   ; If !IVirtualDesktopManager
+      ; IVirtualDesktopManager := ComObjCreate(CLSID_VirtualDesktopManager := "{AA509086-5CA9-4C25-8F95-589D3C07B48A}", IID_IVirtualDesktopManager := "{A5CD92FF-29BE-454C-8D04-D82879FB3F1B}")
+   ; DllCall(NumGet(NumGet(IVirtualDesktopManager+0), 3*A_PtrSize), "ptr", IVirtualDesktopManager, "uptr", hwnd, "int*", onCurrentDesktop)   ; IsWindowOnCurrentVirtualDesktop
+   ; Return onCurrentDesktop
+; }
 
 PropEnumProcEx(hWnd, lpszString, hData, dwData)
 {
@@ -3235,7 +3174,77 @@ realHwnd(hwnd)
    numput(hwnd, var, 0, "uint64")
    Return numget(var, 0, "uint")
 }
+; -----------------------------------------------------------------------
+; https://github.com/Ciantic/VirtualDesktopAccessor/blob/rust/example.ahk
+; -----------------------------------------------------------------------
+MoveCurrentWindowToDesktop(num) {
+    global MoveWindowToDesktopNumberProc
+    correctDesktopNumber := num-1
+    WinGet, activeHwnd, ID, A
+    Return DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", correctDesktopNumber, "Int")
+}
 
+IsWindowOnCurrentVirtualDesktop(hwnd)
+{
+   Global IsWindowOnCurrentVirtualDesktopProc
+   Return DllCall(IsWindowOnCurrentVirtualDesktopProc, "Ptr", hwnd, "Int")
+}
+
+GetDesktopCount() {
+    global GetDesktopCountProc
+    count := DllCall(GetDesktopCountProc, "Int")
+    return count
+}
+
+MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
+    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
+    WinGet, activeHwnd, ID, A
+    DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", desktopNumber, "Int")
+    DllCall(GoToDesktopNumberProc, "Int", desktopNumber)
+}
+
+GoToPrevDesktop() {
+    global GetCurrentDesktopNumberProc, GoToDesktopNumberProc
+    current := DllCall(GetCurrentDesktopNumberProc, "Int")
+    last_desktop := GetDesktopCount() - 1
+    ; If current desktop is 0, go to last desktop
+    if (current = 0) {
+        MoveOrGotoDesktopNumber(last_desktop)
+    } else {
+        MoveOrGotoDesktopNumber(current - 1)
+    }
+    return
+}
+
+GoToNextDesktop() {
+    global GetCurrentDesktopNumberProc
+    current := DllCall(GetCurrentDesktopNumberProc, "Int")
+    last_desktop := GetDesktopCount() - 1
+    ; If current desktop is last, go to first desktop
+    if (current = last_desktop) {
+        MoveOrGotoDesktopNumber(0)
+    } else {
+        MoveOrGotoDesktopNumber(current + 1)
+    }
+    return
+}
+
+GoToDesktopNumber(num) {
+    global GoToDesktopNumberProc
+    correctDesktopNumber := num-1
+    DllCall(GoToDesktopNumberProc, "Int", correctDesktopNumber, "Int")
+    return
+}
+
+MoveOrGotoDesktopNumber(num) {
+    ; If user is holding down Mouse left button, move the current window also
+    if (GetKeyState("LButton")) {
+        MoveCurrentWindowToDesktop(num)
+    } else {
+        GoToDesktopNumber(num)
+    }
+    return
+}
 /* ;
 *****************************
 ***** UTILITY FUNCTIONS *****
@@ -4112,24 +4121,19 @@ getSessionId()
 
 getForemostWindowIdOnDesktop(n)
 {
+    Global IsWindowOnDesktopNumberProc
     n := n - 1 ; Desktops start at 0, while in script it's 1
 
     ; winIDList contains a list of windows IDs ordered from the top to the bottom for each desktop.
     WinGet winIDList, list
     Loop % winIDList {
-        windowID := % winIDList%A_Index%
-        windowIsOnDesktop := DllCall(IsWindowOnDesktopNumberProc, UInt, windowID, UInt, n)
+        windowID := winIDList%A_Index%
+        windowIsOnDesktop := DllCall(IsWindowOnDesktopNumberProc, "Ptr", windowID, "UInt", n, "Int")
         ; Select the first (and foremost) window which is in the specified desktop.
         if (windowIsOnDesktop == 1) {
             return windowID
         }
     }
-}
-
-MoveCurrentWindowToDesktop(desktopNumber) {
-    WinGet, activeHwnd, ID, A
-    DllCall(MoveWindowToDesktopNumberProc, UInt, activeHwnd, UInt, desktopNumber - 1)
-    ; switchDesktopByNumber(desktopNumber)
 }
 
 ActivateTopMostWindow() {
