@@ -1471,7 +1471,7 @@ Return
     winArraySort := []
     tooltip, Looking for Minimized Apps...
 
-    DetectHiddenWindows, Off
+    DetectHiddenWindows, On
     Critical On
     WinGet, id, list
     Loop, %id%
@@ -1479,12 +1479,14 @@ Return
         this_ID := id%A_Index%
         WinGet, minState, MinMax, ahk_id %this_ID%
 
-        desknum := 1
-        ; desknum := findDesktopWindowIsOn(this_ID)
-        ; If desknum <= 0
-            ; continue
+        If !JEE_WinHasAltTabIcon(this_ID)
+            continue
+        If minState > -1
+            continue
 
-        If (minState > -1 || !IsAltTabWindow(this_ID))
+        ; desknum := 1
+        desknum := findDesktopWindowIsOn(this_ID)
+        If desknum <= 0
             continue
 
         WinGetTitle, title, ahk_id %this_ID%
@@ -1531,8 +1533,8 @@ Return
         titleEntry     := Trim(splitEntry2[3])
 
         ; If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
-        ; finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
-            finalEntry   := %  "[" titleEntry "] (" procEntry ")"
+        finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
+            ; finalEntry   := %  "[" titleEntry "] (" procEntry ")"
         ; Else
             ; continue
 
