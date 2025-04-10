@@ -433,7 +433,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 DetectHiddenWindows, Off
                 Return
             }
-            Else If (InStr(vWinTitle, "Save As", false)) {
+            Else If (InStr(vWinTitle, "Save As", false) && vWinClass != "#32770") {
                 WinActivate, % "ahk_id " hWnd
                 DetectHiddenWindows, Off
                 Return
@@ -489,21 +489,40 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
                 ; tooltip, init focus is %initFocusedCtrl%
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
-                    If (vWinClass != "EVERYTHING_(1.5a)") {
-                        exEl := UIA.ElementFromHandle(hWnd)
-                        shellEl := exEl.FindFirstByName("Items View")
-                        shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
-                    }
+                    exEl := UIA.ElementFromHandle(hWnd)
+                    shellEl := exEl.FindFirstByName("Items View")
+                    shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
                 }
 
                 If (OutputVar2 == 1) {
                     FocusedControl := "DirectUIHWND2"
+                    loop, 100 {
+                        ControlFocus, DirectUIHWND2, % "ahk_id " hWnd
+                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        If (testCtrlFocus == "DirectUIHWND2")
+                            break
+                        sleep, 5
+                        }
                 }
                 Else If (OutputVar3 == 1) {
                     FocusedControl := "DirectUIHWND3"
+                    loop, 100 {
+                        ControlFocus, DirectUIHWND3, % "ahk_id " hWnd
+                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        If (testCtrlFocus == "DirectUIHWND3")
+                            break
+                        sleep, 5
+                    }
                 }
                 Else If (OutputVar1 == 1) {
                     FocusedControl := "SysListView321"
+                    loop, 100 {
+                        ControlFocus, SysListView321, % "ahk_id " hWnd
+                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        If (testCtrlFocus == "SysListView321")
+                            break
+                        sleep, 5
+                    }
                 }
 
                 loop, 100 {
@@ -513,21 +532,20 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         break
                     sleep, 5
                 }
-                ; tooltip, about to send to %testCtrlFocus%
+                tooltip, about to send to %testCtrlFocus%
                 WinGet, testID, ID, A
                 If (testID == hWnd) {
-                    sleep, 125
                     Send, ^{NumpadAdd}
-                    sleep, 10
-                }
+                    sleep, 125
 
-                If initFocusedCtrl {
-                    loop, 100 {
-                        ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
-                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                        If (testCtrlFocus == initFocusedCtrl)
-                            break
-                        sleep, 5
+                    If initFocusedCtrl {
+                        loop, 100 {
+                            ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
+                            ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                            If (testCtrlFocus == initFocusedCtrl)
+                                break
+                            sleep, 5
+                        }
                     }
                 }
                 ; tooltip, returned to edit
@@ -535,7 +553,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 BlockInput, Off
             }
             Critical, Off
-            tooltip, cleaning...
+            ; tooltip, cleaning...
             i := 1
             while (i <= prevActiveWindows.MaxIndex()) {
                 checkID := prevActiveWindows[i]
@@ -544,10 +562,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 else
                     ++i
             }
-            tooltip, done!
         }
-        DetectHiddenWindows, Off
     }
+    DetectHiddenWindows, Off
     Return
 }
 
@@ -3545,6 +3562,7 @@ track() {
     Static LbuttonHeld := False
     HexColor1 := 0x0
     HexColor2 := 0x1
+    HexColor3 := 0x2
 
     WinGet, actwndId, ID, A
     MouseGetPos x, y, hwndId
@@ -3657,17 +3675,19 @@ track() {
             Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
             sleep, 500
 
-            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2)) {
-                CoordMode, Mouse, screen
-                MouseGetPos x, y
+            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2!=HexColor3)) {
+                ; CoordMode, Mouse, screen
+                ; MouseGetPos x, y
                 CoordMode, Pixel, Screen
                 PixelGetColor, HexColor1, %x%, %y%, RGB
                 WinActivate, ahk_id %hwndVD%
                 sleep, 50
-                CoordMode, Mouse, screen
-                MouseGetPos x, y
-                CoordMode, Pixel, Screen
+                ; CoordMode, Mouse, screen
+                ; MouseGetPos x, y
+                ; CoordMode, Pixel, Screen
                 PixelGetColor, HexColor2, %x%, %y%, RGB
+                sleep, 50
+                PixelGetColor, HexColor3, %x%, %y%, RGB
             }
             CoordMode, Mouse, screen
 
@@ -3749,17 +3769,19 @@ track() {
             Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
             sleep, 500
 
-            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2)) {
-                CoordMode, Mouse, screen
-                MouseGetPos x, y
+            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2!=HexColor3)) {
+                ; CoordMode, Mouse, screen
+                ; MouseGetPos x, y
                 CoordMode, Pixel, Screen
                 PixelGetColor, HexColor1, %x%, %y%, RGB
                 WinActivate, ahk_id %hwndVD%
                 sleep, 50
-                CoordMode, Mouse, screen
-                MouseGetPos x, y
-                CoordMode, Pixel, Screen
+                ; CoordMode, Mouse, screen
+                ; MouseGetPos x, y
+                ; CoordMode, Pixel, Screen
                 PixelGetColor, HexColor2, %x%, %y%, RGB
+                sleep, 50
+                PixelGetColor, HexColor3, %x%, %y%, RGB
             }
             CoordMode, Mouse, screen
 
