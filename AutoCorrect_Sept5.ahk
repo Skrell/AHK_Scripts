@@ -121,13 +121,27 @@ Menu, Tray, Click, 1
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
 SysGet, MonCount, MonitorCount
+Sysget, totalDesktopWidth, 78
+Sysget, totalDesktopHeight, 79
 
-Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum%
-sleep 1000
+Loop, %MonCount%
+{
+    SysGet, MonitorName, MonitorName, %A_Index%
+    SysGet, Monitor, Monitor, %A_Index%
+    SysGet, MonitorWorkArea, MonitorWorkArea, %A_Index%
+    ;MsgBox, Monitor:`t#%A_Index%`nName:`t%MonitorName%`nLeft:`t%MonitorLeft% (%MonitorWorkAreaLeft% work)`nTop:`t%MonitorTop% (%MonitorWorkAreaTop% work)`nRight:`t%MonitorRight% (%MonitorWorkAreaRight% work)`nBottom:`t%MonitorBottom% (%MonitorWorkAreaBottom% work)
+    If MonitorWorkAreaLeft < 0 ; Monitor is leftmost
+        Global G_DisplayLeftEdge := A_ScreenWidth-totalDesktopWidth
+    Else
+        Global G_DisplayRightEdge := A_ScreenWidth
+}
+
+Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum% with edges: %G_DisplayLeftEdge% - %G_DisplayRightEdge%
+sleep 3000
 Tooltip, % "Current Mon is " GetCurrentMonitorIndex()
-sleep 1000
-Tooltip, Path to ahk %A_AhkPath%
 sleep 2000
+; Tooltip, Path to ahk %A_AhkPath%
+; sleep 2000
 Tooltip,
 
 Gui, ShadowFrFull: New
@@ -406,7 +420,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Return
         }
 
-        If ((!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey") || vWinClass == "#32770") {
+        If (JEE_WinHasAltTabIcon(hWnd) && (!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey" && vWinClass != "AutohotkeyGUI") || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
             tooltip, here we goooo
             loop 200 {
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
@@ -521,17 +535,17 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 BlockInput, Off
             }
             Critical, Off
+            tooltip, cleaning...
+            i := 1
+            while (i <= prevActiveWindows.MaxIndex()) {
+                checkID := prevActiveWindows[i]
+                If !WinExist("ahk_id " checkID)
+                    prevActiveWindows.RemoveAt(i)
+                else
+                    ++i
+            }
+            tooltip, done!
         }
-        tooltip, cleaning...
-        i := 1
-        while (i <= prevActiveWindows.MaxIndex()) {
-            checkID := prevActiveWindows[i]
-            If !WinExist("ahk_id " checkID)
-                prevActiveWindows.RemoveAt(i)
-            else
-                ++i
-        }
-        tooltip, done!
         DetectHiddenWindows, Off
     }
     Return
@@ -1591,7 +1605,7 @@ Cycle(direction)
 {
     Global cycling
     Global cycleCount
-    Global ValidWindows
+    ; Global ValidWindows
     Global GroupedWindows
     Global MonCount
     Global startHighlight
@@ -1631,12 +1645,11 @@ Cycle(direction)
                     If (state > -1) {
                         ValidWindows.push(hwndID)
 
-                        If (prev_cl != cl || prev_exe != exe) {
+                        ; If (prev_cl != cl || prev_exe != exe) {
                             GroupedWindows.push(hwndId)
 
                             If (GroupedWindows.MaxIndex() == 2) {
                                 WinActivate, % "ahk_id " hwndID
-                                ; WinWaitActive,  % "ahk_id " hwndID, , 2
                                 cycleCount := 2
                                 If (hwndID == actId) {
                                     failedSwitch := True
@@ -1650,7 +1663,6 @@ Cycle(direction)
                             }
                             If (GroupedWindows.MaxIndex() == 3 && failedSwitch) {
                                 WinActivate, % "ahk_id " hwndID
-                                ; WinWaitActive,  % "ahk_id " hwndID, , 2
                                 cycleCount := 3
                                 Critical, Off
                                 GoSub, DrawRect
@@ -1659,9 +1671,9 @@ Cycle(direction)
                                 Critical, Off
                                 Return
                             }
-                        }
-                        prev_exe := exe
-                        prev_cl  := cl
+                        ; }
+                        ; prev_exe := exe
+                        ; prev_cl  := cl
                     }
                 }
             }
@@ -3528,9 +3540,11 @@ Return
 
 track() {
     ListLines Off
-    Global MonCount, MonNum, moving, currentMon, previousMon
+    Global MonCount, MonNum, moving, currentMon, previousMon, StopRecurssion
     Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
+    HexColor1 := 0x0
+    HexColor2 := 0x1
 
     WinGet, actwndId, ID, A
     MouseGetPos x, y, hwndId
@@ -3585,7 +3599,7 @@ track() {
     }
     Else If (
         !LbuttonHeld
-        && x >= A_ScreenWidth-3 && y < A_ScreenHeight-200
+        && x >= G_DisplayRightEdge-3 && y < A_ScreenHeight-200
         && GetKeyState("Lbutton", "P")
         && MouseIsOverTitleBar())
     {
@@ -3643,10 +3657,20 @@ track() {
             Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
             sleep, 500
 
-            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop+1)) {
+            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2)) {
+                CoordMode, Mouse, screen
+                MouseGetPos x, y
+                CoordMode, Pixel, Screen
+                PixelGetColor, HexColor1, %x%, %y%, RGB
                 WinActivate, ahk_id %hwndVD%
                 sleep, 50
+                CoordMode, Mouse, screen
+                MouseGetPos x, y
+                CoordMode, Pixel, Screen
+                PixelGetColor, HexColor2, %x%, %y%, RGB
             }
+            CoordMode, Mouse, screen
+
             WinSet, Transparent, 50, ahk_id %hwndVD%
             sleep, 20
             WinSet, Transparent, 100, ahk_id %hwndVD%
@@ -3663,10 +3687,11 @@ track() {
             Critical, Off
         }
         StopRecurssion := false
+        Return
     }
     Else If (
             !LbuttonHeld
-            && x <= 3 && y < A_ScreenHeight-200
+            && x <= G_DisplayLeftEdge+3 && y < A_ScreenHeight-200
             && GetKeyState("Lbutton", "P")
             && MouseIsOverTitleBar())
     {
@@ -3724,10 +3749,20 @@ track() {
             Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
             sleep, 500
 
-            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1)) {
+            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2)) {
+                CoordMode, Mouse, screen
+                MouseGetPos x, y
+                CoordMode, Pixel, Screen
+                PixelGetColor, HexColor1, %x%, %y%, RGB
                 WinActivate, ahk_id %hwndVD%
                 sleep, 50
+                CoordMode, Mouse, screen
+                MouseGetPos x, y
+                CoordMode, Pixel, Screen
+                PixelGetColor, HexColor2, %x%, %y%, RGB
             }
+            CoordMode, Mouse, screen
+
             WinSet, Transparent, 50, ahk_id %hwndVD%
             sleep, 20
             WinSet, Transparent, 100, ahk_id %hwndVD%
@@ -3744,6 +3779,7 @@ track() {
             Critical, Off
         }
         StopRecurssion := false
+        Return
     }
 
     If (MonCount == 1 &&  x > 3 && y > 3 && x < A_ScreenWidth-3 && y < A_ScreenHeight-3)
