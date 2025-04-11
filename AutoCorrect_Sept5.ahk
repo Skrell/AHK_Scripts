@@ -182,18 +182,15 @@ Expr =
     ListLines Off
     SetBatchLines -1
     DetectHiddenWindows, Off
-    ; tooltip, started
-    WinWait, ahk_class #32768,, 3000
-    ; tooltip, done waiting
+
+    WinWait, ahk_class #32768,, 3
+
     If ErrorLevel
         ExitApp
-
-    sleep, 125
 
     SendInput, {DOWN}
     ; https://www.autohotkey.com/board/topic/11157-popup-menu-sometimes-doesnt-have-focus/page-2
     ; MouseMove, %x%, %y%
-
 
     ; Input, SingleKey, L1, {Lbutton}{ESC}{ENTER}, *
     Return
@@ -1599,7 +1596,7 @@ Return
     Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
     ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
 
-    DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+    ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
     Tooltip,
     ShowMenu(MenuGetHandle("minWindows"), False, drawX, drawY, 0x14)
     ; Tooltip, Done.
@@ -2287,14 +2284,15 @@ Return
         }
         Else If (totalMenuItemCount > 1) {
             SetTimer, RunDynaExpr, -1
+
             CoordMode, Mouse, Screen
             CoordMode, Menu, Screen
             ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
             drawX := CoordXCenterScreen()
             drawY := CoordYCenterScreen()
-            ; Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 y0
+            Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
             ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
-            sleep, 100
+            ; sleep, 100
             ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
             ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
             ; Menu, windows, show, % A_ScreenWidth/4, % A_ScreenHeight/3
@@ -2960,16 +2958,15 @@ IsWindow(hWnd){
 
 ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
 MyTimer() {
-   Global IGUIF
+   ; Global IGUIF
    ; Global IGUIF2
    DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2)
 
-   WinWait, ahk_class #32768,, 3000
+   WinWait, ahk_class #32768,, 3
 
    WinGetPos, menux, menuy, menuw, menuh, ahk_class #32768
    menux := menux + 10
    menuy := menuy + 10
-   ; WinMove, ahk_class #32768, , %menux%, %menuy%
    MouseMove, %menux%, %menuy%
 
    ; WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh,
