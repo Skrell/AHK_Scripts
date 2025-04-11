@@ -1499,7 +1499,6 @@ Return
     onlyTitleFound := ""
     winAssoc := {}
     winArraySort := []
-    tooltip, Looking for Minimized Apps...
 
     DetectHiddenWindows, On
     Critical On
@@ -1587,20 +1586,28 @@ Return
 
     Critical Off
 
-    SetTimer, RunDynaAltUp, -1
+    If (totalMenuItemCount > 1) {
+        SetTimer, RunDynaAltUp, -1
 
-    CoordMode, Mouse, Screen
-    CoordMode, Menu, Screen
-    drawX := CoordXCenterScreen()
-    drawY := CoordYCenterScreen()
-    Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
-    ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
+        CoordMode, Mouse, Screen
+        CoordMode, Menu, Screen
+        drawX := CoordXCenterScreen()
+        drawY := CoordYCenterScreen()
+        Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
+        ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
 
-    ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-    Tooltip,
-    ShowMenu(MenuGetHandle("minWindows"), False, drawX, drawY, 0x14)
-    ; Tooltip, Done.
-    Gui, ShadowFrFull:  Hide
+        ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+        ShowMenu(MenuGetHandle("minWindows"), False, drawX, drawY, 0x14)
+        ; Tooltip, Done.
+        Gui, ShadowFrFull:  Hide
+    }
+    Else {
+        loop 100 {
+            tooltip, No windows found!
+            sleep, 10
+        }
+        tooltip,
+    }
 
     StopRecurssion := False
 
