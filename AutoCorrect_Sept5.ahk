@@ -90,6 +90,7 @@ Global lbX1
 Global lbX2
 Global currentMon := 0
 Global previousMon := 0
+Global targetDesktop := 0
 
 Process, Priority,, High
 
@@ -410,14 +411,20 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         DetectHiddenWindows, On
 
         WinGetClass, vWinClass, % "ahk_id " hWnd
-        If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
-            WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
-        }
-        Else If (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "") {
+        If (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "") {
             Return
         }
 
-        If (JEE_WinHasAltTabIcon(hWnd) && (!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey" && vWinClass != "AutohotkeyGUI") || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+        If ( (!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey" && vWinClass != "AutohotkeyGUI") || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+            If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
+                WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
+                If (vWinClass == "OperationStatusWindow")
+                    Return
+            }
+
+            If (!JEE_WinHasAltTabIcon(hWnd) && vWinClass != "#32770")
+                Return
+
             tooltip, here we goooo
             loop 200 {
                 WinGetTitle, vWinTitle, % "ahk_id " hWnd
@@ -457,13 +464,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             prevActiveWindows.push(hWnd)
 
-            ; ToolTip, % vWinTitle " - " vWinClass " - " prevActiveWindows.length()
-            ; loop 200
-            ; {
-                ; If WinExist("ahk_id " hWnd)
-                    ; break
-                ; sleep, 5
-            ; }
             OutputVar1 := OutputVar2 := OutputVar3 := ""
 
             loop 200 {
@@ -529,6 +529,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         break
                     sleep, 5
                 }
+
+                If !WinExist("ahk_id " hWnd) {
+                    DetectHiddenWindows, Off
+                    Return
+                }
+
                 tooltip, about to send to %testCtrlFocus%
                 WinGet, testID, ID, A
                 If (testID == hWnd) {
@@ -1434,6 +1440,7 @@ ResetWins:
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
+#MaxThreadsPerHotkey 1
 $!Tab::
 ComboActive := False
 SetTimer, track, Off
@@ -2461,11 +2468,18 @@ Mbutton::
     Global movehWndId
     MouseGetPos, , , movehWndId
     WinActivate, ahk_id %movehWndId%
-
+    CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    Menu, vdeskMenu, Add
+    Menu, vdeskMenu, DeleteAll
     loop % getTotalDesktops()
     {
-        Menu, vdeskMenu, Add,  Move to Desktop %A_Index%, SendWindow
-        Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
+        If (CurrentDesktop != A_Index)
+        {
+            Menu, vdeskMenu, Add,  Move to Desktop %A_Index%, SendWindow
+            Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
+            Menu, vdeskMenu, Add,  Move and Go to Desktop %A_Index%, SendWindowAndGo
+            Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
+        }
     }
     Menu, vdeskMenu, Show
 Return
@@ -2473,30 +2487,30 @@ Return
 
 SendWindow:
     Global movehWndId
+    Global targetDesktop
     moveLeftConst := -1
     moveRightConst := 1
     moveConst := 0
-    targetDesktop := 0
     DetectHiddenWindows, On
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
     sw_x_org := sw_x
 
-    CurrentDesktop := getCurrentDesktop()
-    If      (A_ThisMenuItem == "Move to Desktop 1")
+    CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move & Go to Desktop 1")
         targetDesktop := 1
-    Else If (A_ThisMenuItem == "Move to Desktop 2")
+    Else If (A_ThisMenuItem == "Move to Desktop 2") || (A_ThisMenuItem == "Move & Go to Desktop 2")
         targetDesktop := 2
-    Else If (A_ThisMenuItem == "Move to Desktop 3")
+    Else If (A_ThisMenuItem == "Move to Desktop 3") || (A_ThisMenuItem == "Move & Go to Desktop 3")
         targetDesktop := 3
-    Else If (A_ThisMenuItem == "Move to Desktop 4")
+    Else If (A_ThisMenuItem == "Move to Desktop 4") || (A_ThisMenuItem == "Move & Go to Desktop 4")
         targetDesktop := 4
-    Else If (A_ThisMenuItem == "Move to Desktop 5")
+    Else If (A_ThisMenuItem == "Move to Desktop 5") || (A_ThisMenuItem == "Move & Go to Desktop 5")
         targetDesktop := 5
-    Else If (A_ThisMenuItem == "Move to Desktop 6")
+    Else If (A_ThisMenuItem == "Move to Desktop 6") || (A_ThisMenuItem == "Move & Go to Desktop 6")
         targetDesktop := 6
-    Else If (A_ThisMenuItem == "Move to Desktop 7")
+    Else If (A_ThisMenuItem == "Move to Desktop 7") || (A_ThisMenuItem == "Move & Go to Desktop 7")
         targetDesktop := 7
-    Else If (A_ThisMenuItem == "Move to Desktop 8")
+    Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move & Go to Desktop 8")
         targetDesktop := 8
 
     If (targetDesktop < CurrentDesktop)
@@ -2533,26 +2547,33 @@ SendWindow:
 
     WinMove, ahk_id %movehWndId%,, %sw_x_org%
 
-    If      (A_ThisMenuItem == "Move to Desktop 1")
+    If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move & Go to Desktop 1")
         MoveCurrentWindowToDesktop(1)
-    Else If (A_ThisMenuItem == "Move to Desktop 2")
+    Else If (A_ThisMenuItem == "Move to Desktop 2") || (A_ThisMenuItem == "Move & Go to Desktop 2")
         MoveCurrentWindowToDesktop(2)
-    Else If (A_ThisMenuItem == "Move to Desktop 3")
+    Else If (A_ThisMenuItem == "Move to Desktop 3") || (A_ThisMenuItem == "Move & Go to Desktop 3")
         MoveCurrentWindowToDesktop(3)
-    Else If (A_ThisMenuItem == "Move to Desktop 4")
+    Else If (A_ThisMenuItem == "Move to Desktop 4") || (A_ThisMenuItem == "Move & Go to Desktop 4")
         MoveCurrentWindowToDesktop(4)
-    Else If (A_ThisMenuItem == "Move to Desktop 5")
+    Else If (A_ThisMenuItem == "Move to Desktop 5") || (A_ThisMenuItem == "Move & Go to Desktop 5")
         MoveCurrentWindowToDesktop(5)
-    Else If (A_ThisMenuItem == "Move to Desktop 6")
+    Else If (A_ThisMenuItem == "Move to Desktop 6") || (A_ThisMenuItem == "Move & Go to Desktop 6")
         MoveCurrentWindowToDesktop(6)
-    Else If (A_ThisMenuItem == "Move to Desktop 7")
+    Else If (A_ThisMenuItem == "Move to Desktop 7") || (A_ThisMenuItem == "Move & Go to Desktop 7")
         MoveCurrentWindowToDesktop(7)
-    Else If (A_ThisMenuItem == "Move to Desktop 8")
+    Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move & Go to Desktop 8")
         MoveCurrentWindowToDesktop(8)
 
     WinSet, Transparent, 255, ahk_id %movehWndId%
     DetectHiddenWindows, Off
 Return
+
+SendWindowAndGo:
+    GoSub, SendWindow
+    sleep, 250
+    DllCall(GoToDesktopNumberProc, "Int", targetDesktop-1)
+Return
+
 
 SendCtrlAdd:
     WinGetClass, lClassCheck, A
