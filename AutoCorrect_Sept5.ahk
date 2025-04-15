@@ -131,10 +131,13 @@ Loop, %MonCount%
     SysGet, Monitor, Monitor, %A_Index%
     SysGet, MonitorWorkArea, MonitorWorkArea, %A_Index%
     ;MsgBox, Monitor:`t#%A_Index%`nName:`t%MonitorName%`nLeft:`t%MonitorLeft% (%MonitorWorkAreaLeft% work)`nTop:`t%MonitorTop% (%MonitorWorkAreaTop% work)`nRight:`t%MonitorRight% (%MonitorWorkAreaRight% work)`nBottom:`t%MonitorBottom% (%MonitorWorkAreaBottom% work)
-    If MonitorWorkAreaLeft < 0 ; Monitor is leftmost
+    If (MonitorWorkAreaLeft < 0) {
         Global G_DisplayLeftEdge := A_ScreenWidth-totalDesktopWidth
-    Else
+    }
+    Else {
         Global G_DisplayRightEdge := A_ScreenWidth
+        Global G_DisplayLeftEdge  := 0
+    }
 }
 
 Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum% with edges: %G_DisplayLeftEdge% - %G_DisplayRightEdge%
@@ -354,7 +357,7 @@ Hoty:
     else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && IsThisHotKeyCapital()) {
         Send % "{BS}" . SubStr(A_ThisHotKey,3,1)
     }
-    else If !IsGoogleDocWindow() && (!StopAutoFix && (CapCount == 3 || (CapCount == 2 && (A_ThisHotkey == "~Space" || A_ThisHotkey == "~." || A_ThisHotkey == "~?" || A_ThisHotkey == "~!") ))) {
+    else If !IsGoogleDocWindow() && (!StopAutoFix && (CapCount == 3 || (CapCount == 2 && (A_ThisHotkey == "~Space" || A_ThisHotkey == "~." || A_ThisHotkey == "~?" || A_ThisHotkey == "~!" || A_ThisHotkey == "~-") ))) {
         Send % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
     }
     If StopAutoFix
@@ -365,6 +368,8 @@ FixSlash:
     TimeOfLastKey := A_TickCount
     If !IsGoogleDocWindow() && (!StopAutoFix && IsPriorHotKeyLetterKey()) && A_ThisHotkey == "~/"
         disableEnter := True
+    Else If !IsGoogleDocWindow() && (!StopAutoFix && IsThisHotKeyLetterKey())
+        disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
     If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)) {
         Send, % "{BS}{BS}{?}{SPACE}"
@@ -383,6 +388,9 @@ Return
 IsPriorHotKeyLetterKey() {
     return (IsPriorHotKeyCapital() || IsPriorHotKeyLowerCase())
 }
+IsThisHotKeyLetterKey() {
+    return (IsThisHotKeyCapital() || IsThisHotKeyLowerCase())
+}
 IsPriorHotKeyCapital() {
     Global keys
     return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,2,1)="+" && inStr(keys, Substr(A_PriorHotkey,3,1), false))
@@ -394,6 +402,10 @@ IsPriorHotKeyLowerCase() {
 IsThisHotKeyCapital() {
     Global keys
     return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,2,1)="+" && inStr(keys, Substr(A_ThisHotKey,3,1), false))
+}
+IsThisHotKeyLowerCase() {
+    Global keys
+    return (StrLen(A_ThisHotKey) == 2 && inStr(keys, Substr(A_ThisHotKey,2,1), false))
 }
 ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
@@ -2476,9 +2488,26 @@ Mbutton::
         If (CurrentDesktop != A_Index)
         {
             Menu, vdeskMenu, Add,  Move to Desktop %A_Index%, SendWindow
-            Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
+            ; Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
+            If ( A_Index == 1)
+                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-top-left.ico, , 32
+            Else If (A_Index == 2)
+                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-top-right.ico, , 32
+            Else If (A_Index == 3)
+                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-bottom-left.ico, , 32
+            Else If (A_Index == 4)
+                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-bottom-right.ico, , 32
+
             Menu, vdeskMenu, Add,  Move and Go to Desktop %A_Index%, SendWindowAndGo
-            Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
+            ; Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
+            If ( A_Index == 1)
+                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-top-left.ico, , 32
+            Else If (A_Index == 2)
+                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-top-right.ico, , 32
+            Else If (A_Index == 3)
+                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-bottom-left.ico, , 32
+            Else If (A_Index == 4)
+                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-bottom-right.ico, , 32
         }
     }
     Menu, vdeskMenu, Show
@@ -2496,21 +2525,21 @@ SendWindow:
     sw_x_org := sw_x
 
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
-    If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move & Go to Desktop 1")
+    If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move and Go to Desktop 1")
         targetDesktop := 1
-    Else If (A_ThisMenuItem == "Move to Desktop 2") || (A_ThisMenuItem == "Move & Go to Desktop 2")
+    Else If (A_ThisMenuItem == "Move to Desktop 2") || (A_ThisMenuItem == "Move and Go to Desktop 2")
         targetDesktop := 2
-    Else If (A_ThisMenuItem == "Move to Desktop 3") || (A_ThisMenuItem == "Move & Go to Desktop 3")
+    Else If (A_ThisMenuItem == "Move to Desktop 3") || (A_ThisMenuItem == "Move and Go to Desktop 3")
         targetDesktop := 3
-    Else If (A_ThisMenuItem == "Move to Desktop 4") || (A_ThisMenuItem == "Move & Go to Desktop 4")
+    Else If (A_ThisMenuItem == "Move to Desktop 4") || (A_ThisMenuItem == "Move and Go to Desktop 4")
         targetDesktop := 4
-    Else If (A_ThisMenuItem == "Move to Desktop 5") || (A_ThisMenuItem == "Move & Go to Desktop 5")
+    Else If (A_ThisMenuItem == "Move to Desktop 5") || (A_ThisMenuItem == "Move and Go to Desktop 5")
         targetDesktop := 5
-    Else If (A_ThisMenuItem == "Move to Desktop 6") || (A_ThisMenuItem == "Move & Go to Desktop 6")
+    Else If (A_ThisMenuItem == "Move to Desktop 6") || (A_ThisMenuItem == "Move and Go to Desktop 6")
         targetDesktop := 6
-    Else If (A_ThisMenuItem == "Move to Desktop 7") || (A_ThisMenuItem == "Move & Go to Desktop 7")
+    Else If (A_ThisMenuItem == "Move to Desktop 7") || (A_ThisMenuItem == "Move and Go to Desktop 7")
         targetDesktop := 7
-    Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move & Go to Desktop 8")
+    Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move and Go to Desktop 8")
         targetDesktop := 8
 
     If (targetDesktop < CurrentDesktop)
@@ -2547,21 +2576,21 @@ SendWindow:
 
     WinMove, ahk_id %movehWndId%,, %sw_x_org%
 
-    If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move & Go to Desktop 1")
+    If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move and Go to Desktop 1")
         MoveCurrentWindowToDesktop(1)
-    Else If (A_ThisMenuItem == "Move to Desktop 2") || (A_ThisMenuItem == "Move & Go to Desktop 2")
+    Else If (A_ThisMenuItem == "Move to Desktop 2") || (A_ThisMenuItem == "Move and Go to Desktop 2")
         MoveCurrentWindowToDesktop(2)
-    Else If (A_ThisMenuItem == "Move to Desktop 3") || (A_ThisMenuItem == "Move & Go to Desktop 3")
+    Else If (A_ThisMenuItem == "Move to Desktop 3") || (A_ThisMenuItem == "Move and Go to Desktop 3")
         MoveCurrentWindowToDesktop(3)
-    Else If (A_ThisMenuItem == "Move to Desktop 4") || (A_ThisMenuItem == "Move & Go to Desktop 4")
+    Else If (A_ThisMenuItem == "Move to Desktop 4") || (A_ThisMenuItem == "Move and Go to Desktop 4")
         MoveCurrentWindowToDesktop(4)
-    Else If (A_ThisMenuItem == "Move to Desktop 5") || (A_ThisMenuItem == "Move & Go to Desktop 5")
+    Else If (A_ThisMenuItem == "Move to Desktop 5") || (A_ThisMenuItem == "Move and Go to Desktop 5")
         MoveCurrentWindowToDesktop(5)
-    Else If (A_ThisMenuItem == "Move to Desktop 6") || (A_ThisMenuItem == "Move & Go to Desktop 6")
+    Else If (A_ThisMenuItem == "Move to Desktop 6") || (A_ThisMenuItem == "Move and Go to Desktop 6")
         MoveCurrentWindowToDesktop(6)
-    Else If (A_ThisMenuItem == "Move to Desktop 7") || (A_ThisMenuItem == "Move & Go to Desktop 7")
+    Else If (A_ThisMenuItem == "Move to Desktop 7") || (A_ThisMenuItem == "Move and Go to Desktop 7")
         MoveCurrentWindowToDesktop(7)
-    Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move & Go to Desktop 8")
+    Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move and Go to Desktop 8")
         MoveCurrentWindowToDesktop(8)
 
     WinSet, Transparent, 255, ahk_id %movehWndId%
@@ -2569,9 +2598,18 @@ SendWindow:
 Return
 
 SendWindowAndGo:
+    Global movehWndId
+    Global targetDesktop
+    DetectHiddenWindows, On
     GoSub, SendWindow
+
+    while (targetDesktop != findDesktopWindowIsOn(movehWndId)) {
+        ; tooltip, % targetDesktop "-" findDesktopWindowIsOn(movehWndId)
+        sleep, 250
+    }
     sleep, 250
     DllCall(GoToDesktopNumberProc, "Int", targetDesktop-1)
+    DetectHiddenWindows, Off
 Return
 
 
