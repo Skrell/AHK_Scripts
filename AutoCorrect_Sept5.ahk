@@ -2445,18 +2445,23 @@ SendWindowAndGo:
     GoToDesktop := True
     GoSub, SendWindow
     StopRecurssion := True
-    CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+
+    sleepTime := 250
+
     while (CurrentDesktop < targetDesktop) {
         Send #^{Right}
-        sleep, 250
+        sleepTime += A_Index*50
+        sleep, %sleepTime%
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     while (CurrentDesktop > targetDesktop) {
         Send #^{Left}
-        sleep, 250
+        sleepTime += A_Index*50
+        sleep, %sleepTime%
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
-    sleep, 350
+
+    WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
     If (targetDesktop < InitialDesktop)
         MoveAndFadeWindow(movehWndId, sw_x, False, "in")
     Else
@@ -3968,72 +3973,75 @@ ShellMsg( wParam, lParam )
 }
 
 MoveAndFadeWindow(Hwnd, initPosx, toRight := true, fadeInOut := "out") {
+    DetectHiddenWindows, On
     Critical, On
     If toRight
         moveConst := 1
     Else
         moveConst := -1
-    sw_x := initPosx
 
     If (fadeInOut == "out") {
-        sw_x_org := initPosx
+        temp_x := initPosx
 
         WinSet, Transparent, 225, ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x%
         sleep, 20
         WinSet, Transparent, 200, ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x%
         sleep, 20
         WinSet, Transparent, 175, ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x%
         sleep, 20
         WinSet, Transparent, 150, ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x%
         sleep, 20
         WinSet, Transparent, 100, ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x%
         sleep, 20
         WinSet, Transparent, 50,  ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x%
         sleep, 20
         WinSet, Transparent, 0,   ahk_id %Hwnd%
-
-        WinMove, ahk_id %Hwnd%,, %sw_x_org%
+        sleep, 20
+        WinMove, ahk_id %Hwnd%,, %initPosx%
     }
     Else {
-        sw_x_start := sw_x-(moveConst*(-15*6))
+        If toRight
+            temp_x_start := initPosx-(15 * 6)
+        Else
+            temp_x_start := initPosx+(15 * 6)
 
         WinSet, Transparent, 0, ahk_id %Hwnd%
-        WinMove, ahk_id %Hwnd%,, %sw_x_start%
 
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        WinMove, ahk_id %Hwnd%,, %temp_x_start%
+        temp_x_start += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x_start%
         sleep, 20
         WinSet, Transparent, 50, ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x_start += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x_start%
         sleep, 20
         WinSet, Transparent, 100, ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x_start += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x_start%
         sleep, 20
         WinSet, Transparent, 150, ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x_start += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x_start%
         sleep, 20
         WinSet, Transparent, 175, ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x_start += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x_start%
         sleep, 20
         WinSet, Transparent, 200,  ahk_id %Hwnd%
-        sw_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %sw_x%
+        temp_x_start += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %temp_x_start%
         sleep, 20
         WinSet, Transparent, 225, ahk_id %Hwnd%
         sleep, 20
