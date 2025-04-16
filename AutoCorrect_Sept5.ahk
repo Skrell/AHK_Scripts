@@ -1315,8 +1315,9 @@ ResetWins:
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
-#MaxThreadsPerHotkey 1
+; #MaxThreadsPerHotkey 1
 $!Tab::
+Hotkey, $!Tab, Off
 ComboActive := False
 SetTimer, track, Off
 SetTimer, keyTrack, Off
@@ -1324,6 +1325,7 @@ Cycle(forward)
 GoSub, Altup
 SetTimer, track, On
 SetTimer, keyTrack, On
+Hotkey, $!Tab, On
 Return
 
 $!+Tab::
@@ -2387,10 +2389,9 @@ SendWindow:
     moveRightConst := 1
     moveConst := 0
     DetectHiddenWindows, On
-    WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
-    sw_x_org := sw_x
 
-    CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    InitialDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+
     If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move and Go to Desktop 1")
         targetDesktop := 1
     Else If (A_ThisMenuItem == "Move to Desktop 2") || (A_ThisMenuItem == "Move and Go to Desktop 2")
@@ -2408,39 +2409,11 @@ SendWindow:
     Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move and Go to Desktop 8")
         targetDesktop := 8
 
-    If (targetDesktop < CurrentDesktop)
-        moveConst := moveLeftConst
+    WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
+    If (targetDesktop < InitialDesktop)
+        MoveAndFadeWindow(movehWndId, sw_x, False)
     Else
-        moveConst := moveRightConst
-
-    WinSet, Transparent, 225, ahk_id %movehWndId%
-    sw_x += 15*moveConst
-    WinMove, ahk_id %movehWndId%,, %sw_x%
-    sleep, 20
-    WinSet, Transparent, 200, ahk_id %movehWndId%
-    sw_x += 15*moveConst
-    WinMove, ahk_id %movehWndId%,, %sw_x%
-    sleep, 20
-    WinSet, Transparent, 175, ahk_id %movehWndId%
-    sw_x += 15*moveConst
-    WinMove, ahk_id %movehWndId%,, %sw_x%
-    sleep, 20
-    WinSet, Transparent, 150, ahk_id %movehWndId%
-    sw_x += 15*moveConst
-    WinMove, ahk_id %movehWndId%,, %sw_x%
-    sleep, 20
-    WinSet, Transparent, 100, ahk_id %movehWndId%
-    sw_x += 15*moveConst
-    WinMove, ahk_id %movehWndId%,, %sw_x%
-    sleep, 20
-    WinSet, Transparent, 50,  ahk_id %movehWndId%
-    sw_x += 15*moveConst
-    WinMove, ahk_id %movehWndId%,, %sw_x%
-    sleep, 20
-    WinSet, Transparent, 0,   ahk_id %movehWndId%
-    sleep, 20
-
-    WinMove, ahk_id %movehWndId%,, %sw_x_org%
+        MoveAndFadeWindow(movehWndId, sw_x, True)
 
     If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move and Go to Desktop 1")
         MoveCurrentWindowToDesktop(1)
@@ -2459,7 +2432,9 @@ SendWindow:
     Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move and Go to Desktop 8")
         MoveCurrentWindowToDesktop(8)
 
-    WinSet, Transparent, 255, ahk_id %movehWndId%
+    If !GoToDesktop
+        WinSet, Transparent, 255, ahk_id %movehWndId%
+
     DetectHiddenWindows, Off
     StopRecurssion := False
 Return
@@ -2467,6 +2442,7 @@ Return
 SendWindowAndGo:
     Global movehWndId
     Global targetDesktop
+    GoToDesktop := True
     GoSub, SendWindow
     StopRecurssion := True
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
@@ -2480,7 +2456,13 @@ SendWindowAndGo:
         sleep, 250
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
+    sleep, 350
+    If (targetDesktop < InitialDesktop)
+        MoveAndFadeWindow(movehWndId, sw_x, False, "in")
+    Else
+        MoveAndFadeWindow(movehWndId, sw_x, True, "in")
     StopRecurssion := False
+    GoToDesktop := False
 Return
 
 
@@ -3034,8 +3016,11 @@ JEE_WinHasAltTabIcon(hWnd)
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399
 IsAltTabWindow(hWnd) {
-
    static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
+
+   WinGetTitle, hasTitle, ahk_id %hWnd%
+   If !hasTitle
+      return False
 
    if (VirtualDesktopExist = "")
    {
@@ -3980,6 +3965,83 @@ ShellMsg( wParam, lParam )
              ; MsgBox, %ID% closed.
          ; }
      ; }
+}
+
+MoveAndFadeWindow(Hwnd, initPosx, toRight := true, fadeInOut := "out") {
+    Critical, On
+    If toRight
+        moveConst := 1
+    Else
+        moveConst := -1
+    sw_x := initPosx
+
+    If (fadeInOut == "out") {
+        sw_x_org := initPosx
+
+        WinSet, Transparent, 225, ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 200, ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 175, ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 150, ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 100, ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 50,  ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 0,   ahk_id %Hwnd%
+
+        WinMove, ahk_id %Hwnd%,, %sw_x_org%
+    }
+    Else {
+        sw_x_start := sw_x-(moveConst*(-15*6))
+
+        WinSet, Transparent, 0, ahk_id %Hwnd%
+        WinMove, ahk_id %Hwnd%,, %sw_x_start%
+
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 50, ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 100, ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 150, ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 175, ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 200,  ahk_id %Hwnd%
+        sw_x += 15*moveConst
+        WinMove, ahk_id %Hwnd%,, %sw_x%
+        sleep, 20
+        WinSet, Transparent, 225, ahk_id %Hwnd%
+        sleep, 20
+        WinSet, Transparent, 255, ahk_id %Hwnd%
+    }
+
+    Critical, Off
+    Return
 }
 
 DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
