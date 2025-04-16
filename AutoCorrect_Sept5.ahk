@@ -43,54 +43,54 @@ SetControlDelay -1
 SetKeyDelay, 1
 SendMode, Input
 
-Global moving := False
-Global ComboActive := False
-Global skipCheck := False
+Global moving                      := False
+Global ComboActive                 := False
+Global skipCheck                   := False
 Global hwndVD
-Global forward := True
-Global cycling := False
-Global ValidWindows := []
-Global GroupedWindows := []
-Global PrevActiveWindows := []
-Global minWinArray := []
-Global allWinArray := []
-Global cycleCount := 1
-Global startHighlight := False
-Global border_thickness := 4
-Global border_color := 0xFF00FF
-Global hitTAB := False
-Global SearchingWindows := False
-Global UserInputTrimmed := ""
-Global memotext := ""
-Global totalMenuItemCount := 0
-Global onlyTitleFound := ""
+Global forward                     := True
+Global cycling                     := False
+Global ValidWindows                := []
+Global GroupedWindows              := []
+Global PrevActiveWindows           := []
+Global minWinArray                 := []
+Global allWinArray                 := []
+Global cycleCount                  := 1
+Global startHighlight              := False
+Global border_thickness            := 4
+Global border_color                := 0xFF00FF
+Global hitTAB                      := False
+Global SearchingWindows            := False
+Global UserInputTrimmed            := ""
+Global memotext                    := ""
+Global totalMenuItemCount          := 0
+Global onlyTitleFound              := ""
 Global nil
-Global CancelClose := False
-Global lastWinMinHwndId := 0x999999
-Global DesktopIconsVisible := False
-Global DrawingRect := False
-Global LclickSelected := False
-Global StopRecurssion := False
-Global currMonHeight := 0
-Global currMonWidth  := 0
-Global LbuttonEnabled := True
-Global LastKey4 :=
-Global LastKey1 :=
-Global LastKey2 :=
-Global LastKey3 :=
-Global X_PriorPriorHotKey :=
-Global StopAutoFix := False
-Global disableEnter := False
-Global disableWheeldown := False
-Global pauseWheel  := False
+Global CancelClose                 := False
+Global lastWinMinHwndId            := 0x999999
+Global DesktopIconsVisible         := False
+Global DrawingRect                 := False
+Global LclickSelected              := False
+Global StopRecurssion              := False
+Global currMonHeight               := 0
+Global currMonWidth                := 0
+Global LbuttonEnabled              := True
+Global LastKey4                    :=
+Global LastKey1                    :=
+Global LastKey2                    :=
+Global LastKey3                    :=
+Global X_PriorPriorHotKey          :=
+Global StopAutoFix                 := False
+Global disableEnter                := False
+Global disableWheeldown            := False
+Global pauseWheel                  := False
 Global EVENT_SYSTEM_MENUPOPUPSTART := 0x0006
 Global EVENT_SYSTEM_MENUPOPUPEND   := 0x0007
-Global TimeOfLastKey := A_TickCount
+Global TimeOfLastKey               := A_TickCount
 Global lbX1
 Global lbX2
-Global currentMon := 0
-Global previousMon := 0
-Global targetDesktop := 0
+Global currentMon                  := 0
+Global previousMon                 := 0
+Global targetDesktop               := 0
 
 Process, Priority,, High
 
@@ -1015,212 +1015,75 @@ Return
 
 !1::
     StopRecurssion := True
-    CurrentDesktop := getCurrentDesktop()
-    ; If GetKeyState("Lbutton", "P") {
-        ; BlockInput, MouseMove
-        ; Send {Lbutton up}
-        ; WinGetTitle, Title, A
-        ; WinGet, hwndVD, ID, A
-        ; ; WinActivate, ahk_class Shell_TrayWnd
-        ; WinSet, AlwaysOnTop , On, %Title%
-        ; loop, 5
-        ; {
-            ; level := 255-(A_Index*50)
-            ; WinSet, Transparent , %level%, %Title%
-            ; sleep, 30
-        ; }
-        ; ; WinSet, ExStyle, ^0x80, %Title%
-        ; If (CurrentDesktop == 3) {
-            ; MoveCurrentWindowToDesktop(2)
-            ; Send #^{Left}
-            ; sleep, 100
-            ; CurrentDesktop -= 1
-            ; MoveCurrentWindowToDesktop(1)
-            ; Send #^{Left}
-            ; CurrentDesktop -= 1
-            ; sleep, 1000
-        ; }
-        ; Else If (CurrentDesktop == 2) {
-            ; MoveCurrentWindowToDesktop(1)
-            ; Send #^{Left}
-            ; CurrentDesktop -= 1
-            ; sleep 500
-        ; }
-        ; ; WinMinimize, ahk_class Shell_TrayWnd
-        ; ; WinSet, ExStyle, ^0x80, %Title%
-        ; loop, 5
-        ; {
-            ; level := (A_Index*50)
-            ; WinSet, Transparent , %level%, %Title%
-            ; sleep, 30
-        ; }
-        ; WinSet, Transparent , off, %Title%
-        ; WinActivate, %Title%
-        ; Send {Lbutton down}
-        ; sleep, 50
-        ; BlockInput, MouseMoveOff
-        ; KeyWait, Lbutton, U T10
-        ; Send {Lbutton up}
-        ; WinSet, AlwaysOnTop , Off, %Title%
-    ; }
-    ; Else {
-        If (CurrentDesktop == 3) {
-            Send #^{Left}
-            sleep, 100
-            CurrentDesktop -= 1
-            Send #^{Left}
-            CurrentDesktop -= 1
-        }
-        Else If (CurrentDesktop == 2) {
-            Send #^{Left}
-            CurrentDesktop -= 1
-        }
-        sleep 250
-    ; }
-    while (1 != getCurrentDesktop())
-    {
-        sleep, 25
+    CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    while (CurrentDesktop < 1) {
+        Send #^{Right}
+        sleep, 250
+        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    }
+    while (CurrentDesktop > 1) {
+        Send #^{Left}
+        sleep, 250
+        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     StopRecurssion := False
 Return
 
 !2::
-    StopRecurssion := True
-    CurrentDesktop := getCurrentDesktop()
-    ; If GetKeyState("Lbutton", "P") {
-        ; BlockInput, MouseMove
-        ; Send {Lbutton up}
-        ; WinGetTitle, Title, A
-        ; WinGet, hwndVD, ID, A
-        ; ; WinActivate, ahk_class Shell_TrayWnd
-        ; WinSet, AlwaysOnTop , On, %Title%
-        ; loop, 5
-        ; {
-            ; level := 255-(A_Index*50)
-            ; WinSet, Transparent , %level%, %Title%
-            ; sleep, 30
-        ; }
-        ; MoveCurrentWindowToDesktop(2)
-        ; ; WinSet, ExStyle, ^0x80, %Title%
-        ; If (CurrentDesktop == 1) {
-            ; Send #^{Right}
-            ; CurrentDesktop += 1
-        ; }
-        ; Else If (CurrentDesktop == 3) {
-            ; Send #^{Left}
-            ; CurrentDesktop -= 1
-        ; }
-        ; sleep 500
-        ; ; WinMinimize, ahk_class Shell_TrayWnd
-        ; ; WinSet, ExStyle, ^0x80, %Title%
-        ; loop, 5
-        ; {
-            ; level := (A_Index*50)
-            ; WinSet, Transparent , %level%, %Title%
-            ; sleep, 30
-        ; }
-        ; WinSet, Transparent , off, %Title%
-        ; WinActivate, %Title%
-        ; Send {Lbutton down}
-        ; sleep, 50
-        ; BlockInput, MouseMoveOff
-        ; KeyWait, Lbutton, U T10
-        ; Send {Lbutton up}
-        ; WinSet, AlwaysOnTop , Off, %Title%
-    ; }
-    ; Else {
-        If (CurrentDesktop == 1) {
+    If  (GetDesktopCount() >= 2) {
+        StopRecurssion := True
+        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        while (CurrentDesktop < 2) {
             Send #^{Right}
-            CurrentDesktop += 1
+            sleep, 250
+            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
-        Else If (CurrentDesktop == 3) {
+        while (CurrentDesktop > 2) {
             Send #^{Left}
-            CurrentDesktop -= 1
+            sleep, 250
+            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
-        sleep 250
-    ; }
-    while (2 != getCurrentDesktop())
-    {
-        sleep, 25
+        StopRecurssion := False
     }
-    StopRecurssion := False
 Return
 
 !3::
-    StopRecurssion := True
-    CurrentDesktop := getCurrentDesktop()
-    ; If GetKeyState("Lbutton", "P") {
-        ; BlockInput, MouseMove
-        ; Send {Lbutton up}
-        ; WinGetTitle, Title, A
-        ; WinGet, hwndVD, ID, A
-        ; ; WinActivate, ahk_class Shell_TrayWnd
-        ; WinSet, AlwaysOnTop , On, %Title%
-        ; loop, 5
-        ; {
-            ; level := 255-(A_Index*50)
-            ; WinSet, Transparent , %level%, %Title%
-            ; sleep, 30
-        ; }
-        ; MoveCurrentWindowToDesktop(3)
-        ; ; WinSet, ExStyle, ^0x80, %Title%
-        ; If (CurrentDesktop == 1) {
-            ; MoveCurrentWindowToDesktop(2)
-            ; Send #^{Right}
-            ; sleep, 100
-            ; CurrentDesktop += 1
-            ; MoveCurrentWindowToDesktop(3)
-            ; Send #^{Right}
-            ; CurrentDesktop += 1
-            ; sleep, 1000
-        ; }
-        ; Else If (CurrentDesktop == 2) {
-            ; MoveCurrentWindowToDesktop(3)
-            ; Send #^{Right}
-            ; CurrentDesktop += 1
-            ; sleep 500
-        ; }
-        ; ; WinMinimize, ahk_class Shell_TrayWnd
-        ; ; WinSet, ExStyle, ^0x80, %Title%
-        ; loop, 5
-        ; {
-            ; level := (A_Index*50)
-            ; WinSet, Transparent , %level%, %Title%
-            ; sleep, 30
-        ; }
-        ; WinSet, Transparent , off, %Title%
-        ; WinActivate, %Title%
-        ; Send {Lbutton down}
-        ; sleep, 50
-        ; BlockInput, MouseMoveOff
-        ; KeyWait, Lbutton, U T10
-        ; Send {Lbutton up}
-        ; WinSet, AlwaysOnTop , Off, %Title%
-    ; }
-    ; Else {
-        If (CurrentDesktop == 1) {
+    If  (GetDesktopCount() >= 3) {
+        StopRecurssion := True
+        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        while (CurrentDesktop < 3) {
             Send #^{Right}
-            sleep, 100
-            CurrentDesktop += 1
-            Send #^{Right}
-            CurrentDesktop += 1
+            sleep, 250
+            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
-        Else If (CurrentDesktop == 2) {
-            Send #^{Right}
-            CurrentDesktop += 1
+        while (CurrentDesktop > 3) {
+            Send #^{Left}
+            sleep, 250
+            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
-        sleep 250
-    ; }
-    while (3 != getCurrentDesktop())
-    {
-        sleep, 25
+        StopRecurssion := False
     }
-    StopRecurssion := False
+Return
+
+!4::
+    If  (GetDesktopCount() >= 4) {
+        StopRecurssion := True
+        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        while (CurrentDesktop < 4) {
+            Send #^{Right}
+            sleep, 250
+            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        }
+        while (CurrentDesktop > 4) {
+            Send #^{Left}
+            sleep, 250
+            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        }
+        StopRecurssion := False
+    }
 Return
 
 ; #MaxThreadsBuffer Off
-
-
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 Altup:
     Global cycling
@@ -1235,8 +1098,8 @@ Altup:
     cycling        := False
     If !hitTAB {
         cycleCount     := 1
-        ValidWindows   := {}
-        GroupedWindows := {}
+        ValidWindows   := []
+        GroupedWindows := []
         startHighlight := False
         hitTAB         := False
         LclickSelected := False
@@ -1266,8 +1129,8 @@ Altup:
     }
 
     cycleCount     := 1
-    ValidWindows   := {}
-    GroupedWindows := {}
+    ValidWindows   := []
+    GroupedWindows := []
     startHighlight := False
     hitTAB         := False
     LclickSelected := False
@@ -1645,7 +1508,7 @@ Cycle(direction)
 {
     Global cycling
     Global cycleCount
-    ; Global ValidWindows
+    Global ValidWindows
     Global GroupedWindows
     Global MonCount
     Global startHighlight
@@ -2478,6 +2341,7 @@ Return
 #If MouseIsOverTitleBar()
 Mbutton::
     Global movehWndId
+    StopRecurssion := True
     MouseGetPos, , , movehWndId
     WinActivate, ahk_id %movehWndId%
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
@@ -2511,12 +2375,14 @@ Mbutton::
         }
     }
     Menu, vdeskMenu, Show
+    StopRecurssion := False
 Return
 #If
 
 SendWindow:
     Global movehWndId
     Global targetDesktop
+    StopRecurssion := True
     moveLeftConst := -1
     moveRightConst := 1
     moveConst := 0
@@ -2595,21 +2461,26 @@ SendWindow:
 
     WinSet, Transparent, 255, ahk_id %movehWndId%
     DetectHiddenWindows, Off
+    StopRecurssion := False
 Return
 
 SendWindowAndGo:
     Global movehWndId
     Global targetDesktop
-    DetectHiddenWindows, On
     GoSub, SendWindow
-
-    while (targetDesktop != findDesktopWindowIsOn(movehWndId)) {
-        ; tooltip, % targetDesktop "-" findDesktopWindowIsOn(movehWndId)
+    StopRecurssion := True
+    CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    while (CurrentDesktop < targetDesktop) {
+        Send #^{Right}
         sleep, 250
+        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
-    sleep, 250
-    DllCall(GoToDesktopNumberProc, "Int", targetDesktop-1)
-    DetectHiddenWindows, Off
+    while (CurrentDesktop > targetDesktop) {
+        Send #^{Left}
+        sleep, 250
+        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    }
+    StopRecurssion := False
 Return
 
 
