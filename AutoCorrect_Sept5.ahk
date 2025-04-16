@@ -2442,11 +2442,11 @@ Return
 SendWindowAndGo:
     Global movehWndId
     Global targetDesktop
+    StopRecurssion := True
     GoToDesktop := True
     GoSub, SendWindow
-    StopRecurssion := True
 
-    sleepTime := 250
+    sleepTime := 500
 
     while (CurrentDesktop < targetDesktop) {
         Send #^{Right}
@@ -2466,6 +2466,7 @@ SendWindowAndGo:
         MoveAndFadeWindow(movehWndId, sw_x, False, "in")
     Else
         MoveAndFadeWindow(movehWndId, sw_x, True, "in")
+
     StopRecurssion := False
     GoToDesktop := False
 Return
