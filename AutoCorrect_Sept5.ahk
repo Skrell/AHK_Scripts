@@ -2345,7 +2345,8 @@ Return
 #If MouseIsOverTitleBar()
 Mbutton::
     Global movehWndId
-    StopRecurssion := True
+    Global GoToDesktop := False
+
     MouseGetPos, , , movehWndId
     WinActivate, ahk_id %movehWndId%
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
@@ -2379,18 +2380,23 @@ Mbutton::
         }
     }
     Menu, vdeskMenu, Show
-    StopRecurssion := False
+
+    If StopRecurssion
+        StopRecurssion := False
 Return
 #If
 
 SendWindow:
     Global movehWndId
     Global targetDesktop
-    StopRecurssion := True
     moveLeftConst := -1
     moveRightConst := 1
     moveConst := 0
+
     DetectHiddenWindows, On
+
+    If !GoToDesktop
+        StopRecurssion := True
 
     InitialDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
 
@@ -2438,7 +2444,8 @@ SendWindow:
         WinSet, Transparent, 255, ahk_id %movehWndId%
 
     DetectHiddenWindows, Off
-    StopRecurssion := False
+    If !GoToDesktop
+        StopRecurssion := False
 Return
 
 SendWindowAndGo:
@@ -2451,6 +2458,7 @@ SendWindowAndGo:
     HexColor1 := 0x0
     HexColor2 := 0x1
     HexColor3 := 0x2
+    HexColor4 := 0x3
 
     sleepTime := 500
 
@@ -2467,7 +2475,7 @@ SendWindowAndGo:
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     MouseGetPos, x, y
-    while (!WinActive("ahk_id " . movehWndId) && (HexColor1!=HexColor2!=HexColor3)) {
+    while (!WinActive("ahk_id " . movehWndId) && !(HexColor1==HexColor2==HexColor3==HexColor4)) {
         WinActivate, ahk_id %movehWndId%
         CoordMode, Pixel, Screen
         PixelGetColor, HexColor1, %x%, %y%, RGB
@@ -2475,6 +2483,8 @@ SendWindowAndGo:
         PixelGetColor, HexColor2, %x%, %y%, RGB
         sleep, 100
         PixelGetColor, HexColor3, %x%, %y%, RGB
+        sleep, 100
+        PixelGetColor, HexColor4, %x%, %y%, RGB
     }
     CoordMode, Mouse, screen
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
