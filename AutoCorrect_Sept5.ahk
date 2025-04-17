@@ -1097,12 +1097,13 @@ Altup:
 
     cycling        := False
     If !hitTAB {
+        Critical, On
         cycleCount     := 1
         ValidWindows   := []
         GroupedWindows := []
         startHighlight := False
-        hitTAB         := False
         LclickSelected := False
+        Critical, Off
         Return
     }
     Else {
@@ -1127,7 +1128,7 @@ Altup:
             }
         }
     }
-
+    Critical, On
     cycleCount     := 1
     ValidWindows   := []
     GroupedWindows := []
@@ -1135,6 +1136,7 @@ Altup:
     hitTAB         := False
     LclickSelected := False
     BlockKeyboard(false)
+    Critical, Off
     Gosub, ClearRect
     ; tooltip,
 Return
@@ -1317,15 +1319,15 @@ Return
 
 ; #MaxThreadsPerHotkey 1
 $!Tab::
-Hotkey, $!Tab, Off
-ComboActive := False
-SetTimer, track, Off
-SetTimer, keyTrack, Off
-Cycle(forward)
-GoSub, Altup
-SetTimer, track, On
-SetTimer, keyTrack, On
-Hotkey, $!Tab, On
+If !hitTAB {
+    ComboActive := False
+    SetTimer, track, Off
+    SetTimer, keyTrack, Off
+    Cycle(forward)
+    GoSub, Altup
+    SetTimer, track, On
+    SetTimer, keyTrack, On
+}
 Return
 
 $!+Tab::
@@ -2446,6 +2448,10 @@ SendWindowAndGo:
     GoToDesktop := True
     GoSub, SendWindow
 
+    HexColor1 := 0x0
+    HexColor2 := 0x1
+    HexColor3 := 0x2
+
     sleepTime := 500
 
     while (CurrentDesktop < targetDesktop) {
@@ -2460,7 +2466,17 @@ SendWindowAndGo:
         sleep, %sleepTime%
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
-
+    MouseGetPos, x, y
+    while (!WinActive("ahk_id " . movehWndId) && (HexColor1!=HexColor2!=HexColor3)) {
+        WinActivate, ahk_id %movehWndId%
+        CoordMode, Pixel, Screen
+        PixelGetColor, HexColor1, %x%, %y%, RGB
+        sleep, 100
+        PixelGetColor, HexColor2, %x%, %y%, RGB
+        sleep, 100
+        PixelGetColor, HexColor3, %x%, %y%, RGB
+    }
+    CoordMode, Mouse, screen
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
     If (targetDesktop < InitialDesktop)
         MoveAndFadeWindow(movehWndId, sw_x, False, "in")
@@ -3601,15 +3617,10 @@ track() {
             sleep, 500
 
             while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2!=HexColor3)) {
-                ; CoordMode, Mouse, screen
-                ; MouseGetPos x, y
+                WinActivate, ahk_id %hwndVD%
                 CoordMode, Pixel, Screen
                 PixelGetColor, HexColor1, %x%, %y%, RGB
-                WinActivate, ahk_id %hwndVD%
                 sleep, 50
-                ; CoordMode, Mouse, screen
-                ; MouseGetPos x, y
-                ; CoordMode, Pixel, Screen
                 PixelGetColor, HexColor2, %x%, %y%, RGB
                 sleep, 50
                 PixelGetColor, HexColor3, %x%, %y%, RGB
@@ -3695,15 +3706,10 @@ track() {
             sleep, 500
 
             while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2!=HexColor3)) {
-                ; CoordMode, Mouse, screen
-                ; MouseGetPos x, y
+                WinActivate, ahk_id %hwndVD%
                 CoordMode, Pixel, Screen
                 PixelGetColor, HexColor1, %x%, %y%, RGB
-                WinActivate, ahk_id %hwndVD%
                 sleep, 50
-                ; CoordMode, Mouse, screen
-                ; MouseGetPos x, y
-                ; CoordMode, Pixel, Screen
                 PixelGetColor, HexColor2, %x%, %y%, RGB
                 sleep, 50
                 PixelGetColor, HexColor3, %x%, %y%, RGB
@@ -5471,6 +5477,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::discrepencies::discrepancies
 ::discrepency::discrepancy
 ::digestable::digestible
+::th::the
 ::i::I
 ::fo::of
 ::fi::If
