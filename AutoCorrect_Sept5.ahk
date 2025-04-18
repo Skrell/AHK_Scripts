@@ -2480,7 +2480,10 @@ SendWindowAndGo:
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     MouseGetPos, x, y
-    while (!WinActive("ahk_id " . movehWndId) && !(HexColor1==HexColor2==HexColor3==HexColor4)) {
+    while (!WinActive("ahk_id " . movehWndId)
+            && !(HexColor1==HexColor2==HexColor3==HexColor4)
+            && targetDesktop != (DllCall(GetCurrentDesktopNumberProc, "Int") + 1)) {
+
         WinActivate, ahk_id %movehWndId%
         CoordMode, Pixel, Screen
         PixelGetColor, HexColor1, %x%, %y%, RGB
