@@ -1564,7 +1564,7 @@ Cycle(direction)
                                 Else {
                                     Critical, Off
                                     GoSub, DrawRect
-                                    If !GetKeyState("Alt","P") || GetKeyState("q","P")
+                                    If !GetKeyState("LAlt","P") || GetKeyState("q","P")
                                         Return
                                 }
                             }
@@ -1574,7 +1574,7 @@ Cycle(direction)
                                 Critical, Off
                                 GoSub, DrawRect
                             }
-                            If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("Alt","P") || GetKeyState("q","P"))) {
+                            If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
                                 Critical, Off
                                 Return
                             }
@@ -1610,8 +1610,13 @@ Cycle(direction)
                     LclickSelected := True
                     GoSub, DrawRect
                     DrawWindowTitlePopup(actTitle, pp)
-                    WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
+                    ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                     KeyWait, Lbutton, U
+                }
+
+                If !GetKeyState("LAlt", "P") || GetKeyState("q","P") {
+                    Gui, WindowTitle: Destroy
+                    Return
                 }
 
                 KeyWait, Tab, D  T0.1
@@ -1629,7 +1634,7 @@ Cycle(direction)
 
                         GoSub, DrawRect
                         DrawWindowTitlePopup(tits, pp)
-                        WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
+                        ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
                     }
                     Else {
@@ -1643,7 +1648,7 @@ Cycle(direction)
                         WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
                         GoSub, DrawRect
                         DrawWindowTitlePopup(tits, pp)
-                        WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
+                        ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
                     }
                     If (cycleCount > 2)
