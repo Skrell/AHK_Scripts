@@ -393,7 +393,7 @@ IsThisHotKeyLetterKey() {
 }
 IsPriorHotKeyCapital() {
     Global keys
-    return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,2,1)="+" && inStr(keys, Substr(A_PriorHotkey,3,1), false))
+    return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,1,1)!="!" && SubStr(A_PriorHotKey,2,1)="+" && inStr(keys, Substr(A_PriorHotkey,3,1), false))
 }
 IsPriorHotKeyLowerCase() {
     Global keys
@@ -401,7 +401,7 @@ IsPriorHotKeyLowerCase() {
 }
 IsThisHotKeyCapital() {
     Global keys
-    return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,2,1)="+" && inStr(keys, Substr(A_ThisHotKey,3,1), false))
+    return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,1,1)!="!" && SubStr(A_ThisHotKey,2,1)="+" && inStr(keys, Substr(A_ThisHotKey,3,1), false))
 }
 IsThisHotKeyLowerCase() {
     Global keys
@@ -469,7 +469,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
             Critical, On
-            If !WinExist("ahk_id " hWnd) {
+            If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
                 DetectHiddenWindows, Off
                 Return
             }
@@ -542,7 +542,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     sleep, 5
                 }
 
-                If !WinExist("ahk_id " hWnd) {
+                If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
                     DetectHiddenWindows, Off
                     Return
                 }
@@ -579,6 +579,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
         }
     }
+    tooltip,
     DetectHiddenWindows, Off
     Return
 }
@@ -3487,7 +3488,7 @@ keyTrack() {
     WinGetClass, currClass, A
     If (currCtrl == "Edit1" && InStr(currClass, "EVERYTHING", true)) {
         StopAutoFix := True
-        If ((A_TickCount-TimeOfLastKey) < 650 && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
+        If ((A_TickCount-TimeOfLastKey) < 700 && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
             SetTimer, keyTrack, Off
             ControlGet, OutputVar1, Visible ,, SysListView321, A
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
@@ -3495,10 +3496,13 @@ keyTrack() {
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
                 WinGetClass, testClass, A
                 If (testClass == currClass) {
-                    BlockKeyboard(true)
+                    ; BlockKeyboard(true)
+                    Critical, On
                     Send, ^{NumpadAdd}
-                    BlockKeyboard(false)
+                    Critical, Off
+                    ; BlockKeyboard(false)
                     sleep, 400
+                    TimeOfLastKey := A_TickCount
                 }
             }
             SetTimer, keyTrack, On
