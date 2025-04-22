@@ -423,17 +423,18 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         DetectHiddenWindows, On
 
         WinGetClass, vWinClass, % "ahk_id " hWnd
-        If (vWinClass == "#32768" || vWinClass == "Shell_TrayWnd" || vWinClass == "") {
+        If (vWinClass == "#32768" || (InStr(vWinClass, "Shell",false) && InStr(vWinClass, "TrayWnd",false)) || vWinClass == "") {
+            tooltip, no class so exiting
             Return
         }
 
         If ( (!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey" && vWinClass != "AutohotkeyGUI") || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
             If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
-                WinSet, AlwaysOnTop, On, Ahk_id %hWnd%
+                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 If (vWinClass == "OperationStatusWindow")
                     Return
             }
-
+            ; tooltip, wtf
             If (!JEE_WinHasAltTabIcon(hWnd) && vWinClass != "#32770")
                 Return
 
@@ -455,12 +456,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Return
             }
 
-            WinGet, state, MinMax, Ahk_id %hWnd%
+            WinGet, state, MinMax, ahk_id %hWnd%
             If (state > -1 && vWinTitle != "") {
                 currentMon := MWAGetMonitorMouseIsIn()
                 currentMonHasActWin := IsWindowOnCurrMon(hWnd, currentMon)
                 If !currentMonHasActWin {
-                    WinActivate, Ahk_id %hWnd%
+                    WinActivate, ahk_id %hWnd%
                     Send, #+{Left}
                 }
             }
@@ -505,33 +506,33 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                 If (OutputVar2 == 1) {
                     FocusedControl := "DirectUIHWND2"
-                    loop, 100 {
-                        ControlFocus, DirectUIHWND2, % "ahk_id " hWnd
-                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                        If (testCtrlFocus == "DirectUIHWND2")
-                            break
-                        sleep, 5
-                        }
+                    ; loop, 100 {
+                        ; ControlFocus, DirectUIHWND2, % "ahk_id " hWnd
+                        ; ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        ; If (testCtrlFocus == "DirectUIHWND2")
+                            ; break
+                        ; sleep, 5
+                        ; }
                 }
                 Else If (OutputVar3 == 1) {
                     FocusedControl := "DirectUIHWND3"
-                    loop, 100 {
-                        ControlFocus, DirectUIHWND3, % "ahk_id " hWnd
-                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                        If (testCtrlFocus == "DirectUIHWND3")
-                            break
-                        sleep, 5
-                    }
+                    ; loop, 100 {
+                        ; ControlFocus, DirectUIHWND3, % "ahk_id " hWnd
+                        ; ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        ; If (testCtrlFocus == "DirectUIHWND3")
+                            ; break
+                        ; sleep, 5
+                    ; }
                 }
                 Else If (OutputVar1 == 1) {
                     FocusedControl := "SysListView321"
-                    loop, 100 {
-                        ControlFocus, SysListView321, % "ahk_id " hWnd
-                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                        If (testCtrlFocus == "SysListView321")
-                            break
-                        sleep, 5
-                    }
+                    ; loop, 100 {
+                        ; ControlFocus, SysListView321, % "ahk_id " hWnd
+                        ; ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        ; If (testCtrlFocus == "SysListView321")
+                            ; break
+                        ; sleep, 5
+                    ; }
                 }
 
                 loop, 100 {
@@ -547,9 +548,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Return
                 }
 
-                tooltip, about to send to %testCtrlFocus%
+                tooltip, about to send to %FocusedControl%
                 WinGet, testID, ID, A
                 If (testID == hWnd) {
+                    ; ControlSend, %FocusedControl%, ^{NumpadAdd} , ahk_id %hWnd%
                     Send, ^{NumpadAdd}
                     sleep, 125
 
@@ -579,7 +581,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
         }
     }
-    tooltip,
+    ; tooltip,
     DetectHiddenWindows, Off
     Return
 }
@@ -1945,7 +1947,6 @@ Return
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
 ~LButton::
     tooltip,
-    StopRecurssion     := True
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, lbhwnd, lctrlN
     SetTimer, SendCtrlAdd, Off
@@ -1972,7 +1973,7 @@ Return
             }
         }
 
-        ; KeyWait, Lbutton, U T3
+        KeyWait, Lbutton, U T3
         LbuttonEnabled     := False
 
         If (lClass == "CabinetWClass" || lClass == "#32770") {
@@ -1982,21 +1983,17 @@ Return
                     break
                 sleep, 2
             }
-
+            ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
             If (prevPath != "" && currentPath != "" && prevPath != currentPath)
                 SetTimer, SendCtrlAdd, -1
-                ; SetTimer, KeepCenteringTimer, 5
 
             LbuttonEnabled     := True
-            StopRecurssion     := False
             Return
         }
         Else {
-            ; SetTimer, KeepCenteringTimer, 5
             SetTimer, SendCtrlAdd, -1
             sleep, 100
             LbuttonEnabled     := True
-            StopRecurssion     := False
             Return
         }
     }
@@ -2039,7 +2036,6 @@ Return
     Else
         SetTimer, SendCtrlAdd, Off
 
-    StopRecurssion := False
     LbuttonEnabled := True
 Return
 #If
@@ -3925,7 +3921,7 @@ ShellMessage( wParam, lParam )
         ID := lParam
         ; loop 10 {
             ; sleep 100
-            ; WinGetPos, x, y, w, h, Ahk_id %ID%
+            ; WinGetPos, x, y, w, h, ahk_id %ID%
             ; If (x == x2 && y == y2 && w == w2 && h == h2)
                 ; break
             ; x2 := x
@@ -3934,12 +3930,12 @@ ShellMessage( wParam, lParam )
             ; h2 := h
         ; }
         ; sleep, 300
-        WinGetTitle, title, Ahk_id %ID%
-        WinGet, procStr, ProcessName, Ahk_id %ID%
-        WinGet, hwndID, ID, Ahk_id %ID%
-        WinGetClass, classStr, Ahk_id %ID%
+        WinGetTitle, title, ahk_id %ID%
+        WinGet, procStr, ProcessName, ahk_id %ID%
+        WinGet, hwndID, ID, ahk_id %ID%
+        WinGetClass, classStr, ahk_id %ID%
 
-        WinWaitActive, Ahk_id %ID%, , 3
+        WinWaitActive, ahk_id %ID%, , 3
         ; tooltip, %classStr%
         If (classStr == "OperationStatusWindow" || classStr == "#32770") {
             sleep 100
@@ -3951,13 +3947,13 @@ ShellMessage( wParam, lParam )
                 Return
             }
 
-            WinGet, state, MinMax, Ahk_id %ID%
+            WinGet, state, MinMax, ahk_id %ID%
             ; tooltip, %classStr% - %currentMonHasActWin%
             If (state > -1) {
                 currentMon := MWAGetMonitorMouseIsIn()
                 currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
                 If !currentMonHasActWin {
-                    WinActivate, Ahk_id %ID%
+                    WinActivate, ahk_id %ID%
                     Send, #+{Left}
                 }
             }
