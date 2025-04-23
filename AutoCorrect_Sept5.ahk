@@ -423,7 +423,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         DetectHiddenWindows, On
 
         WinGetClass, vWinClass, % "ahk_id " hWnd
-        If (vWinClass == "#32768" || (InStr(vWinClass, "Shell",false) && InStr(vWinClass, "TrayWnd",false)) || vWinClass == "") {
+        WinGetTitle, vWinTitle, % "ahk_id " hWnd
+        If (vWinClass == "#32768" || (InStr(vWinClass, "Shell",false) && InStr(vWinClass, "TrayWnd",false)) || vWinClass == "" || !WinExist("ahk_id " hWnd) || (vWinTitle == "")) {
             tooltip, no class so exiting
             Return
         }
@@ -434,17 +435,17 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 If (vWinClass == "OperationStatusWindow")
                     Return
             }
-            ; tooltip, wtf
-            If (!JEE_WinHasAltTabIcon(hWnd) && vWinClass != "#32770")
-                Return
+
+            ; If (!JEE_WinHasAltTabIcon(hWnd) && vWinClass != "#32770")
+                ; Return
 
             tooltip, here we goooo
-            loop 200 {
-                WinGetTitle, vWinTitle, % "ahk_id " hWnd
-                If (vWinTitle != "")
-                    break
-                sleep, 5
-             }
+            ; loop 200 {
+                ; WinGetTitle, vWinTitle, % "ahk_id " hWnd
+                ; If (vWinTitle != "")
+                    ; break
+                ; sleep, 5
+             ; }
 
             If (vWinTitle == "") {
                 DetectHiddenWindows, Off
@@ -555,13 +556,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Send, ^{NumpadAdd}
                     sleep, 125
 
-                    If initFocusedCtrl {
-                        loop, 100 {
+                    If (initFocusedCtrl != FocusedControl) {
+                        loop, 500 {
                             ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
                             ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
                             If (testCtrlFocus == initFocusedCtrl)
                                 break
-                            sleep, 5
+                            sleep, 1
                         }
                     }
                 }
@@ -719,8 +720,13 @@ Return
 !+'::
     Critical, On
     store := Clip()
+    len := StrLen(store)
+    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
     store := Trim(store)
-    store := """" . store . """"
+    If !foundSpace
+        store := """" . store . """"
+    Else
+        store := """" . store . """" . " "
     Clip(store)
     Critical, Off
 Return
@@ -728,8 +734,13 @@ Return
 !+[::
     Critical, On
     store := Clip()
+    len := StrLen(store)
+    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
     store := Trim(store)
-    store := "{" . store . "}"
+    If !foundSpace
+        store := "{" . store . "}"
+    Else
+        store := "{" . store . "} "
     Clip(store)
     Critical, Off
 Return
@@ -737,8 +748,13 @@ Return
 !+]::
     Critical, On
     store := Clip()
+    len := StrLen(store)
+    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
     store := Trim(store)
-    store := "{" . store . "}"
+    If !foundSpace
+        store := "{" . store . "}"
+    Else
+        store := "{" . store . "} "
     Clip(store)
     Critical, Off
 Return
@@ -746,8 +762,13 @@ Return
 !+<::
     Critical, On
     store := Clip()
+    len := StrLen(store)
+    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
     store := Trim(store)
-    store := "<" . store . ">"
+    If !foundSpace
+        store := "<" . store . ">"
+    Else
+        store := "<" . store . "> "
     Clip(store)
     Critical, Off
 Return
@@ -755,8 +776,13 @@ Return
 !+>::
     Critical, On
     store := Clip()
+    len := StrLen(store)
+    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
     store := Trim(store)
-    store := "<" . store . ">"
+    If !foundSpace
+        store := "<" . store . ">"
+    Else
+        store := "<" . store . "> "
     Clip(store)
     Critical, Off
 Return
@@ -764,8 +790,13 @@ Return
 !+(::
     Critical, On
     store := Clip()
+    len := StrLen(store)
+    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
     store := Trim(store)
-    store := "(" . store . ")"
+    If !foundSpace
+        store := "(" . store . ")"
+    Else
+        store := "(" . store . ") "
     Clip(store)
     Critical, Off
 Return
@@ -773,8 +804,13 @@ Return
 !+)::
     Critical, On
     store := Clip()
+    len := StrLen(store)
+    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
     store := Trim(store)
-    store := "(" . store . ")"
+    If !foundSpace
+        store := "(" . store . ")"
+    Else
+        store := "(" . store . ") "
     Clip(store)
     Critical, Off
 Return
@@ -1018,6 +1054,7 @@ Return
 
 !1::
     StopRecurssion := True
+    SetTimer, track, Off
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     while (CurrentDesktop < 1) {
         Send #^{Right}
@@ -1030,11 +1067,13 @@ Return
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     StopRecurssion := False
+    SetTimer, track, On
 Return
 
 !2::
     If  (GetDesktopCount() >= 2) {
         StopRecurssion := True
+        SetTimer, track, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         while (CurrentDesktop < 2) {
             Send #^{Right}
@@ -1047,12 +1086,14 @@ Return
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
+        SetTimer, track, On
     }
 Return
 
 !3::
     If  (GetDesktopCount() >= 3) {
         StopRecurssion := True
+        SetTimer, track, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         while (CurrentDesktop < 3) {
             Send #^{Right}
@@ -1065,12 +1106,14 @@ Return
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
+        SetTimer, track, On
     }
 Return
 
 !4::
     If  (GetDesktopCount() >= 4) {
         StopRecurssion := True
+        SetTimer, track, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         while (CurrentDesktop < 4) {
             Send #^{Right}
@@ -1083,6 +1126,7 @@ Return
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
+        SetTimer, track, On
     }
 Return
 
@@ -1860,19 +1904,19 @@ Return
 Return
 #If
 
-KeepCenteringTimer:
-    MouseGetPos, , , , lctrlN
-    If (GetKeyState("Lbutton","P") || GetKeyState("Rbutton","P") || GetKeyState("LAlt","P") ) {
-        SetTimer, KeepCenteringTimer, Off
-        Return
-    }
-    Else If  (lctrlN != "SysListView321" && lctrlN != "DirectUIHWND2" && lctrlN != "DirectUIHWND3") {
-        SetTimer, KeepCenteringTimer, Off
-        Return
-    }
-    Else
-        Send, ^{NumpadAdd}
-Return
+; KeepCenteringTimer:
+    ; MouseGetPos, , , , lctrlN
+    ; If (GetKeyState("Lbutton","P") || GetKeyState("Rbutton","P") || GetKeyState("LAlt","P") ) {
+        ; SetTimer, KeepCenteringTimer, Off
+        ; Return
+    ; }
+    ; Else If  (lctrlN != "SysListView321" && lctrlN != "DirectUIHWND2" && lctrlN != "DirectUIHWND3") {
+        ; SetTimer, KeepCenteringTimer, Off
+        ; Return
+    ; }
+    ; Else
+        ; Send, ^{NumpadAdd}
+; Return
 
 #If MouseIsOverTitleBar()
 ~^LButton::
@@ -1976,6 +2020,7 @@ Return
         KeyWait, Lbutton, U T3
         LbuttonEnabled     := False
 
+        MouseGetPos, , , , lctrlNCheck
         If (lClass == "CabinetWClass" || lClass == "#32770") {
             loop 100 {
                 currentPath := GetExplorerPath(lbhwnd)
@@ -1984,13 +2029,13 @@ Return
                 sleep, 2
             }
             ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
-            If (prevPath != "" && currentPath != "" && prevPath != currentPath)
+            If (prevPath != "" && currentPath != "" && prevPath != currentPath && lctrlN == lctrlNCheck)
                 SetTimer, SendCtrlAdd, -1
 
             LbuttonEnabled     := True
             Return
         }
-        Else {
+        Else If (lctrlN == lctrlNCheck) {
             SetTimer, SendCtrlAdd, -1
             sleep, 100
             LbuttonEnabled     := True
@@ -3479,6 +3524,22 @@ keyTrack() {
     ListLines, Off
     Global StopAutoFix
     Global TimeOfLastKey
+
+    If GetKeyState("LAlt")   && !GetKeyState("LAlt","P") {
+        Critical, On
+        Send, {LAlt Up}
+        Critical, Off
+    }
+    If GetKeyState("Ctrl")   && !GetKeyState("Ctrl","P") {
+        Critical, On
+        Send, {Ctrl Up}
+        Critical, Off
+    }
+    If GetKeyState("LShift") && !GetKeyState("LShift","P") {
+        Critical, On
+        Send, {LShift Up}
+        Critical, Off
+    }
 
     ControlGetFocus, currCtrl, A
     WinGetClass, currClass, A
