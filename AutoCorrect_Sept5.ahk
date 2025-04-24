@@ -424,7 +424,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
         WinGetClass, vWinClass, % "ahk_id " hWnd
         WinGetTitle, vWinTitle, % "ahk_id " hWnd
-        If (vWinClass == "#32768" || (InStr(vWinClass, "Shell",false) && InStr(vWinClass, "TrayWnd",false)) || vWinClass == "" || !WinExist("ahk_id " hWnd) || (vWinTitle == "")) {
+        If (vWinClass == "#32768" || vWinClass == "Progman" || vWinClass == "WorkerW" || (InStr(vWinClass, "Shell",false) && InStr(vWinClass, "TrayWnd",false)) || vWinClass == "" || !WinExist("ahk_id " hWnd) || (vWinTitle == "")) {
             tooltip, no class so exiting
             Return
         }
@@ -439,7 +439,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ; If (!JEE_WinHasAltTabIcon(hWnd) && vWinClass != "#32770")
                 ; Return
 
-            tooltip, here we goooo
+            ; tooltip, here we goooo
             ; loop 200 {
                 ; WinGetTitle, vWinTitle, % "ahk_id " hWnd
                 ; If (vWinTitle != "")
@@ -458,7 +458,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
 
             WinGet, state, MinMax, ahk_id %hWnd%
-            If (state > -1 && vWinTitle != "") {
+            If (state > -1 && vWinTitle != "" && MonCount > 1) {
                 currentMon := MWAGetMonitorMouseIsIn()
                 currentMonHasActWin := IsWindowOnCurrMon(hWnd, currentMon)
                 If !currentMonHasActWin {
@@ -498,7 +498,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         break
                     sleep, 5
                 }
-                ; tooltip, init focus is %initFocusedCtrl%
+                tooltip, init focus is %initFocusedCtrl%
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                     exEl := UIA.ElementFromHandle(hWnd)
                     shellEl := exEl.FindFirstByName("Items View")
@@ -507,41 +507,21 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                 If (OutputVar2 == 1) {
                     FocusedControl := "DirectUIHWND2"
-                    ; loop, 100 {
-                        ; ControlFocus, DirectUIHWND2, % "ahk_id " hWnd
-                        ; ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                        ; If (testCtrlFocus == "DirectUIHWND2")
-                            ; break
-                        ; sleep, 5
-                        ; }
                 }
                 Else If (OutputVar3 == 1) {
                     FocusedControl := "DirectUIHWND3"
-                    ; loop, 100 {
-                        ; ControlFocus, DirectUIHWND3, % "ahk_id " hWnd
-                        ; ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                        ; If (testCtrlFocus == "DirectUIHWND3")
-                            ; break
-                        ; sleep, 5
-                    ; }
                 }
                 Else If (OutputVar1 == 1) {
                     FocusedControl := "SysListView321"
-                    ; loop, 100 {
-                        ; ControlFocus, SysListView321, % "ahk_id " hWnd
-                        ; ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                        ; If (testCtrlFocus == "SysListView321")
-                            ; break
-                        ; sleep, 5
-                    ; }
                 }
-
-                loop, 100 {
-                    ControlFocus, %FocusedControl%, % "ahk_id " hWnd
-                    ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                    If (testCtrlFocus == FocusedControl)
-                        break
-                    sleep, 5
+                If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+                    loop, 100 {
+                        ControlFocus, %FocusedControl%, % "ahk_id " hWnd
+                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        If (testCtrlFocus == FocusedControl)
+                            break
+                        sleep, 5
+                    }
                 }
 
                 If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
@@ -549,20 +529,22 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Return
                 }
 
-                tooltip, about to send to %FocusedControl%
+                ; tooltip, about to send to %FocusedControl%
                 WinGet, testID, ID, A
                 If (testID == hWnd) {
-                    ; ControlSend, %FocusedControl%, ^{NumpadAdd} , ahk_id %hWnd%
                     Send, ^{NumpadAdd}
-                    sleep, 125
 
-                    If (initFocusedCtrl != FocusedControl) {
-                        loop, 500 {
-                            ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
-                            ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
-                            If (testCtrlFocus == initFocusedCtrl)
-                                break
-                            sleep, 1
+                    If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+                        sleep, 125
+
+                        If (initFocusedCtrl != "" && initFocusedCtrl != FocusedControl) {
+                            loop, 500 {
+                                ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
+                                ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                                If (testCtrlFocus == initFocusedCtrl)
+                                    break
+                                sleep, 1
+                            }
                         }
                     }
                 }
@@ -1058,12 +1040,12 @@ Return
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     while (CurrentDesktop < 1) {
         Send #^{Right}
-        sleep, 250
+        sleep, 300
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     while (CurrentDesktop > 1) {
         Send #^{Left}
-        sleep, 250
+        sleep, 300
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     StopRecurssion := False
@@ -1071,20 +1053,43 @@ Return
 Return
 
 !2::
+    HexColor1 := 0x0
+    HexColor2 := 0x1
+    HexColor3 := 0x2
+    MouseGetPos, x, y,
+
     If  (GetDesktopCount() >= 2) {
         StopRecurssion := True
         SetTimer, track, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         while (CurrentDesktop < 2) {
             Send #^{Right}
-            sleep, 250
+            while (HexColor1 != HexColor2 != HexColor3) {
+                CoordMode, Pixel, Screen
+                PixelGetColor, HexColor1, %x%, %y%, RGB
+                sleep, 50
+                PixelGetColor, HexColor2, %x%, %y%, RGB
+                sleep, 50
+                PixelGetColor, HexColor3, %x%, %y%, RGB
+            }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
+        CoordMode, Mouse, screen
+
         while (CurrentDesktop > 2) {
             Send #^{Left}
-            sleep, 250
+            while (HexColor1 != HexColor2 != HexColor3) {
+                CoordMode, Pixel, Screen
+                PixelGetColor, HexColor1, %x%, %y%, RGB
+                sleep, 50
+                PixelGetColor, HexColor2, %x%, %y%, RGB
+                sleep, 50
+                PixelGetColor, HexColor3, %x%, %y%, RGB
+                tooltip, stuck2
+            }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
+        CoordMode, Mouse, screen
         StopRecurssion := False
         SetTimer, track, On
     }
@@ -1097,12 +1102,12 @@ Return
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         while (CurrentDesktop < 3) {
             Send #^{Right}
-            sleep, 250
+            sleep, 300
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         while (CurrentDesktop > 3) {
             Send #^{Left}
-            sleep, 250
+            sleep, 300
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
@@ -1117,12 +1122,12 @@ Return
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         while (CurrentDesktop < 4) {
             Send #^{Right}
-            sleep, 250
+            sleep, 300
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         while (CurrentDesktop > 4) {
             Send #^{Left}
-            sleep, 250
+            sleep, 300
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
