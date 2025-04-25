@@ -2548,6 +2548,10 @@ SendCtrlAdd:
         WinGet, lIdCheck, ID, A
 
         MouseGetPos, , , , initFocusedCtrl
+        while (initFocusedCtrl == "ShellTabWindowClass1") {
+            MouseGetPos, , , , initFocusedCtrl
+        }
+
         tooltip, hovering over %initFocusedCtrl%
         OutputVar1 := OutputVar2 := OutputVar3 := ""
         If (initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
