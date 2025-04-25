@@ -1034,80 +1034,85 @@ Return
     DetectHiddenWindows, Off
 Return
 
-!1::
+!1::GoSub, SwitchToVD1
+
+SwitchToVD1:
     StopRecurssion := True
     SetTimer, track, Off
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    testDesktop := CurrentDesktop
     while (CurrentDesktop < 1) {
         Send #^{Right}
-        sleep, 300
+        while (CurrentDesktop == testDesktop) {
+            sleep, 100
+            testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        }
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     while (CurrentDesktop > 1) {
         Send #^{Left}
-        sleep, 300
+        while (CurrentDesktop == testDesktop) {
+            sleep, 100
+            testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        }
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     StopRecurssion := False
     SetTimer, track, On
 Return
 
-!2::
-    HexColor1 := 0x0
-    HexColor2 := 0x1
-    HexColor3 := 0x2
-    MouseGetPos, x, y,
+!2::GoSub, SwitchToVD2
 
+SwitchToVD2:
     If  (GetDesktopCount() >= 2) {
         StopRecurssion := True
         SetTimer, track, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        testDesktop := CurrentDesktop
         while (CurrentDesktop < 2) {
             Send #^{Right}
-            while (HexColor1 != HexColor2 != HexColor3) {
-                CoordMode, Pixel, Screen
-                PixelGetColor, HexColor1, %x%, %y%, RGB
-                sleep, 50
-                PixelGetColor, HexColor2, %x%, %y%, RGB
-                sleep, 50
-                PixelGetColor, HexColor3, %x%, %y%, RGB
+            while (CurrentDesktop == testDesktop) {
+                sleep, 100
+                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
             }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
-        CoordMode, Mouse, screen
-
         while (CurrentDesktop > 2) {
             Send #^{Left}
-            while (HexColor1 != HexColor2 != HexColor3) {
-                CoordMode, Pixel, Screen
-                PixelGetColor, HexColor1, %x%, %y%, RGB
-                sleep, 50
-                PixelGetColor, HexColor2, %x%, %y%, RGB
-                sleep, 50
-                PixelGetColor, HexColor3, %x%, %y%, RGB
-                tooltip, stuck2
+            while (CurrentDesktop == testDesktop) {
+                sleep, 100
+                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
             }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
-        CoordMode, Mouse, screen
         StopRecurssion := False
         SetTimer, track, On
     }
+    tooltip,
 Return
 
-!3::
+!3::GoSub, SwitchToVD3
+
+SwitchToVD3:
     If  (GetDesktopCount() >= 3) {
         StopRecurssion := True
         SetTimer, track, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        testDesktop := CurrentDesktop
         while (CurrentDesktop < 3) {
             Send #^{Right}
-            sleep, 300
+            while (CurrentDesktop == testDesktop) {
+                sleep, 100
+                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         while (CurrentDesktop > 3) {
             Send #^{Left}
-            sleep, 300
+            while (CurrentDesktop == testDesktop) {
+                sleep, 100
+                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
@@ -1115,19 +1120,28 @@ Return
     }
 Return
 
-!4::
+!4::GoSub, SwitchToVD4
+
+SwitchToVD4:
     If  (GetDesktopCount() >= 4) {
         StopRecurssion := True
         SetTimer, track, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        testDesktop := CurrentDesktop
         while (CurrentDesktop < 4) {
             Send #^{Right}
-            sleep, 300
+            while (CurrentDesktop == testDesktop) {
+                sleep, 100
+                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         while (CurrentDesktop > 4) {
             Send #^{Left}
-            sleep, 300
+            while (CurrentDesktop == testDesktop) {
+                sleep, 100
+                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
@@ -2507,41 +2521,11 @@ SendWindowAndGo:
     GoToDesktop := True
     GoSub, SendWindow
 
-    HexColor1 := 0x0
-    HexColor2 := 0x1
-    HexColor3 := 0x2
-    HexColor4 := 0x3
+    ; key := "{!" . targetDesktop . "}"
+    ; tooltip,  %key%
+    GoSub, SwitchToVD%targetDesktop%
+    sleep, 400
 
-    sleepTime := 500
-
-    while (CurrentDesktop < targetDesktop) {
-        Send #^{Right}
-        sleepTime += A_Index*50
-        sleep, %sleepTime%
-        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
-    }
-    while (CurrentDesktop > targetDesktop) {
-        Send #^{Left}
-        sleepTime += A_Index*50
-        sleep, %sleepTime%
-        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
-    }
-    MouseGetPos, x, y
-    while (!WinActive("ahk_id " . movehWndId)
-            && !(HexColor1==HexColor2==HexColor3==HexColor4)
-            && targetDesktop != (DllCall(GetCurrentDesktopNumberProc, "Int") + 1)) {
-
-        WinActivate, ahk_id %movehWndId%
-        CoordMode, Pixel, Screen
-        PixelGetColor, HexColor1, %x%, %y%, RGB
-        sleep, 100
-        PixelGetColor, HexColor2, %x%, %y%, RGB
-        sleep, 100
-        PixelGetColor, HexColor3, %x%, %y%, RGB
-        sleep, 100
-        PixelGetColor, HexColor4, %x%, %y%, RGB
-    }
-    CoordMode, Mouse, screen
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
     If (targetDesktop < InitialDesktop)
         MoveAndFadeWindow(movehWndId, sw_x, False, "in")
