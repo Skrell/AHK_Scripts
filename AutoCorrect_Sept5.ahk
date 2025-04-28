@@ -268,7 +268,11 @@ keys = abcdefghijklmnopqrstuvwxyz
 Loop Parse, keys
 {
     HotKey ~+%A_LoopField%, Hoty
-    HotKey ~%A_LoopField%, FixSlash
+    HotKey  ~%A_LoopField%, FixSlash
+}
+Loop Parse, keys
+{
+    HotKey ~%A_LoopField%, Hoty
 }
 numbers = 0123456789
 Loop Parse, numbers
@@ -350,15 +354,9 @@ Return
 
 Hoty:
     CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey<999) ? CapCount+1 : 1 ; note that CapCount is ALWAYS at least 1
-    ; tooltip %A_PriorHotkey% - %CapCount%
-    If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && (SubStr(A_ThisHotKey,2,1)=="'" || SubStr(A_ThisHotKey,2,1)=="-")) {
-        return
-    }
-    else If !IsGoogleDocWindow() && (!StopAutoFix && CapCount == 2 && IsThisHotKeyCapital()) {
-        Send % "{BS}" . SubStr(A_ThisHotKey,3,1)
-    }
-    else If !IsGoogleDocWindow() && (!StopAutoFix && (CapCount == 3 || (CapCount == 2 && (A_ThisHotkey == "~Space" || A_ThisHotkey == "~." || A_ThisHotkey == "~?" || A_ThisHotkey == "~!" || A_ThisHotkey == "~-") ))) {
-        Send % "{Left}{BS}+" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+    If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
+        Send % "{Left}{BS}" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+        CapCount := 1
     }
     If StopAutoFix
         X_PriorPriorHotKey :=
@@ -434,17 +432,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 If (vWinClass == "OperationStatusWindow")
                     Return
             }
-
-            ; If (!JEE_WinHasAltTabIcon(hWnd) && vWinClass != "#32770")
-                ; Return
-
-            ; tooltip, here we goooo
-            ; loop 200 {
-                ; WinGetTitle, vWinTitle, % "ahk_id " hWnd
-                ; If (vWinTitle != "")
-                    ; break
-                ; sleep, 5
-             ; }
 
             If (vWinTitle == "") {
                 DetectHiddenWindows, Off
@@ -2775,7 +2762,7 @@ Return
 
 #If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
 ~WheelUp::
-    ; Hotkey, ~WheelDown, Off
+    StopRecurssion := True
     pauseWheel := True
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
@@ -2801,8 +2788,8 @@ Return
             BlockInput, Off
         }
     }
-    ; Hotkey, ~WheelUp, On
     pauseWheel := False
+    StopRecurssion := False
 Return
 #If
 
@@ -2818,7 +2805,7 @@ Return
 
 #If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
 ~WheelDown::
-    ; Hotkey, ~WheelDown, Off
+    StopRecurssion := True
     pauseWheel := True
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
@@ -2845,7 +2832,7 @@ Return
         }
     }
     pauseWheel := False
-    ; Hotkey, ~WheelDown, On
+    StopRecurssion := False
 Return
 #If
 
