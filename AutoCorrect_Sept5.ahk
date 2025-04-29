@@ -267,12 +267,11 @@ OnExit("PreventRecur")
 keys = abcdefghijklmnopqrstuvwxyz
 Loop Parse, keys
 {
-    HotKey ~+%A_LoopField%, Hoty
-    HotKey  ~%A_LoopField%, FixSlash
+    HotKey ~+%A_LoopField%, HotyANDFixSlash
 }
 Loop Parse, keys
 {
-    HotKey ~%A_LoopField%, Hoty
+    HotKey ~%A_LoopField%, HotyANDFixSlash
 }
 numbers = 0123456789
 Loop Parse, numbers
@@ -310,6 +309,11 @@ Return
 OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
     ; tooltip, pop!
 }
+
+HotyANDFixSlash:
+    GoSub, Hoty
+    GoSub, FixSlash
+Return
 
 Startup:
     Menu, Tray, Togglecheck, Run at startup
@@ -417,12 +421,20 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     If !StopRecurssion {
 
-        DetectHiddenWindows, On
+        ; DetectHiddenWindows, On
+        loop 500 {
+            WinGetClass, vWinClass, % "ahk_id " hWnd
+            WinGetTitle, vWinTitle, % "ahk_id " hWnd
+            If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768"))
+                break
+            sleep, 2
+        }
 
-        WinGetClass, vWinClass, % "ahk_id " hWnd
-        WinGetTitle, vWinTitle, % "ahk_id " hWnd
         If (vWinClass == "#32768" || vWinClass == "Progman" || vWinClass == "WorkerW" || (InStr(vWinClass, "Shell",false) && InStr(vWinClass, "TrayWnd",false)) || vWinClass == "" || !WinExist("ahk_id " hWnd) || (vWinTitle == "")) {
-            tooltip, no class so exiting
+            If (vWinClass == "#32768")
+                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+            Else If (vWinClass == "" || vWinTitle == "")
+                tooltip, no class so exiting
             Return
         }
 
@@ -433,13 +445,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Return
             }
 
-            If (vWinTitle == "") {
-                DetectHiddenWindows, Off
-                Return
-            }
-            Else If (InStr(vWinTitle, "Save As", false) && vWinClass != "#32770") {
+            If (InStr(vWinTitle, "Save As", false) && vWinClass != "#32770") {
                 WinActivate, % "ahk_id " hWnd
-                DetectHiddenWindows, Off
+                ; DetectHiddenWindows, Off
                 Return
             }
 
@@ -456,12 +464,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ;EVENT_SYSTEM_FOREGROUND := 0x3
             ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
-            Critical, On
             If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
-                DetectHiddenWindows, Off
                 Return
             }
 
+            Critical, On
             prevActiveWindows.push(hWnd)
 
             OutputVar1 := OutputVar2 := OutputVar3 := ""
@@ -511,13 +518,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
 
                 If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
-                    DetectHiddenWindows, Off
                     Return
                 }
-
-                ; tooltip, about to send to %FocusedControl%
-                WinGet, testID, ID, A
-                If (testID == hWnd) {
+                Else {
                     Send, ^{NumpadAdd}
 
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
@@ -539,7 +542,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 BlockInput, Off
             }
             Critical, Off
-            ; tooltip, cleaning...
+            DetectHiddenWindows, On
             i := 1
             while (i <= prevActiveWindows.MaxIndex()) {
                 checkID := prevActiveWindows[i]
@@ -823,9 +826,8 @@ Return
 ~Enter::
     ControlGetFocus, currCtrl, A
     WinGetClass, currCl, A
-    WinGetTitle, currTit, A
-    If (!InStr(currTit, "Type Up to 3", true) && (currCtrl == "SysTreeView321" || currCtrl == "DirectUIHWND2" || currCtrl == "DirectUIHWND3" || (currCl == "CabinetWClass" && currCtrl == "Edit1") || (currCl == "#32770" && currCtrl == "Edit1"))) {
-        GoSub, SendCtrlAdd
+    If (currCl == "CabinetWClass" && currCtrl == "Edit1") || (currCl == "#32770" && currCtrl == "Edit1") {
+        Send, ^{NumpadAdd}
     }
 Return
 #If
@@ -5043,6 +5045,7 @@ SetTitleMatchMode, 2
 ::mic::
 ::poke::
 ::arose::
+::caching::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -5542,6 +5545,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::privledges::privileges
 ::outtage::outage
 ::reuse::re-use
 ::fucniton::function
