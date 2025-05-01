@@ -280,13 +280,13 @@ Loop Parse, numbers
 }
 
 HotKey ~/,  FixSlash
-; HotKey ~',  Hoty
-; HotKey ~?,  Hoty
-; HotKey ~!,  Hoty
-; HotKey ~`,, Hoty
-; HotKey ~.,  Hoty
-; HotKey ~_,  Hoty
-; HotKey ~-,  Hoty
+HotKey ~',  Hoty
+HotKey ~?,  Hoty
+HotKey ~!,  Hoty
+HotKey ~`,, Hoty
+HotKey ~.,  Hoty
+HotKey ~_,  Hoty
+HotKey ~-,  Hoty
 
 Send #^{Left}
 sleep, 50
@@ -514,13 +514,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Else If (OutputVar1 == 1) {
                     TargetControl := "SysListView321"
                 }
-                If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+
+                If (vWinClass == "#32770" || vWinClass == "CabinetWClass" && initFocusedCtrl != TargetControl) {
                     loop, 100 {
                         ControlFocus, %TargetControl%, % "ahk_id " hWnd
                         ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
                         If (testCtrlFocus == TargetControl)
                             break
-                        sleep, 5
+                        sleep, 2
                     }
                 }
 
@@ -842,9 +843,9 @@ Return
 Return
 
 ; duplicate hotkey in case shift is accidentally  held as a result of attempting to type a '?'
-; ~+Space::
-    ; GoSub, Hoty
-; Return
+~+Space::
+    GoSub, Hoty
+Return
 
 ~^Backspace::
     Hotstring("Reset")
@@ -2063,10 +2064,14 @@ Return
 
     initTime := A_TickCount
 
-    currentPath := ""
     prevPath := ""
     If ((lClass == "CabinetWClass" || lClass == "#32770") && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
-        prevPath := GetExplorerPath(lbhwnd)
+        loop 100 {
+            prevPath := GetExplorerPath(lbhwnd)
+            If (prevPath != "")
+                break
+            sleep, 2
+        }
     }
 
     KeyWait, LButton, U T5
@@ -2080,7 +2085,7 @@ Return
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < 325)
         && ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF))
-        && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
+        && (InStr(lctrlN,"SysListView32",True) || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
 
         SetTimer, SendCtrlAdd, -125
         }
@@ -2544,13 +2549,13 @@ SendCtrlAdd:
 
         OutputVar1 := OutputVar2 := OutputVar3 := 0
 
-        If (initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
+        If (!InStr(initFocusedCtrl,"SysListView32",True) && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
             ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %mouseHoverId%
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %mouseHoverId%
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %mouseHoverId%
         }
         Else {
-            If (initFocusedCtrl == "SysListView321")
+            If (InStr(initFocusedCtrl,"SysListView32",True))
                 OutputVar1 := 1
             Else If (initFocusedCtrl == "DirectUIHWND2")
                 OutputVar2 := 1
@@ -2587,7 +2592,7 @@ SendCtrlAdd:
                 TargetControl := "DirectUIHWND3"
             }
             tooltip, targeted is %TargetControl% with init at %initFocusedCtrl%
-            If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass" && initFocusedCtrl != TargetControl) {
+            If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                 loop, 500 {
                     ControlFocus, %TargetControl%, ahk_id %mouseHoverId%
                     ControlGetFocus, testCtrlFocus , ahk_id %mouseHoverId%
@@ -2600,7 +2605,7 @@ SendCtrlAdd:
             WinGet, lastCheckID, ID, A
             If (mouseHoverId == lastCheckID) {
                 Send, ^{NumpadAdd}
-                ; tooltip, sent to %testCtrlFocus%
+                tooltip, sent to %TargetControl%
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
                     sleep, 125
@@ -5536,6 +5541,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::bufferring::buffering
 ::privledges::privileges
 ::outtage::outage
 ::reuse::re-use
