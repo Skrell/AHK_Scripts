@@ -480,14 +480,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             OutputVar1 := OutputVar2 := OutputVar3 := 0
 
-            ; loop 200 {
+            loop 200 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
                 ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
                 ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
-                ; If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
-                ; break
-                ; sleep, 5
-        ; }
+                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
+                    break
+                sleep, 2
+            }
 
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
                 ; BlockKeyboard(true)
@@ -499,6 +499,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     sleep, 5
                 }
                 tooltip, init focus is %initFocusedCtrl%
+
+                If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3")
+                    Return
+
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                     exEl := UIA.ElementFromHandle(hWnd)
                     shellEl := exEl.FindFirstByName("Items View")
@@ -2564,7 +2568,6 @@ SendCtrlAdd:
         }
 
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
-           BlockInput, On
 
             tooltip, init focus is %initFocusedCtrl%
             If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
@@ -2581,6 +2584,8 @@ SendCtrlAdd:
                     Return
                 }
             }
+
+            BlockInput, On
 
             If (OutputVar1 == 1) {
                 TargetControl := "SysListView321"
