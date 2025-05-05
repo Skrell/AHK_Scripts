@@ -421,7 +421,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     If !StopRecurssion {
 
-        ; DetectHiddenWindows, On
         loop 500 {
             WinGetClass, vWinClass, % "ahk_id " hWnd
             WinGetTitle, vWinTitle, % "ahk_id " hWnd
@@ -441,7 +440,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If (vWinClass == "#32768")
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
             Else If (vWinClass == "" || vWinTitle == "")
-                tooltip, no class so exiting
+                tooltip, no class OR title so exiting
             Return
         }
 
@@ -454,7 +453,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             If (InStr(vWinTitle, "Save As", false) && vWinClass != "#32770") {
                 WinActivate, % "ahk_id " hWnd
-                ; DetectHiddenWindows, Off
                 Return
             }
 
@@ -490,25 +488,34 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
 
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
-                ; BlockKeyboard(true)
-                BlockInput, On
                 loop, 100 {
                     ControlGetFocus, initFocusedCtrl , % "ahk_id " hWnd
                     If (initFocusedCtrl != "")
                         break
-                    sleep, 5
+                    sleep, 2
                 }
-                tooltip, init focus is %initFocusedCtrl%
+                ; tooltip, init focus is %initFocusedCtrl%
 
                 If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3")
                     Return
 
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
-                    exEl := UIA.ElementFromHandle(hWnd)
-                    shellEl := exEl.FindFirstByName("Items View")
-                    shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+                    try {
+                        exEl := UIA.ElementFromHandle(mouseHoverId)
+                        shellEl := exEl.FindFirstByName("Items View")
+                        shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+                    } catch e {
+                        tooltip, TIMED OUT!!!!
+                        UIA :=  ;// set to a different value
+                        ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                        UIA := UIA_Interface() ; Initialize UIA interface
+                        UIA.ConnectionTimeout := 6000
+                        Return
+                    }
                 }
 
+                BlockKeyboard(true)
+                ; BlockInput, On
                 If (OutputVar2 == 1) {
                     TargetControl := "DirectUIHWND2"
                 }
@@ -549,7 +556,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         }
                     }
                 }
-                BlockInput, Off
+                ; BlockInput, Off
+                BlockKeyboard(false)
             }
             Critical, Off
             DetectHiddenWindows, On
@@ -940,13 +948,15 @@ prevChromeTab()
 
 #If !SearchingWindows && !hitTAB
 ~Esc::
-    WinGet, escHwndID, ID, A
     StopRecurssion := True
     executedOnce   := False
+    escHwndID := FindTopMostWindow()
 
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 550 && escHwndID == escHwndID_old) {
         DetectHiddenWindows, Off
-        If IsAltTabWindow(escHwndID) {
+
+        ; If IsAltTabWindow(escHwndID) {
+            WinActivate, ahk_id %escHwndID%
             GoSub, DrawRect
             WinGetTitle, tit, ahk_id %escHwndID%
             loop {
@@ -999,7 +1009,7 @@ prevChromeTab()
             }
             Else
                 CancelClose := False
-        }
+        ; }
         tooltip
     }
 
@@ -3124,7 +3134,7 @@ IsAltTabWindow(hWnd) {
    if (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
       return false
    WinGetClass, winClass, ahk_id %hWnd%
-   if (winClass = "Windows.UI.Core.CoreWindow" || winClass = "Shell_TrayWnd")
+   if (winClass = "Windows.UI.Core.CoreWindow" || (InStr(winClass, "Shell",false) && InStr(winClass, "TrayWnd",false)) || winClass == "ProgMan" || winClass == "WorkerW")
       return false
    if (winClass = "ApplicationFrameWindow")
    {
@@ -4403,6 +4413,37 @@ ActivateTopMostWindow() {
     }
     Critical, Off
     Return
+}
+
+FindTopMostWindow() {
+    SysGet, MonCount, MonitorCount
+    DetectHiddenWindows, Off
+    Critical, On
+    WinGet, winList, List,
+    loop % winList
+    {
+        hwndID := winList%A_Index%
+        If IsAltTabWindow(hwndId) {
+            WinGet, mmState, MinMax, ahk_id %hwndId%
+            WinGet, procName, ProcessName, ahk_id %hwndId%
+            WinGet, ExStyle, ExStyle, ahk_id %hwndId%
+            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip if zoom or always on top window
+                continue
+            If (mmState > -1) {
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                }
+                Else {
+                    currentMonHasActWin := True
+                }
+                If currentMonHasActWin
+                    break
+            }
+        }
+    }
+    Critical, Off
+    Return hwndID
 }
 ;-------------------------------------------------------------------------------
 ;-------------------------------------------------------------------------------
