@@ -439,8 +439,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             || !WinExist("ahk_id " hWnd)) {
             If (vWinClass == "#32768")
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-            Else If (vWinClass == "" || vWinTitle == "")
-                tooltip, no class OR title so exiting
+            ; Else If (vWinClass == "" || vWinTitle == "")
+            ; tooltip, no class OR title so exiting
             Return
         }
 
@@ -514,8 +514,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     }
                 }
 
-                BlockKeyboard(true)
-                ; BlockInput, On
                 If (OutputVar2 == 1) {
                     TargetControl := "DirectUIHWND2"
                 }
@@ -526,6 +524,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     TargetControl := "SysListView321"
                 }
 
+                BlockKeyboard(true)
+                ; BlockInput, On
                 If (vWinClass == "#32770" || vWinClass == "CabinetWClass" && initFocusedCtrl != TargetControl) {
                     loop, 100 {
                         ControlFocus, %TargetControl%, % "ahk_id " hWnd
@@ -537,6 +537,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
 
                 If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
+                    BlockKeyboard(false)
                     Return
                 }
                 Else {
@@ -5454,6 +5455,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:laity::ality
 :?:altiy::ality
 :?:alit::ality
+:?:daiton::dation
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
