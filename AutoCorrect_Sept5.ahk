@@ -430,6 +430,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
 
         If (   vWinClass == "#32768"
+            || vWinClass == "Autohotkey"
+            || vWinClass == "AutohotkeyGUI"
             || vWinClass == "Progman"
             || vWinClass == "WorkerW"
             || vWinClass == "tooltips_class32"
@@ -444,7 +446,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Return
         }
 
-        If ( (!HasVal(prevActiveWindows, hWnd) && vWinClass != "Autohotkey" && vWinClass != "AutohotkeyGUI") || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+        If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
             If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 If (vWinClass == "OperationStatusWindow")
@@ -452,7 +454,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
 
             If (InStr(vWinTitle, "Save As", false) && vWinClass != "#32770") {
-                WinActivate, % "ahk_id " hWnd
+                WinActivate, ahk_id %hWnd%
                 Return
             }
 
@@ -489,7 +491,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
                 loop, 100 {
-                    ControlGetFocus, initFocusedCtrl , % "ahk_id " hWnd
+                    ControlGetFocus, initFocusedCtrl , ahk_id %hWnd%
                     If (initFocusedCtrl != "")
                         break
                     sleep, 2
@@ -523,13 +525,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Else If (OutputVar1 == 1) {
                     TargetControl := "SysListView321"
                 }
+                ; ControlGet, CtrlHwnd, Hwnd ,, %TargetControl%, ahk_id %hWnd%
 
                 BlockKeyboard(true)
                 ; BlockInput, On
                 If (vWinClass == "#32770" || vWinClass == "CabinetWClass" && initFocusedCtrl != TargetControl) {
                     loop, 100 {
-                        ControlFocus, %TargetControl%, % "ahk_id " hWnd
-                        ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                        ControlFocus, %TargetControl%, ahk_id %hWnd%
+                        ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
                         If (testCtrlFocus == TargetControl)
                             break
                         sleep, 2
@@ -541,15 +544,20 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Return
                 }
                 Else {
-                    Send, ^{NumpadAdd}
+                    ; If CtrlHwnd {
+                        ; ControlSend, , ^{NumpadAdd}, ahk_id %CtrlHwnd%
+                        ; tooltip, Sent to %TargetControl%
+                    ; }
+                    ; Else
+                        Send, ^{NumpadAdd}
 
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
 
                         If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
                             loop, 500 {
-                                ControlFocus , %initFocusedCtrl%, % "ahk_id " hWnd
-                                ControlGetFocus, testCtrlFocus , % "ahk_id " hWnd
+                                ControlFocus , %initFocusedCtrl%, ahk_id %hWnd%
+                                ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
                                 If (testCtrlFocus == initFocusedCtrl)
                                     break
                                 sleep, 1
