@@ -419,7 +419,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     Global UIA
     static exEl, shellEl, listEl
 
-    If !StopRecurssion {
+    If !StopRecurssion && !hitTab {
 
         loop 500 {
             WinGetClass, vWinClass, % "ahk_id " hWnd
@@ -441,20 +441,37 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             || !WinExist("ahk_id " hWnd)) {
             If (vWinClass == "#32768")
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-            ; Else If (vWinClass == "" || vWinTitle == "")
-            ; tooltip, no class OR title so exiting
+
             Return
         }
 
+        SetTimer, keyTrack, Off
+        SetTimer, track,    Off
+
+        loop, 100 {
+            ControlGetFocus, initFocusedCtrl , ahk_id %hWnd%
+            If (initFocusedCtrl != "")
+                break
+            sleep, 2
+        }
+        If InStr(initFocusedCtrl,"Edit",True) {
+            ; tooltip, deleting
+            Send, {Backspace}
+        }
+
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+            ; tooltip, here we go
             If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 If (vWinClass == "OperationStatusWindow")
+                    SetTimer, keyTrack, On
+                    SetTimer, track,    On
                     Return
             }
 
             If (InStr(vWinTitle, "Save As", false) && vWinClass != "#32770") {
-                WinActivate, ahk_id %hWnd%
+                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
                 Return
             }
 
@@ -472,6 +489,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
             If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
+                SetTimer, keyTrack, On
+                SetTimer, track,    On
                 Return
             }
 
@@ -489,17 +508,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 sleep, 2
             }
 
+            ; tooltip, init focus is %initFocusedCtrl%
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
-                loop, 100 {
-                    ControlGetFocus, initFocusedCtrl , ahk_id %hWnd%
-                    If (initFocusedCtrl != "")
-                        break
-                    sleep, 2
-                }
-                ; tooltip, init focus is %initFocusedCtrl%
 
-                If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3")
+                If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
+                    SetTimer, keyTrack, On
+                    SetTimer, track,    On
                     Return
+                }
 
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
                     try {
@@ -512,6 +528,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                         UIA := UIA_Interface() ; Initialize UIA interface
                         UIA.ConnectionTimeout := 6000
+                        SetTimer, keyTrack, On
+                        SetTimer, track,    On
                         Return
                     }
                 }
@@ -529,7 +547,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                 BlockKeyboard(true)
                 ; BlockInput, On
-                If (vWinClass == "#32770" || vWinClass == "CabinetWClass" && initFocusedCtrl != TargetControl) {
+                If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                     loop, 100 {
                         ControlFocus, %TargetControl%, ahk_id %hWnd%
                         ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
@@ -541,15 +559,17 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                 If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
                     BlockKeyboard(false)
+                    SetTimer, keyTrack, On
+                    SetTimer, track,    On
                     Return
                 }
                 Else {
-                    ; If CtrlHwnd {
-                        ; ControlSend, , ^{NumpadAdd}, ahk_id %CtrlHwnd%
-                        ; tooltip, Sent to %TargetControl%
-                    ; }
-                    ; Else
-                        Send, ^{NumpadAdd}
+                    Send, ^{NumpadAdd}
+
+                    ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
+                    If (InStr(testCtrlFocus,"Edit",True)) {
+                        Send, {Backspace}
+                    }
 
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
@@ -582,6 +602,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     }
     ; tooltip,
     DetectHiddenWindows, Off
+    SetTimer, keyTrack, On
+    SetTimer, track,    On
     Return
 }
 
@@ -957,6 +979,8 @@ prevChromeTab()
 
 #If !SearchingWindows && !hitTAB
 ~Esc::
+    SetTimer, keyTrack, Off
+    SetTimer, track,    Off
     StopRecurssion := True
     executedOnce   := False
     escHwndID := FindTopMostWindow()
@@ -985,7 +1009,7 @@ prevChromeTab()
                         ActivateTopMostWindow()
                         break
                     }
-                    sleep, 125
+                    sleep, 150
 
                     WinGetClass, actClass, A
 
@@ -1024,6 +1048,8 @@ prevChromeTab()
 
     escHwndID_old := escHwndID
     StopRecurssion := False
+    SetTimer, keyTrack, On
+    SetTimer, track,    On
 Return
 
 Esc & x::
