@@ -454,8 +454,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 break
             sleep, 2
         }
-        If InStr(initFocusedCtrl,"Edit",True) {
-            ; tooltip, deleting
+        If InStr(initFocusedCtrl,"Edit",True) && vWinClass == "wxWindowNR" {
+            ControlFocus, Edit1, ahk_id %hWnd%
             Send, {Backspace}
         }
 
@@ -463,10 +463,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ; tooltip, here we go
             If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-                If (vWinClass == "OperationStatusWindow")
+                If (vWinClass == "OperationStatusWindow") {
                     SetTimer, keyTrack, On
                     SetTimer, track,    On
                     Return
+                }
             }
 
             If (InStr(vWinTitle, "Save As", false) && vWinClass != "#32770") {
@@ -566,11 +567,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Else {
                     Send, ^{NumpadAdd}
 
-                    ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                    If (InStr(testCtrlFocus,"Edit",True)) {
-                        Send, {Backspace}
-                    }
-
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
 
@@ -582,6 +578,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                     break
                                 sleep, 1
                             }
+                            ControlGetText, isText , Edit1, ahk_id %hWnd%
+                            If (isText != "" && !InStr(vWinTitle, "Save", True))
+                                Send, {Backspace}
                         }
                     }
                 }
@@ -2790,9 +2789,10 @@ Return
 RButton & WheelUp::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
-    MouseGetPos, , , targetID, targetCtrl
-    WinActivate, ahk_id %targetID%
-    ControlFocus, %targetCtrl%, ahk_id %targetID%
+    Send, {click, left}
+    ; MouseGetPos, , , targetID, targetCtrl
+    ; ControlFocus, %targetCtrl%, ahk_id %targetID%
+    ; ControlSend,  %targetCtrl%, ^{Home},  ahk_id %targetID%
     Send, ^{Home}
 Return
 #If
@@ -2801,12 +2801,24 @@ Return
 RButton & WheelDown::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
-    MouseGetPos, , , targetID, targetCtrl
-    WinActivate, ahk_id %targetID%
-    ControlFocus, %targetCtrl%, ahk_id %targetID%
+    Send, {click, left}
+    ; MouseGetPos, , , targetID, targetCtrl
+    ; ControlFocus, %targetCtrl%, ahk_id %targetID%
+    ; ControlSend,  %targetCtrl%, ^{End},  ahk_id %targetID%
     Send, ^{End}
 Return
 #If
+
+ScrollLines(lines,hWnd="") {
+static EM_LINESCROLL := 0xB6
+    if !hWnd
+    {
+        ControlGetFocus, c, A
+        ControlGet, hWnd, hWnd, , %c%, A
+    }
+    PostMessage, EM_LINESCROLL, 0, lines-1, , ahk_id %hWnd% ; 'lines-1' makes the line you wish to jump to visible
+return
+}
 
 #If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
 ~WheelUp::
@@ -5623,6 +5635,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::dogin::doing
 ::bufferring::buffering
 ::privledges::privileges
 ::outtage::outage
