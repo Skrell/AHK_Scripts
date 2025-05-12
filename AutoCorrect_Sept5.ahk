@@ -476,6 +476,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Return
             }
 
+            WinGet, proc, ProcessName, ahk_id %hWnd%
             WinGet, state, MinMax, ahk_id %hWnd%
             If (state > -1 && vWinTitle != "" && MonCount > 1) {
                 currentMon := MWAGetMonitorMouseIsIn()
@@ -518,7 +519,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Return
                 }
 
-                If (vWinClass == "CabinetWClass" || vWinClass == "#32770") {
+                If (vWinClass == "CabinetWClass" || vWinClass == "#32770") && (proc == "explorer.exe" || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
                     try {
                         exEl := UIA.ElementFromHandle(mouseHoverId)
                         shellEl := exEl.FindFirstByName("Items View")
@@ -2064,7 +2065,7 @@ Return
 
         ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
 
-        If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF)) {
+        If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF) && (LB_HexColor4  == 0xFFFFFF) && (LB_HexColor5  == 0xFFFFFF)) {
             If (lctrlN == "SysListView321") {
                 Send, {Backspace}
                 SetTimer, RunDynaExprTimeout, -1
@@ -2101,14 +2102,25 @@ Return
         }
     }
 
+    LB_HexColor1 := 0x0
+    LB_HexColor2 := 0x0
+    LB_HexColor3 := 0x0
+    LB_HexColor4 := 0x0
+    LB_HexColor5 := 0x0
     CoordMode, Pixel, Screen
     PixelGetColor, LB_HexColor1, %lbX1%, %lbY1%, RGB
-    lbX1 -= 1
-    lbY1 -= 1
+    lbX1 -= 2
+    lbY1 -= 2
     PixelGetColor, LB_HexColor2, %lbX1%, %lbY1%, RGB
-    lbX1 += 2
-    lbY1 += 2
+    lbX1 += 1
+    lbY1 += 1
     PixelGetColor, LB_HexColor3, %lbX1%, %lbY1%, RGB
+    lbX1 += 1
+    lbY1 += 1
+    PixelGetColor, LB_HexColor4, %lbX1%, %lbY1%, RGB
+    lbX1 += 1
+    lbY1 += 1
+    PixelGetColor, LB_HexColor5, %lbX1%, %lbY1%, RGB
 
     initTime := A_TickCount
 
@@ -2132,12 +2144,12 @@ Return
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < 325)
-        && ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF))
+        && ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3 == 0xFFFFFF) && (LB_HexColor4  == 0xFFFFFF) && (LB_HexColor5  == 0xFFFFFF))
         && (InStr(lctrlN,"SysListView32",True) || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
 
         SetTimer, SendCtrlAdd, -125
         }
-    Else If (lctrlN == "SysTreeView321") && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3  != 0xFFFFFF) {
+    Else If ((lctrlN == "SysTreeView321") && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3 != 0xFFFFFF) && (LB_HexColor4  != 0xFFFFFF) && (LB_HexColor5  != 0xFFFFFF)) {
         SetTimer, SendCtrlAdd, -125
     }
     Else
