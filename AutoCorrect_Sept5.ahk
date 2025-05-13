@@ -510,7 +510,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 sleep, 2
             }
 
-            ; tooltip, init focus is %initFocusedCtrl%
+            ; tooltip, init focus is %initFocusedCtrl% and proc is %proc%
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
 
                 If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
@@ -519,7 +519,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Return
                 }
 
-                If (vWinClass == "CabinetWClass" || vWinClass == "#32770") && (proc == "explorer.exe" || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
+                If (vWinClass == "CabinetWClass" || vWinClass == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
                     try {
                         exEl := UIA.ElementFromHandle(mouseHoverId)
                         shellEl := exEl.FindFirstByName("Items View")
@@ -566,6 +566,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Return
                 }
                 Else {
+                    sleep, 25
                     Send, ^{NumpadAdd}
 
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
@@ -2121,7 +2122,7 @@ Return
     lbX1 += 1
     lbY1 += 1
     PixelGetColor, LB_HexColor5, %lbX1%, %lbY1%, RGB
-
+    LB_HexORrd := LB_HexColor1 | LB_HexColor2 | LB_HexColor3 | LB_HexColor4 | LB_HexColor5
     initTime := A_TickCount
 
     prevPath := ""
@@ -2145,12 +2146,16 @@ Return
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < 325)
         && ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3 == 0xFFFFFF) && (LB_HexColor4  == 0xFFFFFF) && (LB_HexColor5  == 0xFFFFFF))
-        && (InStr(lctrlN,"SysListView32",True) || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1" || lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324"))  {
+        && (InStr(lctrlN,"SysListView32",True) || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" ))  {
 
         SetTimer, SendCtrlAdd, -125
-        }
+    }
+    Else If ((lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")
+            && (LB_HexColor1 != LB_HexORrd || LB_HexColor2 != LB_HexORrd || LB_HexColor3 != LB_HexORrd || LB_HexColor4  != LB_HexORrd || LB_HexColor5  != LB_HexORrd)) {
+        SetTimer, SendCtrlAdd, -1
+    }
     Else If ((lctrlN == "SysTreeView321") && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3 != 0xFFFFFF) && (LB_HexColor4  != 0xFFFFFF) && (LB_HexColor5  != 0xFFFFFF)) {
-        SetTimer, SendCtrlAdd, -125
+        SetTimer, SendCtrlAdd, -1
     }
     Else
         SetTimer, SendCtrlAdd, Off
@@ -2666,12 +2671,12 @@ SendCtrlAdd:
             WinGet, lastCheckID, ID, A
             If (mouseHoverId == lastCheckID) {
                 Send, ^{NumpadAdd}
-                tooltip, sent to %TargetControl%
+                ; tooltip, sent to %TargetControl%
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
                     sleep, 125
 
-                    If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
+                    If ((InStr(initFocusedCtrl,"Edit",True) || InStr(initFocusedCtrl,"Tree",True)) && initFocusedCtrl != TargetControl) {
                         loop, 500 {
                             ControlFocus , %initFocusedCtrl%, ahk_id %mouseHoverId%
                             ControlGetFocus, testCtrlFocus , ahk_id %mouseHoverId%
