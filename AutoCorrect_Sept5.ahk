@@ -301,7 +301,7 @@ sleep, 50
 DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
  winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
 
-SetTimer track, 100
+SetTimer mouseTrack, 100
 SetTimer keyTrack, 1
 
 Return
@@ -446,7 +446,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
 
         SetTimer, keyTrack, Off
-        SetTimer, track,    Off
+        SetTimer, mouseTrack,    Off
 
         loop, 100 {
             ControlGetFocus, initFocusedCtrl , ahk_id %hWnd%
@@ -465,7 +465,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 If (vWinClass == "OperationStatusWindow") {
                     SetTimer, keyTrack, On
-                    SetTimer, track,    On
+                    SetTimer, mouseTrack,    On
                     Return
                 }
             }
@@ -492,7 +492,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
                 SetTimer, keyTrack, On
-                SetTimer, track,    On
+                SetTimer, mouseTrack,    On
                 Return
             }
 
@@ -515,7 +515,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                 If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
                     SetTimer, keyTrack, On
-                    SetTimer, track,    On
+                    SetTimer, mouseTrack,    On
                     Return
                 }
 
@@ -531,21 +531,20 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         UIA := UIA_Interface() ; Initialize UIA interface
                         UIA.ConnectionTimeout := 6000
                         SetTimer, keyTrack, On
-                        SetTimer, track,    On
+                        SetTimer, mouseTrack,    On
                         Return
                     }
                 }
 
-                If (OutputVar2 == 1) {
-                    TargetControl := "DirectUIHWND2"
-                }
-                Else If (OutputVar3 == 1) {
-                    TargetControl := "DirectUIHWND3"
-                }
-                Else If (OutputVar1 == 1) {
+                If (OutputVar1 == 1) {
                     TargetControl := "SysListView321"
                 }
-                ; ControlGet, CtrlHwnd, Hwnd ,, %TargetControl%, ahk_id %hWnd%
+                Else If (OutputVar2 == 1 && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
+                    TargetControl := "DirectUIHWND2"
+                }
+                Else If (OutputVar3 == 1 && vWinClass == "#32770") {
+                    TargetControl := "DirectUIHWND3"
+                }
 
                 BlockKeyboard(true)
                 ; BlockInput, On
@@ -562,7 +561,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
                     BlockKeyboard(false)
                     SetTimer, keyTrack, On
-                    SetTimer, track,    On
+                    SetTimer, mouseTrack,    On
                     Return
                 }
                 Else {
@@ -604,7 +603,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     ; tooltip,
     DetectHiddenWindows, Off
     SetTimer, keyTrack, On
-    SetTimer, track,    On
+    SetTimer, mouseTrack,    On
     Return
 }
 
@@ -853,12 +852,14 @@ Return
 !j::
     StopAutoFix := true
     Send, ^{LEFT}
+    Hotstring("Reset")
     StopAutoFix := false
 Return
 
 !l::
     StopAutoFix := true
     Send, ^{RIGHT}
+    Hotstring("Reset")
     StopAutoFix := false
 Return
 
@@ -914,7 +915,7 @@ Return
 $F2::
     LbuttonEnabled := False
     StopRecurssion := True
-    SetTimer, track, Off
+    SetTimer, mouseTrack, Off
     SetTimer, keyTrack, Off
     KeyWait, F2, U T1
     Send, {F2}
@@ -928,7 +929,7 @@ $F2::
             break
         sleep, 10
     }
-    SetTimer, track, On
+    SetTimer, mouseTrack, On
     SetTimer, keyTrack, On
     StopRecurssion := False
     LbuttonEnabled := True
@@ -981,7 +982,7 @@ prevChromeTab()
 #If !SearchingWindows && !hitTAB
 ~Esc::
     SetTimer, keyTrack, Off
-    SetTimer, track,    Off
+    SetTimer, mouseTrack,    Off
     StopRecurssion := True
     executedOnce   := False
     escHwndID := FindTopMostWindow()
@@ -1050,7 +1051,7 @@ prevChromeTab()
     escHwndID_old := escHwndID
     StopRecurssion := False
     SetTimer, keyTrack, On
-    SetTimer, track,    On
+    SetTimer, mouseTrack,    On
 Return
 
 Esc & x::
@@ -1079,7 +1080,7 @@ Return
 
 SwitchToVD1:
     StopRecurssion := True
-    SetTimer, track, Off
+    SetTimer, mouseTrack, Off
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     testDesktop := CurrentDesktop
     while (CurrentDesktop < 1) {
@@ -1099,7 +1100,7 @@ SwitchToVD1:
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
     StopRecurssion := False
-    SetTimer, track, On
+    SetTimer, mouseTrack, On
 Return
 
 !2::GoSub, SwitchToVD2
@@ -1107,7 +1108,7 @@ Return
 SwitchToVD2:
     If  (GetDesktopCount() >= 2) {
         StopRecurssion := True
-        SetTimer, track, Off
+        SetTimer, mouseTrack, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         testDesktop := CurrentDesktop
         while (CurrentDesktop < 2) {
@@ -1127,7 +1128,7 @@ SwitchToVD2:
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
-        SetTimer, track, On
+        SetTimer, mouseTrack, On
     }
     tooltip,
 Return
@@ -1137,7 +1138,7 @@ Return
 SwitchToVD3:
     If  (GetDesktopCount() >= 3) {
         StopRecurssion := True
-        SetTimer, track, Off
+        SetTimer, mouseTrack, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         testDesktop := CurrentDesktop
         while (CurrentDesktop < 3) {
@@ -1157,7 +1158,7 @@ SwitchToVD3:
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
-        SetTimer, track, On
+        SetTimer, mouseTrack, On
     }
 Return
 
@@ -1166,7 +1167,7 @@ Return
 SwitchToVD4:
     If  (GetDesktopCount() >= 4) {
         StopRecurssion := True
-        SetTimer, track, Off
+        SetTimer, mouseTrack, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         testDesktop := CurrentDesktop
         while (CurrentDesktop < 4) {
@@ -1186,7 +1187,7 @@ SwitchToVD4:
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
         StopRecurssion := False
-        SetTimer, track, On
+        SetTimer, mouseTrack, On
     }
 Return
 
@@ -1428,22 +1429,22 @@ Return
 $!Tab::
 If !hitTAB {
     ComboActive := False
-    SetTimer, track, Off
+    SetTimer, mouseTrack, Off
     SetTimer, keyTrack, Off
     Cycle(forward)
     GoSub, Altup
-    SetTimer, track, On
+    SetTimer, mouseTrack, On
     SetTimer, keyTrack, On
 }
 Return
 
 $!+Tab::
 ComboActive := False
-SetTimer, track, Off
+SetTimer, mouseTrack, Off
 SetTimer, keyTrack, Off
 Cycle(!forward)
 GoSub, ClearRect
-SetTimer, track, On
+SetTimer, mouseTrack, On
 SetTimer, keyTrack, On
 Return
 
@@ -1909,7 +1910,7 @@ Return
 #If MouseIsOverTaskbarWidgets()
 ~^Lbutton::
     StopRecurssion := True
-    SetTimer, track, Off
+    SetTimer, mouseTrack, Off
 	SetTimer, keyTrack, Off
     DetectHiddenWindows, Off
     SysGet, MonCount, MonitorCount
@@ -1958,7 +1959,7 @@ Return
         }
     }
     WinActivate, ahk_id %targetID%
-    SetTimer, track, On
+    SetTimer, mouseTrack, On
 	SetTimer, keyTrack, On
     StopRecurssion := False
 Return
@@ -1981,7 +1982,7 @@ Return
 #If MouseIsOverTitleBar()
 ~^LButton::
     DetectHiddenWindows, Off
-    SetTimer, track, Off
+    SetTimer, mouseTrack, Off
     MouseGetPos, mx1, my1, actID,
     KeyWait, Lbutton, U T5
     MouseGetPos, mx2, my2, ,
@@ -2043,7 +2044,7 @@ Return
         WinActivate, ahk_id %actID%
         previousMon := currentMon
     }
-    SetTimer, track, On
+    SetTimer, mouseTrack, On
 Return
 #If
 
@@ -2056,6 +2057,7 @@ Return
     SetTimer, SendCtrlAdd, Off
     WinGetClass, lClass, ahk_id %lbhwnd%
     Gui, GUI4Boarder: Hide
+    initTime := A_TickCount
 
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
@@ -2089,7 +2091,18 @@ Return
             }
             ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
-                SetTimer, SendCtrlAdd, -1
+                try {
+                    exEl := UIA.ElementFromHandle(lbhwnd)
+                    shellEl := exEl.FindFirstByName("Items View")
+                    shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+                } catch e {
+                    tooltip, TIMED OUT!!!!
+                    UIA :=  ;// set to a different value
+                    ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                    UIA := UIA_Interface() ; Initialize UIA interface
+                    UIA.ConnectionTimeout := 6000
+                }
+                Send, ^{NumpadAdd}
             }
 
             LbuttonEnabled     := True
@@ -2100,6 +2113,17 @@ Return
             sleep, 100
             LbuttonEnabled     := True
             Return
+        }
+    }
+
+    prevPath := ""
+    If ((lClass == "CabinetWClass" || lClass == "#32770")
+        && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
+        loop 100 {
+            prevPath := GetExplorerPath(lbhwnd)
+            If (prevPath != "")
+                break
+            sleep, 2
         }
     }
 
@@ -2123,38 +2147,35 @@ Return
     lbY1 += 1
     PixelGetColor, LB_HexColor5, %lbX1%, %lbY1%, RGB
     LB_HexORrd := LB_HexColor1 | LB_HexColor2 | LB_HexColor3 | LB_HexColor4 | LB_HexColor5
-    initTime := A_TickCount
-
-    prevPath := ""
-    If ((lClass == "CabinetWClass" || lClass == "#32770") && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
-        loop 100 {
-            prevPath := GetExplorerPath(lbhwnd)
-            If (prevPath != "")
-                break
-            sleep, 2
-        }
-    }
 
     KeyWait, LButton, U T5
     CoordMode, Mouse, screen
     MouseGetPos, lbX2, lbY2,
 
     rlsTime := A_TickCount
-    timeDiff := rlsTime - initTime
+
     ; tooltip, %timeDiff% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (timeDiff < 325)
+        && ((rlsTime - initTime) < 325)
         && ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3 == 0xFFFFFF) && (LB_HexColor4  == 0xFFFFFF) && (LB_HexColor5  == 0xFFFFFF))
         && (InStr(lctrlN,"SysListView32",True) || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" ))  {
 
         SetTimer, SendCtrlAdd, -125
     }
     Else If ((lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")
+            && ((rlsTime - initTime) < 325)
             && (LB_HexColor1 != LB_HexORrd || LB_HexColor2 != LB_HexORrd || LB_HexColor3 != LB_HexORrd || LB_HexColor4  != LB_HexORrd || LB_HexColor5  != LB_HexORrd)) {
+        sleep, 125
+        If WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") {
+            LbuttonEnabled := True
+            Return
+        }
         SetTimer, SendCtrlAdd, -1
     }
-    Else If ((lctrlN == "SysTreeView321") && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3 != 0xFFFFFF) && (LB_HexColor4  != 0xFFFFFF) && (LB_HexColor5  != 0xFFFFFF)) {
+    Else If ((lctrlN == "SysTreeView321")
+            && ((rlsTime - initTime) < 325)
+            && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3 != 0xFFFFFF) && (LB_HexColor4  != 0xFFFFFF) && (LB_HexColor5  != 0xFFFFFF)) {
         SetTimer, SendCtrlAdd, -1
     }
     Else
@@ -2189,7 +2210,7 @@ Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
-    SetTimer, track,    off
+    SetTimer, mouseTrack,    off
     UserInputTrimmed :=
     StopCheck        := False
     SearchingWindows := True
@@ -2202,7 +2223,7 @@ Return
     ; tooltip, searching %UserInputTrimmed%
     If ErrorLevel
     {
-        SetTimer, track,    on
+        SetTimer, mouseTrack,    on
         Return
     }
     else
@@ -2239,7 +2260,7 @@ Return
             Tooltip,
             StopRecurssion := False
             Critical, Off
-            SetTimer, track,    on
+            SetTimer, mouseTrack,    on
             ; SetTimer, keyTrack, on
             Return
         }
@@ -2329,7 +2350,7 @@ Return
     }
     StopRecurssion   := False
     SearchingWindows := False
-    SetTimer, track,    on
+    SetTimer, mouseTrack,    on
     ; SetTimer, keyTrack, on
 Return
 
@@ -2610,14 +2631,22 @@ SendCtrlAdd:
             MouseGetPos, , , , initFocusedCtrl
         }
 
+        WinGetTitle, vWinTitle, ahk_id %mouseHoverId%
+        WinGet, proc, ProcessName, ahk_id %mouseHoverId%
+
         tooltip, hovering over %initFocusedCtrl%
 
         OutputVar1 := OutputVar2 := OutputVar3 := 0
 
         If (!InStr(initFocusedCtrl,"SysListView32",True) && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
-            ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %mouseHoverId%
-            ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %mouseHoverId%
-            ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %mouseHoverId%
+            loop 200 {
+                ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %mouseHoverId%
+                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %mouseHoverId%
+                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %mouseHoverId%
+                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
+                    break
+                sleep, 2
+            }
         }
         Else {
             If (InStr(initFocusedCtrl,"SysListView32",True))
@@ -2631,18 +2660,27 @@ SendCtrlAdd:
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
 
             tooltip, init focus is %initFocusedCtrl%
-            If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
-                try {
-                    exEl := UIA.ElementFromHandle(mouseHoverId)
-                    shellEl := exEl.FindFirstByName("Items View")
-                    shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
-                } catch e {
-                    tooltip, TIMED OUT!!!!
-                    UIA :=  ;// set to a different value
-                    ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                    UIA := UIA_Interface() ; Initialize UIA interface
-                    UIA.ConnectionTimeout := 6000
-                    Return
+            If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
+                currentPath := ""
+                loop 100 {
+                    currentPath := GetExplorerPath(lbhwnd)
+                    If (currentPath != "")
+                        break
+                    sleep, 2
+                }
+                If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
+                    try {
+                        exEl := UIA.ElementFromHandle(mouseHoverId)
+                        shellEl := exEl.FindFirstByName("Items View")
+                        shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+                    } catch e {
+                        tooltip, TIMED OUT!!!!
+                        UIA :=  ;// set to a different value
+                        ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                        UIA := UIA_Interface() ; Initialize UIA interface
+                        UIA.ConnectionTimeout := 6000
+                        Return
+                    }
                 }
             }
 
@@ -2651,12 +2689,13 @@ SendCtrlAdd:
             If (OutputVar1 == 1) {
                 TargetControl := "SysListView321"
             }
-            Else If (OutputVar2 == 1) {
+            Else If (OutputVar2 == 1 && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
                 TargetControl := "DirectUIHWND2"
             }
-            Else If (OutputVar3 == 1) {
+            Else If (OutputVar3 == 1 && lClassCheck == "#32770") {
                 TargetControl := "DirectUIHWND3"
             }
+
             tooltip, targeted is %TargetControl% with init at %initFocusedCtrl%
             If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                 loop, 500 {
@@ -2671,7 +2710,7 @@ SendCtrlAdd:
             WinGet, lastCheckID, ID, A
             If (mouseHoverId == lastCheckID) {
                 Send, ^{NumpadAdd}
-                ; tooltip, sent to %TargetControl%
+                ; tooltip, sent to %TargetControl% - %prevPath% - %currentPath%
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
                     sleep, 125
@@ -3383,7 +3422,7 @@ findDesktopWindowIsOn(hwnd)
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     Global MonCount, VD, Highlighter, hitTAB
-    SetTimer, track, Off
+    SetTimer, mouseTrack, Off
     windowsToMinimize := []
     minimizedWindows  := []
     finalWindowsListWithProcAndClass := []
@@ -3424,7 +3463,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     numWindows := finalWindowsListWithProcAndClass.length()
 
     If (numWindows <= 1) {
-        SetTimer, track, On
+        SetTimer, mouseTrack, On
         loop 100 {
             Tooltip, Only %numWindows% window found!
             sleep, 10
@@ -3570,7 +3609,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
     WinActivate, ahk_id %lastActWinID%
     BlockKeyboard(false)
-    SetTimer, track, On
+    SetTimer, mouseTrack, On
 }
 
 FrameShadow(HGui) {
@@ -3653,7 +3692,7 @@ keyTrack() {
 Return
 }
 
-track() {
+mouseTrack() {
     ListLines Off
     Global MonCount, MonNum, moving, currentMon, previousMon, StopRecurssion
     Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
@@ -3706,7 +3745,7 @@ track() {
         taskview := True
         sleep 700
     }
-    Else If (
+    Else If (MonCount == 1) (
         &&  x <= 3 && y <= 3
         && !taskview
         && GetKeyState("Lbutton","P"))
