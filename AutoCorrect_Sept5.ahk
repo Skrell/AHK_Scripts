@@ -301,7 +301,7 @@ sleep, 50
 DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
  winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
 
-SetTimer mouseTrack, 100
+; SetTimer mouseTrack, 100
 SetTimer keyTrack, 1
 
 Return
@@ -2110,7 +2110,7 @@ Return
         }
         Else {
             SetTimer, SendCtrlAdd, -1
-            sleep, 100
+            sleep, 200
             LbuttonEnabled     := True
             Return
         }
@@ -2175,7 +2175,7 @@ Return
     }
     Else If ((lctrlN == "SysTreeView321")
             && ((rlsTime - initTime) < 325)
-            && (LB_HexColor1 != 0xFFFFFF) && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3 != 0xFFFFFF) && (LB_HexColor4  != 0xFFFFFF) && (LB_HexColor5  != 0xFFFFFF)) {
+            && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3 != 0xFFFFFF) && (LB_HexColor4  != 0xFFFFFF)) {
         SetTimer, SendCtrlAdd, -1
     }
     Else
@@ -3937,32 +3937,32 @@ mouseTrack() {
         skipCheck := False
     }
 
-    If (MonCount > 1 && !GetKeyState("LButton","P")) {
-        currentMon := MWAGetMonitorMouseIsIn(40)
-        If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
-            DetectHiddenWindows, Off
-            Critical, On
-            WinGet, allWindows, List
-            loop % allWindows {
-                hwnd_id := allWindows%A_Index%
-                WinGet, isMin, MinMax, ahk_id %hwnd_id%
-                WinGet, whatProc, ProcessName, ahk_id %hwnd_id%
-                currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
+    ; If (MonCount > 1 && !GetKeyState("LButton","P")) {
+        ; currentMon := MWAGetMonitorMouseIsIn(40)
+        ; If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
+            ; DetectHiddenWindows, Off
+            ; Critical, On
+            ; WinGet, allWindows, List
+            ; loop % allWindows {
+                ; hwnd_id := allWindows%A_Index%
+                ; WinGet, isMin, MinMax, ahk_id %hwnd_id%
+                ; WinGet, whatProc, ProcessName, ahk_id %hwnd_id%
+                ; currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
 
-                If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
-                    WinActivate, ahk_id %hwnd_id%
-                    GoSub, DrawRect
-                    GoSub, ClearRect
-                    Gui, GUI4Boarder: Hide
-                    previousMon := currentMon
-                    Critical, Off
-                    ListLines On
-                    return
-                }
-            }
-        }
-        Critical, Off
-    }
+                ; If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
+                    ; WinActivate, ahk_id %hwnd_id%
+                    ; GoSub, DrawRect
+                    ; GoSub, ClearRect
+                    ; Gui, GUI4Boarder: Hide
+                    ; previousMon := currentMon
+                    ; Critical, Off
+                    ; ListLines On
+                    ; return
+                ; }
+            ; }
+        ; }
+        ; Critical, Off
+    ; }
 
     If (MonCount > 1 && !GetKeyState("LButton","P")) {
         previousMon := currentMon
