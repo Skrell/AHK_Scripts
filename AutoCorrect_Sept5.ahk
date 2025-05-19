@@ -2117,8 +2117,7 @@ Return
     }
 
     prevPath := ""
-    If ((lClass == "CabinetWClass" || lClass == "#32770")
-        && (lctrlN == "SysTreeView321" || lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
+    If (lClass == "CabinetWClass" || lClass == "#32770") {
         loop 100 {
             prevPath := GetExplorerPath(lbhwnd)
             If (prevPath != "")
@@ -2133,9 +2132,11 @@ Return
     LB_HexColor4 := 0x0
     LB_HexColor5 := 0x0
     CoordMode, Pixel, Screen
-    PixelGetColor, LB_HexColor1, %lbX1%, %lbY1%, RGB
     lbX1 -= 2
     lbY1 -= 2
+    PixelGetColor, LB_HexColor1, %lbX1%, %lbY1%, RGB
+    lbX1 += 1
+    lbY1 += 1
     PixelGetColor, LB_HexColor2, %lbX1%, %lbY1%, RGB
     lbX1 += 1
     lbY1 += 1
@@ -2663,7 +2664,7 @@ SendCtrlAdd:
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
                 currentPath := ""
                 loop 100 {
-                    currentPath := GetExplorerPath(lbhwnd)
+                    currentPath := GetExplorerPath(mouseHoverId)
                     If (currentPath != "")
                         break
                     sleep, 2
@@ -2696,7 +2697,7 @@ SendCtrlAdd:
                 TargetControl := "DirectUIHWND3"
             }
 
-            tooltip, targeted is %TargetControl% with init at %initFocusedCtrl%
+            ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrl%
             If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                 loop, 500 {
                     ControlFocus, %TargetControl%, ahk_id %mouseHoverId%
@@ -2710,7 +2711,7 @@ SendCtrlAdd:
             WinGet, lastCheckID, ID, A
             If (mouseHoverId == lastCheckID) {
                 Send, ^{NumpadAdd}
-                ; tooltip, sent to %TargetControl% - %prevPath% - %currentPath%
+                tooltip, sent to %TargetControl% - %prevPath% - %currentPath%
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
                     sleep, 125
@@ -3694,7 +3695,7 @@ Return
 
 mouseTrack() {
     ListLines Off
-    Global MonCount, MonNum, moving, currentMon, previousMon, StopRecurssion
+    Global MonCount, moving, currentMon, previousMon, StopRecurssion
     Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
     HexColor1 := 0x0
