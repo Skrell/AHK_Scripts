@@ -70,7 +70,7 @@ Global lastWinMinHwndId            := 0x999999
 Global DesktopIconsVisible         := False
 Global DrawingRect                 := False
 Global LclickSelected              := False
-Global StopRecurssion              := False
+Global StopRecursion              := False
 Global currMonHeight               := 0
 Global currMonWidth                := 0
 Global LbuttonEnabled              := True
@@ -301,7 +301,11 @@ sleep, 50
 DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
  winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
 
-; SetTimer mouseTrack, 100
+If (MonCount > 1) {
+    currentMon := MWAGetMonitorMouseIsIn()
+    previousMon := currentMon
+}
+SetTimer mouseTrack, 10
 SetTimer keyTrack, 1
 
 Return
@@ -415,11 +419,11 @@ IsThisHotKeyLowerCase() {
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
     Global prevActiveWindows
-    Global StopRecurssion
+    Global StopRecursion
     Global UIA
     static exEl, shellEl, listEl
 
-    If !StopRecurssion && !hitTab {
+    If !StopRecursion && !hitTab {
 
         loop 500 {
             WinGetClass, vWinClass, % "ahk_id " hWnd
@@ -608,8 +612,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 }
 
 PreventRecur() {
-    Global StopRecurssion, hWinEventHook
-    StopRecurssion := True
+    Global StopRecursion, hWinEventHook
+    StopRecursion := True
     nCheck := DllCall( "UnhookWinEvent", Ptr,hWinEventHook )
     DllCall( "CoUninitialize" )
 Return
@@ -914,7 +918,7 @@ Return
 
 $F2::
     LbuttonEnabled := False
-    StopRecurssion := True
+    StopRecursion := True
     SetTimer, mouseTrack, Off
     SetTimer, keyTrack, Off
     KeyWait, F2, U T1
@@ -931,15 +935,15 @@ $F2::
     }
     SetTimer, mouseTrack, On
     SetTimer, keyTrack, On
-    StopRecurssion := False
+    StopRecursion := False
     LbuttonEnabled := True
 Return
 
 ; Ctl+Tab in chrome to goto recent
 prevChromeTab()
 {
-    Global StopRecurssion
-    StopRecurssion := True
+    Global StopRecursion
+    StopRecursion := True
     DetectHiddenWindows, Off
     Send, ^+{a}
     loop 100
@@ -956,7 +960,7 @@ prevChromeTab()
             break
         sleep, 20
         If (A_Index == 99) {
-            StopRecurssion := False
+            StopRecursion := False
             Return
         }
     }
@@ -970,7 +974,7 @@ prevChromeTab()
     tooltip, switched!
     sleep, 1000
     tooltip,
-    StopRecurssion := False
+    StopRecursion := False
 }
 
 #If WinActive("ahk_exe Chrome.exe")
@@ -983,7 +987,7 @@ prevChromeTab()
 ~Esc::
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack,    Off
-    StopRecurssion := True
+    StopRecursion := True
     executedOnce   := False
     escHwndID := FindTopMostWindow()
 
@@ -1049,7 +1053,7 @@ prevChromeTab()
     }
 
     escHwndID_old := escHwndID
-    StopRecurssion := False
+    StopRecursion := False
     SetTimer, keyTrack, On
     SetTimer, mouseTrack,    On
 Return
@@ -1076,11 +1080,17 @@ Return
     DetectHiddenWindows, Off
 Return
 
-!1::GoSub, SwitchToVD1
+!1::
+    StopRecursion := True
+    SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
+    GoSub, SwitchToVD1
+    StopRecurssion := False
+    SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
+Return
 
 SwitchToVD1:
-    StopRecurssion := True
-    SetTimer, mouseTrack, Off
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     testDesktop := CurrentDesktop
     while (CurrentDesktop < 1) {
@@ -1099,16 +1109,20 @@ SwitchToVD1:
         }
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
     }
-    StopRecurssion := False
+Return
+
+!2::
+    StopRecursion := True
+    SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
+    GoSub, SwitchToVD2
+    StopRecursion := False
+    SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
 
-!2::GoSub, SwitchToVD2
-
 SwitchToVD2:
     If  (GetDesktopCount() >= 2) {
-        StopRecurssion := True
-        SetTimer, mouseTrack, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         testDesktop := CurrentDesktop
         while (CurrentDesktop < 2) {
@@ -1127,18 +1141,21 @@ SwitchToVD2:
             }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
-        StopRecurssion := False
-        SetTimer, mouseTrack, On
     }
-    tooltip,
 Return
 
-!3::GoSub, SwitchToVD3
+!3::
+    StopRecursion := True
+    SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
+    GoSub, SwitchToVD3
+    StopRecursion := False
+    SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
+Return
 
 SwitchToVD3:
     If  (GetDesktopCount() >= 3) {
-        StopRecurssion := True
-        SetTimer, mouseTrack, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         testDesktop := CurrentDesktop
         while (CurrentDesktop < 3) {
@@ -1157,17 +1174,21 @@ SwitchToVD3:
             }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
-        StopRecurssion := False
-        SetTimer, mouseTrack, On
     }
 Return
 
-!4::GoSub, SwitchToVD4
+!4::
+    StopRecursion := True
+    SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
+    GoSub, SwitchToVD4
+    StopRecursion := False
+    SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
+Return
 
 SwitchToVD4:
     If  (GetDesktopCount() >= 4) {
-        StopRecurssion := True
-        SetTimer, mouseTrack, Off
         CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         testDesktop := CurrentDesktop
         while (CurrentDesktop < 4) {
@@ -1186,8 +1207,6 @@ SwitchToVD4:
             }
             CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
         }
-        StopRecurssion := False
-        SetTimer, mouseTrack, On
     }
 Return
 
@@ -1451,7 +1470,7 @@ Return
 ; #If !hitTAB
 !q::
     ; tooltip, swapping between windows of app
-    StopRecurssion := True
+    StopRecursion := True
     ComboActive    := False
     ActivateTopMostWindow()
 
@@ -1463,7 +1482,7 @@ Return
     GoSub, ClearRect
 
     ; tooltip,
-    StopRecurssion := False
+    StopRecursion := False
 Return
 ; #If
 
@@ -1488,7 +1507,7 @@ Return
 
 
 !Capslock::
-    StopRecurssion := True
+    StopRecursion := True
     totalMenuItemCount := 0
     onlyTitleFound := ""
     winAssoc := {}
@@ -1525,7 +1544,7 @@ Return
         Tooltip, No matches found...
         Sleep, 1500
         Tooltip,
-        StopRecurssion := False
+        StopRecursion := False
         Critical Off
         Return
     }
@@ -1603,7 +1622,7 @@ Return
         tooltip,
     }
 
-    StopRecurssion := False
+    StopRecursion := False
 
     Menu, minWindows, deleteAll
     i := 1
@@ -1891,25 +1910,25 @@ Return
 
 #If MouseIsOverTaskbarBlank()
 ~Lbutton::
-    StopRecurssion     := True
+    StopRecursion     := True
     MouseGetPos, lbX1, lbY1,
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)) {
         run, explorer.exe
-        StopRecurssion     := False
+        StopRecursion     := False
         Return
     }
 
     KeyWait, LButton, U T5
     MouseGetPos, lbX2, lbY2,
-    StopRecurssion     := False
+    StopRecursion     := False
 Return
 #If
 
 #If MouseIsOverTaskbarWidgets()
 ~^Lbutton::
-    StopRecurssion := True
+    StopRecursion := True
     SetTimer, mouseTrack, Off
 	SetTimer, keyTrack, Off
     DetectHiddenWindows, Off
@@ -1961,7 +1980,7 @@ Return
     WinActivate, ahk_id %targetID%
     SetTimer, mouseTrack, On
 	SetTimer, keyTrack, On
-    StopRecurssion := False
+    StopRecursion := False
 Return
 #If
 
@@ -2215,7 +2234,7 @@ Return
     UserInputTrimmed :=
     StopCheck        := False
     SearchingWindows := True
-    StopRecurssion   := True
+    StopRecursion   := True
     BlockKeyboard(True)
     SetTimer, UpdateInputBoxTitle, 5
     BlockKeyboard(False)
@@ -2259,7 +2278,7 @@ Return
             Tooltip, No matches found...
             Sleep, 1500
             Tooltip,
-            StopRecurssion := False
+            StopRecursion := False
             Critical, Off
             SetTimer, mouseTrack,    on
             ; SetTimer, keyTrack, on
@@ -2349,7 +2368,7 @@ Return
             tooltip,
         }
     }
-    StopRecurssion   := False
+    StopRecursion   := False
     SearchingWindows := False
     SetTimer, mouseTrack,    on
     ; SetTimer, keyTrack, on
@@ -2495,6 +2514,10 @@ Mbutton::
     Global movehWndId
     Global GoToDesktop := False
 
+    StopRecursion := True
+    SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
+
     MouseGetPos, , , movehWndId
     WinActivate, ahk_id %movehWndId%
     CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
@@ -2529,8 +2552,13 @@ Mbutton::
     }
     Menu, vdeskMenu, Show
 
-    If StopRecurssion
-        StopRecurssion := False
+    sleep, 1000
+    StopRecursion := False
+    SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
+
+    ; If StopRecursion
+        ; StopRecursion := False
 Return
 #If
 
@@ -2543,8 +2571,8 @@ SendWindow:
 
     DetectHiddenWindows, On
 
-    If !GoToDesktop
-        StopRecurssion := True
+    ; If !GoToDesktop
+        ; StopRecursion := True
 
     InitialDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
 
@@ -2592,14 +2620,18 @@ SendWindow:
         WinSet, Transparent, 255, ahk_id %movehWndId%
 
     DetectHiddenWindows, Off
-    If !GoToDesktop
-        StopRecurssion := False
+    StopRecursion := False
+    SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
+
+    ; If !GoToDesktop
+        ; StopRecursion := False
 Return
 
 SendWindowAndGo:
     Global movehWndId
     Global targetDesktop
-    StopRecurssion := True
+    StopRecursion := True
     GoToDesktop := True
     GoSub, SendWindow
 
@@ -2612,8 +2644,10 @@ SendWindowAndGo:
     Else
         MoveAndFadeWindow(movehWndId, sw_x, True, "in")
 
-    StopRecurssion := False
-    GoToDesktop := False
+    GoToDesktop    := False
+    StopRecursion := False
+    SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 
@@ -2819,7 +2853,7 @@ Return
 
 #If !moving && !IsOverDesktop()
 *RButton::
-    StopRecurssion := True
+    StopRecursion := True
     ComboActive := False
     loop 600 {
         If !(GetKeyState("RButton"))
@@ -2838,7 +2872,7 @@ Return
     else
         ComboActive := False
 
-    StopRecurssion := False
+    StopRecursion := False
 Return
 #If
 
@@ -2879,7 +2913,7 @@ return
 
 #If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
 ~WheelUp::
-    StopRecurssion := True
+    StopRecursion := True
     pauseWheel := True
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
@@ -2906,7 +2940,7 @@ return
         }
     }
     pauseWheel := False
-    StopRecurssion := False
+    StopRecursion := False
 Return
 #If
 
@@ -2922,7 +2956,7 @@ Return
 
 #If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
 ~WheelDown::
-    StopRecurssion := True
+    StopRecursion := True
     pauseWheel := True
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
@@ -2949,7 +2983,7 @@ Return
         }
     }
     pauseWheel := False
-    StopRecurssion := False
+    StopRecursion := False
 Return
 #If
 
@@ -3694,10 +3728,10 @@ Return
 }
 
 mouseTrack() {
-    ListLines Off
-    Global MonCount, moving, currentMon, previousMon, StopRecurssion
+    Global MonCount, moving, currentMon, previousMon, StopRecursion
     Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
+    ListLines Off
     HexColor1 := 0x0
     HexColor2 := 0x1
     HexColor3 := 0x2
@@ -3728,6 +3762,7 @@ mouseTrack() {
     }
 
     lastX := x, lastY := y,
+
     If WinActive("ahk_class ZPContentViewWndClass") {
         WinGetPos, x, y, w, h, ahk_class ZPContentViewWndClass
         If (w == currMonWidth && h == currMonHeight) {
@@ -3753,184 +3788,184 @@ mouseTrack() {
     {
         skipCheck := True
     }
-    Else If (
-        !LbuttonHeld
-        && x >= G_DisplayRightEdge-3 && y < A_ScreenHeight-200
-        && GetKeyState("Lbutton", "P")
-        && MouseIsOverTitleBar())
-    {
-        StopRecurssion := true
-        KeyWait, Lbutton, T0.2
-        If (ErrorLevel == 1 && abs(y-ny) < 3)
-        {
-            Critical, On
-            CurrentDesktop := getCurrentDesktop()
-            If !(CurrentDesktop < getTotalDesktops() ) {
-                StopRecurssion := false
-                Return
-            }
-            BlockInput, MouseMove
-            LbuttonHeld := true
-            Send {Lbutton up}
-            WinGetTitle, Title, A
-            WinGet, hwndVD, ID, A
-            WinGetPos, wx, wy, ww, wh, ahk_id %hwndVD%
-            sw_x_org := wx
+    ; Else If (
+        ; !LbuttonHeld
+        ; && x >= G_DisplayRightEdge-3 && y < A_ScreenHeight-200
+        ; && GetKeyState("Lbutton", "P")
+        ; && MouseIsOverTitleBar())
+    ; {
+        ; StopRecursion := true
+        ; KeyWait, Lbutton, T0.2
+        ; If (ErrorLevel == 1 && abs(y-ny) < 3)
+        ; {
+            ; Critical, On
+            ; CurrentDesktop := getCurrentDesktop()
+            ; If !(CurrentDesktop < getTotalDesktops() ) {
+                ; StopRecursion := false
+                ; Return
+            ; }
+            ; BlockInput, MouseMove
+            ; LbuttonHeld := true
+            ; Send {Lbutton up}
+            ; WinGetTitle, Title, A
+            ; WinGet, hwndVD, ID, A
+            ; WinGetPos, wx, wy, ww, wh, ahk_id %hwndVD%
+            ; sw_x_org := wx
 
-            moveConst := 1
+            ; moveConst := 1
 
-            WinSet, Transparent, 225, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 200, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 175, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 150, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 100, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 50,  ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 0,   ahk_id %hwndVD%
-            sleep, 20
+            ; WinSet, Transparent, 225, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 200, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 175, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 150, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 100, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 50,  ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 0,   ahk_id %hwndVD%
+            ; sleep, 20
 
-            WinMove, ahk_id %hwndVD%,, %sw_x_org%
-            WinActivate, ahk_id %hwndVD%
-            MoveCurrentWindowToDesktop(CurrentDesktop+1)
+            ; WinMove, ahk_id %hwndVD%,, %sw_x_org%
+            ; WinActivate, ahk_id %hwndVD%
+            ; MoveCurrentWindowToDesktop(CurrentDesktop+1)
 
-            Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
-            sleep, 500
+            ; Send {LWin down}{Ctrl down}{Right}{Ctrl up}{LWin up}
+            ; sleep, 500
 
-            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2!=HexColor3)) {
-                WinActivate, ahk_id %hwndVD%
-                CoordMode, Pixel, Screen
-                PixelGetColor, HexColor1, %x%, %y%, RGB
-                sleep, 50
-                PixelGetColor, HexColor2, %x%, %y%, RGB
-                sleep, 50
-                PixelGetColor, HexColor3, %x%, %y%, RGB
-            }
-            CoordMode, Mouse, screen
+            ; while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2!=HexColor3)) {
+                ; WinActivate, ahk_id %hwndVD%
+                ; CoordMode, Pixel, Screen
+                ; PixelGetColor, HexColor1, %x%, %y%, RGB
+                ; sleep, 50
+                ; PixelGetColor, HexColor2, %x%, %y%, RGB
+                ; sleep, 50
+                ; PixelGetColor, HexColor3, %x%, %y%, RGB
+            ; }
+            ; CoordMode, Mouse, screen
 
-            WinSet, Transparent, 50, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 100, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 150, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 175, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 200, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 255, ahk_id %hwndVD%
-            BlockInput, MouseMoveOff
-            Send {Lbutton down}
-            Critical, Off
-        }
-        StopRecurssion := false
-        Return
-    }
-    Else If (
-            !LbuttonHeld
-            && x <= G_DisplayLeftEdge+3 && y < A_ScreenHeight-200
-            && GetKeyState("Lbutton", "P")
-            && MouseIsOverTitleBar())
-    {
-        StopRecurssion := true
-        KeyWait, Lbutton, T0.2
-        If (ErrorLevel == 1 && abs(y-ny) < 3)
-        {
-            Critical, On
-            CurrentDesktop := getCurrentDesktop()
-            If !(CurrentDesktop > 0) {
-                StopRecurssion := false
-                Return
-            }
-            BlockInput, MouseMove
-            LbuttonHeld := true
-            Send {Lbutton up}
-            WinGetTitle, Title, A
-            WinGet, hwndVD, ID, A
-            WinGetPos, wx, wy, ww, wh, ahk_id %hwndVD%
-            sw_x_org := wx
+            ; WinSet, Transparent, 50, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 100, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 150, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 175, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 200, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 255, ahk_id %hwndVD%
+            ; BlockInput, MouseMoveOff
+            ; Send {Lbutton down}
+            ; Critical, Off
+        ; }
+        ; StopRecursion := false
+        ; Return
+    ; }
+    ; Else If (
+            ; !LbuttonHeld
+            ; && x <= G_DisplayLeftEdge+3 && y < A_ScreenHeight-200
+            ; && GetKeyState("Lbutton", "P")
+            ; && MouseIsOverTitleBar())
+    ; {
+        ; StopRecursion := true
+        ; KeyWait, Lbutton, T0.2
+        ; If (ErrorLevel == 1 && abs(y-ny) < 3)
+        ; {
+            ; Critical, On
+            ; CurrentDesktop := getCurrentDesktop()
+            ; If !(CurrentDesktop > 0) {
+                ; StopRecursion := false
+                ; Return
+            ; }
+            ; BlockInput, MouseMove
+            ; LbuttonHeld := true
+            ; Send {Lbutton up}
+            ; WinGetTitle, Title, A
+            ; WinGet, hwndVD, ID, A
+            ; WinGetPos, wx, wy, ww, wh, ahk_id %hwndVD%
+            ; sw_x_org := wx
 
-            moveConst := -1
+            ; moveConst := -1
 
-            WinSet, Transparent, 225, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 200, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 175, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 150, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 100, ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 50,  ahk_id %hwndVD%
-            wx += 15*moveConst
-            WinMove, ahk_id %hwndVD%,, %wx%
-            sleep, 20
-            WinSet, Transparent, 0,   ahk_id %hwndVD%
-            sleep, 20
+            ; WinSet, Transparent, 225, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 200, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 175, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 150, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 100, ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 50,  ahk_id %hwndVD%
+            ; wx += 15*moveConst
+            ; WinMove, ahk_id %hwndVD%,, %wx%
+            ; sleep, 20
+            ; WinSet, Transparent, 0,   ahk_id %hwndVD%
+            ; sleep, 20
 
-            WinMove, ahk_id %hwndVD%,, %sw_x_org%
-            WinActivate, ahk_id %hwndVD%
-            MoveCurrentWindowToDesktop(CurrentDesktop-1)
+            ; WinMove, ahk_id %hwndVD%,, %sw_x_org%
+            ; WinActivate, ahk_id %hwndVD%
+            ; MoveCurrentWindowToDesktop(CurrentDesktop-1)
 
-            Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
-            sleep, 500
+            ; Send {LWin down}{Ctrl down}{Left}{Ctrl up}{LWin up}
+            ; sleep, 500
 
-            while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2!=HexColor3)) {
-                WinActivate, ahk_id %hwndVD%
-                CoordMode, Pixel, Screen
-                PixelGetColor, HexColor1, %x%, %y%, RGB
-                sleep, 50
-                PixelGetColor, HexColor2, %x%, %y%, RGB
-                sleep, 50
-                PixelGetColor, HexColor3, %x%, %y%, RGB
-            }
-            CoordMode, Mouse, screen
+            ; while (!WinActive("ahk_id " . hwndVD) && getCurrentDesktop() != (CurrentDesktop-1) && (HexColor1!=HexColor2!=HexColor3)) {
+                ; WinActivate, ahk_id %hwndVD%
+                ; CoordMode, Pixel, Screen
+                ; PixelGetColor, HexColor1, %x%, %y%, RGB
+                ; sleep, 50
+                ; PixelGetColor, HexColor2, %x%, %y%, RGB
+                ; sleep, 50
+                ; PixelGetColor, HexColor3, %x%, %y%, RGB
+            ; }
+            ; CoordMode, Mouse, screen
 
-            WinSet, Transparent, 50, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 100, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 150, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 175, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 200, ahk_id %hwndVD%
-            sleep, 20
-            WinSet, Transparent, 255, ahk_id %hwndVD%
-            BlockInput, MouseMoveOff
-            Send {Lbutton down}
-            Critical, Off
-        }
-        StopRecurssion := false
-        Return
-    }
+            ; WinSet, Transparent, 50, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 100, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 150, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 175, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 200, ahk_id %hwndVD%
+            ; sleep, 20
+            ; WinSet, Transparent, 255, ahk_id %hwndVD%
+            ; BlockInput, MouseMoveOff
+            ; Send {Lbutton down}
+            ; Critical, Off
+        ; }
+        ; StopRecursion := false
+        ; Return
+    ; }
 
     If (MonCount == 1 &&  x > 3 && y > 3 && x < A_ScreenWidth-3 && y < A_ScreenHeight-3)
     {
@@ -3938,35 +3973,29 @@ mouseTrack() {
         skipCheck := False
     }
 
-    ; If (MonCount > 1 && !GetKeyState("LButton","P")) {
-        ; currentMon := MWAGetMonitorMouseIsIn(40)
-        ; If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
-            ; DetectHiddenWindows, Off
-            ; Critical, On
-            ; WinGet, allWindows, List
-            ; loop % allWindows {
-                ; hwnd_id := allWindows%A_Index%
-                ; WinGet, isMin, MinMax, ahk_id %hwnd_id%
-                ; WinGet, whatProc, ProcessName, ahk_id %hwnd_id%
-                ; currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
-
-                ; If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
-                    ; WinActivate, ahk_id %hwnd_id%
-                    ; GoSub, DrawRect
-                    ; GoSub, ClearRect
-                    ; Gui, GUI4Boarder: Hide
-                    ; previousMon := currentMon
-                    ; Critical, Off
-                    ; ListLines On
-                    ; return
-                ; }
-            ; }
-        ; }
-        ; Critical, Off
-    ; }
-
     If (MonCount > 1 && !GetKeyState("LButton","P")) {
-        previousMon := currentMon
+        currentMon := MWAGetMonitorMouseIsIn(40)
+        If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
+            StopRecursion := True
+            DetectHiddenWindows, Off
+            WinGet, allWindows, List, , , ""
+            loop % allWindows {
+                hwnd_id := allWindows%A_Index%
+                WinGet, isMin, MinMax, ahk_id %hwnd_id%
+                WinGet, whatProc, ProcessName, ahk_id %hwnd_id%
+                currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
+
+                If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
+                    WinActivate, ahk_id %hwnd_id%
+                    GoSub, DrawRect
+                    GoSub, ClearRect
+                    Gui, GUI4Boarder: Hide
+                    break
+                }
+            }
+            previousMon := currentMon
+            StopRecursion := False
+        }
     }
     ListLines On
 }
