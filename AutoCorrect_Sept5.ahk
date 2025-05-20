@@ -43,7 +43,7 @@ SetControlDelay -1
 SetKeyDelay, 1
 SendMode, Input
 
-Global moving                      := False
+Global mouseMoving                      := False
 Global ComboActive                 := False
 Global skipCheck                   := False
 Global hwndVD
@@ -1984,7 +1984,7 @@ Return
 
     StopRecursion := False
     SetTimer, mouseTrack, On
-	SetTimer, keyTrack,   On
+    SetTimer, keyTrack,   On
 Return
 #If
 
@@ -2236,20 +2236,21 @@ Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
+    StopRecursion   := True
     SetTimer, mouseTrack, off
 
     UserInputTrimmed :=
     StopCheck        := False
     SearchingWindows := True
-    StopRecursion   := True
     BlockKeyboard(True)
     SetTimer, UpdateInputBoxTitle, 5
     BlockKeyboard(False)
     InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
     SetTimer, UpdateInputBoxTitle, off
-    ; tooltip, searching %UserInputTrimmed%
+
     If ErrorLevel
     {
+        StopRecursion   := False
         SetTimer, mouseTrack, On
         Return
     }
@@ -2282,11 +2283,11 @@ Return
         }
 
         If (allWinArray.length() == 0) {
+            Critical, Off
             Tooltip, No matches found...
             Sleep, 1500
             Tooltip,
             StopRecursion := False
-            Critical, Off
             SetTimer, mouseTrack, On
             Return
         }
@@ -2374,8 +2375,9 @@ Return
             tooltip,
         }
     }
-    StopRecursion   := False
     SearchingWindows := False
+
+    StopRecursion   := False
     SetTimer, mouseTrack, On
 Return
 
@@ -2842,13 +2844,13 @@ WheelDown::send {Volume_Down}
 ; Return
 ; #If
 
-#If moving
+#If mouseMoving
 ~RButton::
     ComboActive := False
 Return
 #If
 
-#If !moving && !IsOverDesktop()
+#If !mouseMoving && !IsOverDesktop()
 *RButton::
     StopRecursion := True
     ComboActive := False
@@ -2873,7 +2875,7 @@ Return
 Return
 #If
 
-#If !moving && !VolumeHover() && !IsOverDesktop()
+#If !mouseMoving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelUp::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
@@ -2885,7 +2887,7 @@ RButton & WheelUp::
 Return
 #If
 
-#If !moving && !VolumeHover() && !IsOverDesktop()
+#If !mouseMoving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelDown::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
@@ -2915,7 +2917,7 @@ return
     MouseGetPos, , , wuID, wuCtrl
     WinGetClass, wuClass, ahk_id %wuID%
 
-    If (wuClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
+    If (wuClass == "Shell_TrayWnd" && !mouseMoving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Left}
         sleep, 200
@@ -2958,7 +2960,7 @@ Return
     MouseGetPos, , , wdID, wuCtrl
     WinGetClass, wdClass, ahk_id %wdID%
 
-    If (wdClass == "Shell_TrayWnd" && !moving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
+    If (wdClass == "Shell_TrayWnd" && !mouseMoving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
     {
         Send #^{Right}
         sleep, 200
@@ -3713,6 +3715,7 @@ keyTrack() {
             }
             SetTimer, keyTrack,   On
         }
+        StopAutoFix := False
     }
     Else If (currClass == "XLMAIN") {
         StopAutoFix := True
@@ -3725,7 +3728,7 @@ Return
 }
 
 mouseTrack() {
-    Global MonCount, moving, currentMon, previousMon, StopRecursion
+    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion
     Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
     ListLines Off
@@ -3751,11 +3754,11 @@ mouseTrack() {
     }
 
     If ((abs(x - lastX) > 10 || abs(y - lastY) > 10) && lastX != "") {
-        moving := True
+        mouseMoving := True
         If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770")
             sleep 250
     } Else {
-        moving := False
+        mouseMoving := False
     }
 
     lastX := x, lastY := y,
@@ -4598,7 +4601,7 @@ FindTopMostWindow() {
 ;
 ;   Offset_X, Offset_Y - Output variables. [Optional] Offset, in pixels, of the
 ;       actual position of the window versus the position of the window as
-;       reported by GetWindowRect.  If moving the window to specific
+;       reported by GetWindowRect.  If mouseMoving the window to specific
 ;       coordinates, add these offset values to the appropriate coordinate
 ;       (X and/or Y) to reflect the true size of the window.
 ;
