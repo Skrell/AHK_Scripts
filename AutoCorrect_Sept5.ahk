@@ -449,8 +449,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Return
         }
 
-        SetTimer, keyTrack, Off
-        SetTimer, mouseTrack,    Off
+        SetTimer, keyTrack,   Off
+        SetTimer, mouseTrack, Off
 
         loop, 100 {
             ControlGetFocus, initFocusedCtrl , ahk_id %hWnd%
@@ -468,8 +468,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 If (vWinClass == "OperationStatusWindow") {
-                    SetTimer, keyTrack, On
-                    SetTimer, mouseTrack,    On
+                    SetTimer, keyTrack,   On
+                    SetTimer, mouseTrack, On
                     Return
                 }
             }
@@ -495,8 +495,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
             If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
-                SetTimer, keyTrack, On
-                SetTimer, mouseTrack,    On
+                SetTimer, keyTrack,   On
+                SetTimer, mouseTrack, On
                 Return
             }
 
@@ -518,8 +518,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
 
                 If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
-                    SetTimer, keyTrack, On
-                    SetTimer, mouseTrack,    On
+                    SetTimer, keyTrack,   On
+                    SetTimer, mouseTrack, On
                     Return
                 }
 
@@ -534,8 +534,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                         UIA := UIA_Interface() ; Initialize UIA interface
                         UIA.ConnectionTimeout := 6000
-                        SetTimer, keyTrack, On
-                        SetTimer, mouseTrack,    On
+                        SetTimer, keyTrack,   On
+                        SetTimer, mouseTrack, On
                         Return
                     }
                 }
@@ -564,8 +564,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                 If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
                     BlockKeyboard(false)
-                    SetTimer, keyTrack, On
-                    SetTimer, mouseTrack,    On
+                    SetTimer, keyTrack,   On
+                    SetTimer, mouseTrack, On
                     Return
                 }
                 Else {
@@ -606,8 +606,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     }
     ; tooltip,
     DetectHiddenWindows, Off
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack,    On
+    SetTimer, keyTrack,   On
+    SetTimer, mouseTrack, On
     Return
 }
 
@@ -920,7 +920,8 @@ $F2::
     LbuttonEnabled := False
     StopRecursion := True
     SetTimer, mouseTrack, Off
-    SetTimer, keyTrack, Off
+    SetTimer, keyTrack,   Off
+
     KeyWait, F2, U T1
     Send, {F2}
     sleep, 150
@@ -933,10 +934,11 @@ $F2::
             break
         sleep, 10
     }
-    SetTimer, mouseTrack, On
-    SetTimer, keyTrack, On
-    StopRecursion := False
+
     LbuttonEnabled := True
+    StopRecursion := False
+    SetTimer, mouseTrack, On
+    SetTimer, keyTrack,   On
 Return
 
 ; Ctl+Tab in chrome to goto recent
@@ -985,9 +987,9 @@ prevChromeTab()
 
 #If !SearchingWindows && !hitTAB
 ~Esc::
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack,    Off
     StopRecursion := True
+    SetTimer, keyTrack,   Off
+    SetTimer, mouseTrack, Off
     executedOnce   := False
     escHwndID := FindTopMostWindow()
 
@@ -1054,8 +1056,8 @@ prevChromeTab()
 
     escHwndID_old := escHwndID
     StopRecursion := False
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack,    On
+    SetTimer, keyTrack,   On
+    SetTimer, mouseTrack, On
 Return
 
 Esc & x::
@@ -1082,11 +1084,11 @@ Return
 
 !1::
     StopRecursion := True
-    SetTimer, keyTrack, Off
+    SetTimer, keyTrack,   Off
     SetTimer, mouseTrack, Off
     GoSub, SwitchToVD1
-    StopRecurssion := False
-    SetTimer, keyTrack, On
+    StopRecursion := False
+    SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
 Return
 
@@ -1113,11 +1115,11 @@ Return
 
 !2::
     StopRecursion := True
-    SetTimer, keyTrack, Off
+    SetTimer, keyTrack,   Off
     SetTimer, mouseTrack, Off
     GoSub, SwitchToVD2
     StopRecursion := False
-    SetTimer, keyTrack, On
+    SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
 Return
 
@@ -1146,11 +1148,11 @@ Return
 
 !3::
     StopRecursion := True
-    SetTimer, keyTrack, Off
+    SetTimer, keyTrack,   Off
     SetTimer, mouseTrack, Off
     GoSub, SwitchToVD3
     StopRecursion := False
-    SetTimer, keyTrack, On
+    SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
 Return
 
@@ -1179,11 +1181,11 @@ Return
 
 !4::
     StopRecursion := True
-    SetTimer, keyTrack, Off
+    SetTimer, keyTrack,   Off
     SetTimer, mouseTrack, Off
     GoSub, SwitchToVD4
     StopRecursion := False
-    SetTimer, keyTrack, On
+    SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
 Return
 
@@ -1449,22 +1451,22 @@ $!Tab::
 If !hitTAB {
     ComboActive := False
     SetTimer, mouseTrack, Off
-    SetTimer, keyTrack, Off
+    SetTimer, keyTrack,   Off
     Cycle(forward)
     GoSub, Altup
     SetTimer, mouseTrack, On
-    SetTimer, keyTrack, On
+    SetTimer, keyTrack,   On
 }
 Return
 
 $!+Tab::
 ComboActive := False
 SetTimer, mouseTrack, Off
-SetTimer, keyTrack, Off
+SetTimer, keyTrack,   Off
 Cycle(!forward)
 GoSub, ClearRect
 SetTimer, mouseTrack, On
-SetTimer, keyTrack, On
+SetTimer, keyTrack,   On
 Return
 
 ; #If !hitTAB
@@ -1930,7 +1932,8 @@ Return
 ~^Lbutton::
     StopRecursion := True
     SetTimer, mouseTrack, Off
-	SetTimer, keyTrack, Off
+	SetTimer, keyTrack,   Off
+
     DetectHiddenWindows, Off
     SysGet, MonCount, MonitorCount
 
@@ -1978,9 +1981,10 @@ Return
         }
     }
     WinActivate, ahk_id %targetID%
-    SetTimer, mouseTrack, On
-	SetTimer, keyTrack, On
+
     StopRecursion := False
+    SetTimer, mouseTrack, On
+	SetTimer, keyTrack,   On
 Return
 #If
 
@@ -2002,6 +2006,7 @@ Return
 ~^LButton::
     DetectHiddenWindows, Off
     SetTimer, mouseTrack, Off
+
     MouseGetPos, mx1, my1, actID,
     KeyWait, Lbutton, U T5
     MouseGetPos, mx2, my2, ,
@@ -2063,6 +2068,7 @@ Return
         WinActivate, ahk_id %actID%
         previousMon := currentMon
     }
+
     SetTimer, mouseTrack, On
 Return
 #If
@@ -2230,7 +2236,8 @@ Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 !`::
-    SetTimer, mouseTrack,    off
+    SetTimer, mouseTrack, off
+
     UserInputTrimmed :=
     StopCheck        := False
     SearchingWindows := True
@@ -2243,7 +2250,7 @@ Return
     ; tooltip, searching %UserInputTrimmed%
     If ErrorLevel
     {
-        SetTimer, mouseTrack,    on
+        SetTimer, mouseTrack, On
         Return
     }
     else
@@ -2280,8 +2287,7 @@ Return
             Tooltip,
             StopRecursion := False
             Critical, Off
-            SetTimer, mouseTrack,    on
-            ; SetTimer, keyTrack, on
+            SetTimer, mouseTrack, On
             Return
         }
 
@@ -2370,8 +2376,7 @@ Return
     }
     StopRecursion   := False
     SearchingWindows := False
-    SetTimer, mouseTrack,    on
-    ; SetTimer, keyTrack, on
+    SetTimer, mouseTrack, On
 Return
 
 ActivateWindow:
@@ -2515,7 +2520,7 @@ Mbutton::
     Global GoToDesktop := False
 
     StopRecursion := True
-    SetTimer, keyTrack, Off
+    SetTimer, keyTrack,   Off
     SetTimer, mouseTrack, Off
 
     MouseGetPos, , , movehWndId
@@ -2554,7 +2559,7 @@ Mbutton::
 
     sleep, 1000
     StopRecursion := False
-    SetTimer, keyTrack, On
+    SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
 
     ; If StopRecursion
@@ -2620,9 +2625,6 @@ SendWindow:
         WinSet, Transparent, 255, ahk_id %movehWndId%
 
     DetectHiddenWindows, Off
-    StopRecursion := False
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
 
     ; If !GoToDesktop
         ; StopRecursion := False
@@ -2631,7 +2633,6 @@ Return
 SendWindowAndGo:
     Global movehWndId
     Global targetDesktop
-    StopRecursion := True
     GoToDesktop := True
     GoSub, SendWindow
 
@@ -2644,12 +2645,8 @@ SendWindowAndGo:
     Else
         MoveAndFadeWindow(movehWndId, sw_x, True, "in")
 
-    GoToDesktop    := False
-    StopRecursion := False
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    GoToDesktop := False
 Return
-
 
 SendCtrlAdd:
     MouseGetPos, , , mouseHoverId, initFocusedCtrl
@@ -3698,7 +3695,7 @@ keyTrack() {
     If (currCtrl == "Edit1" && InStr(currClass, "EVERYTHING", true)) {
         StopAutoFix := True
         If ((A_TickCount-TimeOfLastKey) < 700 && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
-            SetTimer, keyTrack, Off
+            SetTimer, keyTrack,   Off
             ControlGet, OutputVar1, Visible ,, SysListView321, A
             ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
             ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
@@ -3714,7 +3711,7 @@ keyTrack() {
                     TimeOfLastKey := A_TickCount
                 }
             }
-            SetTimer, keyTrack, On
+            SetTimer, keyTrack,   On
         }
     }
     Else If (currClass == "XLMAIN") {
