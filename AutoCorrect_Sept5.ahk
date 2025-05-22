@@ -2003,13 +2003,21 @@ Return
 ; Return
 
 #If MouseIsOverTitleBar()
-~^LButton::
+^LButton::
     DetectHiddenWindows, Off
+    StopRecursion := True
     SetTimer, mouseTrack, Off
 
+    Critical, On
     MouseGetPos, mx1, my1, actID,
+    Send, {Lbutton DOWN}
+
     KeyWait, Lbutton, U T5
+
     MouseGetPos, mx2, my2, ,
+    Send, {Lbutton UP}
+    Critical, Off
+
     If (MonCount > 1)
         currentMon := MWAGetMonitorMouseIsIn()
 
@@ -2069,6 +2077,7 @@ Return
         previousMon := currentMon
     }
 
+    StopRecursion := False
     SetTimer, mouseTrack, On
 Return
 #If
@@ -2879,7 +2888,7 @@ Return
 RButton & WheelUp::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
-    Send, {click, left}
+    ; Send, {click, left}
     ; MouseGetPos, , , targetID, targetCtrl
     ; ControlFocus, %targetCtrl%, ahk_id %targetID%
     ; ControlSend,  %targetCtrl%, ^{Home},  ahk_id %targetID%
@@ -2891,7 +2900,7 @@ Return
 RButton & WheelDown::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
-    Send, {click, left}
+    ; Send, {click, left}
     ; MouseGetPos, , , targetID, targetCtrl
     ; ControlFocus, %targetCtrl%, ahk_id %targetID%
     ; ControlSend,  %targetCtrl%, ^{End},  ahk_id %targetID%
@@ -5221,6 +5230,8 @@ SetTitleMatchMode, 2
 ::poke::
 ::arose::
 ::caching::
+::bot::
+::campaign::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
