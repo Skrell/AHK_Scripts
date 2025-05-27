@@ -467,6 +467,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ; tooltip, here we go
             If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                ; Send, ^{NumpadAdd}
                 If (vWinClass == "OperationStatusWindow") {
                     SetTimer, keyTrack,   On
                     SetTimer, mouseTrack, On
@@ -474,8 +475,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
             }
 
-            If (InStr(vWinTitle, "Save As", false) && vWinClass != "#32770") {
-                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+            If (InStr(vWinTitle, "Save", false) && vWinClass != "#32770") {
+                WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
                 WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
                 Return
             }
@@ -520,6 +521,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
                     SetTimer, keyTrack,   On
                     SetTimer, mouseTrack, On
+                    tooltip, quitting
                     Return
                 }
 
@@ -571,7 +573,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Else {
                     sleep, 25
                     Send, ^{NumpadAdd}
+                    tooltip, sent to %TargetControl%
 
+                    ControlGetText, isText , Edit1, ahk_id %hWnd%
+                    If (isText != "" && !InStr(vWinTitle, "Save", True))
+                        Send, {Backspace}
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
 
@@ -583,9 +589,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                     break
                                 sleep, 1
                             }
-                            ControlGetText, isText , Edit1, ahk_id %hWnd%
-                            If (isText != "" && !InStr(vWinTitle, "Save", True))
-                                Send, {Backspace}
                         }
                     }
                 }
@@ -3762,12 +3765,15 @@ mouseTrack() {
         LbuttonHeld := False
     }
 
-    If ((abs(x - lastX) > 10 || abs(y - lastY) > 10) && lastX != "") {
+    If ((abs(x - lastX) > 10 || abs(y - lastY) > 10) && lastX != "" && lastY != "") {
         mouseMoving := True
+
         If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770")
             sleep 250
     } Else {
         mouseMoving := False
+        ; If GetNameOfIconUnderMouse() != ""
+            ; ToolTip % GetNameOfIconUnderMouse()
     }
 
     lastX := x, lastY := y,
@@ -4803,7 +4809,7 @@ GetExplorerPath(hwnd:="") {
         hwnd := WinExist("A")
 
     If !WinExist("ahk_id " . hwnd)
-        Return false
+        Return ""
 
     WinGetClass, clCheck, ahk_id %hwnd%
 
@@ -4845,7 +4851,7 @@ GetExplorerPath(hwnd:="") {
             Return dir
         }
     }
-    Return false
+    Return ""
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=60403
@@ -5049,6 +5055,41 @@ Local    ; This modfied version to be passed as parameter to ShowMenu() @ tiny.c
     v%A_Index% := NumGet(v+0, offset+=4, "Int")
 Return ( v3>v7 ? [v7, Y, 0x18] : v4>v8 ? [X, v8, 0x24]
        : v5>v1 ? [v5, Y, 0x10] : v6>v2 ? [X, v6, 0x04] : [0,0,0] )
+}
+
+; https://www.autohotkey.com/boards/viewtopic.php?t=51788
+GetNameOfIconUnderMouse() {
+   MouseGetPos, , , hwnd, CtrlClass
+   WinGetClass, WinClass, ahk_id %hwnd%
+   try if (WinClass = "CabinetWClass" && (CtrlClass = "DirectUIHWND3"|| CtrlClass = "DirectUIHWND2")) {
+      oAcc := Acc_ObjectFromPoint()
+      Name := Acc_Parent(oAcc).accValue(0)
+      Name := Name ? Name : oAcc.accValue(0)
+   } else if (WinClass = "Progman" || WinClass = "WorkerW") {
+      oAcc := Acc_ObjectFromPoint(ChildID)
+      Name := ChildID ? oAcc.accName(ChildID) : ""
+   }
+   Return Name
+}
+
+; https://github.com/Drugoy/Autohotkey-scripts-.ahk/blob/master/Libraries/Acc.ahk
+
+Acc_Init() {
+	Static h
+	If Not h
+		h:=DllCall("LoadLibrary","Str","oleacc","Ptr")
+}
+Acc_ObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
+	Acc_Init()
+	If	DllCall("oleacc\AccessibleObjectFromPoint", "Int64", x==""||y==""?0*DllCall("GetCursorPos","Int64*",pt)+pt:x&0xFFFFFFFF|y<<32, "Ptr*", pacc, "Ptr", VarSetCapacity(varChild,8+2*A_PtrSize,0)*0+&varChild)=0
+	Return ComObjEnwrap(9,pacc,1), _idChild_:=NumGet(varChild,8,"UInt")
+}
+Acc_Parent(Acc) {
+	try parent:=Acc.accParent
+	return parent?Acc_Query(parent):
+}
+Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=81731&p=509530#509530
+	try return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
 }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
