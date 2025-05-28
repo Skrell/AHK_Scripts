@@ -545,11 +545,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 If (OutputVar1 == 1) {
                     TargetControl := "SysListView321"
                 }
-                Else If (OutputVar2 == 1 && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
-                    TargetControl := "DirectUIHWND2"
-                }
-                Else If (OutputVar3 == 1 && vWinClass == "#32770") {
-                    TargetControl := "DirectUIHWND3"
+                Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
+                    ControlGetPos, , , , OutHeight2, , ahk_id %hWnd%, , , , DirectUIHWND2
+                    ControlGetPos, , , , OutHeight3, , ahk_id %hWnd%, , , , DirectUIHWND3
+                    If (OutHeight2 > OutHeight3)
+                        TargetControl := "DirectUIHWND2"
+                    Else
+                        TargetControl := "DirectUIHWND3"
                 }
 
                 BlockKeyboard(true)
@@ -576,7 +578,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     tooltip, sent to %TargetControl%
 
                     ControlGetText, isText , Edit1, ahk_id %hWnd%
-                    If (isText != "" && !InStr(vWinTitle, "Save", True))
+                    If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) == 1)
                         Send, {Backspace}
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
@@ -2205,7 +2207,7 @@ Return
             && ((rlsTime - initTime) < 325)
             && (LB_HexColor1 != LB_HexORrd || LB_HexColor2 != LB_HexORrd || LB_HexColor3 != LB_HexORrd || LB_HexColor4  != LB_HexORrd || LB_HexColor5  != LB_HexORrd)) {
         sleep, 125
-        If WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") {
+        If WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768" || GetKeyState("Lbutton","P")) {
             LbuttonEnabled := True
             Return
         }
@@ -2735,11 +2737,13 @@ SendCtrlAdd:
             If (OutputVar1 == 1) {
                 TargetControl := "SysListView321"
             }
-            Else If (OutputVar2 == 1 && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
-                TargetControl := "DirectUIHWND2"
-            }
-            Else If (OutputVar3 == 1 && lClassCheck == "#32770") {
-                TargetControl := "DirectUIHWND3"
+            Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
+                ControlGetPos, , , , OutHeight2, , ahk_id %mouseHoverId%, , , , DirectUIHWND2
+                ControlGetPos, , , , OutHeight3, , ahk_id %mouseHoverId%, , , , DirectUIHWND3
+                If (OutHeight2 > OutHeight3)
+                    TargetControl := "DirectUIHWND2"
+                Else
+                    TargetControl := "DirectUIHWND3"
             }
 
             ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrl%
