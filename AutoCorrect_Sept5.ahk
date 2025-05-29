@@ -91,6 +91,8 @@ Global lbX2
 Global currentMon                  := 0
 Global previousMon                 := 0
 Global targetDesktop               := 0
+Global currentPath                 := ""
+Global prevPath                    := ""
 
 Process, Priority,, High
 
@@ -546,8 +548,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     TargetControl := "SysListView321"
                 }
                 Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
-                    ControlGetPos, , , , OutHeight2, , ahk_id %hWnd%, , , , DirectUIHWND2
-                    ControlGetPos, , , , OutHeight3, , ahk_id %hWnd%, , , , DirectUIHWND3
+                    ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %hWnd%, , , ,
+                    ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %hWnd%, , , ,
                     If (OutHeight2 > OutHeight3)
                         TargetControl := "DirectUIHWND2"
                     Else
@@ -1909,8 +1911,10 @@ DrawRect:
 Return
 
 !Lbutton::
-    If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550))
+    If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550)) {
         Send, {ENTER}
+        sleep, 275
+    }
     Else
         Send, {click, Left}
 Return
@@ -1994,12 +1998,12 @@ Return
 #If
 
 ; KeepCenteringTimer:
-    ; MouseGetPos, , , , lctrlN
+    ; MouseGetPos, , , , lbctrlN
     ; If (GetKeyState("Lbutton","P") || GetKeyState("Rbutton","P") || GetKeyState("LAlt","P") ) {
         ; SetTimer, KeepCenteringTimer, Off
         ; Return
     ; }
-    ; Else If  (lctrlN != "SysListView321" && lctrlN != "DirectUIHWND2" && lctrlN != "DirectUIHWND3") {
+    ; Else If  (lbctrlN != "SysListView321" && lbctrlN != "DirectUIHWND2" && lbctrlN != "DirectUIHWND3") {
         ; SetTimer, KeepCenteringTimer, Off
         ; Return
     ; }
@@ -2092,7 +2096,7 @@ Return
 ~LButton::
     tooltip,
     CoordMode, Mouse, Screen
-    MouseGetPos, lbX1, lbY1, lbhwnd, lctrlN
+    MouseGetPos, lbX1, lbY1, lbhwnd, lbctrlN
     SetTimer, SendCtrlAdd, Off
     WinGetClass, lClass, ahk_id %lbhwnd%
     Gui, GUI4Boarder: Hide
@@ -2101,14 +2105,14 @@ Return
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (lctrlN == "SysListView321" || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3")) {
+        && (lbctrlN == "SysListView321" || lbctrlN == "DirectUIHWND2" || lbctrlN == "DirectUIHWND3")) {
 
         currentPath    := ""
 
-        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %lctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
+        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %lbctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
 
         If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF) && (LB_HexColor4  == 0xFFFFFF) && (LB_HexColor5  == 0xFFFFFF)) {
-            If (lctrlN == "SysListView321") {
+            If (lbctrlN == "SysListView321") {
                 Send, {Backspace}
                 SetTimer, RunDynaExprTimeout, -1
             }
@@ -2194,28 +2198,44 @@ Return
 
     rlsTime := A_TickCount
 
-    ; tooltip, %timeDiff% ms - %lctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
+    ; tooltip, %timeDiff% ms - %lbctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && ((rlsTime - initTime) < 325)
         && ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3 == 0xFFFFFF) && (LB_HexColor4  == 0xFFFFFF) && (LB_HexColor5  == 0xFFFFFF))
-        && (InStr(lctrlN,"SysListView32",True) || lctrlN == "DirectUIHWND2" || lctrlN == "DirectUIHWND3" ))  {
+        && (InStr(lbctrlN,"SysListView32",True) || lbctrlN == "DirectUIHWND2" || lbctrlN == "DirectUIHWND3" ))  {
 
         SetTimer, SendCtrlAdd, -125
     }
-    Else If ((lctrlN == "UpBand1" || lctrlN == "ToolbarWindow321" || lctrlN == "ToolbarWindow323" || lctrlN == "ToolbarWindow324" || lctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")
+    Else If ((lbctrlN == "UpBand1" || lbctrlN == "ToolbarWindow321" || lbctrlN == "ToolbarWindow323" || lbctrlN == "ToolbarWindow324" || lbctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")
             && ((rlsTime - initTime) < 325)
             && (LB_HexColor1 != LB_HexORrd || LB_HexColor2 != LB_HexORrd || LB_HexColor3 != LB_HexORrd || LB_HexColor4  != LB_HexORrd || LB_HexColor5  != LB_HexORrd)) {
+
         sleep, 125
         If WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768" || GetKeyState("Lbutton","P")) {
             LbuttonEnabled := True
             Return
         }
+        currentPath := ""
+        loop 100 {
+            currentPath := GetExplorerPath(mouseHoverId)
+            If (currentPath != "")
+                break
+            sleep, 2
+        }
         SetTimer, SendCtrlAdd, -1
     }
-    Else If ((lctrlN == "SysTreeView321")
+    Else If ((lbctrlN == "SysTreeView321")
             && ((rlsTime - initTime) < 325)
             && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3 != 0xFFFFFF) && (LB_HexColor4  != 0xFFFFFF)) {
+
+        currentPath := ""
+        loop 100 {
+            currentPath := GetExplorerPath(mouseHoverId)
+            If (currentPath != "" && currentPath != prevPath)
+                break
+            sleep, 2
+        }
         SetTimer, SendCtrlAdd, -1
     }
     Else
@@ -2682,7 +2702,7 @@ SendCtrlAdd:
         WinGetTitle, vWinTitle, ahk_id %mouseHoverId%
         WinGet, proc, ProcessName, ahk_id %mouseHoverId%
 
-        tooltip, hovering over %initFocusedCtrl%
+        ; tooltip, hovering over %initFocusedCtrl%
 
         OutputVar1 := OutputVar2 := OutputVar3 := 0
 
@@ -2707,15 +2727,8 @@ SendCtrlAdd:
 
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
 
-            tooltip, init focus is %initFocusedCtrl%
+            ; tooltip, init focus is %initFocusedCtrl%
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
-                currentPath := ""
-                loop 100 {
-                    currentPath := GetExplorerPath(mouseHoverId)
-                    If (currentPath != "")
-                        break
-                    sleep, 2
-                }
                 If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                     try {
                         exEl := UIA.ElementFromHandle(mouseHoverId)
@@ -2738,15 +2751,17 @@ SendCtrlAdd:
                 TargetControl := "SysListView321"
             }
             Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
-                ControlGetPos, , , , OutHeight2, , ahk_id %mouseHoverId%, , , , DirectUIHWND2
-                ControlGetPos, , , , OutHeight3, , ahk_id %mouseHoverId%, , , , DirectUIHWND3
+                OutHeight2 := 0
+                OutHeight3 := 0
+                ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %mouseHoverId%, , , ,
+                ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %mouseHoverId%, , , ,
                 If (OutHeight2 > OutHeight3)
                     TargetControl := "DirectUIHWND2"
                 Else
                     TargetControl := "DirectUIHWND3"
             }
 
-            ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrl%
+            ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrl% - %OutHeight2% - %OutHeight3%
             If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                 loop, 500 {
                     ControlFocus, %TargetControl%, ahk_id %mouseHoverId%
