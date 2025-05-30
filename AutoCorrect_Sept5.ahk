@@ -438,6 +438,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         If (   vWinClass == "#32768"
             || vWinClass == "Autohotkey"
             || vWinClass == "AutohotkeyGUI"
+            || vWinClass == "TaskListThumbnailWnd"
+            || vWinClass == "Windows.UI.Core.CoreWindow"
             || vWinClass == "Progman"
             || vWinClass == "WorkerW"
             || vWinClass == "tooltips_class32"
@@ -683,6 +685,10 @@ Return
     }
 Return
 #IfWinExist
+
+^+Esc::
+    Run, C:\Program Files\SystemInformer\SystemInformer.exe
+Return
 
 CapsLock::
     Send {Delete}
