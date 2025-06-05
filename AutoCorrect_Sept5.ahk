@@ -438,6 +438,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         If (   vWinClass == "#32768"
             || vWinClass == "Autohotkey"
             || vWinClass == "AutohotkeyGUI"
+            || vWinClass == "SysShadow"
             || vWinClass == "TaskListThumbnailWnd"
             || vWinClass == "Windows.UI.Core.CoreWindow"
             || vWinClass == "Progman"
@@ -462,8 +463,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 break
             sleep, 2
         }
-        If InStr(initFocusedCtrl,"Edit",True) && vWinClass == "wxWindowNR" {
-            ControlFocus, Edit1, ahk_id %hWnd%
+        If (vWinClass == "wxWindowNR") {
+            loop, 100 {
+                ControlFocus, Edit1, ahk_id %hWnd%
+                ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
+                If (testCtrlFocus == "Edit1")
+                    break
+                sleep, 2
+            }
             Send, {Backspace}
         }
 
@@ -581,9 +588,18 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Send, ^{NumpadAdd}
                     tooltip, sent to %TargetControl%
 
-                    ControlGetText, isText , Edit1, ahk_id %hWnd%
-                    If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) == 1)
-                        Send, {Backspace}
+                    loop 125 {
+                        ControlGetText, isText , Edit1, ahk_id %hWnd%
+                        If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) <= 2) {
+                            Send, {Ctrl Up}
+                            Send, ^{Backspace}
+                            break
+                        }
+                        Else If (isText == "")
+                            break
+                        sleep, 2
+                    }
+
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
 
@@ -2016,6 +2032,31 @@ Return
     ; Else
         ; Send, ^{NumpadAdd}
 ; Return
+#If MouseIsOverTaskbarButtonGroup()
+Lbutton::
+    x1 := x2 := y1 := y2 := 0
+    Critical, On
+    loop {
+        MouseGetPos, x1, y1,
+        If (abs(x1 - x2) > 10 || abs(y1-y2) > 10) {
+            Send, {Lbutton DOWN}
+            break
+        }
+        sleep, 10
+        MouseGetPos, x2, y2,
+        If (!GetKeyState("Lbutton","P"))
+            break
+        tooltip, stuck
+    }
+    KeyWait, Lbutton, U T5
+    MouseGetPos, x2, y2,
+    If (abs(x1 - x2) <= 10 && abs(y1-y2) <= 10)
+        Send, ^{Lbutton}
+    Else
+        Send, {Lbutton UP}
+    Critical, Off
+Return
+#If
 
 #If MouseIsOverTitleBar()
 ^LButton::
@@ -2197,6 +2238,7 @@ Return
     lbY1 += 1
     PixelGetColor, LB_HexColor5, %lbX1%, %lbY1%, RGB
     LB_HexORrd := LB_HexColor1 | LB_HexColor2 | LB_HexColor3 | LB_HexColor4 | LB_HexColor5
+    LB_HexORrd := Format("0x{:x}", LB_HexORrd)
 
     KeyWait, LButton, U T5
     CoordMode, Mouse, screen
@@ -2204,7 +2246,7 @@ Return
 
     rlsTime := A_TickCount
 
-    ; tooltip, %timeDiff% ms - %lbctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3% - %lbX1% - %lbX2%
+    ; tooltip, %timeDiff% ms - %lbctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexORrd% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && ((rlsTime - initTime) < 325)
@@ -2218,10 +2260,12 @@ Return
             && (LB_HexColor1 != LB_HexORrd || LB_HexColor2 != LB_HexORrd || LB_HexColor3 != LB_HexORrd || LB_HexColor4  != LB_HexORrd || LB_HexColor5  != LB_HexORrd)) {
 
         sleep, 125
-        If WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768" || GetKeyState("Lbutton","P")) {
+
+        If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
             LbuttonEnabled := True
             Return
         }
+
         currentPath := ""
         loop 100 {
             currentPath := GetExplorerPath(mouseHoverId)
@@ -2693,7 +2737,7 @@ Return
 SendCtrlAdd:
     MouseGetPos, , , mouseHoverId, initFocusedCtrl
     WinGetClass, lClassCheck, ahk_id %mouseHoverId%
-
+    tooltip, here1
     If (lClassCheck != lClass) {
         SetTimer, SendCtrlAdd, Off
         Return
@@ -2734,6 +2778,7 @@ SendCtrlAdd:
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
 
             ; tooltip, init focus is %initFocusedCtrl%
+
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
                 If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                     try {
@@ -2916,10 +2961,6 @@ Return
 RButton & WheelUp::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
-    ; Send, {click, left}
-    ; MouseGetPos, , , targetID, targetCtrl
-    ; ControlFocus, %targetCtrl%, ahk_id %targetID%
-    ; ControlSend,  %targetCtrl%, ^{Home},  ahk_id %targetID%
     Send, ^{Home}
 Return
 #If
@@ -4992,6 +5033,21 @@ MouseIsOverTaskbar() {
         Return False
 }
 
+MouseIsOverTaskbarButtonGroup() {
+    Global UIA
+    CoordMode, Mouse, Screen
+    MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
+
+    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+    If (InStr(mClass,"TrayWnd",false) && InStr(mClass,"Shell",false) && CtrlUnderMouseId != "TrayNotifyWnd1") {
+        pt := UIA.ElementFromPoint(x,y,False)
+        ; tooltip, % "val is " pt.CurrentControlType
+        Return (pt.CurrentControlType == 50000)
+    }
+    Else
+        Return False
+}
+
 MouseIsOverTaskbarWidgets() {
     CoordMode, Mouse, Screen
     MouseGetPos, , , WindowUnderMouseID
@@ -5005,10 +5061,10 @@ MouseIsOverTaskbarWidgets() {
 
 MouseIsOverTaskbarBlank() {
     Global UIA
-    MouseGetPos, x, y, hwnd, hctrl
-    WinGetClass, cl, ahk_id %hwnd%
+    MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
+    WinGetClass, cl, ahk_id %WindowUnderMouseID%
     try {
-        If (InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false) && hctrl != "TrayNotifyWnd1") {
+        If (InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false) && CtrlUnderMouseId != "TrayNotifyWnd1") {
             If WinExist("ahk_class TaskListThumbnailWnd") {
                 return False
             }
