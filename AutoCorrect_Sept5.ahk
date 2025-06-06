@@ -592,7 +592,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         ControlGetText, isText , Edit1, ahk_id %hWnd%
                         If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) <= 2) {
                             Send, {Ctrl Up}
-                            Send, ^{Backspace}
+                            Send, {Backspace}{Backspace}
                             break
                         }
                         Else If (isText == "")
@@ -2216,28 +2216,43 @@ Return
         }
     }
 
-    LB_HexColor1 := 0x0
-    LB_HexColor2 := 0x0
-    LB_HexColor3 := 0x0
-    LB_HexColor4 := 0x0
-    LB_HexColor5 := 0x0
+    LB_HexColor1  := 0x0
+    LB_HexColor2  := 0x0
+    LB_HexColor3  := 0x0
+    LB_HexColor4  := 0x0
+    LB_HexColor5  := 0x0
+    LB_HexColor6  := 0x0
+    LB_HexColor7  := 0x0
+    LB_HexColor8  := 0x0
+    LB_HexColor9  := 0x0
+    LB_HexColor10 := 0x0
+    LB_HexColor11 := 0x0
+    LB_HexColor12 := 0x0
+    LB_HexColor13 := 0x0
+    LB_HexColor14 := 0x0
+    LB_HexColor15 := 0x0
+    LB_HexColor16 := 0x0
+
     CoordMode, Pixel, Screen
-    lbX1 -= 2
-    lbY1 -= 2
-    PixelGetColor, LB_HexColor1, %lbX1%, %lbY1%, RGB
-    lbX1 += 1
-    lbY1 += 1
-    PixelGetColor, LB_HexColor2, %lbX1%, %lbY1%, RGB
-    lbX1 += 1
-    lbY1 += 1
-    PixelGetColor, LB_HexColor3, %lbX1%, %lbY1%, RGB
-    lbX1 += 1
-    lbY1 += 1
-    PixelGetColor, LB_HexColor4, %lbX1%, %lbY1%, RGB
-    lbX1 += 1
-    lbY1 += 1
-    PixelGetColor, LB_HexColor5, %lbX1%, %lbY1%, RGB
-    LB_HexORrd := LB_HexColor1 | LB_HexColor2 | LB_HexColor3 | LB_HexColor4 | LB_HexColor5
+    lbX1 -= 10
+    lbY1 -= 10
+    loop 16 {
+        PixelGetColor, LB_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
+        lbX1 += 1
+        lbY1 += 1
+        LB_HexORrd |= LB_HexColor%A_Index%
+    }
+    ; PixelGetColor, LB_HexColor2, %lbX1%, %lbY1%, RGB
+    ; lbX1 += 1
+    ; lbY1 += 1
+    ; PixelGetColor, LB_HexColor3, %lbX1%, %lbY1%, RGB
+    ; lbX1 += 1
+    ; lbY1 += 1
+    ; PixelGetColor, LB_HexColor4, %lbX1%, %lbY1%, RGB
+    ; lbX1 += 1
+    ; lbY1 += 1
+    ; PixelGetColor, LB_HexColor5, %lbX1%, %lbY1%, RGB
+    ; LB_HexORrd := LB_HexColor1 | LB_HexColor2 | LB_HexColor3 | LB_HexColor4 | LB_HexColor5 | LB_HexColor6 | LB_HexColor7 | LB_HexColor8 | LB_HexColor9 | LB_HexColor10
     LB_HexORrd := Format("0x{:x}", LB_HexORrd)
 
     KeyWait, LButton, U T5
@@ -2255,9 +2270,24 @@ Return
 
         SetTimer, SendCtrlAdd, -125
     }
-    Else If ((lbctrlN == "UpBand1" || lbctrlN == "ToolbarWindow321" || lbctrlN == "ToolbarWindow323" || lbctrlN == "ToolbarWindow324" || lbctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")
+    Else If ((lbctrlN == "UpBand1" || InStr(lbctrlN,"ToolbarWindow32", True) || lbctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")
             && ((rlsTime - initTime) < 325)
-            && (LB_HexColor1 != LB_HexORrd || LB_HexColor2 != LB_HexORrd || LB_HexColor3 != LB_HexORrd || LB_HexColor4  != LB_HexORrd || LB_HexColor5  != LB_HexORrd)) {
+            && (LB_HexColor1  != LB_HexORrd
+             || LB_HexColor2  != LB_HexORrd
+             || LB_HexColor3  != LB_HexORrd
+             || LB_HexColor4  != LB_HexORrd
+             || LB_HexColor5  != LB_HexORrd
+             || LB_HexColor6  != LB_HexORrd
+             || LB_HexColor7  != LB_HexORrd
+             || LB_HexColor8  != LB_HexORrd
+             || LB_HexColor9  != LB_HexORrd
+             || LB_HexColor10 != LB_HexORrd
+             || LB_HexColor11 != LB_HexORrd
+             || LB_HexColor12 != LB_HexORrd
+             || LB_HexColor13 != LB_HexORrd
+             || LB_HexColor14 != LB_HexORrd
+             || LB_HexColor15 != LB_HexORrd
+             || LB_HexColor16 != LB_HexORrd)) {
 
         sleep, 125
 
@@ -2752,7 +2782,7 @@ SendCtrlAdd:
         WinGetTitle, vWinTitle, ahk_id %mouseHoverId%
         WinGet, proc, ProcessName, ahk_id %mouseHoverId%
 
-        ; tooltip, hovering over %initFocusedCtrl%
+        tooltip, hovering over %initFocusedCtrl%
 
         OutputVar1 := OutputVar2 := OutputVar3 := 0
 
@@ -2932,47 +2962,40 @@ WheelDown::send {Volume_Down}
 Return
 #If
 
-#If !mouseMoving && !IsOverDesktop()
+#If !mouseMoving && !VolumeHover() && !IsOverDesktop()
 *RButton::
     StopRecursion := True
     ComboActive := False
-    loop 600 {
-        If !(GetKeyState("RButton"))
-        {
-            break
-        }
-        sleep 5
-    }
+    ; loop 600 {
+        ; If !(GetKeyState("RButton"))
+        ; {
+            ; break
+        ; }
+        ; sleep 5
+    ; }
+    KeyWait, Rbutton, U T3
     If !ComboActive
     {
         If GetKeyState("LShift") && !GetKeyState("LShift","P")
             Send, +{Click, Right}
         Else
-            Send, {Click, Right}
+            Send,  {Click, Right}
     }
     else
         ComboActive := False
 
     StopRecursion := False
 Return
-#If
 
-#If !mouseMoving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelUp::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
     Send, ^{Home}
 Return
-#If
 
-#If !mouseMoving && !VolumeHover() && !IsOverDesktop()
 RButton & WheelDown::
     SetTimer, SendCtrlAdd, Off
     ComboActive := True
-    ; Send, {click, left}
-    ; MouseGetPos, , , targetID, targetCtrl
-    ; ControlFocus, %targetCtrl%, ahk_id %targetID%
-    ; ControlSend,  %targetCtrl%, ^{End},  ahk_id %targetID%
     Send, ^{End}
 Return
 #If
@@ -3831,15 +3854,14 @@ mouseTrack() {
         LbuttonHeld := False
     }
 
-    If ((abs(x - lastX) > 10 || abs(y - lastY) > 10) && lastX != "" && lastY != "") {
+    If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "" && lastY != "") {
         mouseMoving := True
-
+        ; tooltip, true
         If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770")
             sleep 250
     } Else {
         mouseMoving := False
-        ; If GetNameOfIconUnderMouse() != ""
-            ; ToolTip % GetNameOfIconUnderMouse()
+        ; tooltip, false
     }
 
     lastX := x, lastY := y,
