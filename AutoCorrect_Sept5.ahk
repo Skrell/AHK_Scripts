@@ -444,13 +444,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             || vWinClass == "Progman"
             || vWinClass == "WorkerW"
             || vWinClass == "tooltips_class32"
+            || vWinClass == "OperationStatusWindow"
             || (InStr(vWinClass, "Shell",false) && InStr(vWinClass, "TrayWnd",false))
             || vWinClass == ""
             || vWinTitle == ""
             || !WinExist("ahk_id " hWnd)) {
-            If (vWinClass == "#32768")
+            If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-
+                SetTimer, keyTrack,   On
+                SetTimer, mouseTrack, On
+            }
             Return
         }
 
@@ -463,6 +466,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 break
             sleep, 2
         }
+
+        ; this check to prevent accidental sends to windows that contain a SysListView321 panel not a file list such as Notepad++
+        If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
+            SetTimer, keyTrack,   On
+            SetTimer, mouseTrack, On
+            Return
+        }
+
         If (vWinClass == "wxWindowNR") {
             loop, 100 {
                 ControlFocus, Edit1, ahk_id %hWnd%
@@ -476,14 +487,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
             ; tooltip, here we go
-            If (vWinClass == "OperationStatusWindow" || vWinClass == "#32770") {
+            If (vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-                ; Send, ^{NumpadAdd}
-                If (vWinClass == "OperationStatusWindow") {
-                    SetTimer, keyTrack,   On
-                    SetTimer, mouseTrack, On
-                    Return
-                }
             }
 
             If (InStr(vWinTitle, "Save", false) && vWinClass != "#32770") {
@@ -528,13 +533,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             ; tooltip, init focus is %initFocusedCtrl% and proc is %proc%
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
-
-                If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
-                    SetTimer, keyTrack,   On
-                    SetTimer, mouseTrack, On
-                    tooltip, quitting
-                    Return
-                }
 
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
                     try {
@@ -588,16 +586,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Send, ^{NumpadAdd}
                     tooltip, sent to %TargetControl%
 
-                    loop 125 {
-                        ControlGetText, isText , Edit1, ahk_id %hWnd%
-                        If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) <= 2) {
-                            Send, {Ctrl Up}
-                            Send, {Backspace}{Backspace}
-                            break
-                        }
-                        Else If (isText == "")
-                            break
-                        sleep, 2
+                    ControlGetText, isText , Edit1, ahk_id %hWnd%
+                    If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) <= 2) {
+                        Send, {Ctrl Up}
+                        Send, {Backspace}{Backspace}
                     }
 
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
@@ -610,6 +602,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                 If (testCtrlFocus == initFocusedCtrl)
                                     break
                                 sleep, 1
+                            }
+                            If (GetKeyState("Lbutton", "P")) {
+                                DetectHiddenWindows, Off
+                                SetTimer, keyTrack,   On
+                                SetTimer, mouseTrack, On
+                                Return
                             }
                         }
                     }
@@ -626,10 +624,15 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     prevActiveWindows.RemoveAt(i)
                 else
                     ++i
+                If (GetKeyState("Lbutton", "P")) {
+                    DetectHiddenWindows, Off
+                    SetTimer, keyTrack,   On
+                    SetTimer, mouseTrack, On
+                    Return
+                }
             }
         }
     }
-    ; tooltip,
     DetectHiddenWindows, Off
     SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
@@ -2142,14 +2145,14 @@ Return
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
 ~LButton::
     tooltip,
+    SetTimer, SendCtrlAdd, Off
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, lbhwnd, lbctrlN
-    SetTimer, SendCtrlAdd, Off
     WinGetClass, lClass, ahk_id %lbhwnd%
     Gui, GUI4Boarder: Hide
     initTime := A_TickCount
 
-    If (A_PriorHotkey == A_ThisHotkey
+    If (    A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (lbctrlN == "SysListView321" || lbctrlN == "DirectUIHWND2" || lbctrlN == "DirectUIHWND3")) {
@@ -2158,7 +2161,7 @@ Return
 
         ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %lbctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
 
-        If ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3  == 0xFFFFFF) && (LB_HexColor4  == 0xFFFFFF) && (LB_HexColor5  == 0xFFFFFF)) {
+        If ((LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
             If (lbctrlN == "SysListView321") {
                 Send, {Backspace}
                 SetTimer, RunDynaExprTimeout, -1
@@ -2216,6 +2219,17 @@ Return
         }
     }
 
+    CoordMode, Pixel, Screen
+    lbX1 -= 3
+    lbY1 -= 3
+    loop 3 {
+        PixelGetColor, LBD_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
+        lbX1 += 1
+        lbY1 += 1
+    }
+
+    KeyWait, LButton, U T5
+
     LB_HexColor1  := 0x0
     LB_HexColor2  := 0x0
     LB_HexColor3  := 0x0
@@ -2233,7 +2247,6 @@ Return
     LB_HexColor15 := 0x0
     LB_HexColor16 := 0x0
 
-    CoordMode, Pixel, Screen
     lbX1 -= 10
     lbY1 -= 10
     loop 16 {
@@ -2241,21 +2254,14 @@ Return
         lbX1 += 1
         lbY1 += 1
         LB_HexORrd |= LB_HexColor%A_Index%
+        If (GetKeyState("Lbutton","P")) {
+            CoordMode, Mouse, screen
+            MouseGetPos, lbX2, lbY2
+            Return
+        }
     }
-    ; PixelGetColor, LB_HexColor2, %lbX1%, %lbY1%, RGB
-    ; lbX1 += 1
-    ; lbY1 += 1
-    ; PixelGetColor, LB_HexColor3, %lbX1%, %lbY1%, RGB
-    ; lbX1 += 1
-    ; lbY1 += 1
-    ; PixelGetColor, LB_HexColor4, %lbX1%, %lbY1%, RGB
-    ; lbX1 += 1
-    ; lbY1 += 1
-    ; PixelGetColor, LB_HexColor5, %lbX1%, %lbY1%, RGB
-    ; LB_HexORrd := LB_HexColor1 | LB_HexColor2 | LB_HexColor3 | LB_HexColor4 | LB_HexColor5 | LB_HexColor6 | LB_HexColor7 | LB_HexColor8 | LB_HexColor9 | LB_HexColor10
     LB_HexORrd := Format("0x{:x}", LB_HexORrd)
 
-    KeyWait, LButton, U T5
     CoordMode, Mouse, screen
     MouseGetPos, lbX2, lbY2,
 
@@ -2292,7 +2298,6 @@ Return
         sleep, 125
 
         If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
-            LbuttonEnabled := True
             Return
         }
 
@@ -2321,7 +2326,6 @@ Return
     Else
         SetTimer, SendCtrlAdd, Off
 
-    LbuttonEnabled := True
 Return
 #If
 
@@ -2856,7 +2860,8 @@ SendCtrlAdd:
             WinGet, lastCheckID, ID, A
             If (mouseHoverId == lastCheckID) {
                 Send, ^{NumpadAdd}
-                tooltip, sent to %TargetControl% - %prevPath% - %currentPath%
+                If (prevPath != "" && currentPath != "" && prevPath != currentPath)
+                    tooltip, sent to %TargetControl% - %prevPath% - %currentPath%
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
                     sleep, 125
