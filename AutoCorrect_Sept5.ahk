@@ -38,10 +38,11 @@ Global CurrentDesktop := 1
 #include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 
 SetBatchLines -1
-SetWinDelay   -1
-SetControlDelay -1
-SetKeyDelay, 1
+SetWinDelay   10
+SetControlDelay 10
 SendMode, Input
+; SetKeyDelay is not obeyed by SendInput; there is no delay between keystrokes in that mode.
+; This same is true for Send when SendMode Input is in effect.
 
 Global mouseMoving                      := False
 Global ComboActive                 := False
@@ -2146,6 +2147,9 @@ Return
 ~LButton::
     tooltip,
     SetTimer, SendCtrlAdd, Off
+    SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
+
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, lbhwnd, lbctrlN
     WinGetClass, lClass, ahk_id %lbhwnd%
@@ -2199,10 +2203,14 @@ Return
             }
 
             LbuttonEnabled     := True
+            SetTimer, keyTrack, On
+            SetTimer, mouseTrack, On
             Return
         }
         Else {
             SetTimer, SendCtrlAdd, -1
+            SetTimer, keyTrack, On
+            SetTimer, mouseTrack, On
             sleep, 200
             LbuttonEnabled     := True
             Return
@@ -2257,6 +2265,8 @@ Return
         If (GetKeyState("Lbutton","P")) {
             CoordMode, Mouse, screen
             MouseGetPos, lbX2, lbY2
+            SetTimer, keyTrack, On
+            SetTimer, mouseTrack, On
             Return
         }
     }
@@ -2298,6 +2308,8 @@ Return
         sleep, 125
 
         If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
+            SetTimer, keyTrack, On
+            SetTimer, mouseTrack, On
             Return
         }
 
@@ -2326,6 +2338,8 @@ Return
     Else
         SetTimer, SendCtrlAdd, Off
 
+    SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 #If
 
