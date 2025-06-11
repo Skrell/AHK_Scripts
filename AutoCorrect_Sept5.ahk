@@ -583,15 +583,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Return
                 }
                 Else {
-                    sleep, 25
+                    Send, {Ctrl UP}
+                    sleep, 50
                     Send, ^{NumpadAdd}
                     tooltip, sent to %TargetControl%
 
-                    ControlGetText, isText , Edit1, ahk_id %hWnd%
-                    If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) <= 2) {
-                        Send, {Ctrl Up}
-                        Send, {Backspace}{Backspace}
-                    }
+                    ; ControlGetText, isText , Edit1, ahk_id %hWnd%
+                    ; If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) <= 2) {
+                        ; Send, {Ctrl Up}
+                        ; Send, {Backspace}{Backspace}
+                    ; }
 
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
@@ -2253,11 +2254,10 @@ Return
     LB_HexColor13 := 0x0
     LB_HexColor14 := 0x0
     LB_HexColor15 := 0x0
-    LB_HexColor16 := 0x0
 
-    lbX1 -= 10
-    lbY1 -= 10
-    loop 16 {
+    lbX1 -= 15
+    lbY1 -= 15
+    loop 15 {
         PixelGetColor, LB_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
         lbX1 += 1
         lbY1 += 1
@@ -2276,18 +2276,18 @@ Return
     MouseGetPos, lbX2, lbY2,
 
     rlsTime := A_TickCount
-
+    timeDiff := rlsTime - initTime
     ; tooltip, %timeDiff% ms - %lbctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexORrd% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && ((rlsTime - initTime) < 325)
+        && ((rlsTime - initTime) < 400)
         && ((LB_HexColor1 == 0xFFFFFF) && (LB_HexColor2 == 0xFFFFFF) && (LB_HexColor3 == 0xFFFFFF) && (LB_HexColor4  == 0xFFFFFF) && (LB_HexColor5  == 0xFFFFFF))
         && (InStr(lbctrlN,"SysListView32",True) || lbctrlN == "DirectUIHWND2" || lbctrlN == "DirectUIHWND3" ))  {
 
         SetTimer, SendCtrlAdd, -125
     }
     Else If ((lbctrlN == "UpBand1" || InStr(lbctrlN,"ToolbarWindow32", True) || lbctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")
-            && ((rlsTime - initTime) < 325)
+            && ((rlsTime - initTime) < 400)
             && (LB_HexColor1  != LB_HexORrd
              || LB_HexColor2  != LB_HexORrd
              || LB_HexColor3  != LB_HexORrd
@@ -2302,14 +2302,14 @@ Return
              || LB_HexColor12 != LB_HexORrd
              || LB_HexColor13 != LB_HexORrd
              || LB_HexColor14 != LB_HexORrd
-             || LB_HexColor15 != LB_HexORrd
-             || LB_HexColor16 != LB_HexORrd)) {
-
+             || LB_HexColor15 != LB_HexORrd)) {
+        tooltip, controlbar button
         sleep, 125
 
         If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
+            tooltip, forget it
             Return
         }
 
@@ -2320,10 +2320,11 @@ Return
                 break
             sleep, 2
         }
+        tooltip, Sending
         SetTimer, SendCtrlAdd, -1
     }
     Else If ((lbctrlN == "SysTreeView321")
-            && ((rlsTime - initTime) < 325)
+            && ((rlsTime - initTime) < 400)
             && (LB_HexColor2 != 0xFFFFFF) && (LB_HexColor3 != 0xFFFFFF) && (LB_HexColor4  != 0xFFFFFF)) {
 
         currentPath := ""
@@ -2800,7 +2801,7 @@ SendCtrlAdd:
         WinGetTitle, vWinTitle, ahk_id %mouseHoverId%
         WinGet, proc, ProcessName, ahk_id %mouseHoverId%
 
-        tooltip, hovering over %initFocusedCtrl%
+        ; tooltip, hovering over %initFocusedCtrl%
 
         OutputVar1 := OutputVar2 := OutputVar3 := 0
 
@@ -3848,7 +3849,7 @@ Return
 }
 
 mouseTrack() {
-    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion
+    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, LbuttonEnabled
     Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
     ListLines Off
@@ -3862,6 +3863,8 @@ mouseTrack() {
     WinGet, targetProc, ProcessName, ahk_id %hwndId%
 
     CoordMode Mouse
+
+    ; tooltip, %LbuttonEnabled%
 
     If (LbuttonHeld && GetKeyState("Lbutton", "P") && x < A_ScreenWidth-3 && x > 3)
     {
