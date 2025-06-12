@@ -535,6 +535,24 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ; tooltip, init focus is %initFocusedCtrl% and proc is %proc%
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
 
+                If (OutputVar1 == 1) {
+                    TargetControl := "SysListView321"
+                    ; ControlGet, ctrlNnHwnd, Hwnd,, SysListView321, ahk_id %hWnd%
+                    ControlGetPos, ctrlX, ctrlY, ctrlW, ctrlH, SysListView321, ahk_id %hWnd%
+                    WinGetPos, winX, winY, winW, winH, ahk_id %hWnd%
+                    If (ctrlW < floor(0.5*winW))
+                        Return
+                    ; WinGet, windowStyle, Style, ahk_id %ctrlNnHwnd%
+                }
+                Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
+                    ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %hWnd%, , , ,
+                    ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %hWnd%, , , ,
+                    If (OutHeight2 > OutHeight3)
+                        TargetControl := "DirectUIHWND2"
+                    Else
+                        TargetControl := "DirectUIHWND3"
+                }
+
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
                     try {
                         exEl := UIA.ElementFromHandle(mouseHoverId)
@@ -550,18 +568,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         SetTimer, mouseTrack, On
                         Return
                     }
-                }
-
-                If (OutputVar1 == 1) {
-                    TargetControl := "SysListView321"
-                }
-                Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
-                    ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %hWnd%, , , ,
-                    ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %hWnd%, , , ,
-                    If (OutHeight2 > OutHeight3)
-                        TargetControl := "DirectUIHWND2"
-                    Else
-                        TargetControl := "DirectUIHWND3"
                 }
 
                 BlockKeyboard(true)
@@ -586,13 +592,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Send, {Ctrl UP}
                     sleep, 50
                     Send, ^{NumpadAdd}
-                    tooltip, sent to %TargetControl%
+                    ; tooltip, sent to %TargetControl%
 
-                    ; ControlGetText, isText , Edit1, ahk_id %hWnd%
-                    ; If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) <= 2) {
-                        ; Send, {Ctrl Up}
-                        ; Send, {Backspace}{Backspace}
-                    ; }
+                    ControlGetText, isText , Edit1, ahk_id %hWnd%
+                    If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) <= 2) {
+                        Send, {Ctrl Up}
+                        Send, {Backspace}{Backspace}
+                    }
 
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
@@ -5765,6 +5771,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:altiy::ality
 :?:alit::ality
 :?:daiton::dation
+:?:emtn::ment
+:?:emtns::ments
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
