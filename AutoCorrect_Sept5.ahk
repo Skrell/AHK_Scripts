@@ -691,27 +691,33 @@ Loop % myWindow
 }
 Return
 
-#IfWinExist ahk_class #32770
+!Mbutton::
+    Send, {Enter}
+Return
+
+; #IfWinExist ahk_class #32770
 !WheelDown::
-    WinActivate, ahk_class #32770
-    ControlGet, mOutput, Visible ,, Edit1, A
-    If (mOutput == 1) {
-        ControlFocus, Edit1, A
-        Send, {Enter}
-        sleep, 50
-    }
+    Send, {DOWN}
+    ; WinActivate, ahk_class #32770
+    ; ControlGet, mOutput, Visible ,, Edit1, A
+    ; If (mOutput == 1) {
+        ; ControlFocus, Edit1, A
+        ; Send, {Enter}
+        ; sleep, 50
+    ; }
 Return
 
 !WheelUp::
-    WinActivate, ahk_class #32770
-    ControlGet, mOutput, Visible ,, Edit1, A
-    If (mOutput == 1) {
-        ControlFocus, Edit1, A
-        Send, +{Enter}
-        sleep, 50
-    }
+    Send, {UP}
+    ; WinActivate, ahk_class #32770
+    ; ControlGet, mOutput, Visible ,, Edit1, A
+    ; If (mOutput == 1) {
+        ; ControlFocus, Edit1, A
+        ; Send, +{Enter}
+        ; sleep, 50
+    ; }
 Return
-#IfWinExist
+; #IfWinExist
 
 ^+Esc::
     Run, C:\Program Files\SystemInformer\SystemInformer.exe
@@ -900,10 +906,22 @@ Return
     StopAutoFix := false
 Return
 
+!^j::
+    StopAutoFix := true
+    Send, {LEFT}
+    StopAutoFix := false
+Return
+
 !l::
     StopAutoFix := true
     Send, ^{RIGHT}
     Hotstring("Reset")
+    StopAutoFix := false
+Return
+
+!^l::
+    StopAutoFix := true
+    Send, {RIGHT}
     StopAutoFix := false
 Return
 
@@ -2309,14 +2327,17 @@ Return
              || LB_HexColor13 != LB_HexORrd
              || LB_HexColor14 != LB_HexORrd
              || LB_HexColor15 != LB_HexORrd)) {
-        tooltip, controlbar button
-        sleep, 125
 
-        If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
-            SetTimer, keyTrack, On
-            SetTimer, mouseTrack, On
-            tooltip, forget it
-            Return
+        tooltip, controlbar button
+        pt := UIA.ElementFromPoint(lbX2,lbY2,False)
+        If (pt.CurrentControlType == 50000 && pt.HelpText == "") {
+            sleep, 150
+            If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
+                SetTimer, keyTrack, On
+                SetTimer, mouseTrack, On
+                tooltip, forget it
+                Return
+            }
         }
 
         currentPath := ""
