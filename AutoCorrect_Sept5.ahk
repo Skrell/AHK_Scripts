@@ -94,6 +94,7 @@ Global previousMon                 := 0
 Global targetDesktop               := 0
 Global currentPath                 := ""
 Global prevPath                    := ""
+Global MbuttonIsEnter              := False
 
 Process, Priority,, High
 
@@ -469,11 +470,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
 
         ; this check to prevent accidental sends to windows that contain a SysListView321 panel not a file list such as Notepad++
-        If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
-            SetTimer, keyTrack,   On
-            SetTimer, mouseTrack, On
-            Return
-        }
+        ; If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
+            ; SetTimer, keyTrack,   On
+            ; SetTimer, mouseTrack, On
+            ; Return
+        ; }
 
         If (vWinClass == "wxWindowNR") {
             loop, 100 {
@@ -540,6 +541,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     ; ControlGet, ctrlNnHwnd, Hwnd,, SysListView321, ahk_id %hWnd%
                     ControlGetPos, ctrlX, ctrlY, ctrlW, ctrlH, SysListView321, ahk_id %hWnd%
                     WinGetPos, winX, winY, winW, winH, ahk_id %hWnd%
+                    tooltip, %ctrlW% - %winW%
                     If (ctrlW < floor(0.5*winW))
                         Return
                     ; WinGet, windowStyle, Style, ahk_id %ctrlNnHwnd%
@@ -697,7 +699,12 @@ Return
 
 ; #IfWinExist ahk_class #32770
 !WheelDown::
+    StopRecursion := True
     Send, {DOWN}
+    SetTimer, MbuttonTimer, Off
+    SetTimer, MbuttonTimer, -1
+    StopRecursion := False
+
     ; WinActivate, ahk_class #32770
     ; ControlGet, mOutput, Visible ,, Edit1, A
     ; If (mOutput == 1) {
@@ -708,7 +715,11 @@ Return
 Return
 
 !WheelUp::
+    StopRecursion := True
     Send, {UP}
+    SetTimer, MbuttonTimer, Off
+    SetTimer, MbuttonTimer, -1
+    StopRecursion := False
     ; WinActivate, ahk_class #32770
     ; ControlGet, mOutput, Visible ,, Edit1, A
     ; If (mOutput == 1) {
@@ -718,6 +729,20 @@ Return
     ; }
 Return
 ; #IfWinExist
+
+MbuttonTimer:
+    MbuttonIsEnter := True
+    sleep, 3000
+    MbuttonIsEnter := False
+Return
+
+#If MbuttonIsEnter
+Mbutton::
+    Send, {Enter}
+    SetTimer, MbuttonTimer, Off
+    SetTimer, MbuttonTimer, -1
+Return
+#If
 
 ^+Esc::
     Run, C:\Program Files\SystemInformer\SystemInformer.exe
@@ -881,6 +906,20 @@ Return
         store := "(" . store . ")"
     Else
         store := "(" . store . ") "
+    Clip(store)
+    Critical, Off
+Return
+
+!+b::
+    Critical, On
+    store := Clip()
+    len := StrLen(store)
+    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
+    store := Trim(store)
+    If !foundSpace
+        store := "\b" . store . "\b"
+    Else
+        store := "\b" . store . "\b "
     Clip(store)
     Critical, Off
 Return
@@ -2676,7 +2715,7 @@ ActivateWindow:
 Return
 
 
-#If MouseIsOverTitleBar()
+#If MouseIsOverTitleBar() && !MbuttonIsEnter
 Mbutton::
     Global movehWndId
     Global GoToDesktop := False
