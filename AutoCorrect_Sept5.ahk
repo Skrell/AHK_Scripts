@@ -462,6 +462,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Return
         }
 
+        LbuttonEnabled := False
         SetTimer, keyTrack,   Off
         SetTimer, mouseTrack, Off
 
@@ -499,6 +500,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If (InStr(vWinTitle, "Save", false) && vWinClass != "#32770") {
                 WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
                 WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
+                LbuttonEnabled := True
                 Return
             }
 
@@ -519,6 +521,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
                 SetTimer, keyTrack,   On
                 SetTimer, mouseTrack, On
+                LbuttonEnabled := True
                 Return
             }
 
@@ -545,8 +548,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     ControlGetPos, ctrlX, ctrlY, ctrlW, ctrlH, SysListView321, ahk_id %hWnd%
                     WinGetPos, winX, winY, winW, winH, ahk_id %hWnd%
                     tooltip, %ctrlW% - %winW%
-                    If (ctrlW < floor(0.5*winW))
+                    If (ctrlW < floor(0.5*winW)) {
+                        LbuttonEnabled := True
                         Return
+                    }
                     ; WinGet, windowStyle, Style, ahk_id %ctrlNnHwnd%
                 }
                 Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
@@ -571,6 +576,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         UIA.ConnectionTimeout := 6000
                         SetTimer, keyTrack,   On
                         SetTimer, mouseTrack, On
+                        LbuttonEnabled := True
                         Return
                     }
                 }
@@ -591,6 +597,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     BlockKeyboard(false)
                     SetTimer, keyTrack,   On
                     SetTimer, mouseTrack, On
+                    LbuttonEnabled := True
                     Return
                 }
                 Else {
@@ -620,6 +627,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                 DetectHiddenWindows, Off
                                 SetTimer, keyTrack,   On
                                 SetTimer, mouseTrack, On
+                                LbuttonEnabled := True
                                 Return
                             }
                         }
@@ -628,6 +636,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 ; BlockInput, Off
                 BlockKeyboard(false)
             }
+            LbuttonEnabled := True
             Critical, Off
             DetectHiddenWindows, On
             i := 1
@@ -649,6 +658,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     DetectHiddenWindows, Off
     SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
+    LbuttonEnabled := True
     Return
 }
 
@@ -5437,6 +5447,7 @@ SetTitleMatchMode, 2
 ::champaign::
 ::codesign::
 ::coign::
+::compose::
 ::condign::
 ::consign::
 ::coreign::
