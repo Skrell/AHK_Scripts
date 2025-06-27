@@ -481,7 +481,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ; }
 
         If (vWinClass == "wxWindowNR") {
-            loop, 100 {
+            loop, 150 {
                 ControlFocus, Edit1, ahk_id %hWnd%
                 ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
                 If (testCtrlFocus == "Edit1")
@@ -2233,6 +2233,7 @@ Return
 #If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
 ~LButton::
     tooltip,
+    HotString("Reset")
     SetTimer, SendCtrlAdd, Off
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
