@@ -95,6 +95,7 @@ Global targetDesktop               := 0
 Global currentPath                 := ""
 Global prevPath                    := ""
 Global MbuttonIsEnter              := False
+Global textBoxSelected             := False
 
 Process, Priority,, High
 
@@ -480,18 +481,17 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ; Return
         ; }
 
-        If (vWinClass == "wxWindowNR") {
-            loop, 150 {
-                ControlFocus, Edit1, ahk_id %hWnd%
-                ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                If (testCtrlFocus == "Edit1")
-                    break
-                sleep, 2
-            }
-            Send, {Backspace}
-        }
-
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+            If (vWinClass == "wxWindowNR") {
+                loop, 150 {
+                    ControlFocus, Edit1, ahk_id %hWnd%
+                    ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
+                    If (testCtrlFocus == "Edit1")
+                        break
+                    sleep, 2
+                }
+                Send, {Backspace}
+            }
             ; tooltip, here we go
             If (vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
@@ -710,38 +710,69 @@ Return
     Send, {Enter}
 Return
 
-; #IfWinExist ahk_class #32770
-!WheelDown::
+#If ((IsConsoleWindow() && IsMouseOnLeftSide()) || textBoxSelected)
+WheelDown::
     StopRecursion := True
     Send, {DOWN}
     SetTimer, MbuttonTimer, Off
     SetTimer, MbuttonTimer, -1
     StopRecursion := False
-
-    ; WinActivate, ahk_class #32770
-    ; ControlGet, mOutput, Visible ,, Edit1, A
-    ; If (mOutput == 1) {
-        ; ControlFocus, Edit1, A
-        ; Send, {Enter}
-        ; sleep, 50
-    ; }
 Return
 
-!WheelUp::
+WheelUp::
     StopRecursion := True
     Send, {UP}
     SetTimer, MbuttonTimer, Off
     SetTimer, MbuttonTimer, -1
     StopRecursion := False
-    ; WinActivate, ahk_class #32770
-    ; ControlGet, mOutput, Visible ,, Edit1, A
-    ; If (mOutput == 1) {
-        ; ControlFocus, Edit1, A
-        ; Send, +{Enter}
-        ; sleep, 50
-    ; }
 Return
-; #IfWinExist
+#If
+
+IsConsoleWindow() {
+    WinGetClass, targetClass, A
+    If (targetClass == "mintty" || targetClass == "CASCADIA_HOSTING_WINDOW_CLASS" || targetClass == "ConsoleWindowClass ")
+        Return True
+    Else
+        Return False
+}
+
+IsWindowScrollable() {
+    MouseGetPos, , , hwnd, ctrlN
+    WinGet, ExControlStyle, ExStyle, ahk_id %hwnd%
+    ControlGet, ControlStyle, Style,, %ctrlN%, ahk_id %hwnd%
+    If (((ControlStyle & 0x100000) || (ControlStyle & 0x200000)) || (ExControlStyle & 0x4000)) {
+        ; tooltip, is scrollable %ControlStyle%
+        Return True
+    }
+    Else {
+        ; tooltip, NOT scrollable %ControlStyle%
+        Return False
+    }
+}
+
+IsMouseOnLeftSide() {
+    divisor := 5
+    MouseGetPos, mx, my, hwnd, ctrlN
+    If (!ctrlN) {
+        WinGetPos, x, y, w, h, ahk_id %hwnd%
+        ; tooltip, % x "-" y "-" x+w "-" y+h "-" mx "-" my
+        If (mx > x && mx < (x+w/divisor) && my > y && my < (y+h)) {
+            Return True
+        }
+        Else
+            Return False
+    }
+    Else {
+        ControlGetPos , cx, cy, cw, ch, %ctrlN%, ahk_id %hwnd%
+        If (cx && cy && cw && ch) {
+            If (mx > cx && mx < (cx+cw/divisor) && my > cy && my < (cy+ch)) {
+                Return True
+            }
+        }
+        Else
+            Return False
+    }
+}
 
 MbuttonTimer:
     MbuttonIsEnter := True
@@ -1568,28 +1599,19 @@ Return
 
 ; #MaxThreadsPerHotkey 1
 $!Tab::
+$!+Tab::
 If !hitTAB {
     ComboActive := False
+    textBoxSelected := False
     SetTimer, mouseTrack, Off
     SetTimer, keyTrack,   Off
-    Cycle(forward)
+    Cycle()
     GoSub, Altup
     SetTimer, mouseTrack, On
     SetTimer, keyTrack,   On
 }
 Return
 
-$!+Tab::
-ComboActive := False
-SetTimer, mouseTrack, Off
-SetTimer, keyTrack,   Off
-Cycle(!forward)
-GoSub, ClearRect
-SetTimer, mouseTrack, On
-SetTimer, keyTrack,   On
-Return
-
-; #If !hitTAB
 !q::
     ; tooltip, swapping between windows of app
     StopRecursion := True
@@ -1606,7 +1628,6 @@ Return
     ; tooltip,
     StopRecursion := False
 Return
-; #If
 
 #If hitTAB
 !x::
@@ -1757,7 +1778,7 @@ Return
     }
 Return
 
-Cycle(direction)
+Cycle()
 {
     Global cycling
     Global cycleCount
@@ -1850,6 +1871,7 @@ Cycle(direction)
         loop {
             If (GroupedWindows.length() >= 2 && cycling)
             {
+                tooltip, cycleCount is %cycleCount%
                 KeyWait, Lbutton, D  T0.1
                 If !ErrorLevel {
                     MouseGetPos, , , lbhwnd,
@@ -1871,7 +1893,7 @@ Cycle(direction)
                 KeyWait, Tab, D  T0.1
                 If !ErrorLevel
                 {
-                    If direction {
+                    If !GetKeyState("Lshift","P") {
                         If (cycleCount == GroupedWindows.MaxIndex())
                             cycleCount := 1
                         Else
@@ -1886,7 +1908,7 @@ Cycle(direction)
                         ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                         KeyWait, Tab, U
                     }
-                    Else {
+                    Else If GetKeyState("Lshift","P") {
                         If (cycleCount == 1)
                             cycleCount := GroupedWindows.MaxIndex()
                         Else
@@ -2151,6 +2173,7 @@ Return
 
 #If MouseIsOverTitleBar()
 ^LButton::
+    Global currentMon, previousMon
     DetectHiddenWindows, Off
     StopRecursion := True
     SetTimer, mouseTrack, Off
@@ -2234,6 +2257,7 @@ Return
 ~LButton::
     tooltip,
     HotString("Reset")
+    textBoxSelected := False
     SetTimer, SendCtrlAdd, Off
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
@@ -2426,8 +2450,19 @@ Return
         }
         SetTimer, SendCtrlAdd, -1
     }
-    Else
+    Else {
         SetTimer, SendCtrlAdd, Off
+        try {
+            pt := UIA.ElementFromPoint(lbX1,lbY1,False)
+            textBoxSelected := (pt.CurrentControlType == 50004)
+        } catch e {
+                    tooltip, TIMED OUT!!!!
+                    UIA :=  ;// set to a different value
+                    ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                    UIA := UIA_Interface() ; Initialize UIA interface
+                    UIA.ConnectionTimeout := 6000
+        }
+    }
 
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
@@ -5489,6 +5524,7 @@ SetTitleMatchMode, 2
 ::caching::
 ::bot::
 ::campaign::
+::'ing::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -9140,6 +9176,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::wern't::weren't
 ::werent::weren't
 ::whats::what's
+::whats'::what's
 ::wnot::won't
 ::wo'nt::won't
 ::womens::women's
