@@ -44,7 +44,7 @@ SendMode, Input
 ; SetKeyDelay is not obeyed by SendInput; there is no delay between keystrokes in that mode.
 ; This same is true for Send when SendMode Input is in effect.
 
-Global mouseMoving                      := False
+Global mouseMoving                 := False
 Global ComboActive                 := False
 Global skipCheck                   := False
 Global hwndVD
@@ -71,7 +71,7 @@ Global lastWinMinHwndId            := 0x999999
 Global DesktopIconsVisible         := False
 Global DrawingRect                 := False
 Global LclickSelected              := False
-Global StopRecursion              := False
+Global StopRecursion               := False
 Global currMonHeight               := 0
 Global currMonWidth                := 0
 Global LbuttonEnabled              := True
@@ -96,6 +96,7 @@ Global currentPath                 := ""
 Global prevPath                    := ""
 Global MbuttonIsEnter              := False
 Global textBoxSelected             := False
+Global disableArrows               := false
 
 Process, Priority,, High
 
@@ -842,13 +843,6 @@ Return
     StopAutoFix := false
 Return
 
-!+l::
-    StopAutoFix := true
-    Send ^+{RIGHT}
-    Hotstring("Reset")
-    StopAutoFix := false
-Return
-
 !+'::
     Critical, On
     store := Clip()
@@ -975,16 +969,11 @@ Return
     StopAutoFix := false
 Return
 
+#If !disableArrows
 $!j::
     StopAutoFix := true
     Send, ^{LEFT}
     Hotstring("Reset")
-    StopAutoFix := false
-Return
-
-$!^j::
-    StopAutoFix := true
-    Send, {LEFT}
     StopAutoFix := false
 Return
 
@@ -995,18 +984,48 @@ $!+j::
     Hotstring("Reset")
     StopAutoFix := false
 Return
+#If
 
-!l::
+#If !disableArrows
+$!l::
     StopAutoFix := true
     Send, ^{RIGHT}
     Hotstring("Reset")
     StopAutoFix := false
 Return
 
-!^l::
+$!+l::
     StopAutoFix := true
-    Send, {RIGHT}
+    Send ^+{RIGHT}
+    Hotstring("Reset")
     StopAutoFix := false
+Return
+#If
+
+#If disableArrows
+$!j::Return
+$!l::Return
+$!+j::Return
+$!+l::Return
+#If
+
+$!Capslock::
+    disableArrows := true
+    loop 500 {
+        If GetKeyState("j","P") {
+            Send, {LEFT}
+            Keywait, j, U T1
+        }
+        If GetKeyState("l","P") {
+            Send, {RIGHT}
+            Keywait, l, U T1
+        }
+        If (!GetKeyState("LAlt","P") || !GetKeyState("Capslock","P") || GetKeyState("LShift","P"))
+            break
+        sleep, 50
+    }
+    tooltip,
+    disableArrows := false
 Return
 
 #If disableEnter
@@ -1649,134 +1668,134 @@ RunDynaExprTimeout:
 Return
 
 
-!Capslock::
-    StopRecursion := True
-    totalMenuItemCount := 0
-    onlyTitleFound := ""
-    winAssoc := {}
-    winArraySort := []
+; !Capslock::
+    ; StopRecursion := True
+    ; totalMenuItemCount := 0
+    ; onlyTitleFound := ""
+    ; winAssoc := {}
+    ; winArraySort := []
 
-    DetectHiddenWindows, On
-    Critical On
-    WinGet, id, list
-    Loop, %id%
-    {
-        this_ID := id%A_Index%
-        WinGet, minState, MinMax, ahk_id %this_ID%
+    ; DetectHiddenWindows, On
+    ; Critical On
+    ; WinGet, id, list
+    ; Loop, %id%
+    ; {
+        ; this_ID := id%A_Index%
+        ; WinGet, minState, MinMax, ahk_id %this_ID%
 
-        If !JEE_WinHasAltTabIcon(this_ID)
-            continue
-        If minState > -1
-            continue
-
-        ; desknum := 1
-        desknum := findDesktopWindowIsOn(this_ID)
-        If desknum <= 0
-            continue
-
-        WinGetTitle, title, ahk_id %this_ID%
-        WinGet, procName, ProcessName , ahk_id %this_ID%
-        finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
-        If HasVal(minWinArray,finalTitle)
-            continue
-
-        minWinArray.Push(finalTitle)
-    }
-
-    If (minWinArray.length() == 0) {
-        Tooltip, No matches found...
-        Sleep, 1500
-        Tooltip,
-        StopRecursion := False
-        Critical Off
-        Return
-    }
-
-    For k, v in minWinArray
-    {
-        winAssoc[v] := k
-    }
-
-    For k, v in winAssoc
-    {
-        winArraySort.Push(k)
-    }
-
-    desktopEntryLast := ""
-
-    Menu, minWindows, Add
-    Menu, minWindows, deleteAll
-    For k, ft in winArraySort
-    {
-        splitEntry1 := StrSplit(ft , "^")
-        entry := splitEntry1[1]
-        ahkid := splitEntry1[2]
-
-        splitEntry2    := StrSplit(entry, "↑")
-        desktopEntry   := splitEntry2[1]
-        procEntry      := Trim(splitEntry2[2])
-        titleEntry     := Trim(splitEntry2[3])
-
-        ; If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
-        finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
-            ; finalEntry   := %  "[" titleEntry "] (" procEntry ")"
-        ; Else
+        ; If !JEE_WinHasAltTabIcon(this_ID)
+            ; continue
+        ; If minState > -1
             ; continue
 
-        WinGet, Path, ProcessPath, ahk_exe %procEntry%
-        If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
-            Menu, minWindows, Add
-        }
-        If (finalEntry != "" && titleEntry != "") {
-            totalMenuItemCount := totalMenuItemCount + 1
-            onlyTitleFound := finalEntry
+        ; ; desknum := 1
+        ; desknum := findDesktopWindowIsOn(this_ID)
+        ; If desknum <= 0
+            ; continue
 
-            Menu, minWindows, Add, %finalEntry%, ActivateWindow
-            Try
-                Menu, minWindows, Icon, %finalEntry%, %Path%,, 32
-            Catch
-                Menu, minWindows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
-        }
-        desktopEntryLast := desktopEntry
-    }
+        ; WinGetTitle, title, ahk_id %this_ID%
+        ; WinGet, procName, ProcessName , ahk_id %this_ID%
+        ; finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
+        ; If HasVal(minWinArray,finalTitle)
+            ; continue
 
-    Critical Off
+        ; minWinArray.Push(finalTitle)
+    ; }
 
-    If (totalMenuItemCount > 1) {
-        SetTimer, RunDynaAltUp, -1
+    ; If (minWinArray.length() == 0) {
+        ; Tooltip, No matches found...
+        ; Sleep, 1500
+        ; Tooltip,
+        ; StopRecursion := False
+        ; Critical Off
+        ; Return
+    ; }
 
-        CoordMode, Mouse, Screen
-        CoordMode, Menu, Screen
-        drawX := CoordXCenterScreen()
-        drawY := CoordYCenterScreen()
-        Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
-        ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
+    ; For k, v in minWinArray
+    ; {
+        ; winAssoc[v] := k
+    ; }
 
-        ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-        ShowMenu(MenuGetHandle("minWindows"), False, drawX, drawY, 0x14)
-        ; Tooltip, Done.
-        Gui, ShadowFrFull:  Hide
-    }
-    Else {
-        loop 100 {
-            tooltip, No windows found!
-            sleep, 10
-        }
-        tooltip,
-    }
+    ; For k, v in winAssoc
+    ; {
+        ; winArraySort.Push(k)
+    ; }
 
-    StopRecursion := False
+    ; desktopEntryLast := ""
 
-    Menu, minWindows, deleteAll
-    i := 1
-    while (i <= minWinArray.MaxIndex()) {
-        checkID := minWinArray[i]
-        If !WinExist("ahk_id " checkID)
-            minWinArray.RemoveAt(i)
-        else
-            ++i
-    }
-Return
+    ; Menu, minWindows, Add
+    ; Menu, minWindows, deleteAll
+    ; For k, ft in winArraySort
+    ; {
+        ; splitEntry1 := StrSplit(ft , "^")
+        ; entry := splitEntry1[1]
+        ; ahkid := splitEntry1[2]
+
+        ; splitEntry2    := StrSplit(entry, "↑")
+        ; desktopEntry   := splitEntry2[1]
+        ; procEntry      := Trim(splitEntry2[2])
+        ; titleEntry     := Trim(splitEntry2[3])
+
+        ; ; If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
+        ; finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
+            ; ; finalEntry   := %  "[" titleEntry "] (" procEntry ")"
+        ; ; Else
+            ; ; continue
+
+        ; WinGet, Path, ProcessPath, ahk_exe %procEntry%
+        ; If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
+            ; Menu, minWindows, Add
+        ; }
+        ; If (finalEntry != "" && titleEntry != "") {
+            ; totalMenuItemCount := totalMenuItemCount + 1
+            ; onlyTitleFound := finalEntry
+
+            ; Menu, minWindows, Add, %finalEntry%, ActivateWindow
+            ; Try
+                ; Menu, minWindows, Icon, %finalEntry%, %Path%,, 32
+            ; Catch
+                ; Menu, minWindows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
+        ; }
+        ; desktopEntryLast := desktopEntry
+    ; }
+
+    ; Critical Off
+
+    ; If (totalMenuItemCount > 1) {
+        ; SetTimer, RunDynaAltUp, -1
+
+        ; CoordMode, Mouse, Screen
+        ; CoordMode, Menu, Screen
+        ; drawX := CoordXCenterScreen()
+        ; drawY := CoordYCenterScreen()
+        ; Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
+        ; ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
+
+        ; ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+        ; ShowMenu(MenuGetHandle("minWindows"), False, drawX, drawY, 0x14)
+        ; ; Tooltip, Done.
+        ; Gui, ShadowFrFull:  Hide
+    ; }
+    ; Else {
+        ; loop 100 {
+            ; tooltip, No windows found!
+            ; sleep, 10
+        ; }
+        ; tooltip,
+    ; }
+
+    ; StopRecursion := False
+
+    ; Menu, minWindows, deleteAll
+    ; i := 1
+    ; while (i <= minWinArray.MaxIndex()) {
+        ; checkID := minWinArray[i]
+        ; If !WinExist("ahk_id " checkID)
+            ; minWinArray.RemoveAt(i)
+        ; else
+            ; ++i
+    ; }
+; Return
 
 Cycle()
 {
@@ -1871,7 +1890,7 @@ Cycle()
         loop {
             If (GroupedWindows.length() >= 2 && cycling)
             {
-                tooltip, cycleCount is %cycleCount%
+
                 KeyWait, Lbutton, D  T0.1
                 If !ErrorLevel {
                     MouseGetPos, , , lbhwnd,
