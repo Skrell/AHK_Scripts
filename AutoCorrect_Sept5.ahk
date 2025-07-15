@@ -548,7 +548,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     ; ControlGet, ctrlNnHwnd, Hwnd,, SysListView321, ahk_id %hWnd%
                     ControlGetPos, ctrlX, ctrlY, ctrlW, ctrlH, SysListView321, ahk_id %hWnd%
                     WinGetPos, winX, winY, winW, winH, ahk_id %hWnd%
-                    tooltip, %ctrlW% - %winW%
+                    ; tooltip, %ctrlW% - %winW%
                     If (ctrlW < floor(0.5*winW)) {
                         LbuttonEnabled := True
                         Return
@@ -607,12 +607,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Send, ^{NumpadAdd}
                     ; tooltip, sent to %TargetControl%
 
-                    ControlGetText, isText , Edit1, ahk_id %hWnd%
-                    If (isText != "" && !InStr(vWinTitle, "Save", True) && StrLen(isText) <= 2) {
-                        Send, {Ctrl Up}
-                        Send, {Backspace}{Backspace}
-                    }
-
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
 
@@ -629,10 +623,25 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                 SetTimer, keyTrack,   On
                                 SetTimer, mouseTrack, On
                                 LbuttonEnabled := True
+                                BlockKeyboard(false)
                                 Return
                             }
                         }
                     }
+
+                    ControlGetFocus, isEdit1 , ahk_id %hWnd%
+                    ; loop 20 {
+                        If (isEdit1 == "Edit1" && OutputVar1 == 1 && !InStr(vWinTitle, "Save", True)) {
+                            ; ControlGetText, isText , Edit1, ahk_id %hWnd%
+                            ; If (!InStr(vWinTitle, "Save", True)) {
+                                Send, {Ctrl Up}
+                                Send, {Backspace}{Backspace}
+                                ; break
+                            ; }
+                        }
+                        ; sleep, 5
+                        ; }
+
                 }
                 ; BlockInput, Off
                 BlockKeyboard(false)
@@ -2814,24 +2823,24 @@ Mbutton::
             Menu, vdeskMenu, Add,  Move to Desktop %A_Index%, SendWindow
             ; Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
             If ( A_Index == 1)
-                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-top-left.ico, , 32
+                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\1-move-blk.ico, , 32
             Else If (A_Index == 2)
-                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-top-right.ico, , 32
+                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\2-move-blk.ico, , 32
             Else If (A_Index == 3)
-                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-bottom-left.ico, , 32
+                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\3-move-blk.ico, , 32
             Else If (A_Index == 4)
-                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-bottom-right.ico, , 32
+                Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\4-move-blk.ico, , 32
 
             Menu, vdeskMenu, Add,  Move and Go to Desktop %A_Index%, SendWindowAndGo
             ; Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
             If ( A_Index == 1)
-                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-top-left.ico, , 32
+                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\1-moveswitch-blk.ico, , 32
             Else If (A_Index == 2)
-                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-top-right.ico, , 32
+                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\2-moveswitch-blk.ico, , 32
             Else If (A_Index == 3)
-                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-bottom-left.ico, , 32
+                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\3-moveswitch-blk.ico, , 32
             Else If (A_Index == 4)
-                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\Papirus-Team-Papirus-Apps-Workspace-switcher-bottom-right.ico, , 32
+                Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\4-moveswitch-blk.ico, , 32
         }
     }
     Menu, vdeskMenu, Show
@@ -5914,6 +5923,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:emtn::ment
 :?:emtns::ments
 :?:ioins::ions
+:?:ceis::cies
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
