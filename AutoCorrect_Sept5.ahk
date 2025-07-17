@@ -722,6 +722,7 @@ Return
 
 #If ((IsConsoleWindow() && IsMouseOnLeftSide()) || textBoxSelected)
 WheelDown::
+    ; tooltip, % IsConsoleWindow() "-" IsMouseOnLeftSide() "-" textBoxSelected
     StopRecursion := True
     Send, {DOWN}
     SetTimer, MbuttonTimer, Off
@@ -978,7 +979,7 @@ Return
     StopAutoFix := false
 Return
 
-#If !disableArrows
+; #If !disableArrows
 $!j::
     StopAutoFix := true
     Send, ^{LEFT}
@@ -993,9 +994,21 @@ $!+j::
     Hotstring("Reset")
     StopAutoFix := false
 Return
-#If
+; #If
 
-#If !disableArrows
+$!h::
+    StopAutoFix := true
+    Send, {LEFT}
+    StopAutoFix := false
+Return
+
+$!+h::
+    StopAutoFix := true
+    Send, {LEFT}
+    StopAutoFix := false
+Return
+
+; #If !disableArrows
 $!l::
     StopAutoFix := true
     Send, ^{RIGHT}
@@ -1009,33 +1022,33 @@ $!+l::
     Hotstring("Reset")
     StopAutoFix := false
 Return
-#If
+; #If
 
-#If disableArrows
-$!j::Return
-$!l::Return
-$!+j::Return
-$!+l::Return
-#If
+; #If disableArrows
+; $!j::Return
+; $!l::Return
+; $!+j::Return
+; $!+l::Return
+; #If
 
-$!Capslock::
-    disableArrows := true
-    loop 500 {
-        If GetKeyState("j","P") {
-            Send, {LEFT}
-            Keywait, j, U T1
-        }
-        If GetKeyState("l","P") {
-            Send, {RIGHT}
-            Keywait, l, U T1
-        }
-        If (!GetKeyState("LAlt","P") || !GetKeyState("Capslock","P") || GetKeyState("LShift","P"))
-            break
-        sleep, 50
-    }
-    tooltip,
-    disableArrows := false
-Return
+; $!Capslock::
+    ; disableArrows := true
+    ; loop 500 {
+        ; If GetKeyState("j","P") {
+            ; Send, {LEFT}
+            ; Keywait, j, U T1
+        ; }
+        ; If GetKeyState("l","P") {
+            ; Send, {RIGHT}
+            ; Keywait, l, U T1
+        ; }
+        ; If (!GetKeyState("LAlt","P") || !GetKeyState("Capslock","P") || GetKeyState("LShift","P"))
+            ; break
+        ; sleep, 50
+    ; }
+    ; tooltip,
+    ; disableArrows := false
+; Return
 
 #If disableEnter
 Enter::
