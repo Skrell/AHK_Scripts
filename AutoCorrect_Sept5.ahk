@@ -2495,7 +2495,12 @@ Return
         SetTimer, SendCtrlAdd, Off
         try {
             pt := UIA.ElementFromPoint(lbX1,lbY1,False)
-            textBoxSelected := (pt.CurrentControlType == 50004)
+            mElPos := pt.CurrentBoundingRectangle
+            ; RangeTip(mElPos.l, mElPos.t, mElPos.r-mElPos.l, mElPos.b-mElPos.t, "Blue", 4)
+            If (mElPos.t - mElPos.b <= 30 )
+                textBoxSelected := (pt.CurrentControlType == 50004)
+            Else
+                textBoxSelected := False
         } catch e {
                     tooltip, TIMED OUT!!!!
                     UIA :=  ;// set to a different value
@@ -2509,6 +2514,35 @@ Return
     SetTimer, mouseTrack, On
 Return
 #If
+
+RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2) ; from the FindText library, credit goes to feiyue
+{
+  static id:=0
+  if (x="")
+  {
+    id:=0
+    Loop 4
+      Gui, Range_%A_Index%: Destroy
+    return
+  }
+  if (!id)
+  {
+    Loop 4
+      Gui, Range_%A_Index%: +Hwndid +AlwaysOnTop -Caption +ToolWindow
+        -DPIScale +E0x08000000
+  }
+  x:=Floor(x), y:=Floor(y), w:=Floor(w), h:=Floor(h), d:=Floor(d)
+  Loop 4
+  {
+    i:=A_Index
+    , x1:=(i=2 ? x+w : x-d)
+    , y1:=(i=3 ? y+h : y-d)
+    , w1:=(i=1 or i=3 ? w+2*d : d)
+    , h1:=(i=2 or i=4 ? h+2*d : d)
+    Gui, Range_%i%: Color, %color%
+    Gui, Range_%i%: Show, NA x%x1% y%y1% w%w1% h%h1%
+  }
+}
 
 #MaxThreadsPerHotkey 1
 
@@ -4042,7 +4076,7 @@ mouseTrack() {
         LbuttonHeld := False
     }
 
-    If ((abs(x - lastX) > 5 || abs(y - lastY) > 5) && lastX != "" && lastY != "") {
+    If ((abs(x - lastX) > 10 || abs(y - lastY) > 10) && lastX != "" && lastY != "") {
         mouseMoving := True
         ; tooltip, true
         If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770")
