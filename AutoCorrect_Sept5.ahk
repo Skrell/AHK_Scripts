@@ -603,9 +603,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
                 Else {
                     Send, {Ctrl UP}
-                    sleep, 50
+                    WaitForFadeInStop(hWnd)
                     Send, ^{NumpadAdd}
-                    ; tooltip, sent to %TargetControl%
 
                     If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                         sleep, 125
@@ -669,6 +668,34 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
     LbuttonEnabled := True
+    Return
+}
+
+WaitForFadeInStop(hwnd) {
+    HexColorLast1 :=
+    HexColorLast2 :=
+    HexColorLast3 :=
+    HexColorLast4 :=
+    HexColorLast5 :=
+
+    WinGetPos, sx, sy, sw, sh, ahk_id %hwnd%
+    sampleX := (sx + sw)/2
+    sampleY := (sy + 13)
+    CoordMode, Pixel, Screen
+    loop 100 {
+        PixelGetColor, HexColor%A_Index%, %sampleX%, %sampleY%, RGB
+        If (A_Index >= 5) {
+            If (HexColor%A_Index% == HexColorLast1 && HexColorLast1 == HexColorLast2 && HexColorLast2 == HexColorLast3 && HexColorLast3 == HexColorLast4 && HexColorLast4 == HexColorLast5)
+                break
+            HexColorLast1 := HexColor%A_Index%
+            HexColorLast2 := HexColorLast1
+            HexColorLast3 := HexColorLast2
+            HexColorLast4 := HexColorLast3
+            HexColorLast5 := HexColorLast4
+        }
+        sleep, 2
+    }
+    CoordMode, Mouse, screen
     Return
 }
 
@@ -2173,45 +2200,6 @@ Return
 Return
 #If
 
-; KeepCenteringTimer:
-    ; MouseGetPos, , , , lbctrlN
-    ; If (GetKeyState("Lbutton","P") || GetKeyState("Rbutton","P") || GetKeyState("LAlt","P") ) {
-        ; SetTimer, KeepCenteringTimer, Off
-        ; Return
-    ; }
-    ; Else If  (lbctrlN != "SysListView321" && lbctrlN != "DirectUIHWND2" && lbctrlN != "DirectUIHWND3") {
-        ; SetTimer, KeepCenteringTimer, Off
-        ; Return
-    ; }
-    ; Else
-        ; Send, ^{NumpadAdd}
-; Return
-; #If MouseIsOverTaskbarButtonGroup()
-; Lbutton::
-    ; x1 := x2 := y1 := y2 := 0
-    ; Critical, On
-    ; loop {
-        ; MouseGetPos, x1, y1,
-        ; If (abs(x1 - x2) > 10 || abs(y1-y2) > 10) {
-            ; Send, {Lbutton DOWN}
-            ; break
-        ; }
-        ; sleep, 10
-        ; MouseGetPos, x2, y2,
-        ; If (!GetKeyState("Lbutton","P"))
-            ; break
-        ; tooltip, stuck
-    ; }
-    ; KeyWait, Lbutton, U T5
-    ; MouseGetPos, x2, y2,
-    ; If (abs(x1 - x2) <= 10 && abs(y1-y2) <= 10)
-        ; Send, ^{Lbutton}
-    ; Else
-        ; Send, {Lbutton UP}
-    ; Critical, Off
-; Return
-; #If
-
 #If MouseIsOverTitleBar()
 ^LButton::
     Global currentMon, previousMon
@@ -3075,11 +3063,12 @@ SendCtrlAdd:
             WinGet, lastCheckID, ID, A
             If (mouseHoverId == lastCheckID) {
                 Send, ^{NumpadAdd}
+
                 If (prevPath != "" && currentPath != "" && prevPath != currentPath)
                     tooltip, sent to %TargetControl% - %prevPath% - %currentPath%
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
-                    sleep, 125
+                    ; sleep, 125
 
                     If ((InStr(initFocusedCtrl,"Edit",True) || InStr(initFocusedCtrl,"Tree",True)) && initFocusedCtrl != TargetControl) {
                         loop, 500 {
@@ -5600,6 +5589,7 @@ SetTitleMatchMode, 2
 ::bot::
 ::campaign::
 ::'ing::
+::ing::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
