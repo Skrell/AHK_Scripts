@@ -529,6 +529,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             Critical, On
             prevActiveWindows.push(hWnd)
+            Critical, Off
 
             OutputVar1 := OutputVar2 := OutputVar3 := 0
 
@@ -630,24 +631,20 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     }
 
                     ControlGetFocus, isEdit1 , ahk_id %hWnd%
-                    ; loop 20 {
-                        If (isEdit1 == "Edit1" && OutputVar1 == 1 && !InStr(vWinTitle, "Save", True)) {
-                            ; ControlGetText, isText , Edit1, ahk_id %hWnd%
-                            ; If (!InStr(vWinTitle, "Save", True)) {
-                                Send, {Ctrl Up}
-                                Send, {Backspace}{Backspace}
-                                ; break
-                            ; }
-                        }
-                        ; sleep, 5
+                    If (isEdit1 == "Edit1" && OutputVar1 == 1 && !InStr(vWinTitle, "Save", True)) {
+                        ; ControlGetText, isText , Edit1, ahk_id %hWnd%
+                        ; If (!InStr(vWinTitle, "Save", True)) {
+                            Send, {Ctrl Up}
+                            Send, {Backspace}{Backspace}
+                            ; break
                         ; }
-
+                    }
                 }
                 ; BlockInput, Off
                 BlockKeyboard(false)
             }
+
             LbuttonEnabled := True
-            Critical, Off
             DetectHiddenWindows, On
             i := 1
             while (i <= prevActiveWindows.MaxIndex()) {
@@ -2562,8 +2559,10 @@ Return
             pt := UIA.ElementFromPoint(lbX1,lbY1,False)
             mElPos := pt.CurrentBoundingRectangle
             ; RangeTip(mElPos.l, mElPos.t, mElPos.r-mElPos.l, mElPos.b-mElPos.t, "Blue", 4)
-            If (mElPos.t - mElPos.b <= 30 )
+            If (abs(mElPos.t - mElPos.b) <= 40 ) {
+                ; tooltip, % pt.CurrentControlType "-" abs(mElPos.t - mElPos.b)
                 textBoxSelected := (pt.CurrentControlType == 50004)
+            }
             Else
                 textBoxSelected := False
         } catch e {
@@ -5967,6 +5966,48 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:emtns::ments
 :?:ioins::ions
 :?:ceis::cies
+:?:bj::b
+:?:cj::c
+:?:dj::d
+:?:fq::f
+:?:gj::g
+:?:iq::i
+:?:jq::j
+:?:jx::j
+:?:kj::k
+:?:kq::k
+:?:mq::m
+:?:oj::o
+:?:qj::q
+:?:qq::q
+:?:qx::q
+:?:qz::q
+:?:uj::u
+:?:vq::v
+:?:wq::w
+:?:wz::w
+:?:xq::x
+:?:xz::x
+:?:yq::y
+:?:zq::z
+:?:zz::z
+:?:aq::a
+:?:cz::c
+:?:dx::d
+:?:ez::e
+:?:fy::f
+:?:hx::h
+:?:ix::i
+:?:jy::j
+:?:kx::k
+:?:nx::n
+:?:oz::o
+:?:ry::r
+:?:ty::t
+:?:ux::u
+:?:xy::x
+:?:yx::y
+:?:zy::z
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -6096,6 +6137,46 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:specfiic::specific
 :*:speciifc::specific
 :*:specifci::specific
+:*:dj::j
+:*:fj::j
+:*:gj::j
+:*:hz::z
+:*:ij::j
+:*:jq::q
+:*:kq::q
+:*:qj::j
+:*:qw::w
+:*:qz::z
+:*:vx::x
+:*:vz::z
+:*:wq::q
+:*:wz::z
+:*:xj::j
+:*:xz::z
+:*:yq::q
+:*:zq::q
+:*:zz::z
+:*:aj::j
+:*:bq::q
+:*:cj::j
+:*:dk::k
+:*:ez::z
+:*:ix::x
+:*:jx::x
+:*:kf::f
+:*:lx::x
+:*:mx::x
+:*:nz::z
+:*:oj::j
+:*:px::x
+:*:qx::x
+:*:rx::x
+:*:sx::x
+:*:ux::x
+:*:vx::x
+:*:wx::x
+:*:yx::x
+:*:zx::x
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
