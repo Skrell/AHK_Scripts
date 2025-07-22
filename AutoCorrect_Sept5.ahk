@@ -75,10 +75,6 @@ Global StopRecursion               := False
 Global currMonHeight               := 0
 Global currMonWidth                := 0
 Global LbuttonEnabled              := True
-Global LastKey4                    :=
-Global LastKey1                    :=
-Global LastKey2                    :=
-Global LastKey3                    :=
 Global X_PriorPriorHotKey          :=
 Global StopAutoFix                 := False
 Global disableEnter                := False
@@ -440,7 +436,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
 
         WinGet, vWinStyle, Style, % "ahk_id " hWnd
-
         If (   vWinClass == "#32768"
             || vWinClass == "Autohotkey"
             || vWinClass == "AutohotkeyGUI"
@@ -454,7 +449,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             || (InStr(vWinClass, "Shell",false) && InStr(vWinClass, "TrayWnd",false))
             || vWinClass == ""
             || vWinTitle == ""
-            || (vWinStyle & 0xFFF00000 == 0x94C00000)
+            || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
             || !WinExist("ahk_id " hWnd)) {
             If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
@@ -483,6 +478,15 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ; }
 
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+            If (vWinClass == "#32770") {
+                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+            }
+            Else If (vWinClass != "#32770" && WinExist("ahk_class #32770")) {
+                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                WinSet, AlwaysOnTop, Off, ahk_class #32770
+                WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
+            }
+
             If (vWinClass == "wxWindowNR") {
                 loop, 150 {
                     ControlFocus, Edit1, ahk_id %hWnd%
@@ -494,9 +498,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Send, {Backspace}
             }
             ; tooltip, here we go
-            If (vWinClass == "#32770") {
-                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-            }
 
             If (InStr(vWinTitle, "Save", false) && vWinClass != "#32770") {
                 WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
@@ -762,6 +763,82 @@ WheelUp::
     Send, {UP}
     SetTimer, MbuttonTimer, Off
     SetTimer, MbuttonTimer, -1
+    StopRecursion := False
+Return
+#If
+
+#If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
+~WheelUp::
+    StopRecursion := True
+    pauseWheel := True
+    MouseGetPos, , , wuID, wuCtrl
+    WinGetClass, wuClass, ahk_id %wuID%
+
+    If (wuClass == "Shell_TrayWnd" && !mouseMoving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
+    {
+        Send #^{Left}
+        sleep, 200
+    }
+    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
+        ControlFocus , %wuCtrl%, % "ahk_id " wdID
+        ControlGetFocus, TargetControl, A
+        If (TargetControl == wuCtrl) {
+            BlockInput, On
+            If !GetKeyState("Ctrl") {
+                Send, {Ctrl Up}
+            }
+            Send, ^{NumpadAdd}
+            sleep, 200
+            If !GetKeyState("Ctrl") {
+                Send, {Ctrl Up}
+            }
+            BlockInput, Off
+        }
+    }
+    pauseWheel := False
+    StopRecursion := False
+Return
+#If
+
+#If MouseIsOverTitleBar() || disableWheeldown
+WheelDown::
+    disableWheeldown := True
+    MouseGetPos, , , wdID,
+    WinMinimize, ahk_id %wdID%
+    sleep, 500
+    disableWheeldown := False
+Return
+#If
+
+#If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
+~WheelDown::
+    StopRecursion := True
+    pauseWheel := True
+    MouseGetPos, , , wdID, wuCtrl
+    WinGetClass, wdClass, ahk_id %wdID%
+
+    If (wdClass == "Shell_TrayWnd" && !mouseMoving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
+    {
+        Send #^{Right}
+        sleep, 200
+    }
+    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
+        ControlFocus , %wuCtrl%, % "ahk_id " wdID
+        ControlGetFocus, TargetControl, A
+        If (TargetControl == wuCtrl) {
+            BlockInput, On
+            If !GetKeyState("Ctrl") {
+                Send, {Ctrl Up}
+            }
+            Send, ^{NumpadAdd}
+            sleep, 200
+            If !GetKeyState("Ctrl") {
+                Send, {Ctrl Up}
+            }
+            BlockInput, Off
+        }
+    }
+    pauseWheel := False
     StopRecursion := False
 Return
 #If
@@ -3220,82 +3297,6 @@ static EM_LINESCROLL := 0xB6
 return
 }
 
-#If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
-~WheelUp::
-    StopRecursion := True
-    pauseWheel := True
-    MouseGetPos, , , wuID, wuCtrl
-    WinGetClass, wuClass, ahk_id %wuID%
-
-    If (wuClass == "Shell_TrayWnd" && !mouseMoving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
-    {
-        Send #^{Left}
-        sleep, 200
-    }
-    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
-        ControlFocus , %wuCtrl%, % "ahk_id " wdID
-        ControlGetFocus, TargetControl, A
-        If (TargetControl == wuCtrl) {
-            BlockInput, On
-            If !GetKeyState("Ctrl") {
-                Send, {Ctrl Up}
-            }
-            Send, ^{NumpadAdd}
-            sleep, 200
-            If !GetKeyState("Ctrl") {
-                Send, {Ctrl Up}
-            }
-            BlockInput, Off
-        }
-    }
-    pauseWheel := False
-    StopRecursion := False
-Return
-#If
-
-#If MouseIsOverTitleBar() || disableWheeldown
-WheelDown::
-    disableWheeldown := True
-    MouseGetPos, , , wdID,
-    WinMinimize, ahk_id %wdID%
-    sleep, 500
-    disableWheeldown := False
-Return
-#If
-
-#If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
-~WheelDown::
-    StopRecursion := True
-    pauseWheel := True
-    MouseGetPos, , , wdID, wuCtrl
-    WinGetClass, wdClass, ahk_id %wdID%
-
-    If (wdClass == "Shell_TrayWnd" && !mouseMoving && wuCtrl != "ToolbarWindow323" && wuCtrl != "TrayNotifyWnd1")
-    {
-        Send #^{Right}
-        sleep, 200
-    }
-    Else If (wdClass != "ProgMan" && wdClass != "WorkerW" && wdClass != "Notepad++" && (wuCtrl == "SysListView321" || wuCtrl == "DirectUIHWND2" || wuCtrl == "DirectUIHWND3")) {
-        ControlFocus , %wuCtrl%, % "ahk_id " wdID
-        ControlGetFocus, TargetControl, A
-        If (TargetControl == wuCtrl) {
-            BlockInput, On
-            If !GetKeyState("Ctrl") {
-                Send, {Ctrl Up}
-            }
-            Send, ^{NumpadAdd}
-            sleep, 200
-            If !GetKeyState("Ctrl") {
-                Send, {Ctrl Up}
-            }
-            BlockInput, Off
-        }
-    }
-    pauseWheel := False
-    StopRecursion := False
-Return
-#If
-
 /* ;
 ***********************************
 ***** SHORTCUTS CONFIGURATION *****
@@ -4038,7 +4039,7 @@ Return
 }
 
 mouseTrack() {
-    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, LbuttonEnabled
+    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, LbuttonEnabled, textBoxSelected
     Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
     ListLines Off
@@ -4067,7 +4068,7 @@ mouseTrack() {
 
     If ((abs(x - lastX) > 10 || abs(y - lastY) > 10) && lastX != "" && lastY != "") {
         mouseMoving := True
-        ; tooltip, true
+        textBoxSelected := False
         If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770")
             sleep 250
     } Else {
@@ -4315,6 +4316,7 @@ mouseTrack() {
 }
 
 MouseIsOverTitleBar(xPos := "", yPos := "") {
+    Global UIA
     SysGet, SM_CXBORDER, 5
     SysGet, SM_CYBORDER, 6
     SysGet, SM_CXFIXEDFRAME, 7
@@ -4328,28 +4330,32 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
 
     titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
 
-    CoordMode, Mouse, Screen
-    If (xPos != "" && yPos != "")
-        MouseGetPos, , , WindowUnderMouseID
-    Else
-        MouseGetPos, xPos, yPos, WindowUnderMouseID
-
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If ((mClass != "Shell_TrayWnd")
+    If (   (mClass != "Shell_TrayWnd")
         && (mClass != "WorkerW")
         && (mClass != "ProgMan")
         && (mClass != "TaskListThumbnailWnd")
         && (mClass != "#32768")
         && (mClass != "Net UI Tool Window")) {
 
-        WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+        CoordMode, Mouse, Screen
+        If (xPos != "" && yPos != "")
+            MouseGetPos, , , WindowUnderMouseID
+        Else
+            MouseGetPos, xPos, yPos, WindowUnderMouseID
 
-        SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID
-        If ((yPos > y) && (yPos < (y+titlebarHeight)) && (ErrorLevel == 2))
-            Return True
-        Else If ((ErrorLevel != 12) && (mClass != "Chrome_WidgetWin_1") && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-SM_CXBORDER-(45*3)))) {
-            ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
-            Return True
+        WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+        If (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-SM_CXBORDER-(45*3))) {
+            SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID
+            If ((yPos > y) && (yPos < (y+titlebarHeight)) && (ErrorLevel == 2))
+                Return True
+            Else If ((ErrorLevel != 12) && (mClass != "Chrome_WidgetWin_1")) {
+                ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
+                pt := UIA.ElementFromPoint(xPos,yPos,False)
+                Return (pt.CurrentControlType == 50037)
+            }
+            Else
+                Return True
         }
         Else
             Return False
