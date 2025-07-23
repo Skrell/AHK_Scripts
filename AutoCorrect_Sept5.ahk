@@ -583,7 +583,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         Return
                     }
                 }
-
+                Critical, On
                 BlockKeyboard(true)
                 ; BlockInput, On
                 If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
@@ -597,10 +597,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
 
                 If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
-                    BlockKeyboard(false)
                     SetTimer, keyTrack,   On
                     SetTimer, mouseTrack, On
                     LbuttonEnabled := True
+                    BlockKeyboard(false)
+                    Critical, Off
                     Return
                 }
                 Else {
@@ -625,6 +626,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                 SetTimer, mouseTrack, On
                                 LbuttonEnabled := True
                                 BlockKeyboard(false)
+                                Critical, Off
                                 Return
                             }
                         }
@@ -642,6 +644,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
                 ; BlockInput, Off
                 BlockKeyboard(false)
+                Critical, Off
             }
 
             LbuttonEnabled := True
@@ -1529,6 +1532,7 @@ Altup:
         Return
     }
     Else {
+        Critical, On
         BlockKeyboard(true)
         WinGet, actWndID, ID, A
         If (LclickSelected && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
@@ -1550,7 +1554,7 @@ Altup:
             }
         }
     }
-    Critical, On
+
     cycleCount     := 1
     ValidWindows   := []
     GroupedWindows := []
@@ -1739,7 +1743,7 @@ ResetWins:
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
-; #MaxThreadsPerHotkey 1
+; #MaxThreadsPerHotkey 2
 $!Tab::
 $!+Tab::
 If !hitTAB {
@@ -1776,6 +1780,20 @@ Return
     Gui, GUI4Boarder: Hide
     GoSub, ResetWins
 Return
+
+; ~!Lbutton::
+    ; LclickSelected := True
+    ; MouseGetPos, , , lbhwnd,
+    ; WinGetTitle, actTitle, ahk_id %lbhwnd%
+    ; WinGet, pp, ProcessPath , ahk_id %lbhwnd%
+
+    ; GoSub, DrawRect
+    ; DrawWindowTitlePopup(actTitle, pp)
+    ; KeyWait, Lalt, U
+    ; GoSub, Altup
+    ; SetTimer, mouseTrack, On
+    ; SetTimer, keyTrack,   On
+; Return
 #If
 
 RunDynaExpr:
@@ -1930,10 +1948,11 @@ Cycle()
     Global startHighlight
     Global hitTAB
     Global lbhwnd
-    static prev_cl, prev_exe
+    Global LclickSelected
+    ; static prev_cl, prev_exe
+    ; prev_cl  := ""
+    ; prev_exe := ""
     hitTAB := True
-    prev_cl  := ""
-    prev_exe := ""
 
     If !cycling
     {
@@ -2009,7 +2028,6 @@ Cycle()
     KeyWait, Tab, U
     cycling := True
     If cycling {
-        ; tooltip, cycling
         loop {
             If (GroupedWindows.length() >= 2 && cycling)
             {
@@ -2027,7 +2045,7 @@ Cycle()
                     KeyWait, Lbutton, U
                 }
 
-                If !GetKeyState("LAlt", "P") || GetKeyState("q","P") {
+                If (!GetKeyState("LAlt", "P") || GetKeyState("q","P")) {
                     Gui, WindowTitle: Destroy
                     Return
                 }
@@ -2779,7 +2797,7 @@ Return
 Return
 
 ActivateWindow:
-    BlockKeyboard(true)
+
     Gui, ShadowFrFull:  Hide
     ; Gui, ShadowFrFull2: Hide
     DetectHiddenWindows, On
@@ -2909,7 +2927,7 @@ ActivateWindow:
     ; }
     Process, Close, Expr_Name
     Process, Close, ExprAltUp_Name
-    BlockKeyboard(false)
+
 Return
 
 
@@ -3918,7 +3936,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             }
         }
     }
-
+    Critical, On
     BlockKeyboard(true)
     counter := counter - 1
     If (counter <= 0)
@@ -3953,6 +3971,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
     WinActivate, ahk_id %lastActWinID%
     BlockKeyboard(false)
+    Critical, Off
     SetTimer, mouseTrack, On
 }
 
@@ -5991,23 +6010,17 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:yq::y
 :?:zq::z
 :?:zz::z
-:?:aq::a
 :?:cz::c
 :?:dx::d
 :?:ez::e
-:?:fy::f
 :?:hx::h
-:?:ix::i
 :?:jy::j
 :?:kx::k
 :?:nx::n
 :?:oz::o
-:?:ry::r
-:?:ty::t
 :?:ux::u
 :?:xy::x
 :?:yx::y
-:?:zy::z
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
