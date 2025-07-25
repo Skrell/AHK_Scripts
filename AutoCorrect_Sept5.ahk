@@ -1749,8 +1749,12 @@ Return
 
 #If hitTAB
 !x::
+    tooltip, Canceled Operation!
     Gui, GUI4Boarder: Hide
+    Gui, WindowTitle: Destroy
     GoSub, ResetWins
+    sleep, 1000
+    tooltip,
 Return
 #If
 
