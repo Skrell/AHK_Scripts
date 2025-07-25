@@ -93,6 +93,7 @@ Global prevPath                    := ""
 Global MbuttonIsEnter              := False
 Global textBoxSelected             := False
 Global disableArrows               := false
+Global WindowTitleID               :=
 
 Process, Priority,, High
 
@@ -1069,6 +1070,12 @@ Return
     Critical, Off
 Return
 
+$!CapsLock::
+    CapsDown := True
+    KeyWait, CapsLock, U T10
+    CapsDown := False
+Return
+
 !i::
     StopAutoFix := true
     Send, {UP}
@@ -1083,10 +1090,12 @@ Return
     StopAutoFix := false
 Return
 
-; #If !disableArrows
 $!j::
     StopAutoFix := true
-    Send, ^{LEFT}
+    If CapsDown
+        Send, {LEFT}
+    Else
+        Send, ^{LEFT}
     Hotstring("Reset")
     StopAutoFix := false
 Return
@@ -1098,24 +1107,13 @@ $!+j::
     Hotstring("Reset")
     StopAutoFix := false
 Return
-; #If
 
-$!h::
-    StopAutoFix := true
-    Send, {LEFT}
-    StopAutoFix := false
-Return
-
-$!+h::
-    StopAutoFix := true
-    Send, {LEFT}
-    StopAutoFix := false
-Return
-
-; #If !disableArrows
 $!l::
     StopAutoFix := true
-    Send, ^{RIGHT}
+    If CapsDown
+        Send, {RIGHT}
+    Else
+        Send, ^{RIGHT}
     Hotstring("Reset")
     StopAutoFix := false
 Return
@@ -1126,33 +1124,7 @@ $!+l::
     Hotstring("Reset")
     StopAutoFix := false
 Return
-; #If
 
-; #If disableArrows
-; $!j::Return
-; $!l::Return
-; $!+j::Return
-; $!+l::Return
-; #If
-
-; $!Capslock::
-    ; disableArrows := true
-    ; loop 500 {
-        ; If GetKeyState("j","P") {
-            ; Send, {LEFT}
-            ; Keywait, j, U T1
-        ; }
-        ; If GetKeyState("l","P") {
-            ; Send, {RIGHT}
-            ; Keywait, l, U T1
-        ; }
-        ; If (!GetKeyState("LAlt","P") || !GetKeyState("Capslock","P") || GetKeyState("LShift","P"))
-            ; break
-        ; sleep, 50
-    ; }
-    ; tooltip,
-    ; disableArrows := false
-; Return
 
 #If disableEnter
 Enter::
@@ -1760,7 +1732,7 @@ Return
 
 !q::
     ; tooltip, swapping between windows of app
-    StopRecursion := True
+    StopRecursion  := True
     ComboActive    := False
     ActivateTopMostWindow()
 
@@ -1791,9 +1763,9 @@ Return
         WinGet, pp, ProcessPath , ahk_id %lbhwnd%
 
         GoSub, DrawRect
-        DrawWindowTitlePopup(actTitle, pp)
+        WindowTitleID := DrawWindowTitlePopup(actTitle, pp)
         KeyWait, LAlt, U
-        Gui, WindowTitle: Destroy
+        GoSub, FadeOutWindowTitle
         GoSub, Altup
         SetTimer, mouseTrack, On
         SetTimer, keyTrack,   On
@@ -1818,6 +1790,22 @@ RunDynaExprTimeout:
     DynaRun(ExprTimeout, ExprTimeout_Name)
 Return
 
+FadeOutWindowTitle:
+    Global WindowTitleID
+    WinSet, Transparent, 200, ahk_id %WindowTitleID%
+    sleep, 50,
+    WinSet, Transparent, 175, ahk_id %WindowTitleID%
+    sleep, 50,
+    WinSet, Transparent, 150, ahk_id %WindowTitleID%
+    sleep, 50,
+    WinSet, Transparent, 125, ahk_id %WindowTitleID%
+    sleep, 50,
+    WinSet, Transparent, 100, ahk_id %WindowTitleID%
+    sleep, 50,
+    WinSet, Transparent, 50,  ahk_id %WindowTitleID%
+    sleep, 50
+    Gui, WindowTitle: Destroy
+Return
 
 ; !Capslock::
     ; StopRecursion := True
@@ -1959,9 +1947,8 @@ Cycle()
     Global hitTAB
     Global lbhwnd
     Global LclickSelected
-    ; static prev_cl, prev_exe
-    ; prev_cl  := ""
-    ; prev_exe := ""
+    Global WindowTitleID
+
     hitTAB := True
 
     If !cycling
@@ -2090,7 +2077,7 @@ Cycle()
                     WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                     WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
-                    DrawWindowTitlePopup(tits, pp)
+                    WindowTitleID := DrawWindowTitlePopup(tits, pp)
                     KeyWait, Tab, U
 
                     If (cycleCount > 2)
@@ -2098,8 +2085,9 @@ Cycle()
                 }
             }
         } until (!GetKeyState("LAlt", "P") || GetKeyState("q","P"))
-        If !LclickSelected
-            Gui, WindowTitle: Destroy
+        If !LclickSelected {
+            GoSub, FadeOutWindowTitle
+        }
     }
     Return
 }
@@ -3087,8 +3075,6 @@ SendCtrlAdd:
             MouseGetPos, , , , initFocusedCtrl
         }
 
-        WinGet, proc, ProcessName, ahk_id %mouseHoverId%
-
         ; tooltip, hovering over %initFocusedCtrl%
 
         OutputVar1 := OutputVar2 := OutputVar3 := 0
@@ -3115,6 +3101,7 @@ SendCtrlAdd:
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
 
             ; tooltip, init focus is %initFocusedCtrl%
+            WinGet, proc, ProcessName, ahk_id %mouseHoverId%
             WinGetTitle, vWinTitle, ahk_id %mouseHoverId%
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
                 If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
@@ -3792,7 +3779,7 @@ findDesktopWindowIsOn(hwnd)
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    Global MonCount, VD, Highlighter, hitTAB
+    Global MonCount, VD, Highlighter, hitTAB, WindowTitleID
     SetTimer, mouseTrack, Off
     windowsToMinimize := []
     minimizedWindows  := []
@@ -3878,7 +3865,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
             LclickSelected := True
             GoSub, DrawRect
-            DrawWindowTitlePopup(actTitle, pp, True)
+            WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
             WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
             lastActWinID := lbhwnd
 
@@ -3929,7 +3916,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
     }
     until (!GetKeyState("LAlt", "P"))
-    Gui, WindowTitle: Destroy
+    GoSub, FadeOutWindowTitle
 
     loop % windowsToMinimize.length()
     {
@@ -4027,6 +4014,11 @@ keyTrack() {
     If GetKeyState("LShift") && !GetKeyState("LShift","P") {
         Critical, On
         Send, {LShift Up}
+        Critical, Off
+    }
+    If GetKeyState("Rbutton")   && !GetKeyState("Rbutton","P") {
+        Critical, On
+        Send, {Rbutton Up}
         Critical, Off
     }
 
@@ -5359,7 +5351,7 @@ MouseIsOverTaskbarBlank() {
 }
 
 DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
-    Gui, WindowTitle: Destroy
+   Gui, WindowTitle: Destroy
 
     If !InStr(vtext, " - ", false)
         showFullTitle := True
@@ -5376,7 +5368,7 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     }
 
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
-    Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndTEST ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
+    Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
     Gui, WindowTitle: Font, s24  ; Set a large font size (32-point).
     If InStr(pathToExe, "ApplicationFrameHost", false) {
@@ -5390,10 +5382,11 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     drawX := CoordXCenterScreen()
     drawY := CoordYCenterScreen()
     Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
-    WinGetPos, x, y, w , h, ahk_id %TEST%
-    WinSet, Transparent, 225, ahk_id %TEST%
-    WinMove, ahk_id %TEST%,, drawX-floor(w/2), drawY-floor(h/2)
-    WinSet, AlwaysOnTop, On, ahk_id %TEST%
+    WinGetPos, x, y, w , h, ahk_id %WindowTitleID%
+    WinSet, Transparent, 225, ahk_id %WindowTitleID%
+    WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
+    WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
+    Return WindowTitleID
 }
 
 Routine:
