@@ -3972,9 +3972,9 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
     WinActivate, ahk_id %lastActWinID%
     BlockKeyboard(false)
-    Return
     Critical, Off
     SetTimer, mouseTrack, On
+    Return
 }
 
 FrameShadow(HGui) {
