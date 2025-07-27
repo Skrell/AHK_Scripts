@@ -42,7 +42,7 @@ SetWinDelay   10
 SetControlDelay 10
 SendMode, Input
 ; SetKeyDelay is not obeyed by SendInput; there is no delay between keystrokes in that mode.
-; This same is true for Send when SendMode Input is in effect.
+; This same is True for Send when SendMode Input is in effect.
 
 Global mouseMoving                 := False
 Global ComboActive                 := False
@@ -585,7 +585,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     }
                 }
                 Critical, On
-                BlockKeyboard(true)
+                BlockKeyboard(True)
                 ; BlockInput, On
                 If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                     loop, 100 {
@@ -914,21 +914,21 @@ CapsLock::
 Return
 
 !a::
-    StopAutoFix := true
+    StopAutoFix := True
     Send, {home}
     Hotstring("Reset")
     StopAutoFix := false
 Return
 
 +!a::
-    StopAutoFix := true
+    StopAutoFix := True
     Send, +{home}
     Hotstring("Reset")
     StopAutoFix := false
 Return
 
 !;::
-    StopAutoFix := true
+    StopAutoFix := True
     If GetKeyState("a")
         Send, +{end}
     Else
@@ -938,21 +938,21 @@ Return
 Return
 
 !+;::
-    StopAutoFix := true
+    StopAutoFix := True
     Send, +{end}
     Hotstring("Reset")
     StopAutoFix := false
 Return
 
 !+i::
-    StopAutoFix := true
+    StopAutoFix := True
     Send +{UP}
     Hotstring("Reset")
     StopAutoFix := false
 Return
 
 !+k::
-    StopAutoFix := true
+    StopAutoFix := True
     Send +{DOWN}
     Hotstring("Reset")
     StopAutoFix := false
@@ -962,7 +962,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
     store := Trim(store)
     If !foundSpace
         store := """" . store . """"
@@ -976,7 +976,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
     store := Trim(store)
     If !foundSpace
         store := "{" . store . "}"
@@ -990,7 +990,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
     store := Trim(store)
     If !foundSpace
         store := "{" . store . "}"
@@ -1004,7 +1004,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
     store := Trim(store)
     If !foundSpace
         store := "<" . store . ">"
@@ -1018,7 +1018,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
     store := Trim(store)
     If !foundSpace
         store := "<" . store . ">"
@@ -1032,7 +1032,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
     store := Trim(store)
     If !foundSpace
         store := "(" . store . ")"
@@ -1046,7 +1046,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
     store := Trim(store)
     If !foundSpace
         store := "(" . store . ")"
@@ -1060,7 +1060,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? true : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
     store := Trim(store)
     If !foundSpace
         store := "\b" . store . "\b"
@@ -1077,21 +1077,21 @@ $!CapsLock::
 Return
 
 !i::
-    StopAutoFix := true
+    StopAutoFix := True
     Send, {UP}
     Hotstring("Reset")
     StopAutoFix := false
 Return
 
 !k::
-    StopAutoFix := true
+    StopAutoFix := True
     Send, {DOWN}
     Hotstring("Reset")
     StopAutoFix := false
 Return
 
 $!j::
-    StopAutoFix := true
+    StopAutoFix := True
     If CapsDown
         Send, {LEFT}
     Else
@@ -1101,7 +1101,7 @@ $!j::
 Return
 
 $!+j::
-    StopAutoFix := true
+    StopAutoFix := True
     SendLevel, 1
     Send, ^+{LEFT}
     Hotstring("Reset")
@@ -1109,7 +1109,7 @@ $!+j::
 Return
 
 $!l::
-    StopAutoFix := true
+    StopAutoFix := True
     If CapsDown
         Send, {RIGHT}
     Else
@@ -1119,7 +1119,7 @@ $!l::
 Return
 
 $!+l::
-    StopAutoFix := true
+    StopAutoFix := True
     Send ^+{RIGHT}
     Hotstring("Reset")
     StopAutoFix := false
@@ -1505,7 +1505,7 @@ Altup:
     }
     Else {
         Critical, On
-        BlockKeyboard(true)
+        BlockKeyboard(True)
         WinGet, actWndID, ID, A
         If (LclickSelected && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
             If (startHighlight) {
@@ -1543,47 +1543,47 @@ Return
 FadeInWin1:
     Critical, On
 
-    WinSet, AlwaysOnTop, Off, ahk_id %lbhwnd%
+    WinSet, AlwaysOnTop, Off, ahk_id %_winIdD%
     WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
 
-    WinSet, AlwaysOnTop, On, ahk_id %lbhwnd%
+    WinSet, AlwaysOnTop, On, ahk_id %_winIdD%
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
-    If (lbhwnd != ValidWindows[1] && Highlighter != ValidWindows[1] && ValidWindows.MaxIndex() >= 1)
+    If (_winIdD != ValidWindows[1] && Highlighter != ValidWindows[1] && ValidWindows.MaxIndex() >= 1)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    If (lbhwnd != ValidWindows[2] && Highlighter != ValidWindows[2] && ValidWindows.MaxIndex() >= 2)
+    If (_winIdD != ValidWindows[2] && Highlighter != ValidWindows[2] && ValidWindows.MaxIndex() >= 2)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    If (lbhwnd != ValidWindows[3] && Highlighter != ValidWindows[3] && ValidWindows.MaxIndex() >= 3)
+    If (_winIdD != ValidWindows[3] && Highlighter != ValidWindows[3] && ValidWindows.MaxIndex() >= 3)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
-    If (lbhwnd != ValidWindows[4] && Highlighter != ValidWindows[4] && ValidWindows.MaxIndex() >= 4)
+    If (_winIdD != ValidWindows[4] && Highlighter != ValidWindows[4] && ValidWindows.MaxIndex() >= 4)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
 
-    If (lbhwnd != ValidWindows[4] &&ValidWindows.MaxIndex() >= 4) {
+    If (_winIdD != ValidWindows[4] &&ValidWindows.MaxIndex() >= 4) {
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[4]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[4]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
-    If (lbhwnd != ValidWindows[3] &&ValidWindows.MaxIndex() >= 3) {
+    If (_winIdD != ValidWindows[3] &&ValidWindows.MaxIndex() >= 3) {
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
-    If (lbhwnd != ValidWindows[2] &&ValidWindows.MaxIndex() >= 2) {
+    If (_winIdD != ValidWindows[2] &&ValidWindows.MaxIndex() >= 2) {
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
-    If (lbhwnd != ValidWindows[1] &&ValidWindows.MaxIndex() >= 1) {
+    If (_winIdD != ValidWindows[1] &&ValidWindows.MaxIndex() >= 1) {
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
 
-    WinSet, AlwaysOnTop, On, ahk_id %lbhwnd%
+    WinSet, AlwaysOnTop, On, ahk_id %_winIdD%
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
-    WinActivate, % "ahk_id " lbhwnd
+    WinActivate, % "ahk_id " _winIdD
 
-    If (ValidWindows.MaxIndex() >= 1 && Highlighter != ValidWindows[1] && lbhwnd != ValidWindows[1]) {
+    If (ValidWindows.MaxIndex() >= 1 && Highlighter != ValidWindows[1] && _winIdD != ValidWindows[1]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
@@ -1592,7 +1592,7 @@ FadeInWin1:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
     }
-    If (ValidWindows.MaxIndex() >= 2 && Highlighter != ValidWindows[2] && lbhwnd != ValidWindows[2]) {
+    If (ValidWindows.MaxIndex() >= 2 && Highlighter != ValidWindows[2] && _winIdD != ValidWindows[2]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
@@ -1601,7 +1601,7 @@ FadeInWin1:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
     }
-    If (ValidWindows.MaxIndex() >= 3 && Highlighter != ValidWindows[3] && lbhwnd != ValidWindows[3]) {
+    If (ValidWindows.MaxIndex() >= 3 && Highlighter != ValidWindows[3] && _winIdD != ValidWindows[3]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
@@ -1610,7 +1610,7 @@ FadeInWin1:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
     }
-    If (ValidWindows.MaxIndex() >= 4 && Highlighter != ValidWindows[4] && lbhwnd != ValidWindows[4]) {
+    If (ValidWindows.MaxIndex() >= 4 && Highlighter != ValidWindows[4] && _winIdD != ValidWindows[4]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
@@ -1620,7 +1620,7 @@ FadeInWin1:
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
     }
 
-    WinSet, AlwaysOnTop, Off , % "ahk_id " lbhwnd
+    WinSet, AlwaysOnTop, Off , % "ahk_id " _winIdD
     Critical, Off
 Return
 
@@ -1761,10 +1761,10 @@ Return
 !Lbutton::
     If hitTab {
         LclickSelected := True
-        MouseGetPos, , , lbhwnd,
-        WinActivate, ahk_id %lbhwnd%
-        WinGetTitle, actTitle, ahk_id %lbhwnd%
-        WinGet, pp, ProcessPath , ahk_id %lbhwnd%
+        MouseGetPos, , , _winIdD,
+        WinActivate, ahk_id %_winIdD%
+        WinGetTitle, actTitle, ahk_id %_winIdD%
+        WinGet, pp, ProcessPath , ahk_id %_winIdD%
 
         GoSub, DrawRect
         WindowTitleID := DrawWindowTitlePopup(actTitle, pp)
@@ -1949,7 +1949,7 @@ Cycle()
     Global MonCount
     Global startHighlight
     Global hitTAB
-    Global lbhwnd
+;    Global _winIdD
     Global LclickSelected
     Global WindowTitleID
 
@@ -1979,8 +1979,8 @@ Cycle()
             If (currentMonHasActWin) {
                 If (IsAltTabWindow(hwndID)) {
                     WinGet, state, MinMax, ahk_id %hwndID%
-                    WinGet, exe, ProcessName, ahk_id %hwndID%
-                    WinGetClass, cl, ahk_id %hwndID%
+                    ; WinGet, exe, ProcessName, ahk_id %hwndID%
+                    ; WinGetClass, cl, ahk_id %hwndID%
                     If (state > -1) {
                         ValidWindows.push(hwndID)
 
@@ -2041,9 +2041,9 @@ Cycle()
 
                 ; KeyWait, Lbutton, D  T0.1
                 ; If !ErrorLevel {
-                    ; MouseGetPos, , , lbhwnd,
-                    ; WinGetTitle, actTitle, ahk_id %lbhwnd%
-                    ; WinGet, pp, ProcessPath , ahk_id %lbhwnd%
+                    ; MouseGetPos, , , _winIdD,
+                    ; WinGetTitle, actTitle, ahk_id %_winIdD%
+                    ; WinGet, pp, ProcessPath , ahk_id %_winIdD%
 
                     ; LclickSelected := True
                     ; GoSub, DrawRect
@@ -2379,22 +2379,22 @@ Return
     SetTimer, mouseTrack, Off
 
     CoordMode, Mouse, Screen
-    MouseGetPos, lbX1, lbY1, lbhwnd, lbctrlN
-    WinGetClass, lClass, ahk_id %lbhwnd%
+    MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
+    WinGetClass, wmClassD, ahk_id %_winIdD%
     Gui, GUI4Boarder: Hide
     initTime := A_TickCount
 
     If (    A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (lbctrlN == "SysListView321" || lbctrlN == "DirectUIHWND2" || lbctrlN == "DirectUIHWND3")) {
+        && (_winCtrlD == "SysListView321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3")) {
 
         currentPath    := ""
 
-        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %lbctrlN% - %A_ThisHotkey% - %A_PriorHotkey%
+        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %_winCtrlD% - %A_ThisHotkey% - %A_PriorHotkey%
 
         If ((LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
-            If (lbctrlN == "SysListView321") {
+            If (_winCtrlD == "SysListView321") {
                 Send, {Backspace}
                 SetTimer, RunDynaExprTimeout, -1
             }
@@ -2407,9 +2407,9 @@ Return
         KeyWait, Lbutton, U T3
         LbuttonEnabled     := False
 
-        If (lClass == "CabinetWClass" || lClass == "#32770") {
+        If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
             loop 100 {
-                currentPath := GetExplorerPath(lbhwnd)
+                currentPath := GetExplorerPath(_winIdD)
                 If (currentPath != "")
                     break
                 sleep, 2
@@ -2417,7 +2417,7 @@ Return
             ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                 try {
-                    exEl := UIA.ElementFromHandle(lbhwnd)
+                    exEl := UIA.ElementFromHandle(_winIdD)
                     shellEl := exEl.FindFirstByName("Items View")
                     shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
                 } catch e {
@@ -2439,16 +2439,16 @@ Return
             SetTimer, SendCtrlAdd, -1
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
-            sleep, 200
+            sleep, 250
             LbuttonEnabled     := True
             Return
         }
     }
 
     prevPath := ""
-    If (lClass == "CabinetWClass" || lClass == "#32770") {
+    If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
         loop 100 {
-            prevPath := GetExplorerPath(lbhwnd)
+            prevPath := GetExplorerPath(_winIdD)
             If (prevPath != "")
                 break
             sleep, 2
@@ -2471,16 +2471,16 @@ Return
 
     rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
-    ; tooltip, %timeDiff% ms - %lbctrlN% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexORrd% - %lbX1% - %lbX2%
+    ; tooltip, %timeDiff% ms - %_winCtrlD% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexORrd% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && ((rlsTime - initTime) < 400)
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)
-        && (InStr(lbctrlN,"SysListView32",True) || lbctrlN == "DirectUIHWND2" || lbctrlN == "DirectUIHWND3" ))  {
+        && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" ))  {
 
         SetTimer, SendCtrlAdd, -125
     }
-    Else If ((lbctrlN == "UpBand1" || InStr(lbctrlN,"ToolbarWindow32", True) || lbctrlN == "Microsoft.UI.Content.DesktopChildSiteBridge1")
+    Else If ((_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
             && ((rlsTime - initTime) < 400)) {
 
             CoordMode, Pixel, Screen
@@ -2548,7 +2548,7 @@ Return
 
             currentPath := ""
             loop 100 {
-                currentPath := GetExplorerPath(lbhwnd)
+                currentPath := GetExplorerPath(_winIdD)
                 If (currentPath != "")
                     break
                 sleep, 2
@@ -2557,13 +2557,13 @@ Return
             SetTimer, SendCtrlAdd, -1
         }
     }
-    Else If ((lbctrlN == "SysTreeView321")
+    Else If ((_winCtrlD == "SysTreeView321")
             && ((rlsTime - initTime) < 400)
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
         loop 100 {
-            currentPath := GetExplorerPath(lbhwnd)
+            currentPath := GetExplorerPath(_winIdD)
             If (currentPath != "" && currentPath != prevPath)
                 break
             sleep, 2
@@ -2583,11 +2583,11 @@ Return
             Else
                 textBoxSelected := False
         } catch e {
-                    tooltip, TIMED OUT!!!!
-                    UIA :=  ;// set to a different value
-                    ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                    UIA := UIA_Interface() ; Initialize UIA interface
-                    UIA.ConnectionTimeout := 6000
+                tooltip, TIMED OUT!!!!
+                UIA :=  ;// set to a different value
+                ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                UIA := UIA_Interface() ; Initialize UIA interface
+                UIA.ConnectionTimeout := 6000
         }
     }
 
@@ -3068,12 +3068,12 @@ SendCtrlAdd:
     MouseGetPos, , , mouseHoverId, initFocusedCtrl
     WinGetClass, lClassCheck, ahk_id %mouseHoverId%
     tooltip, here1
-    If (lClassCheck != lClass) {
+    If (lClassCheck != wmClassD) {
         SetTimer, SendCtrlAdd, Off
         Return
     }
 
-    If (!GetKeyState("LShift","P" ) && lClassCheck == lClass && lclass != "WorkerW" && lclass != "ProgMan" && lclass != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
+    If (!GetKeyState("LShift","P" ) && lClassCheck == wmClassD && wmClassD != "WorkerW" && wmClassD != "ProgMan" && wmClassD != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
 
         while (initFocusedCtrl == "ShellTabWindowClass1") {
             MouseGetPos, , , , initFocusedCtrl
@@ -3382,9 +3382,10 @@ ShowMenu(hMenu, MenuLoop:=0, X:=0, Y:=0, Flags:=0) {            ; Ver 0.61 by SK
 
     Return R
 }
+
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=81064#p533551
 ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ;  ShowMenu v0.63 by SKAN on D39F/D689 @ autohotkey.com/r?t=81064
-Local
+  Local
   If   hMenu Is Not Integer
        hMenu := MenuGetHandle(hMenu)
 
@@ -3616,7 +3617,7 @@ IsAltTabWindow(hWnd) {
       if DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
          return false
       if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
-         return true
+         return True
       else
          return false
    }
@@ -3631,7 +3632,7 @@ IsAltTabWindow(hWnd) {
          if DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
             return false
          if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
-            return true
+            return True
          else
             return false
       }
@@ -3667,7 +3668,7 @@ PropEnumProcEx(hWnd, lpszString, hData, dwData)
       numput(hData, dwData+0, 0, "int")
       Return false
    }
-   Return true
+   Return True
 }
 
 realHwnd(hwnd)
@@ -3789,7 +3790,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     minimizedWindows  := []
     finalWindowsListWithProcAndClass := []
     lastActWinID      := ""
-    hitTAB := False
+    hitTAB            := False
 
     currentMon := MWAGetMonitorMouseIsIn()
     Critical, On
@@ -3827,7 +3828,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     If (numWindows <= 1) {
         SetTimer, mouseTrack, On
         loop 100 {
-            Tooltip, Only %numWindows% window found!
+            Tooltip, Only %numWindows% Window(s) found!
             sleep, 10
         }
         Tooltip,
@@ -3852,8 +3853,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     KeyWait, q, U T1
 
     counter++
-    If (counter > numWindows)
-    {
+    If (counter > numWindows) {
         counter := 1
     }
 
@@ -3863,15 +3863,15 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     {
         KeyWait, Lbutton, D T0.1
         If !ErrorLevel {
-            MouseGetPos, , , lbhwnd,
-            WinGetTitle, actTitle, ahk_id %lbhwnd%
-            WinGet, pp, ProcessPath , ahk_id %lbhwnd%
+            MouseGetPos, , , _winIdD,
+            WinGetTitle, actTitle, ahk_id %_winIdD%
+            WinGet, pp, ProcessPath , ahk_id %_winIdD%
 
             LclickSelected := True
             GoSub, DrawRect
             WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
             WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
-            lastActWinID := lbhwnd
+            lastActWinID := _winIdD
 
             KeyWait, Lbutton, U
         }
@@ -3921,6 +3921,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     }
     until (!GetKeyState("LAlt", "P"))
     GoSub, FadeOutWindowTitle
+   
 
     loop % windowsToMinimize.length()
     {
@@ -3937,7 +3938,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
     }
     Critical, On
-    BlockKeyboard(true)
+    BlockKeyboard(True)
     counter := counter - 1
     If (counter <= 0)
         counter := finalWindowsListWithProcAndClass.MaxIndex()
@@ -3971,6 +3972,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
     WinActivate, ahk_id %lastActWinID%
     BlockKeyboard(false)
+    Return
     Critical, Off
     SetTimer, mouseTrack, On
 }
@@ -4028,7 +4030,7 @@ keyTrack() {
 
     ControlGetFocus, currCtrl, A
     WinGetClass, currClass, A
-    If (currCtrl == "Edit1" && InStr(currClass, "EVERYTHING", true)) {
+    If (currCtrl == "Edit1" && InStr(currClass, "EVERYTHING", True)) {
         StopAutoFix := True
         If ((A_TickCount-TimeOfLastKey) < 700 && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
             SetTimer, keyTrack,   Off
@@ -4038,7 +4040,7 @@ keyTrack() {
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
                 WinGetClass, testClass, A
                 If (testClass == currClass) {
-                    ; BlockKeyboard(true)
+                    ; BlockKeyboard(True)
                     Critical, On
                     Send, ^{NumpadAdd}
                     Critical, Off
@@ -4132,7 +4134,7 @@ mouseTrack() {
         ; && GetKeyState("Lbutton", "P")
         ; && MouseIsOverTitleBar())
     ; {
-        ; StopRecursion := true
+        ; StopRecursion := True
         ; KeyWait, Lbutton, T0.2
         ; If (ErrorLevel == 1 && abs(y-ny) < 3)
         ; {
@@ -4143,7 +4145,7 @@ mouseTrack() {
                 ; Return
             ; }
             ; BlockInput, MouseMove
-            ; LbuttonHeld := true
+            ; LbuttonHeld := True
             ; Send {Lbutton up}
             ; WinGetTitle, Title, A
             ; WinGet, hwndVD, ID, A
@@ -4221,7 +4223,7 @@ mouseTrack() {
             ; && GetKeyState("Lbutton", "P")
             ; && MouseIsOverTitleBar())
     ; {
-        ; StopRecursion := true
+        ; StopRecursion := True
         ; KeyWait, Lbutton, T0.2
         ; If (ErrorLevel == 1 && abs(y-ny) < 3)
         ; {
@@ -4232,7 +4234,7 @@ mouseTrack() {
                 ; Return
             ; }
             ; BlockInput, MouseMove
-            ; LbuttonHeld := true
+            ; LbuttonHeld := True
             ; Send {Lbutton up}
             ; WinGetTitle, Title, A
             ; WinGet, hwndVD, ID, A
@@ -4548,7 +4550,7 @@ ShellMsg( wParam, lParam )
      ; }
 }
 
-MoveAndFadeWindow(Hwnd, initPosx, toRight := true, fadeInOut := "out") {
+MoveAndFadeWindow(Hwnd, initPosx, toRight := True, fadeInOut := "out") {
     DetectHiddenWindows, On
     Critical, On
     If toRight
@@ -4946,7 +4948,7 @@ FindTopMostWindow() {
 ;       actual position of the window versus the position of the window as
 ;       reported by GetWindowRect.  If mouseMoving the window to specific
 ;       coordinates, add these offset values to the appropriate coordinate
-;       (X and/or Y) to reflect the true size of the window.
+;       (X and/or Y) to reflect the True size of the window.
 ;
 ; Returns:
 ;
@@ -4977,12 +4979,12 @@ FindTopMostWindow() {
 ;   actually larger than reported by Windows when using standard commands (Ex:
 ;   WinGetPos, GetWindowRect, etc.) and because of that, are not positioned
 ;   correctly when using standard commands (Ex: gui Show, WinMove, etc.).  This
-;   function was created to 1) identify the true position and size of all
+;   function was created to 1) identify the True position and size of all
 ;   windows regardless of the window attributes, desktop theme, or version of
 ;   Windows and to 2) identify the appropriate offset that is needed to position
 ;   the window if the window is a different size than reported.
 ;
-; * The true size, position, and offset of a window cannot be determined until
+; * The True size, position, and offset of a window cannot be determined until
 ;   the window has been rendered.  See the example script for an example of how
 ;   to use this function to position a new window.
 ;
@@ -5221,7 +5223,7 @@ IsPopup(winID) {
     WinGet, sx, ExStyle, ahk_id %winID%
 
     If(ss & 0x80000000 && sx & 0x00000080)
-        Return true
+        Return True
     Return false
 }
 ; https://www.autohotkey.com/boards/viewtopic.php?t=107842
