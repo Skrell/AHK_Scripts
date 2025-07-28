@@ -42,7 +42,7 @@ SetWinDelay   10
 SetControlDelay 10
 SendMode, Input
 ; SetKeyDelay is not obeyed by SendInput; there is no delay between keystrokes in that mode.
-; This same is True for Send when SendMode Input is in effect.
+; This same is true for Send when SendMode Input is in effect.
 
 Global mouseMoving                 := False
 Global ComboActive                 := False
@@ -1730,7 +1730,7 @@ If !hitTAB {
 }
 Return
 
-!q::
+!`::
     ; tooltip, swapping between windows of app
     StopRecursion  := True
     ComboActive    := False
@@ -2649,150 +2649,154 @@ UpdateInputBoxTitle:
 Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
-!`::
-    StopRecursion   := True
-    SetTimer, mouseTrack, off
-
-    UserInputTrimmed :=
-    StopCheck        := False
-    SearchingWindows := True
-    BlockKeyboard(True)
-    SetTimer, UpdateInputBoxTitle, 5
-    BlockKeyboard(False)
-    InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
-    SetTimer, UpdateInputBoxTitle, off
-
-    If ErrorLevel
+~$Ctrl::
+    if (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < 300)
     {
-        StopRecursion   := False
-        SetTimer, mouseTrack, On
-        Return
-    }
-    else
-    {
-        DetectHiddenWindows, On
-        Critical On
-        totalMenuItemCount := 0
-        onlyTitleFound := ""
-        allWinArray := []
-        winAssoc := {}
-        winArraySort := []
+        StopRecursion   := True
+        SetTimer, mouseTrack, off
 
-        WinGet, id, list
-        Loop, %id%
+        UserInputTrimmed :=
+        StopCheck        := False
+        SearchingWindows := True
+        BlockKeyboard(True)
+        SetTimer, UpdateInputBoxTitle, 5
+        BlockKeyboard(False)
+        InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
+        SetTimer, UpdateInputBoxTitle, off
+
+        If ErrorLevel
         {
-            this_ID := id%A_Index%
-
-            If !JEE_WinHasAltTabIcon(this_ID)
-               continue
-
-            WinGetTitle, title, ahk_id %this_ID%
-            WinGet, procName, ProcessName , ahk_id %this_ID%
-            desknum := findDesktopWindowIsOn(this_ID)
-            ; desknum := 1
-            If desknum <= 0
-                continue
-            finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
-            allWinArray.Push(finalTitle)
-        }
-
-        If (allWinArray.length() == 0) {
-            Critical, Off
-            Tooltip, No matches found...
-            Sleep, 1500
-            Tooltip,
-            StopRecursion := False
+            StopRecursion   := False
             SetTimer, mouseTrack, On
             Return
         }
-
-        For k, v in allWinArray
+        else
         {
-            winAssoc[v] := k
-        }
+            DetectHiddenWindows, On
+            Critical On
+            totalMenuItemCount := 0
+            onlyTitleFound := ""
+            allWinArray := []
+            winAssoc := {}
+            winArraySort := []
 
-        For k, v in winAssoc
-        {
-            winArraySort.Push(k)
-        }
+            WinGet, id, list
+            Loop, %id%
+            {
+                this_ID := id%A_Index%
 
-        desktopEntryLast := ""
+                If !JEE_WinHasAltTabIcon(this_ID)
+                   continue
 
-        Menu, windows, Add
-        Menu, windows, deleteAll
-        For k, ft in winArraySort
-        {
-            splitEntry1 := StrSplit(ft , "^")
-            entry := splitEntry1[1]
-            ahkid := splitEntry1[2]
-
-            WinGet, minState, MinMax, ahk_id %ahkid%
-
-            splitEntry2    := StrSplit(entry, "↑")
-            desktopEntry   := splitEntry2[1]
-            procEntry      := Trim(splitEntry2[2])
-            ; procEntry      := RTrim(procEntry)
-            titleEntry     := Trim(splitEntry2[3])
-
-            WinGet, Path, ProcessPath, ahk_exe %procEntry%
-            If (minState == -1 )
-                finalEntry   := % desktopEntry ":  [" titleEntry "] (" procEntry ")"
-            Else
-                finalEntry   := % desktopEntry ":  " titleEntry " (" procEntry ")"
-            ; tooltip, searching for %UserInputTrimmed%
-            If (!InStr(finalEntry, UserInputTrimmed))
-                continue
-
-            If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
-                Menu, windows, Add
+                WinGetTitle, title, ahk_id %this_ID%
+                WinGet, procName, ProcessName , ahk_id %this_ID%
+                desknum := findDesktopWindowIsOn(this_ID)
+                ; desknum := 1
+                If desknum <= 0
+                    continue
+                finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
+                allWinArray.Push(finalTitle)
             }
-            If (finalEntry != "" && titleEntry != "") {
-                totalMenuItemCount := totalMenuItemCount + 1
-                onlyTitleFound := finalEntry
 
-                Menu, windows, Add, %finalEntry%, ActivateWindow
-                Try
-                    Menu, windows, Icon, %finalEntry%, %Path%,, 32
-                Catch
-                    Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
+            If (allWinArray.length() == 0) {
+                Critical, Off
+                Tooltip, No matches found...
+                Sleep, 1500
+                Tooltip,
+                StopRecursion := False
+                SetTimer, mouseTrack, On
+                Return
             }
-            desktopEntryLast := desktopEntry
-        }
-        Critical Off
 
-        If (totalMenuItemCount == 1 && onlyTitleFound != "") {
-            GoSub, ActivateWindow
-        }
-        Else If (totalMenuItemCount > 1) {
-            SetTimer, RunDynaExpr, -1
+            For k, v in allWinArray
+            {
+                winAssoc[v] := k
+            }
 
-            CoordMode, Mouse, Screen
-            CoordMode, Menu, Screen
-            ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
-            drawX := CoordXCenterScreen()
-            drawY := CoordYCenterScreen()
-            Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
-            ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
-            ; sleep, 100
-            ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
-            ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-            ; Menu, windows, show, % A_ScreenWidth/4, % A_ScreenHeight/3
-            ShowMenuX("windows", drawX, drawY, 0x14)
-            ; Gui, ShadowFrFull:  Hide
+            For k, v in winAssoc
+            {
+                winArraySort.Push(k)
+            }
+
+            desktopEntryLast := ""
+
+            Menu, windows, Add
             Menu, windows, deleteAll
-        }
-        Else {
-            loop 100 {
-                tooltip, No windows found!
-                sleep, 10
-            }
-            tooltip,
-        }
-    }
-    SearchingWindows := False
+            For k, ft in winArraySort
+            {
+                splitEntry1 := StrSplit(ft , "^")
+                entry := splitEntry1[1]
+                ahkid := splitEntry1[2]
 
-    StopRecursion   := False
-    SetTimer, mouseTrack, On
+                WinGet, minState, MinMax, ahk_id %ahkid%
+
+                splitEntry2    := StrSplit(entry, "↑")
+                desktopEntry   := splitEntry2[1]
+                procEntry      := Trim(splitEntry2[2])
+                ; procEntry      := RTrim(procEntry)
+                titleEntry     := Trim(splitEntry2[3])
+
+                WinGet, Path, ProcessPath, ahk_exe %procEntry%
+                If (minState == -1 )
+                    finalEntry   := % desktopEntry ":  [" titleEntry "] (" procEntry ")"
+                Else
+                    finalEntry   := % desktopEntry ":  " titleEntry " (" procEntry ")"
+                ; tooltip, searching for %UserInputTrimmed%
+                If (!InStr(finalEntry, UserInputTrimmed))
+                    continue
+
+                If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
+                    Menu, windows, Add
+                }
+                If (finalEntry != "" && titleEntry != "") {
+                    totalMenuItemCount := totalMenuItemCount + 1
+                    onlyTitleFound := finalEntry
+
+                    Menu, windows, Add, %finalEntry%, ActivateWindow
+                    Try
+                        Menu, windows, Icon, %finalEntry%, %Path%,, 32
+                    Catch
+                        Menu, windows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
+                }
+                desktopEntryLast := desktopEntry
+            }
+            Critical Off
+
+            If (totalMenuItemCount == 1 && onlyTitleFound != "") {
+                GoSub, ActivateWindow
+            }
+            Else If (totalMenuItemCount > 1) {
+                SetTimer, RunDynaExpr, -1
+
+                CoordMode, Mouse, Screen
+                CoordMode, Menu, Screen
+                ; https://www.autohotkey.com/boards/viewtopic.php?style=17&t=107525#p478308
+                drawX := CoordXCenterScreen()
+                drawY := CoordYCenterScreen()
+                Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
+                ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
+                ; sleep, 100
+                ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
+                ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
+                ; Menu, windows, show, % A_ScreenWidth/4, % A_ScreenHeight/3
+                ShowMenuX("windows", drawX, drawY, 0x14)
+                ; Gui, ShadowFrFull:  Hide
+                Menu, windows, deleteAll
+            }
+            Else {
+                loop 100 {
+                    tooltip, No windows found!
+                    sleep, 10
+                }
+                tooltip,
+            }
+        }
+        SearchingWindows := False
+
+        StopRecursion   := False
+        SetTimer, mouseTrack, On
+    }
+    KeyWait, Ctrl, U T10
 Return
 
 ActivateWindow:
@@ -3850,7 +3854,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     GoSub, DrawRect
     DrawWindowTitlePopup(actTitle, pp, True)
 
-    KeyWait, q, U T1
+    KeyWait, ``, U T1
 
     counter++
     If (counter > numWindows) {
@@ -3861,22 +3865,22 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     loop
     {
-        KeyWait, Lbutton, D T0.1
-        If !ErrorLevel {
-            MouseGetPos, , , _winIdD,
-            WinGetTitle, actTitle, ahk_id %_winIdD%
-            WinGet, pp, ProcessPath , ahk_id %_winIdD%
+        ; KeyWait, Lbutton, D T0.1
+        ; If !ErrorLevel {
+            ; MouseGetPos, , , _winIdD,
+            ; WinGetTitle, actTitle, ahk_id %_winIdD%
+            ; WinGet, pp, ProcessPath , ahk_id %_winIdD%
 
-            LclickSelected := True
-            GoSub, DrawRect
-            WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
-            WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
-            lastActWinID := _winIdD
+            ; LclickSelected := True
+            ; GoSub, DrawRect
+            ; WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
+            ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
+            ; lastActWinID := _winIdD
 
-            KeyWait, Lbutton, U
-        }
+            ; KeyWait, Lbutton, U
+        ; }
 
-        KeyWait, q, D T0.1
+        KeyWait, ``, D T0.1
         If !ErrorLevel
         {
             WinGet, mmState, MinMax, ahk_id %hwndId%
@@ -3891,7 +3895,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             GoSub, DrawRect
             DrawWindowTitlePopup(actTitle, pp, True)
 
-            KeyWait, q, U
+            KeyWait, ``, U
             If !ErrorLevel
             {
                 counter++
@@ -3914,14 +3918,9 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                 }
             }
         }
-        WinGetClass, testCl, A
-        If (testCl != activeClass) {
-            Return
-        }
     }
     until (!GetKeyState("LAlt", "P"))
     GoSub, FadeOutWindowTitle
-   
 
     loop % windowsToMinimize.length()
     {
@@ -4034,21 +4033,21 @@ keyTrack() {
         StopAutoFix := True
         If ((A_TickCount-TimeOfLastKey) < 700 && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
             SetTimer, keyTrack,   Off
-            ControlGet, OutputVar1, Visible ,, SysListView321, A
-            ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
-            ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
-            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
+            ; ControlGet, OutputVar1, Visible ,, SysListView321, A
+            ; ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
+            ; ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
+            ; If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
                 WinGetClass, testClass, A
                 If (testClass == currClass) {
-                    ; BlockKeyboard(True)
                     Critical, On
+                    BlockKeyboard(True)
                     Send, ^{NumpadAdd}
+                    BlockKeyboard(false)
                     Critical, Off
-                    ; BlockKeyboard(false)
                     sleep, 400
                     TimeOfLastKey := A_TickCount
                 }
-            }
+            ; }
             SetTimer, keyTrack,   On
         }
         StopAutoFix := False
@@ -4948,7 +4947,7 @@ FindTopMostWindow() {
 ;       actual position of the window versus the position of the window as
 ;       reported by GetWindowRect.  If mouseMoving the window to specific
 ;       coordinates, add these offset values to the appropriate coordinate
-;       (X and/or Y) to reflect the True size of the window.
+;       (X and/or Y) to reflect the true size of the window.
 ;
 ; Returns:
 ;
@@ -4979,12 +4978,12 @@ FindTopMostWindow() {
 ;   actually larger than reported by Windows when using standard commands (Ex:
 ;   WinGetPos, GetWindowRect, etc.) and because of that, are not positioned
 ;   correctly when using standard commands (Ex: gui Show, WinMove, etc.).  This
-;   function was created to 1) identify the True position and size of all
+;   function was created to 1) identify the true position and size of all
 ;   windows regardless of the window attributes, desktop theme, or version of
 ;   Windows and to 2) identify the appropriate offset that is needed to position
 ;   the window if the window is a different size than reported.
 ;
-; * The True size, position, and offset of a window cannot be determined until
+; * The true size, position, and offset of a window cannot be determined until
 ;   the window has been rendered.  See the example script for an example of how
 ;   to use this function to position a new window.
 ;
@@ -9581,6 +9580,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::bascially::basically
 ::checkins::check-ins
 ::inprecisely::imprecisely
+::youa re::you are
 ;------------------------------------------------------------------------------
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
