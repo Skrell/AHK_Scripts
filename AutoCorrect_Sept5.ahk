@@ -1275,7 +1275,7 @@ Esc::
 
                 loop 10 {
                     If !WinExist("ahk_id " . escHwndID) {
-                        GoSub, ClearRect
+                        ClearRect(escHwndID)
                         ActivateTopMostWindow()
                         break
                     }
@@ -1301,7 +1301,7 @@ Esc::
                     WinKill , ahk_id %escHwndID%
                     loop 50 {
                         If !WinExist("ahk_id " . escHwndID) {
-                            GoSub, ClearRect
+                            ClearRect(escHwndID)
                             ActivateTopMostWindow()
                             break
                         }
@@ -1326,7 +1326,7 @@ Return
 
 Esc & x::
     Tooltip, Canceled!
-    GoSub, ClearRect
+    ClearRect()
     CancelClose := True
     sleep, 1500
     Tooltip,
@@ -1535,7 +1535,7 @@ Altup:
     LclickSelected := False
     BlockKeyboard(false)
     Critical, Off
-    Gosub, ClearRect
+    ClearRect()
     ; tooltip,
 Return
 
@@ -1741,7 +1741,7 @@ Return
     WinGetClass, activeClassName, A
 
     HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
-    GoSub, ClearRect
+    ClearRect()
 
     ; tooltip,
     StopRecursion := False
@@ -1949,9 +1949,11 @@ Cycle()
     Global MonCount
     Global startHighlight
     Global hitTAB
-;    Global _winIdD
     Global LclickSelected
     Global WindowTitleID
+
+    prev_exe :=
+    prev_cl  :=
 
     hitTAB := True
 
@@ -2096,9 +2098,14 @@ Cycle()
     Return
 }
 
-ClearRect:
-    Critical, On
+ClearRect(hwnd := "") {
+    Global DrawingRect
+    Global ComboActive
+    Global Highlighter
+    Global GUI4Boarder
+
     If DrawingRect {
+        Critical, On
         loop 5 {
             DrawingRect := False
             If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
@@ -2108,6 +2115,7 @@ ClearRect:
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
             }
+            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
             sleep, 5
         }
 
@@ -2123,12 +2131,21 @@ ClearRect:
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
             }
+            If (hwnd != "" && !WinExist("ahk_id " . hwnd)) {
+                Critical, Off
+                Gui, GUI4Boarder: Hide
+                WinSet, Transparent, 255, ahk_id %Highlighter%
+                WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+                Return
+            }
+            WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
             sleep 5
         }
         Gui, GUI4Boarder: Hide
+        Critical, Off
     }
-    Critical, Off
 Return
+}
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
@@ -2483,60 +2500,62 @@ Return
     Else If ((_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
             && ((rlsTime - initTime) < 400)) {
 
-            CoordMode, Pixel, Screen
-            LB_HexColor1  := 0x0
-            LB_HexColor2  := 0x0
-            LB_HexColor3  := 0x0
-            LB_HexColor4  := 0x0
-            LB_HexColor5  := 0x0
-            LB_HexColor6  := 0x0
-            LB_HexColor7  := 0x0
-            LB_HexColor8  := 0x0
-            LB_HexColor9  := 0x0
-            LB_HexColor10 := 0x0
-            LB_HexColor11 := 0x0
-            LB_HexColor12 := 0x0
-            LB_HexColor13 := 0x0
-            LB_HexColor14 := 0x0
-            LB_HexColor15 := 0x0
+        ; CoordMode, Pixel, Screen
+        ; LB_HexColor1  := 0x0
+        ; LB_HexColor2  := 0x0
+        ; LB_HexColor3  := 0x0
+        ; LB_HexColor4  := 0x0
+        ; LB_HexColor5  := 0x0
+        ; LB_HexColor6  := 0x0
+        ; LB_HexColor7  := 0x0
+        ; LB_HexColor8  := 0x0
+        ; LB_HexColor9  := 0x0
+        ; LB_HexColor10 := 0x0
+        ; LB_HexColor11 := 0x0
+        ; LB_HexColor12 := 0x0
+        ; LB_HexColor13 := 0x0
+        ; LB_HexColor14 := 0x0
+        ; LB_HexColor15 := 0x0
 
-            lbX1 -= 15
-            lbY1 -= 15
-            loop 15 {
-                PixelGetColor, LB_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
-                lbX1 += 1
-                lbY1 += 1
-                LB_HexORrd |= LB_HexColor%A_Index%
-                If (GetKeyState("Lbutton","P")) {
-                    CoordMode, Mouse, screen
-                    MouseGetPos, lbX2, lbY2
-                    SetTimer, keyTrack, On
-                    SetTimer, mouseTrack, On
-                    Return
-                }
-            }
-            CoordMode, Mouse, screen
-            LB_HexORrd := Format("0x{:x}", LB_HexORrd)
+        ; lbX1 -= 5
+        ; lbY1 -= 5
+        ; allValues := ""
+        ; loop 11 {
+            ; PixelGetColor, LB_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
+            ; lbX1 += 1
+            ; lbY1 += 1
+            ; LB_HexORrd |= LB_HexColor%A_Index%
+            ; If (GetKeyState("Lbutton","P")) {
+                ; CoordMode, Mouse, screen
+                ; MouseGetPos, lbX2, lbY2
+                ; SetTimer, keyTrack, On
+                ; SetTimer, mouseTrack, On
+                ; Return
+            ; }
+            ; allValues .= "Value " . A_Index . ": " .  LB_HexColor%A_Index% . "`n"
+        ; }
+        ; CoordMode, Mouse, screen
+        ; LB_HexORrd := Format("0x{:x}", LB_HexORrd)
+        ; ToolTip, %allValues%
 
-            If (LB_HexColor1  != LB_HexORrd
-             || LB_HexColor2  != LB_HexORrd
-             || LB_HexColor3  != LB_HexORrd
-             || LB_HexColor4  != LB_HexORrd
-             || LB_HexColor5  != LB_HexORrd
-             || LB_HexColor6  != LB_HexORrd
-             || LB_HexColor7  != LB_HexORrd
-             || LB_HexColor8  != LB_HexORrd
-             || LB_HexColor9  != LB_HexORrd
-             || LB_HexColor10 != LB_HexORrd
-             || LB_HexColor11 != LB_HexORrd
-             || LB_HexColor12 != LB_HexORrd
-             || LB_HexColor13 != LB_HexORrd
-             || LB_HexColor14 != LB_HexORrd
-             || LB_HexColor15 != LB_HexORrd) {
+        ; If (    LB_HexColor1  != LB_HexORrd
+             ; || LB_HexColor2  != LB_HexORrd
+             ; || LB_HexColor3  != LB_HexORrd
+             ; || LB_HexColor4  != LB_HexORrd
+             ; || LB_HexColor5  != LB_HexORrd
+             ; || LB_HexColor6  != LB_HexORrd
+             ; || LB_HexColor7  != LB_HexORrd
+             ; || LB_HexColor8  != LB_HexORrd
+             ; || LB_HexColor9  != LB_HexORrd
+             ; || LB_HexColor10 != LB_HexORrd
+             ; || LB_HexColor11 != LB_HexORrd
+             ; || LB_HexColor12 != LB_HexORrd
+             ; || LB_HexColor13 != LB_HexORrd
+             ; || LB_HexColor14 != LB_HexORrd
+             ; || LB_HexColor15 != LB_HexORrd) {
 
-            tooltip, controlbar button
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
-            If (pt.CurrentControlType == 50000 && pt.HelpText == "") {
+            If (pt.CurrentControlType == 50000 || pt.CurrentControlType == 50020) {
                 sleep, 150
                 If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
                     SetTimer, keyTrack, On
@@ -2544,18 +2563,16 @@ Return
                     tooltip, forget it
                     Return
                 }
+                currentPath := ""
+                loop 100 {
+                    currentPath := GetExplorerPath(_winIdD)
+                    If (currentPath != "")
+                        break
+                    sleep, 2
+                }
+                SetTimer, SendCtrlAdd, -1
             }
-
-            currentPath := ""
-            loop 100 {
-                currentPath := GetExplorerPath(_winIdD)
-                If (currentPath != "")
-                    break
-                sleep, 2
-            }
-            tooltip, Sending
-            SetTimer, SendCtrlAdd, -1
-        }
+        ; }
     }
     Else If ((_winCtrlD == "SysTreeView321")
             && ((rlsTime - initTime) < 400)
@@ -2650,7 +2667,7 @@ Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 ~$Ctrl::
-    if (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < 300)
+    if (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < 250)
     {
         StopRecursion   := True
         SetTimer, mouseTrack, off
@@ -2926,7 +2943,7 @@ ActivateWindow:
      }
     GoSub, DrawRect
     sleep, 200
-    GoSub, ClearRect
+    ClearRect()
     ; }
     Process, Close, Expr_Name
     Process, Close, ExprAltUp_Name
@@ -3161,7 +3178,7 @@ SendCtrlAdd:
                 Send, ^{NumpadAdd}
 
                 If (prevPath != "" && currentPath != "" && prevPath != currentPath)
-                    tooltip, sent to %TargetControl% - %prevPath% - %currentPath%
+                    tooltip, sent to %TargetControl% - %prevPath% VS %currentPath%
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
                     sleep, 125
@@ -3221,7 +3238,7 @@ explorerGetPath(hwnd := 0) { ; https://www.autohotkey.com/boards/viewtopic.php?p
         Gui, GUI4Boarder: Color, 0xFF0000
     GoSub, DrawRect
     sleep, 100
-    GoSub, ClearRect
+    ClearRect()
     Gui, GUI4Boarder: Color, %border_color%
     WinSet, AlwaysOnTop, toggle, ahk_id %hwndId%
     BlockInput, MouseMoveOff
@@ -4327,7 +4344,7 @@ mouseTrack() {
                 If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
                     WinActivate, ahk_id %hwnd_id%
                     GoSub, DrawRect
-                    GoSub, ClearRect
+                    ClearRect()
                     Gui, GUI4Boarder: Hide
                     break
                 }
@@ -5157,7 +5174,7 @@ GetExplorerPath(hwnd:="") {
         ; Trim leading/trailing spaces from each part
         String1 := Trim(parts1)
         String2 := Trim(parts2)
-        tooltip, %String1%
+        ; tooltip, %String1%
         Return String1
     }
     else {
@@ -9581,6 +9598,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::checkins::check-ins
 ::inprecisely::imprecisely
 ::youa re::you are
+::asychronously::asynchronously
+::depdenency::dependency
 ;------------------------------------------------------------------------------
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
