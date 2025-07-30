@@ -94,6 +94,7 @@ Global MbuttonIsEnter              := False
 Global textBoxSelected             := False
 Global disableArrows               := false
 Global WindowTitleID               :=
+Global keys                        = abcdefghijklmnopqrstuvwxyz
 
 Process, Priority,, High
 
@@ -267,15 +268,8 @@ OnExit("PreventRecur")
 ;------------------------------------------------------------------------------
 ; The first line of code below is the set of letters, digits, and/or symbols
 ; that are eligible for this type of correction.  Customize if you wish:
-keys = abcdefghijklmnopqrstuvwxyz
-Loop Parse, keys
-{
-    HotKey ~+%A_LoopField%, HotyANDFixSlash
-}
-Loop Parse, keys
-{
-    HotKey ~%A_LoopField%, HotyANDFixSlash
-}
+
+ReAssignHotkeys()
 numbers = 0123456789
 Loop Parse, numbers
 {
@@ -416,6 +410,36 @@ IsThisHotKeyLowerCase() {
     Global keys
     return (StrLen(A_ThisHotKey) == 2 && inStr(keys, Substr(A_ThisHotKey,2,1), false))
 }
+
+ReAssignHotkeys() {
+    Global keys
+    Loop Parse, keys
+    {
+        HotKey ~+%A_LoopField%, HotyANDFixSlash
+    }
+    Loop Parse, keys
+    {
+        HotKey ~%A_LoopField%, HotyANDFixSlash
+    }
+    Return
+}
+
+DeAssignHotkeys() {
+    Global keys
+    Loop Parse, keys
+    {
+        HotKey +%A_LoopField%, DoNothing
+    }
+    Loop Parse, keys
+    {
+        HotKey %A_LoopField%, DoNothing
+    }
+    Return
+}
+
+DoNothing:
+Return
+
 ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
@@ -1998,8 +2022,12 @@ Cycle()
                                 Else {
                                     Critical, Off
                                     GoSub, DrawRect
-                                    If !GetKeyState("LAlt","P") || GetKeyState("q","P")
+                                    If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
+                                        GroupedWindows = []
+                                        ValidWindows   = []
+                                        Critical, Off
                                         Return
+                                    }
                                 }
                             }
                             If (GroupedWindows.MaxIndex() == 3 && failedSwitch) {
@@ -2009,6 +2037,8 @@ Cycle()
                                 GoSub, DrawRect
                             }
                             If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
+                                GroupedWindows = []
+                                ValidWindows   = []
                                 Critical, Off
                                 Return
                             }
@@ -2408,7 +2438,7 @@ Return
 
         currentPath    := ""
 
-        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexColor3%  - %X1% %X2% %Y1% %Y2% - %_winCtrlD% - %A_ThisHotkey% - %A_PriorHotkey%
+        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3%  - %X1% %X2% %Y1% %Y2% - %_winCtrlD% - %A_ThisHotkey% - %A_PriorHotkey%
 
         If ((LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
             If (_winCtrlD == "SysListView321") {
@@ -2427,7 +2457,7 @@ Return
         If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
             loop 100 {
                 currentPath := GetExplorerPath(_winIdD)
-                If (currentPath != "")
+                If (currentPath != "" && prevPath != currentPath )
                     break
                 sleep, 2
             }
@@ -2566,7 +2596,7 @@ Return
                 currentPath := ""
                 loop 100 {
                     currentPath := GetExplorerPath(_winIdD)
-                    If (currentPath != "")
+                    If (currentPath != "" && currentPath != prevPath)
                         break
                     sleep, 2
                 }
@@ -2683,7 +2713,8 @@ Return
 
         If ErrorLevel
         {
-            StopRecursion   := False
+            StopRecursion    := False
+            SearchingWindows := False
             SetTimer, mouseTrack, On
             Return
         }
@@ -4019,6 +4050,7 @@ HideTrayTip() {
 }
 
 keyTrack() {
+    Global keys
     ListLines, Off
     Global StopAutoFix
     Global TimeOfLastKey
@@ -4057,9 +4089,13 @@ keyTrack() {
                 WinGetClass, testClass, A
                 If (testClass == currClass) {
                     Critical, On
-                    BlockKeyboard(True)
+                    ; BlockKeyboard(True)
+                    DeAssignHotkeys()
                     Send, ^{NumpadAdd}
-                    BlockKeyboard(false)
+                    If (inStr(keys, A_PriorKey, false) && A_PriorKey != A_ThisHotKey)
+                        Send, %A_PriorKey%
+                    ReAssignHotkeys()
+                    ; BlockKeyboard(false)
                     Critical, Off
                     sleep, 400
                     TimeOfLastKey := A_TickCount
@@ -5168,14 +5204,16 @@ GetExplorerPath(hwnd:="") {
     }
     else if (clCheck == "CabinetWClass") {
         WinGetTitle, expTitle, ahk_id %hwnd%
-        ; Split the string using the hyphen delimiter
-        StringSplit, parts, expTitle, -
+        loop {
+            If !inStr(expTitle, "\", false)
+                WinGetTitle, expTitle, ahk_id %hwnd%
+            Else
+                break
+        }
+        cleaned := RegExReplace(expTitle, " - File Explorer$")  ; `$` anchors to the end
 
-        ; Trim leading/trailing spaces from each part
-        String1 := Trim(parts1)
-        String2 := Trim(parts2)
-        ; tooltip, %String1%
-        Return String1
+        ; tooltip, %expTitle% - %cleaned%
+        Return cleaned
     }
     else {
         activeTab := 0
@@ -9319,6 +9357,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::coudlnt::couldn't
 ::didint::didn't
 ::didnt::didn't
+::dint::didn't
 ::didtn::didn't
 ::dno't::don't
 ::dnot::don't
@@ -9331,6 +9370,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::doesnt::doesn't
 ::doest::doesn't
 ::doestn::doesn't
+::doent::doesn't
+::dosnt::doesn't
 ::dont::don't
 ::dosen't::doesn't
 ::dosn't::doesn't
