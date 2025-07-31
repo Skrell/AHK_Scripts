@@ -94,7 +94,8 @@ Global MbuttonIsEnter              := False
 Global textBoxSelected             := False
 Global disableArrows               := false
 Global WindowTitleID               :=
-Global keys                        = abcdefghijklmnopqrstuvwxyz
+Global keys                        := "abcdefghijklmnopqrstuvwxyz"
+Global numbers                     := "0123456789"
 
 Process, Priority,, High
 
@@ -270,11 +271,6 @@ OnExit("PreventRecur")
 ; that are eligible for this type of correction.  Customize if you wish:
 
 ReAssignHotkeys()
-numbers = 0123456789
-Loop Parse, numbers
-{
-    HotKey ~%A_LoopField%, Hoty
-}
 
 HotKey ~/,  FixSlash
 HotKey ~',  Hoty
@@ -369,6 +365,7 @@ Return
 
 FixSlash:
     TimeOfLastKey := A_TickCount
+
     If !IsGoogleDocWindow() && (!StopAutoFix && IsPriorHotKeyLetterKey()) && A_ThisHotkey == "~/"
         disableEnter := True
     Else If !IsGoogleDocWindow() && (!StopAutoFix && IsThisHotKeyLetterKey())
@@ -413,26 +410,38 @@ IsThisHotKeyLowerCase() {
 
 ReAssignHotkeys() {
     Global keys
+    Global numbers
+
     Loop Parse, keys
     {
-        HotKey ~+%A_LoopField%, HotyANDFixSlash
+        HotKey ~+%A_LoopField%, HotyANDFixSlash, On
     }
     Loop Parse, keys
     {
-        HotKey ~%A_LoopField%, HotyANDFixSlash
+        HotKey ~%A_LoopField%, HotyANDFixSlash, On
+    }
+    Loop Parse, numbers
+    {
+        HotKey ~%A_LoopField%, HotyANDFixSlash, On
     }
     Return
 }
 
 DeAssignHotkeys() {
     Global keys
+    Global numbers
+
     Loop Parse, keys
     {
-        HotKey +%A_LoopField%, DoNothing
+        HotKey +%A_LoopField%, DoNothing, On
     }
     Loop Parse, keys
     {
-        HotKey %A_LoopField%, DoNothing
+        HotKey %A_LoopField%, DoNothing, On
+    }
+    Loop Parse, numbers
+    {
+        HotKey %A_LoopField%, DoNothing, On
     }
     Return
 }
@@ -608,8 +617,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         Return
                     }
                 }
+                DeAssignHotkeys()
                 Critical, On
-                BlockKeyboard(True)
+                ; BlockKeyboard(True)
                 ; BlockInput, On
                 If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                     loop, 100 {
@@ -625,12 +635,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     SetTimer, keyTrack,   On
                     SetTimer, mouseTrack, On
                     LbuttonEnabled := True
-                    BlockKeyboard(false)
                     Critical, Off
+                    ; BlockKeyboard(false)
+                    ReAssignHotkeys()
                     Return
                 }
                 Else {
-                    Send, {Ctrl UP}
                     WaitForFadeInStop(hWnd)
                     Send, ^{NumpadAdd}
 
@@ -650,26 +660,25 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                 SetTimer, keyTrack,   On
                                 SetTimer, mouseTrack, On
                                 LbuttonEnabled := True
-                                BlockKeyboard(false)
                                 Critical, Off
+                                ; BlockKeyboard(false)
+                                ReAssignHotkeys()
                                 Return
                             }
                         }
                     }
 
-                    ControlGetFocus, isEdit1 , ahk_id %hWnd%
-                    If (isEdit1 == "Edit1" && OutputVar1 == 1 && !InStr(vWinTitle, "Save", True)) {
-                        ; ControlGetText, isText , Edit1, ahk_id %hWnd%
-                        ; If (!InStr(vWinTitle, "Save", True)) {
-                            Send, {Ctrl Up}
-                            Send, {Backspace}{Backspace}
-                            ; break
-                        ; }
-                    }
+                    ; ControlGetFocus, isEdit1 , ahk_id %hWnd%
+                    ; If (isEdit1 == "Edit1" && OutputVar1 == 1 && !InStr(vWinTitle, "Save", True)) {
+                        ; Send, {Ctrl Up}
+                        ; Send, {Backspace}{Backspace}
+                        ; break
+                    ; }
                 }
                 ; BlockInput, Off
-                BlockKeyboard(false)
+                ; BlockKeyboard(false)
                 Critical, Off
+                ReAssignHotkeys()
             }
 
             LbuttonEnabled := True
@@ -1094,9 +1103,23 @@ Return
     Critical, Off
 Return
 
-$!CapsLock::
+!+5::
+    Critical, On
+    store := Clip()
+    len := StrLen(store)
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    store := Trim(store)
+    If !foundSpace
+        store := "%" . store . "%"
+    Else
+        store := "%" . store . "% "
+    Clip(store)
+    Critical, Off
+Return
+
+$!Space::
     CapsDown := True
-    KeyWait, CapsLock, U T10
+    KeyWait, Space, U T10
     CapsDown := False
 Return
 
@@ -2684,7 +2707,7 @@ UpdateInputBoxTitle:
     ControlGetText, memotext, Edit1, Type Up to 3 Letters of a Window Title to Search
     StringLen, memolength, memotext
 
-    If ((memolength >= 2 && (A_TickCount-TimeOfLastKey > 400)) || (memolength >= 1 && InStr(memotext, " "))) {
+    If ((memolength >= 3 && (A_TickCount-TimeOfLastKey > 400)) || (memolength >= 1 && InStr(memotext, " "))) {
         UserInputTrimmed := Trim(memotext)
         Send, {ENTER}
         SetTimer, UpdateInputBoxTitle, off
@@ -4082,25 +4105,23 @@ keyTrack() {
         StopAutoFix := True
         If ((A_TickCount-TimeOfLastKey) < 700 && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
             SetTimer, keyTrack,   Off
-            ; ControlGet, OutputVar1, Visible ,, SysListView321, A
-            ; ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  A
-            ; ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  A
-            ; If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
-                WinGetClass, testClass, A
-                If (testClass == currClass) {
-                    Critical, On
-                    ; BlockKeyboard(True)
-                    DeAssignHotkeys()
-                    Send, ^{NumpadAdd}
-                    If (inStr(keys, A_PriorKey, false) && A_PriorKey != A_ThisHotKey)
-                        Send, %A_PriorKey%
-                    ReAssignHotkeys()
-                    ; BlockKeyboard(false)
-                    Critical, Off
-                    sleep, 400
-                    TimeOfLastKey := A_TickCount
-                }
-            ; }
+            WinGetClass, testClass, A
+
+            If (testClass == currClass) {
+                lastHotkeyBefore := A_PriorHotKey
+                DeAssignHotkeys()
+
+                Critical, On
+                Send, ^{NumpadAdd}
+                Critical, Off
+
+                If (inStr(keys, A_PriorHotkey, false) && A_PriorHotkey != lastHotkeyBefore)
+                    Send, %A_PriorKey%
+                ReAssignHotkeys()
+                ; BlockKeyboard(false)
+                sleep, 400
+                TimeOfLastKey := A_TickCount
+            }
             SetTimer, keyTrack,   On
         }
         StopAutoFix := False
@@ -6278,6 +6299,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?*:insatll::install
 :?*:istall::install
 :?*:intall::install
+:?*:usou::uous
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
