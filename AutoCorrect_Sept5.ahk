@@ -2575,18 +2575,6 @@ Return
             && ((rlsTime - initTime) < 400)
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
-        try {
-            exEl := UIA.ElementFromHandle(_winIdD)
-            shellEl := exEl.FindFirstByName("Items View")
-            shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
-        } catch e {
-            tooltip, TIMED OUT!!!!
-            UIA :=  ;// set to a different value
-            ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-            UIA := UIA_Interface() ; Initialize UIA interface
-            UIA.ConnectionTimeout := 6000
-        }
-
         currentPath := ""
         loop 100 {
             currentPath := GetExplorerPath(_winIdD)
