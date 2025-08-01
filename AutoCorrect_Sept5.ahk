@@ -2517,14 +2517,12 @@ Return
 
     prevPath := ""
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
-        loop 100 {
-            prevPath := GetExplorerPath(_winIdD)
-            If (prevPath != "")
-                break
-            sleep, 2
-        }
+        prevPath := GetExplorerPath(_winIdD)
     }
 
+    LBD_HexColor1 := 0x000000
+    LBD_HexColor2 := 0x000000
+    LBD_HexColor3 := 0x000000
     CoordMode, Pixel, Screen
     lbX1 -= 3
     lbY1 -= 3
@@ -2533,15 +2531,15 @@ Return
         lbX1 += 1
         lbY1 += 1
     }
+    CoordMode, Mouse, screen
 
     KeyWait, LButton, U T5
 
-    CoordMode, Mouse, screen
     MouseGetPos, lbX2, lbY2,
 
     rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
-    ; tooltip, %timeDiff% ms - %_winCtrlD% - %LB_HexColor1% - %LB_HexColor2% - %LB_HexORrd% - %lbX1% - %lbX2%
+    ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && ((rlsTime - initTime) < 400)
@@ -2552,60 +2550,6 @@ Return
     }
     Else If ((_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
             && ((rlsTime - initTime) < 400)) {
-
-        ; CoordMode, Pixel, Screen
-        ; LB_HexColor1  := 0x0
-        ; LB_HexColor2  := 0x0
-        ; LB_HexColor3  := 0x0
-        ; LB_HexColor4  := 0x0
-        ; LB_HexColor5  := 0x0
-        ; LB_HexColor6  := 0x0
-        ; LB_HexColor7  := 0x0
-        ; LB_HexColor8  := 0x0
-        ; LB_HexColor9  := 0x0
-        ; LB_HexColor10 := 0x0
-        ; LB_HexColor11 := 0x0
-        ; LB_HexColor12 := 0x0
-        ; LB_HexColor13 := 0x0
-        ; LB_HexColor14 := 0x0
-        ; LB_HexColor15 := 0x0
-
-        ; lbX1 -= 5
-        ; lbY1 -= 5
-        ; allValues := ""
-        ; loop 11 {
-            ; PixelGetColor, LB_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
-            ; lbX1 += 1
-            ; lbY1 += 1
-            ; LB_HexORrd |= LB_HexColor%A_Index%
-            ; If (GetKeyState("Lbutton","P")) {
-                ; CoordMode, Mouse, screen
-                ; MouseGetPos, lbX2, lbY2
-                ; SetTimer, keyTrack, On
-                ; SetTimer, mouseTrack, On
-                ; Return
-            ; }
-            ; allValues .= "Value " . A_Index . ": " .  LB_HexColor%A_Index% . "`n"
-        ; }
-        ; CoordMode, Mouse, screen
-        ; LB_HexORrd := Format("0x{:x}", LB_HexORrd)
-        ; ToolTip, %allValues%
-
-        ; If (    LB_HexColor1  != LB_HexORrd
-             ; || LB_HexColor2  != LB_HexORrd
-             ; || LB_HexColor3  != LB_HexORrd
-             ; || LB_HexColor4  != LB_HexORrd
-             ; || LB_HexColor5  != LB_HexORrd
-             ; || LB_HexColor6  != LB_HexORrd
-             ; || LB_HexColor7  != LB_HexORrd
-             ; || LB_HexColor8  != LB_HexORrd
-             ; || LB_HexColor9  != LB_HexORrd
-             ; || LB_HexColor10 != LB_HexORrd
-             ; || LB_HexColor11 != LB_HexORrd
-             ; || LB_HexColor12 != LB_HexORrd
-             ; || LB_HexColor13 != LB_HexORrd
-             ; || LB_HexColor14 != LB_HexORrd
-             ; || LB_HexColor15 != LB_HexORrd) {
 
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
             If (pt.CurrentControlType == 50000 || pt.CurrentControlType == 50020) {
@@ -2631,6 +2575,18 @@ Return
             && ((rlsTime - initTime) < 400)
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
+        try {
+            exEl := UIA.ElementFromHandle(_winIdD)
+            shellEl := exEl.FindFirstByName("Items View")
+            shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+        } catch e {
+            tooltip, TIMED OUT!!!!
+            UIA :=  ;// set to a different value
+            ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+            UIA := UIA_Interface() ; Initialize UIA interface
+            UIA.ConnectionTimeout := 6000
+        }
+
         currentPath := ""
         loop 100 {
             currentPath := GetExplorerPath(_winIdD)
@@ -2638,6 +2594,7 @@ Return
                 break
             sleep, 2
         }
+        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
         SetTimer, SendCtrlAdd, -1
     }
     Else {
@@ -3179,7 +3136,7 @@ SendCtrlAdd:
 
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
 
-            ; tooltip, init focus is %initFocusedCtrl%
+            tooltip, init focus is %initFocusedCtrl%
             WinGet, proc, ProcessName, ahk_id %mouseHoverId%
             WinGetTitle, vWinTitle, ahk_id %mouseHoverId%
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
@@ -3216,7 +3173,7 @@ SendCtrlAdd:
                     TargetControl := "DirectUIHWND3"
             }
 
-            ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrl% - %OutHeight2% - %OutHeight3%
+            tooltip, targeted is %TargetControl% with init at %initFocusedCtrl% - %OutHeight2% - %OutHeight3%
             If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                 loop, 500 {
                     ControlFocus, %TargetControl%, ahk_id %mouseHoverId%
@@ -3251,10 +3208,6 @@ SendCtrlAdd:
             BlockInput, Off
             Critical, Off
         }
-        ; Else {
-            ; Send, ^{NumpadAdd}
-            ; tooltip, sent
-        ; }
     }
 Return
 
@@ -5208,6 +5161,7 @@ GetActiveExplorerPath()
 
 ; https://www.reddit.com/r/AutoHotkey/comments/10fmk4h/get_path_of_active_explorer_tab/
 GetExplorerPath(hwnd:="") {
+    ; tooltip, entering
     if !hwnd
         hwnd := WinExist("A")
 
@@ -5225,18 +5179,33 @@ GetExplorerPath(hwnd:="") {
     }
     else if (clCheck == "CabinetWClass") {
         WinGetTitle, expTitle, ahk_id %hwnd%
-        loop {
-            If !inStr(expTitle, "\", false)
-                WinGetTitle, expTitle, ahk_id %hwnd%
-            Else
+        cleaned := StrReplace(expTitle, " - File Explorer",,,1)
+        ; tooltip, cleaned is %cleaned%
+        loop 500 {
+            If (cleaned == "This PC"
+                || cleaned == "Downloads"
+                || cleaned == "Recycle Bin"
+                || cleaned == "Pictures"
+                || cleaned == "Videos"
+                || cleaned == "Documents"
+                || cleaned == "Music"
+                || cleaned == "Desktop" )
                 break
+            Else If inStr(cleaned, "\", false) {
+                break
+            }
+            Else {
+                WinGetTitle, expTitle, ahk_id %hwnd%
+                cleaned := StrReplace(expTitle, " - File Explorer",,,1)
+            }
+            sleep, 1
         }
-        cleaned := RegExReplace(expTitle, " - File Explorer$")  ; `$` anchors to the end
 
-        ; tooltip, %expTitle% - %cleaned%
+        ; tooltip, exiting
         Return cleaned
     }
     else {
+        tooltip, SOMETHING HAS GONE VERY WRONG
         activeTab := 0
         try {
             ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
@@ -5264,6 +5233,7 @@ GetExplorerPath(hwnd:="") {
             ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
             If (dir == "" || !InStr(dir,"address",false))
                 ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+            tooltip, exiting 2
             Return dir
         }
     }
@@ -6043,14 +6013,14 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:itons::tions
 :?:emnt::ment
 :?:mnet::ment
+:?:metn::ment
+:?:emnts::ments
 :?:oitn::oint
 :?:kgin::king
 :?:ferance::ference
-:?:metn::ment
 :?:dya::day
 :?:mhz::Mhz
 :?:toins::tions
-:?:emnts::ments
 :?:ghz::Ghz
 :?:aition::ation
 :?:aotin::ation
@@ -6071,6 +6041,15 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:ign::ing
 :?:ngi::ing
 :?:yda::day
+:?:gound::ground
+:?:grund::ground
+:?:grond::ground
+:?:groud::ground
+:?:groun::ground
+:?:rgound::ground
+:?:gorund::ground
+:?:gruond::ground
+:?:gronud::ground
 :?:groudn::ground
 :?:aliyt::ality
 :?:laity::ality
