@@ -5189,11 +5189,9 @@ GetExplorerPath(hwnd:="") {
             sleep, 1
         }
 
-        ; tooltip, exiting
         Return cleaned
     }
     else {
-        tooltip, SOMETHING HAS GONE VERY WRONG
         activeTab := 0
         try {
             ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
@@ -5221,7 +5219,7 @@ GetExplorerPath(hwnd:="") {
             ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
             If (dir == "" || !InStr(dir,"address",false))
                 ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-            tooltip, exiting 2
+
             Return dir
         }
     }
