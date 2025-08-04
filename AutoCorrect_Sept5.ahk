@@ -5944,7 +5944,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ot::to
 ::fo::of
 ::ni::in
-::fi::If
+::fi::if
 ::pu::up
 ::od::do
 ::ro::or
@@ -6458,7 +6458,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::alrigth::alright
 ::alriht::alright
 ::alsation::Alsatian
-::alse::Else
+::alse::else
 ::alseep::asleep
 ::alsot::also
 ::alterior::ulterior
