@@ -8,7 +8,7 @@
 ; dummyFunction1() {
     ; static dummyStatic1 := VD.init()
 ; }
-; the auto-exec section ends at the first hotkey/hotstring or Return or exit or at the script end - whatever comes first; function definitions get ignored by the execution flow.
+; the auto-exec section ends at the first hotkey/hotstring or return or exit or at the script end - whatever comes first; function definitions get ignored by the execution flow.
 #NoEnv
 #SingleInstance
 #InstallMouseHook
@@ -269,7 +269,7 @@ OnExit("PreventRecur")
 ; From Laszlo's script at http://www.autohotkey.com/forum/topic9689.html
 ;------------------------------------------------------------------------------
 ; The first line of code below is the set of letters, digits, and/or symbols
-; that are eligible for this type of correction.  Customize If you wish:
+; that are eligible for this type of correction.  Customize if you wish:
 
 ReAssignHotkeys()
 
@@ -2536,7 +2536,7 @@ Return
 
     KeyWait, LButton, U T5
 
-    MouseGetPos, lbX2, lbY2,
+    MouseGetPos, lbX2, lbY2, _winIdU
 
     rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
@@ -2550,8 +2550,8 @@ Return
         SetTimer, SendCtrlAdd, -125
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (_winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3") 
-        && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3 != 0xFFFFFF) && (LBD_HexColor4 != 0xFFFFFF) && (LBD_HexColor5 != 0xFFFFFF)) {
+        && (_winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3")
+        && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3 != 0xFFFFFF)) {
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
@@ -2582,7 +2582,7 @@ Return
             }
         } catch e {
         }
-        
+
         If inStr(pt.Name, "Refresh", True)
             GoSub, SendCtrlAdd
         Else {
@@ -3188,7 +3188,7 @@ SendCtrlAdd:
                     TargetControl := "DirectUIHWND3"
             }
 
-            tooltip, targeted is %TargetControl% with init at %initFocusedCtrl% - %OutHeight2% - %OutHeight3%
+            tooltip, targeted is %TargetControl% with init at %initFocusedCtrl% ; - %OutHeight2% - %OutHeight3%
             If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                 loop, 500 {
                     ControlFocus, %TargetControl%, ahk_id %mouseHoverId%
@@ -4079,14 +4079,16 @@ keyTrack() {
             WinGetClass, testClass, A
 
             If (testClass == currClass) {
-                lastHotkeyBefore := A_PriorHotKey
+                lastHotkeyBefore := ""
+                If inStr(keys, A_PriorKey, False)
+                    lastHotkeyBefore := A_PriorKey
                 DeAssignHotkeys()
 
                 Critical, On
                 Send, ^{NumpadAdd}
                 Critical, Off
 
-                If (inStr(keys, A_PriorHotkey, False) && A_PriorHotkey != lastHotkeyBefore)
+                If (inStr(keys, A_PriorKey, False) && lastHotkeyBefore != "" && A_PriorKey != lastHotkeyBefore)
                     Send, %A_PriorKey%
                 ReAssignHotkeys()
                 ; BlockKeyboard(False)
@@ -5003,7 +5005,7 @@ FindTopMostWindow() {
 ;   The next 8 bytes contain the X and Y offsets (4-byte integer for X and
 ;   4-byte integer for Y).
 ;
-;   Also If successful (and If defined), the output variables (X, Y, Width,
+;   Also if successful (and if defined), the output variables (X, Y, Width,
 ;   Height, Offset_X, and Offset_Y) are updated.  See the *Parameters* section
 ;   for more more information.
 ;
@@ -5026,14 +5028,14 @@ FindTopMostWindow() {
 ;   function was created to 1) identify the true position and size of all
 ;   windows regardless of the window attributes, desktop theme, or version of
 ;   Windows and to 2) identify the appropriate offset that is needed to position
-;   the window If the window is a different size than reported.
+;   the window if the window is a different size than reported.
 ;
 ; * The true size, position, and offset of a window cannot be determined until
 ;   the window has been rendered.  See the example script for an example of how
 ;   to use this function to position a new window.
 ;
 ; * 20150906: The "dwmapi\DwmGetWindowAttribute" function can Return odd errors
-;   If DWM is not enabled.  One error I've discovered is a Return code of
+;   if DWM is not enabled.  One error I've discovered is a Return code of
 ;   0x80070006 with a last error code of 6, i.e. ERROR_INVALID_HANDLE or "The
 ;   handle is invalid."  To keep the function operational during this types of
 ;   conditions, the function has been modified to assume that all unexpected
@@ -6239,6 +6241,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:speciifc::specific
 :*:specifci::specific
 :*:fucn::func
+:*:retreiv::retriev
 :*:dj::j
 :*:fj::j
 :*:gj::j
