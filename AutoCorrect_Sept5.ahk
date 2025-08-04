@@ -8,7 +8,7 @@
 ; dummyFunction1() {
     ; static dummyStatic1 := VD.init()
 ; }
-; the auto-exec section ends at the first hotkey/hotstring or return or exit or at the script end - whatever comes first; function definitions get ignored by the execution flow.
+; the auto-exec section ends at the first hotkey/hotstring or Return or exit or at the script end - whatever comes first; function definitions get ignored by the execution flow.
 #NoEnv
 #SingleInstance
 #InstallMouseHook
@@ -92,10 +92,11 @@ Global currentPath                 := ""
 Global prevPath                    := ""
 Global MbuttonIsEnter              := False
 Global textBoxSelected             := False
-Global disableArrows               := false
+Global disableArrows               := False
 Global WindowTitleID               :=
 Global keys                        := "abcdefghijklmnopqrstuvwxyz"
 Global numbers                     := "0123456789"
+Global DoubleClickTime     := DllCall("GetDoubleClickTime")
 
 Process, Priority,, High
 
@@ -206,19 +207,19 @@ Expr =
 
     ~ENTER::
         ExitApp
-    return
+    Return
 
     ~ESC::
         ExitApp
-    return
+    Return
 
     ~*LBUTTON::
         ExitApp
-    return
+    Return
 
     SPACE::
         SendInput, {DOWN}
-    return
+    Return
 )
 
 ExprAltUp =
@@ -268,7 +269,7 @@ OnExit("PreventRecur")
 ; From Laszlo's script at http://www.autohotkey.com/forum/topic9689.html
 ;------------------------------------------------------------------------------
 ; The first line of code below is the set of letters, digits, and/or symbols
-; that are eligible for this type of correction.  Customize if you wish:
+; that are eligible for this type of correction.  Customize If you wish:
 
 ReAssignHotkeys()
 
@@ -316,7 +317,7 @@ Startup:
     Menu, Tray, Togglecheck, Run at startup
     IfExist, %A_Startup%/AutoCorrect.lnk
         FileDelete, %A_Startup%/AutoCorrect.lnk
-    else
+    Else
         FileCreateShortcut, % H_Compiled ? A_AhkPath : A_ScriptFullPath, %A_Startup%/AutoCorrect.lnk
 Return
 
@@ -371,41 +372,41 @@ FixSlash:
     Else If !IsGoogleDocWindow() && (!StopAutoFix && IsThisHotKeyLetterKey())
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
-    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)) {
+    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)) {
         Send, % "{BS}{BS}{?}{SPACE}"
         disableEnter := False
     }
-    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, false) && A_PriorHotKey == "~/" && A_ThisHotkey == "Enter" && A_TimeSincePriorHotkey<999)) {
+    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "Enter" && A_TimeSincePriorHotkey<999)) {
         Send, % "{BS}{?}{ENTER}"
         disableEnter := False
     }
     If IsPriorHotKeyLowerCase()   ; as long as a letter key is pressed we record the priorprior hotkey
         X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1) ; record the letter key pressed
     If IsPriorHotKeyCapital()
-        X_PriorPriorHotKey := Substr(A_PriorHotkey,3,1) ; record only the letter key pressed if captialized
+        X_PriorPriorHotKey := Substr(A_PriorHotkey,3,1) ; record only the letter key pressed If captialized
 Return
 ;------------------------------------------------------------------------------
 IsPriorHotKeyLetterKey() {
-    return (IsPriorHotKeyCapital() || IsPriorHotKeyLowerCase())
+    Return (IsPriorHotKeyCapital() || IsPriorHotKeyLowerCase())
 }
 IsThisHotKeyLetterKey() {
-    return (IsThisHotKeyCapital() || IsThisHotKeyLowerCase())
+    Return (IsThisHotKeyCapital() || IsThisHotKeyLowerCase())
 }
 IsPriorHotKeyCapital() {
     Global keys
-    return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,1,1)!="!" && SubStr(A_PriorHotKey,2,1)="+" && inStr(keys, Substr(A_PriorHotkey,3,1), false))
+    Return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,1,1)!="!" && SubStr(A_PriorHotKey,2,1)="+" && inStr(keys, Substr(A_PriorHotkey,3,1), False))
 }
 IsPriorHotKeyLowerCase() {
     Global keys
-    return (StrLen(A_PriorHotkey) == 2 && inStr(keys, Substr(A_PriorHotkey,2,1), false))
+    Return (StrLen(A_PriorHotkey) == 2 && inStr(keys, Substr(A_PriorHotkey,2,1), False))
 }
 IsThisHotKeyCapital() {
     Global keys
-    return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,1,1)!="!" && SubStr(A_ThisHotKey,2,1)="+" && inStr(keys, Substr(A_ThisHotKey,3,1), false))
+    Return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,1,1)!="!" && SubStr(A_ThisHotKey,2,1)="+" && inStr(keys, Substr(A_ThisHotKey,3,1), False))
 }
 IsThisHotKeyLowerCase() {
     Global keys
-    return (StrLen(A_ThisHotKey) == 2 && inStr(keys, Substr(A_ThisHotKey,2,1), false))
+    Return (StrLen(A_ThisHotKey) == 2 && inStr(keys, Substr(A_ThisHotKey,2,1), False))
 }
 
 ReAssignHotkeys() {
@@ -480,7 +481,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             || vWinClass == "WorkerW"
             || vWinClass == "tooltips_class32"
             || vWinClass == "OperationStatusWindow"
-            || (InStr(vWinClass, "Shell",false) && InStr(vWinClass, "TrayWnd",false))
+            || (InStr(vWinClass, "Shell",False) && InStr(vWinClass, "TrayWnd",False))
             || vWinClass == ""
             || vWinTitle == ""
             || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
@@ -533,7 +534,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
             ; tooltip, here we go
 
-            If (InStr(vWinTitle, "Save", false) && vWinClass != "#32770") {
+            If (InStr(vWinTitle, "Save", False) && vWinClass != "#32770") {
                 WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
                 WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
                 LbuttonEnabled := True
@@ -636,7 +637,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     SetTimer, mouseTrack, On
                     LbuttonEnabled := True
                     Critical, Off
-                    ; BlockKeyboard(false)
+                    ; BlockKeyboard(False)
                     ReAssignHotkeys()
                     Return
                 }
@@ -661,7 +662,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                 SetTimer, mouseTrack, On
                                 LbuttonEnabled := True
                                 Critical, Off
-                                ; BlockKeyboard(false)
+                                ; BlockKeyboard(False)
                                 ReAssignHotkeys()
                                 Return
                             }
@@ -676,7 +677,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     ; }
                 }
                 ; BlockInput, Off
-                ; BlockKeyboard(false)
+                ; BlockKeyboard(False)
                 Critical, Off
                 ReAssignHotkeys()
             }
@@ -688,7 +689,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 checkID := prevActiveWindows[i]
                 If !WinExist("ahk_id " checkID)
                     prevActiveWindows.RemoveAt(i)
-                else
+                Else
                     ++i
                 If (GetKeyState("Lbutton", "P")) {
                     DetectHiddenWindows, Off
@@ -767,11 +768,11 @@ WinGet, myWindow, List
 Loop % myWindow
 {
     ControlGet, myOkay, Hwnd,, OK, % "ahk_id " myWindow%A_Index%
-    if (myOkay) {
+    If (myOkay) {
         ControlClick,, ahk_id %myOkay%,,,2
         hwndID := "ahk_id " myWindow%A_Index%
         sleep, 400
-        if WinExist(hwndID)
+        If WinExist(hwndID)
             Send, !{o}
         break
     }
@@ -950,14 +951,14 @@ Return
     StopAutoFix := True
     Send, {home}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 +!a::
     StopAutoFix := True
     Send, +{home}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 !;::
@@ -967,35 +968,35 @@ Return
     Else
         Send, {end}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 !+;::
     StopAutoFix := True
     Send, +{end}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 !+i::
     StopAutoFix := True
     Send +{UP}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 !+k::
     StopAutoFix := True
     Send +{DOWN}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 !+'::
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
     store := Trim(store)
     If !foundSpace
         store := """" . store . """"
@@ -1009,7 +1010,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
     store := Trim(store)
     If !foundSpace
         store := "{" . store . "}"
@@ -1023,7 +1024,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
     store := Trim(store)
     If !foundSpace
         store := "{" . store . "}"
@@ -1037,7 +1038,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
     store := Trim(store)
     If !foundSpace
         store := "<" . store . ">"
@@ -1051,7 +1052,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
     store := Trim(store)
     If !foundSpace
         store := "<" . store . ">"
@@ -1065,7 +1066,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
     store := Trim(store)
     If !foundSpace
         store := "(" . store . ")"
@@ -1079,7 +1080,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
     store := Trim(store)
     If !foundSpace
         store := "(" . store . ")"
@@ -1093,7 +1094,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
     store := Trim(store)
     If !foundSpace
         store := "\b" . store . "\b"
@@ -1107,7 +1108,7 @@ Return
     Critical, On
     store := Clip()
     len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : false
+    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
     store := Trim(store)
     If !foundSpace
         store := "%" . store . "%"
@@ -1127,14 +1128,14 @@ Return
     StopAutoFix := True
     Send, {UP}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 !k::
     StopAutoFix := True
     Send, {DOWN}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 $!j::
@@ -1144,7 +1145,7 @@ $!j::
     Else
         Send, ^{LEFT}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 $!+j::
@@ -1152,7 +1153,7 @@ $!+j::
     SendLevel, 1
     Send, ^+{LEFT}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 $!l::
@@ -1162,21 +1163,21 @@ $!l::
     Else
         Send, ^{RIGHT}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 $!+l::
     StopAutoFix := True
     Send ^+{RIGHT}
     Hotstring("Reset")
-    StopAutoFix := false
+    StopAutoFix := False
 Return
 
 
 #If disableEnter
 Enter::
     GoSub, FixSlash
-    disableEnter := false
+    disableEnter := False
 Return
 #If
 
@@ -1310,14 +1311,14 @@ Esc::
             GoSub, DrawRect
 
             loop {
-                tooltip Close `"%escTitle%`" ?
+                tooltip Close `"%escTitle%`" ? ;"
                 sleep, 10
                 If !GetKeyState("Esc")
                     break
             }
 
             If !CancelClose {
-                tooltip, Waiting for `"%escTitle%`" to close...
+                tooltip, Waiting for `"%escTitle%`" to close... ; "
                 Winclose, ahk_id %escHwndID%
 
                 loop 10 {
@@ -1330,7 +1331,7 @@ Esc::
 
                     WinGetClass, actClass, A
 
-                    If ((WinActive("ahk_class #32770") || InStr(actClass, "dialog", false)) && !executedOnce) {
+                    If ((WinActive("ahk_class #32770") || InStr(actClass, "dialog", False)) && !executedOnce) {
                         WinGet, dialog_hwndID, ID, A
                         executedOnce := True
                         WinSet, AlwaysOnTop, On, ahk_class #32770
@@ -1580,7 +1581,7 @@ Altup:
     startHighlight := False
     hitTAB         := False
     LclickSelected := False
-    BlockKeyboard(false)
+    BlockKeyboard(False)
     Critical, Off
     ClearRect()
     ; tooltip,
@@ -1982,7 +1983,7 @@ Return
         ; checkID := minWinArray[i]
         ; If !WinExist("ahk_id " checkID)
             ; minWinArray.RemoveAt(i)
-        ; else
+        ; Else
             ; ++i
     ; }
 ; Return
@@ -2046,8 +2047,8 @@ Cycle()
                                     Critical, Off
                                     GoSub, DrawRect
                                     If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
-                                        GroupedWindows = []
-                                        ValidWindows   = []
+                                        GroupedWindows := []
+                                        ValidWindows := []
                                         Critical, Off
                                         Return
                                     }
@@ -2060,8 +2061,8 @@ Cycle()
                                 GoSub, DrawRect
                             }
                             If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
-                                GroupedWindows = []
-                                ValidWindows   = []
+                                GroupedWindows := []
+                                ValidWindows := []
                                 Critical, Off
                                 Return
                             }
@@ -2072,8 +2073,8 @@ Cycle()
                 }
             }
         }
+        Critical, Off
     }
-    Critical, Off
 
     If (GroupedWindows.length() == 1) {
         tooltip, % "Only " GroupedWindows.length() " Window to Show..."
@@ -2208,12 +2209,12 @@ DrawRect:
     x := y := w := h := 0
     WinGetPosEx(activeWin, x, y, w, h)
 
-    if (x="")
+    If (x="")
         Return
 
     borderType:="inside"                ; set to inside, outside, or both
 
-    if (borderType="outside") {
+    If (borderType="outside") {
         outerX:=0
         outerY:=0
         outerX2:=w+2*border_thickness
@@ -2229,11 +2230,11 @@ DrawRect:
         newW:=w+2*border_thickness
         newH:=h+2*border_thickness
 
-    } else if (borderType="inside") {
+    } Else If (borderType="inside") {
         ; WinGet, myState, MinMax, A
-        ; if (myState == 1)
+        ; If (myState == 1)
             ; offset:=8
-        ; else
+        ; Else
             offset:=0
 
         outerX:=offset
@@ -2251,7 +2252,7 @@ DrawRect:
         newW:=w
         newH:=h
 
-    } else if (borderType="both") {
+    } Else If (borderType="both") {
         outerX:=0
         outerY:=0
         outerX2:=w+2*border_thickness
@@ -2455,7 +2456,7 @@ Return
     initTime := A_TickCount
 
     If (    A_PriorHotkey == A_ThisHotkey
-        && (A_TimeSincePriorHotkey < 550)
+        && (A_TimeSincePriorHotkey < DoubleClickTime)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (_winCtrlD == "SysListView321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3")) {
 
@@ -2542,17 +2543,35 @@ Return
     ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && ((rlsTime - initTime) < 400)
+        && ((rlsTime - initTime) < DoubleClickTime)
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)
         && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" ))  {
 
         SetTimer, SendCtrlAdd, -125
     }
-    Else If ((_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
-            && ((rlsTime - initTime) < 400)) {
+    Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
+        && (_winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3") 
+        && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3 != 0xFFFFFF) && (LBD_HexColor4 != 0xFFFFFF) && (LBD_HexColor5 != 0xFFFFFF)) {
 
+        try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
-            If (pt.CurrentControlType == 50000 || pt.CurrentControlType == 50020) {
+
+            If (pt.CurrentControlType == 50031) {
+                ControlGetFocus, initFocusedCtrl , ahk_id %_winIdU%
+                If (initFocusedCtrl == "SysTreeView321")
+                    Send, {tab}
+                GoSub, SendCtrlAdd
+            }
+        } catch e {
+        }
+    }
+    Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
+        && (_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
+        && ((rlsTime - initTime) < DoubleClickTime)) {
+
+        try {
+            pt := UIA.ElementFromPoint(lbX2,lbY2,False)
+            If ((pt.CurrentControlType == 50000 || pt.CurrentControlType == 50020)  && !inStr(pt.Name, "Refresh", True)) {
                 sleep, 150
                 If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
                     SetTimer, keyTrack, On
@@ -2560,19 +2579,27 @@ Return
                     tooltip, forget it
                     Return
                 }
-                currentPath := ""
-                loop 100 {
-                    currentPath := GetExplorerPath(_winIdD)
-                    If (currentPath != "" && currentPath != prevPath)
-                        break
-                    sleep, 2
-                }
-                SetTimer, SendCtrlAdd, -1
             }
-        ; }
+        } catch e {
+        }
+        
+        If inStr(pt.Name, "Refresh", True)
+            GoSub, SendCtrlAdd
+        Else {
+            currentPath := ""
+            loop 100 {
+                currentPath := GetExplorerPath(_winIdD)
+                If (currentPath != "" && currentPath != prevPath)
+                    break
+                sleep, 2
+            }
+            If (currentPath != prevPath)
+                SetTimer, SendCtrlAdd, -1
+        }
     }
-    Else If ((_winCtrlD == "SysTreeView321")
-            && ((rlsTime - initTime) < 400)
+    Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
+            && (_winCtrlD == "SysTreeView321")
+            && ((rlsTime - initTime) < DoubleClickTime)
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
@@ -2614,14 +2641,14 @@ Return
 RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2) ; from the FindText library, credit goes to feiyue
 {
   static id:=0
-  if (x="")
+  If (x="")
   {
     id:=0
     Loop 4
       Gui, Range_%A_Index%: Destroy
-    return
+    Return
   }
-  if (!id)
+  If (!id)
   {
     Loop 4
       Gui, Range_%A_Index%: +Hwndid +AlwaysOnTop -Caption +ToolWindow
@@ -2658,14 +2685,14 @@ UpdateInputBoxTitle:
         SetTimer, UpdateInputBoxTitle, off
         Return
     }
-    else {
+    Else {
         UserInputTrimmed := Trim(memotext)
     }
 Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 ~$Ctrl::
-    if (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < 250)
+    If (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < 250)
     {
         StopRecursion   := True
         SetTimer, mouseTrack, off
@@ -2686,7 +2713,7 @@ Return
             SetTimer, mouseTrack, On
             Return
         }
-        else
+        Else
         {
             DetectHiddenWindows, On
             Critical On
@@ -2874,7 +2901,7 @@ ActivateWindow:
             ; }
             ; WinMove, %fulltitle%,, vwx, , , ,
         ; }
-        ; else {
+        ; Else {
             ; sleep 500
             ; WinMinimize, %fulltitle%
             ; WinSet, Transparent, 255, %fulltitle%
@@ -2882,7 +2909,7 @@ ActivateWindow:
             ; WinActivate, %fulltitle%
         ; }
     ; }
-    ; else If (desknum > cdt)
+    ; Else If (desknum > cdt)
     ; {
         ; WinGet, vState, MinMax, %fulltitle%
         ; WinGet, vID, ID, %fulltitle%
@@ -2909,7 +2936,7 @@ ActivateWindow:
             ; }
             ; WinMove, %fulltitle%,, vwx, , , ,
         ; }
-        ; else {
+        ; Else {
             ; sleep 500
             ; WinMinimize, %fulltitle%
             ; WinSet, Transparent, 255, %fulltitle%
@@ -2917,14 +2944,14 @@ ActivateWindow:
             ; WinActivate, %fulltitle%
         ; }
     ; }
-    ; else
+    ; Else
     ; {
     If (fulltitle == "Calculator") {
         ; https://www.autohotkey.com/boards/viewtopic.php?t=43997
         WinGet, CalcIDs, List, Calculator
         If (CalcIDs = 1) ; Calc is NOT minimized
             CalcID := CalcIDs1
-        else
+        Else
             CalcID := CalcIDs2 ; Calc is Minimized use 2nd ID
         WinActivate, ahk_id %CalcID%
     }
@@ -3300,7 +3327,7 @@ Return
         Else
             Send,  {Click, Right}
     }
-    else
+    Else
         ComboActive := False
 
     StopRecursion := False
@@ -3321,13 +3348,13 @@ Return
 
 ScrollLines(lines,hWnd="") {
 static EM_LINESCROLL := 0xB6
-    if !hWnd
+    If !hWnd
     {
         ControlGetFocus, c, A
         ControlGet, hWnd, hWnd, , %c%, A
     }
     PostMessage, EM_LINESCROLL, 0, lines-1, , ahk_id %hWnd% ; 'lines-1' makes the line you wish to jump to visible
-return
+Return
 }
 
 /* ;
@@ -3338,7 +3365,7 @@ return
 */
 VolumeHover() {
     ControlGetText, toolText,, ahk_class tooltips_class32
-    If (InStr(toolText, "Speakers", false) || InStr(toolText, "Headphones", false))
+    If (InStr(toolText, "Speakers", False) || InStr(toolText, "Headphones", False))
         Return True
     Else
         Return False
@@ -3569,95 +3596,98 @@ ProcessIsElevated(vPID)
 JEE_WinHasAltTabIcon(hWnd)
 {
 	local
-	if !(DllCall("user32\GetDesktopWindow", "Ptr") = DllCall("user32\GetAncestor", "Ptr",hWnd, "UInt",1, "Ptr")) ;GA_PARENT := 1
+	If !(DllCall("user32\GetDesktopWindow", "Ptr") = DllCall("user32\GetAncestor", "Ptr",hWnd, "UInt",1, "Ptr")) ;GA_PARENT := 1
 	;|| DllCall("user32\GetWindow", "Ptr",hWnd, "UInt",4, "Ptr") ;GW_OWNER := 4 ;affects taskbar but not alt-tab
-		return 0
+		Return 0
 
     WinGet, vWinProc, ProcessName, % "ahk_id " hWnd
     If inStr(vWinProc, "InputHost.exe") || inStr(vWinProc, "App.exe")
-        return 0
+        Return 0
 
 	WinGet, vWinStyle, Style, % "ahk_id " hWnd
-	if !vWinStyle
+	If !vWinStyle
 	|| !(vWinStyle & 0x10000000) ;WS_VISIBLE := 0x10000000
 	|| (vWinStyle & 0x8000000) ;WS_DISABLED := 0x8000000 ;affects alt-tab but not taskbar
-		return 0
+		Return 0
 	WinGet, vWinExStyle, ExStyle, % "ahk_id " hWnd
-	if (vWinExStyle & 0x40000) ;WS_EX_APPWINDOW := 0x40000
-		return 1
-	if (vWinExStyle & 0x80) ;WS_EX_TOOLWINDOW := 0x80
+	If (vWinExStyle & 0x40000) ;WS_EX_APPWINDOW := 0x40000
+		Return 1
+	If (vWinExStyle & 0x80) ;WS_EX_TOOLWINDOW := 0x80
 	|| (vWinExStyle & 0x8000000) ;WS_EX_NOACTIVATE := 0x8000000 ;affects alt-tab but not taskbar
-		return 0
-	return 1
+		Return 0
+	Return 1
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399
 IsAltTabWindow(hWnd) {
-   static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
+    static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
+    static WS_EX_WINDOWEDGE := 0x100, WS_EX_CONTROLPARENT := 0x10000, WS_EX_DLGMODALFRAME := 0x00000001
 
-   WinGetTitle, hasTitle, ahk_id %hWnd%
-   If !hasTitle
-      return False
+    WinGetTitle, hasTitle, ahk_id %hWnd%
+    If !hasTitle
+       Return False
 
-   if (VirtualDesktopExist = "")
-   {
-      OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
-      if (OSbuildNumber < 14393)
-         VirtualDesktopExist := 0
-      else
-         VirtualDesktopExist := 1
-   }
-   if !DllCall("IsWindowVisible", "uptr", hWnd)
-      return false
-   DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
-   if (cloaked = DWM_CLOAKED_SHELL)
-      return false
-   if (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
-      return false
-   WinGetClass, winClass, ahk_id %hWnd%
-   if (winClass = "Windows.UI.Core.CoreWindow" || (InStr(winClass, "Shell",false) && InStr(winClass, "TrayWnd",false)) || winClass == "ProgMan" || winClass == "WorkerW")
-      return false
-   if (winClass = "ApplicationFrameWindow")
-   {
-      varsetcapacity(ApplicationViewCloakType, 4, 0)
-      DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
-      if (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
-         return false
-   }
-   ; if !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test if window is shown on any monitor. alt-tab shows any window even if window is out of monitor.
-   ;   return
-   WinGet, exStyles, ExStyle, ahk_id %hWnd%
-   if (exStyles & WS_EX_APPWINDOW)
-   {
-      if DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
-         return false
-      if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
-         return True
-      else
-         return false
-   }
-   if (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)
-      return false
-   loop
-   {
-      hwndPrev := hwnd
-      hwnd := DllCall("GetWindow", "uptr", hwnd, "uint", GW_OWNER, "ptr")
-      if !hwnd
-      {
-         if DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
-            return false
-         if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
-            return True
-         else
-            return false
-      }
-      if DllCall("IsWindowVisible", "uptr", hwnd)
-         return false
-      WinGet, exStyles, ExStyle, ahk_id %hwnd%
-      if ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
-         return false
-   }
+    If (VirtualDesktopExist = "")
+    {
+       OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
+       If (OSbuildNumber < 14393)
+          VirtualDesktopExist := 0
+       Else
+          VirtualDesktopExist := 1
+    }
+    If !DllCall("IsWindowVisible", "uptr", hWnd)
+       Return False
+    DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
+    If (cloaked = DWM_CLOAKED_SHELL)
+       Return False
+    If (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
+       Return False
+    WinGetClass, winClass, ahk_id %hWnd%
+    If (winClass = "Windows.UI.Core.CoreWindow" || (InStr(winClass, "Shell",False) && InStr(winClass, "TrayWnd",False)) || winClass == "ProgMan" || winClass == "WorkerW")
+       Return False
+    If (winClass = "ApplicationFrameWindow")
+    {
+       varsetcapacity(ApplicationViewCloakType, 4, 0)
+       DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
+       If (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
+          Return False
+    }
+    ; If !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test If window is shown on any monitor. alt-tab shows any window even If window is out of monitor.
+    ;   Return
+    WinGet, exStyles, ExStyle, ahk_id %hWnd%
+    If (exStyles & WS_EX_APPWINDOW)
+    {
+       If DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
+          Return False
+       If (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
+          Return True
+       Else
+          Return False
+    }
+    If (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE) or (exStyles & WS_EX_DLGMODALFRAME)
+       Return False
+    If (exStyles & (WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT))
+       Return True
+    loop
+    {
+       hwndPrev := hwnd
+       hwnd := DllCall("GetWindow", "uptr", hwnd, "uint", GW_OWNER, "ptr")
+       If !hwnd
+       {
+          If DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
+             Return False
+          If (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
+             Return True
+          Else
+             Return False
+       }
+       If DllCall("IsWindowVisible", "uptr", hwnd)
+          Return False
+       WinGet, exStyles, ExStyle, ahk_id %hwnd%
+       If ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
+          Return False
+    }
 }
 
 GetLastActivePopup(hwnd)
@@ -3682,7 +3712,7 @@ PropEnumProcEx(hWnd, lpszString, hData, dwData)
    If (strget(lpszString, "UTF-16") = "ApplicationViewCloakType")
    {
       numput(hData, dwData+0, 0, "int")
-      Return false
+      Return False
    }
    Return True
 }
@@ -3712,7 +3742,7 @@ IsWindowOnCurrentVirtualDesktop(hwnd)
 GetDesktopCount() {
     global GetDesktopCountProc
     count := DllCall(GetDesktopCountProc, "Int")
-    return count
+    Return count
 }
 
 MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
@@ -3727,12 +3757,12 @@ GoToPrevDesktop() {
     current := DllCall(GetCurrentDesktopNumberProc, "Int")
     last_desktop := GetDesktopCount() - 1
     ; If current desktop is 0, go to last desktop
-    if (current = 0) {
+    If (current = 0) {
         MoveOrGotoDesktopNumber(last_desktop)
-    } else {
+    } Else {
         MoveOrGotoDesktopNumber(current - 1)
     }
-    return
+    Return
 }
 
 GoToNextDesktop() {
@@ -3740,29 +3770,29 @@ GoToNextDesktop() {
     current := DllCall(GetCurrentDesktopNumberProc, "Int")
     last_desktop := GetDesktopCount() - 1
     ; If current desktop is last, go to first desktop
-    if (current = last_desktop) {
+    If (current = last_desktop) {
         MoveOrGotoDesktopNumber(0)
-    } else {
+    } Else {
         MoveOrGotoDesktopNumber(current + 1)
     }
-    return
+    Return
 }
 
 GoToDesktopNumber(num) {
     global GoToDesktopNumberProc
     correctDesktopNumber := num-1
     DllCall(GoToDesktopNumberProc, "Int", correctDesktopNumber, "Int")
-    return
+    Return
 }
 
 MoveOrGotoDesktopNumber(num) {
     ; If user is holding down Mouse left button, move the current window also
-    if (GetKeyState("LButton")) {
+    If (GetKeyState("LButton")) {
         MoveCurrentWindowToDesktop(num)
-    } else {
+    } Else {
         GoToDesktopNumber(num)
     }
-    return
+    Return
 }
 
 getForemostWindowIdOnDesktop(n)
@@ -3776,8 +3806,8 @@ getForemostWindowIdOnDesktop(n)
         windowID := winIDList%A_Index%
         windowIsOnDesktop := DllCall(IsWindowOnDesktopNumberProc, "Ptr", windowID, "UInt", n, "Int")
         ; Select the first (and foremost) window which is in the specified desktop.
-        if (windowIsOnDesktop == 1) {
-            return windowID
+        If (windowIsOnDesktop == 1) {
+            Return windowID
         }
     }
 }
@@ -3982,7 +4012,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     }
     WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
     WinActivate, ahk_id %lastActWinID%
-    BlockKeyboard(false)
+    BlockKeyboard(False)
     Critical, Off
     SetTimer, mouseTrack, On
     Return
@@ -3992,7 +4022,7 @@ FrameShadow(HGui) {
     DllCall("dwmapi\DwmIsCompositionEnabled","IntP",_ISENABLED) ; Get If DWM Manager is Enabled
     If !_ISENABLED ; If DWM is not enabled, Make Basic Shadow
         DllCall("SetClassLong","UInt",HGui,"Int",-26,"Int",DllCall("GetClassLong","UInt",HGui,"Int",-26)|0x20000)
-    else {
+    Else {
         VarSetCapacity(_MARGINS,16)
         NumPut(1,&_MARGINS,0,"UInt")
         NumPut(1,&_MARGINS,4,"UInt")
@@ -4056,10 +4086,10 @@ keyTrack() {
                 Send, ^{NumpadAdd}
                 Critical, Off
 
-                If (inStr(keys, A_PriorHotkey, false) && A_PriorHotkey != lastHotkeyBefore)
+                If (inStr(keys, A_PriorHotkey, False) && A_PriorHotkey != lastHotkeyBefore)
                     Send, %A_PriorKey%
                 ReAssignHotkeys()
-                ; BlockKeyboard(false)
+                ; BlockKeyboard(False)
                 sleep, 400
                 TimeOfLastKey := A_TickCount
             }
@@ -4112,7 +4142,7 @@ mouseTrack() {
             sleep 250
     } Else {
         mouseMoving := False
-        ; tooltip, false
+        ; tooltip, False
     }
 
     lastX := x, lastY := y,
@@ -4155,7 +4185,7 @@ mouseTrack() {
             ; Critical, On
             ; CurrentDesktop := getCurrentDesktop()
             ; If !(CurrentDesktop < getTotalDesktops() ) {
-                ; StopRecursion := false
+                ; StopRecursion := False
                 ; Return
             ; }
             ; BlockInput, MouseMove
@@ -4228,7 +4258,7 @@ mouseTrack() {
             ; Send {Lbutton down}
             ; Critical, Off
         ; }
-        ; StopRecursion := false
+        ; StopRecursion := False
         ; Return
     ; }
     ; Else If (
@@ -4244,7 +4274,7 @@ mouseTrack() {
             ; Critical, On
             ; CurrentDesktop := getCurrentDesktop()
             ; If !(CurrentDesktop > 0) {
-                ; StopRecursion := false
+                ; StopRecursion := False
                 ; Return
             ; }
             ; BlockInput, MouseMove
@@ -4317,7 +4347,7 @@ mouseTrack() {
             ; Send {Lbutton down}
             ; Critical, Off
         ; }
-        ; StopRecursion := false
+        ; StopRecursion := False
         ; Return
     ; }
 
@@ -4648,10 +4678,10 @@ DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
 {
     ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
     ; Toggle See through icons.
-    if !FadeIn
+    If !FadeIn
     {
         Critical, On
-        if hwndProgman=
+        If hwndProgman=
         {
             WinSet, Trans, 200, ahk_class WorkerW
             sleep, 20
@@ -4665,7 +4695,7 @@ DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
             sleep, 20
             WinSet, Trans, 0, ahk_class WorkerW
         }
-        else
+        Else
         {
             WinSet, Trans, 200, ahk_id %hwndProgman%
             sleep, 20
@@ -4682,10 +4712,10 @@ DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
         }
         Critical, Off
     }
-    else
+    Else
     {
         Critical, On
-        if hwndProgman=
+        If hwndProgman=
         {
             WinSet, Trans, OFF, ahk_class WorkerW
             WinSet, Trans, 25, ahk_class WorkerW
@@ -4700,7 +4730,7 @@ DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
             sleep, 20
             WinSet, Trans, 255, ahk_class WorkerW
         }
-        else
+        Else
         {
             WinSet, Trans, OFF, ahk_id %hwndProgman%
             WinSet, Trans, 25, ahk_id %hwndProgman%
@@ -4805,7 +4835,7 @@ mapDesktopsFromRegistry()
     ; Get the current desktop UUID. Length should be 32 always, but there's no guarantee this couldn't change in a later Windows release so we check.
     IdLength := 32
     SessionId := getSessionId()
-    if (SessionId) {
+    If (SessionId) {
 
         ; Older windows 10 version
         ;RegRead, CurrentDesktopId, HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\1\VirtualDesktops, CurrentVirtualDesktop
@@ -4815,23 +4845,23 @@ mapDesktopsFromRegistry()
 
         ; Windows 11
         RegRead, CurrentDesktopId, HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops, CurrentVirtualDesktop
-        if ErrorLevel {
+        If ErrorLevel {
             RegRead, CurrentDesktopId, HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\%SessionId%\VirtualDesktops, CurrentVirtualDesktop
         }
 
-        if (CurrentDesktopId) {
+        If (CurrentDesktopId) {
             IdLength := StrLen(CurrentDesktopId)
         }
     }
 
     ; Get a list of the UUIDs for all virtual desktops on the system
     RegRead, DesktopList, HKEY_CURRENT_USER, SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops, VirtualDesktopIDs
-    if (DesktopList) {
+    If (DesktopList) {
         DesktopListLength := StrLen(DesktopList)
         ; Figure out how many virtual desktops there are
         DesktopCount := floor(DesktopListLength / IdLength)
     }
-    else {
+    Else {
         DesktopCount := 1
     }
 
@@ -4842,9 +4872,9 @@ mapDesktopsFromRegistry()
         DesktopIter := SubStr(DesktopList, StartPos, IdLength)
         OutputDebug, The iterator is pointing at %DesktopIter% and count is %i%.
 
-        ; Break out if we find a match in the list. If we didn't find anything, keep the
+        ; Break out If we find a match in the list. If we didn't find anything, keep the
         ; old guess and pray we're still correct :-D.
-        if (DesktopIter = CurrentDesktopId) {
+        If (DesktopIter = CurrentDesktopId) {
             CurrentDesktop := i + 1
             OutputDebug, Current desktop number is %CurrentDesktop% with an ID of %DesktopIter%.
             break
@@ -4859,19 +4889,19 @@ mapDesktopsFromRegistry()
 getSessionId()
 {
     ProcessId := DllCall("GetCurrentProcessId", "UInt")
-    if ErrorLevel {
+    If ErrorLevel {
         OutputDebug, Error getting current process id: %ErrorLevel%
-        return
+        Return
     }
     OutputDebug, Current Process Id: %ProcessId%
 
     DllCall("ProcessIdToSessionId", "UInt", ProcessId, "UInt*", SessionId)
-    if ErrorLevel {
+    If ErrorLevel {
         OutputDebug, Error getting session id: %ErrorLevel%
-        return
+        Return
     }
     OutputDebug, Current Session Id: %SessionId%
-    return SessionId
+    Return SessionId
 }
 
 ActivateTopMostWindow() {
@@ -4886,7 +4916,7 @@ ActivateTopMostWindow() {
             WinGet, mmState, MinMax, ahk_id %hwndId%
             WinGet, procName, ProcessName, ahk_id %hwndId%
             WinGet, ExStyle, ExStyle, ahk_id %hwndId%
-            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip if zoom or always on top window
+            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip If zoom or always on top window
                 continue
             If (mmState > -1) {
                 If (MonCount > 1) {
@@ -4919,7 +4949,7 @@ FindTopMostWindow() {
             WinGet, mmState, MinMax, ahk_id %hwndId%
             WinGet, procName, ProcessName, ahk_id %hwndId%
             WinGet, ExStyle, ExStyle, ahk_id %hwndId%
-            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip if zoom or always on top window
+            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip If zoom or always on top window
                 continue
             If (mmState > -1) {
                 If (MonCount > 1) {
@@ -4973,7 +5003,7 @@ FindTopMostWindow() {
 ;   The next 8 bytes contain the X and Y offsets (4-byte integer for X and
 ;   4-byte integer for Y).
 ;
-;   Also if successful (and if defined), the output variables (X, Y, Width,
+;   Also If successful (and If defined), the output variables (X, Y, Width,
 ;   Height, Offset_X, and Offset_Y) are updated.  See the *Parameters* section
 ;   for more more information.
 ;
@@ -4996,14 +5026,14 @@ FindTopMostWindow() {
 ;   function was created to 1) identify the true position and size of all
 ;   windows regardless of the window attributes, desktop theme, or version of
 ;   Windows and to 2) identify the appropriate offset that is needed to position
-;   the window if the window is a different size than reported.
+;   the window If the window is a different size than reported.
 ;
 ; * The true size, position, and offset of a window cannot be determined until
 ;   the window has been rendered.  See the example script for an example of how
 ;   to use this function to position a new window.
 ;
 ; * 20150906: The "dwmapi\DwmGetWindowAttribute" function can Return odd errors
-;   if DWM is not enabled.  One error I've discovered is a Return code of
+;   If DWM is not enabled.  One error I've discovered is a Return code of
 ;   0x80070006 with a last error code of 6, i.e. ERROR_INVALID_HANDLE or "The
 ;   handle is invalid."  To keep the function operational during this types of
 ;   conditions, the function has been modified to assume that all unexpected
@@ -5042,13 +5072,13 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
         ,PtrType,&RECTPlus                              ;-- pvAttribute
         ,"UInt",16)                                     ;-- cbAttribute
 
-    if (DWMRC<>S_OK)
+    If (DWMRC<>S_OK)
         {
-        if ErrorLevel in -3,-4  ;-- Dll or function not found (older than Vista)
+        If ErrorLevel in -3,-4  ;-- Dll or function not found (older than Vista)
             {
-            ;-- Do nothing else (for now)
+            ;-- Do nothing Else (for now)
             }
-         else
+         Else
             outputdebug,
                (ltrim join`s
                 Function: %A_ThisFunc% -
@@ -5074,7 +5104,7 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
     OffSet_Y:=0
 
     ;-- If DWM is not used (older than Vista or DWM not enabled), we're done
-    if (DWMRC<>S_OK)
+    If (DWMRC<>S_OK)
         Return &RECTPlus
 
     ;-- Collect dimensions via GetWindowRect
@@ -5100,7 +5130,7 @@ DynaRun(TempScript, pipename="")
       name := pipename
    __PIPE_GA_ := DllCall("CreateNamedPipe","str","\\.\pipe\" name,_,2,_,0,_,255,_,0,_,0,@,0,@,0)
    __PIPE_    := DllCall("CreateNamedPipe","str","\\.\pipe\" name,_,2,_,0,_,255,_,0,_,0,@,0,@,0)
-   if (__PIPE_=-1 or __PIPE_GA_=-1)
+   If (__PIPE_=-1 or __PIPE_GA_=-1)
       Return 0
    Run, %A_AhkPath% "\\.\pipe\%name%",,UseErrorLevel HIDE, PID
    If ErrorLevel
@@ -5109,7 +5139,7 @@ DynaRun(TempScript, pipename="")
    DllCall("CloseHandle",@,__PIPE_GA_)
    DllCall("ConnectNamedPipe",@,__PIPE_,@,0)
    script := (A_IsUnicode ? chr(0xfeff) : (chr(239) . chr(187) . chr(191))) TempScript
-   if !DllCall("WriteFile",@,__PIPE_,"str",script,_,(StrLen(script)+1)*(A_IsUnicode ? 2 : 1),_ "*",0,@,0)
+   If !DllCall("WriteFile",@,__PIPE_,"str",script,_,(StrLen(script)+1)*(A_IsUnicode ? 2 : 1),_ "*",0,@,0)
         Return A_LastError,DllCall("CloseHandle",@,__PIPE_)
    DllCall("CloseHandle",@,__PIPE_)
    Return PID
@@ -5135,13 +5165,13 @@ ControlWaitActive(Hwnd, Seconds = "") {
 GetActiveExplorerPath()
 {
     explorerHwnd := WinActive("ahk_class CabinetWClass")
-    if (explorerHwnd)
+    If (explorerHwnd)
     {
         for window in ComObjCreate("Shell.Application").Windows
         {
-            if (window.hwnd==explorerHwnd)
+            If (window.hwnd==explorerHwnd)
             {
-                return window.Document.Folder.Self.Path
+                Return window.Document.Folder.Self.Path
             }
         }
     }
@@ -5150,22 +5180,22 @@ GetActiveExplorerPath()
 ; https://www.reddit.com/r/AutoHotkey/comments/10fmk4h/get_path_of_active_explorer_tab/
 GetExplorerPath(hwnd:="") {
     ; tooltip, entering
-    if !hwnd
+    If !hwnd
         hwnd := WinExist("A")
 
-    if !WinExist("ahk_id " . hwnd)
+    If !WinExist("ahk_id " . hwnd)
         Return ""
 
     WinGetClass, clCheck, ahk_id %hwnd%
 
-    if (clCheck == "#32770") {
+    If (clCheck == "#32770") {
         ; ControlFocus, ToolbarWindow323, ahk_id %hwnd%
         ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-        If (dir == "" || !InStr(dir,"address",false))
+        If (dir == "" || !InStr(dir,"address",False))
             ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
         Return dir
     }
-    else if (clCheck == "CabinetWClass") {
+    Else If (clCheck == "CabinetWClass") {
         WinGetTitle, expTitle, ahk_id %hwnd%
         cleaned := StrReplace(expTitle, " - File Explorer",,,1)
         ; tooltip, cleaned is %cleaned%
@@ -5179,7 +5209,7 @@ GetExplorerPath(hwnd:="") {
                 || cleaned == "Music"
                 || cleaned == "Desktop" )
                 break
-            Else If inStr(cleaned, "\", false) {
+            Else If inStr(cleaned, "\", False) {
                 break
             }
             Else {
@@ -5191,24 +5221,24 @@ GetExplorerPath(hwnd:="") {
 
         Return cleaned
     }
-    else {
+    Else {
         activeTab := 0
         try {
             ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
             for w in ComObjCreate("Shell.Application").Windows {
-                if (w.hwnd != hwnd)
+                If (w.hwnd != hwnd)
                     continue
-                if activeTab {
+                If activeTab {
                     static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
                     shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
                     DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
-                    if (thisTab != activeTab)
+                    If (thisTab != activeTab)
                         continue
                     ObjRelease(shellBrowser)
                 }
                 If (w.Document.Folder.Self.Path == 0) {
                     ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-                    If (dir == "" || !InStr(dir,"address",false))
+                    If (dir == "" || !InStr(dir,"address",False))
                         ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
                     Return dir
                 }
@@ -5217,7 +5247,7 @@ GetExplorerPath(hwnd:="") {
             }
         }catch e {
             ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-            If (dir == "" || !InStr(dir,"address",false))
+            If (dir == "" || !InStr(dir,"address",False))
                 ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
 
             Return dir
@@ -5229,21 +5259,21 @@ GetExplorerPath(hwnd:="") {
 ; https://www.autohotkey.com/boards/viewtopic.php?t=60403
 Explorer_GetSelection() {
    WinGetClass, winClass, % "ahk_id" . hWnd := WinExist("A")
-   if !(winClass ~= "^(Progman|WorkerW|(Cabinet|Explore)WClass)$")
+   If !(winClass ~= "^(Progman|WorkerW|(Cabinet|Explore)WClass)$")
       Return
 
    shellWindows := ComObjCreate("Shell.Application").Windows
-   if (winClass ~= "Progman|WorkerW")  ; IShellWindows::Item:    https://goo.gl/ihW9Gm
+   If (winClass ~= "Progman|WorkerW")  ; IShellWindows::Item:    https://goo.gl/ihW9Gm
                                        ; IShellFolderViewDual:   https://goo.gl/gnntq3
       shellFolderView := shellWindows.Item( ComObject(VT_UI4 := 0x13, SWC_DESKTOP := 0x8) ).Document
-   else {
+   Else {
       for window in shellWindows       ; ShellFolderView object: https://tinyurl.com/yh92uvpa
-         if (hWnd = window.HWND) && (shellFolderView := window.Document)
+         If (hWnd = window.HWND) && (shellFolderView := window.Document)
             break
    }
    for item in shellFolderView.SelectedItems
       result .= (result = "" ? "" : "`n") . item.Path
-   ;~ if !result
+   ;~ If !result
       ;~ result := shellFolderView.Folder.Self.Path
    Return result
 }
@@ -5255,7 +5285,7 @@ IsPopup(winID) {
 
     If(ss & 0x80000000 && sx & 0x00000080)
         Return True
-    Return false
+    Return False
 }
 ; https://www.autohotkey.com/boards/viewtopic.php?t=107842
 BlockKeyboard( bAction )
@@ -5273,14 +5303,14 @@ GetIEobject()
    WinGet, hWnd, ID, A
    for oWin in ComObjCreate("Shell.Application").Windows
    {
-      if (oWin.HWND = hWnd)
-         return oWin
+      If (oWin.HWND = hWnd)
+         Return oWin
    }
 }
 
 IsGoogleDocWindow() {
     WinGetTitle, title, A
-    If InStr(title, "Google Sheets", false) || InStr(title, "Google Docs", false)
+    If InStr(title, "Google Sheets", False) || InStr(title, "Google Docs", False)
         Return True
     Else
         Return False
@@ -5299,33 +5329,33 @@ IsEditCtrl() {
 ; ___________________________________
 
 ; GetExplorerPath(explorerHwnd=0){
-    ; if(!explorerHwnd)
+    ; If(!explorerHwnd)
         ; ExplorerHwnd:= winactive("ahk_class CabinetWClass")
 
-    ; if(!explorerHwnd){
+    ; If(!explorerHwnd){
         ; WinGet, explorerHwnd, List, ahk_class CabinetWClass
         ; loop, % explorerHwnd
         ; {
             ; loopindex:= A_Index
             ; for window in ComObjCreate("Shell.Application").Windows{
                 ; try{
-                    ; if (window.hwnd==explorerHwnd%loopindex%){
+                    ; If (window.hwnd==explorerHwnd%loopindex%){
                         ; folder:= window.Document.Folder.Self.Path
-                        ; if (instr(folder,"\"))
-                            ; return folder
+                        ; If (instr(folder,"\"))
+                            ; Return folder
                     ; }
                 ; }
             ; }
         ; }
-    ; }else{
+    ; }Else{
         ; for window in ComObjCreate("Shell.Application").Windows{
             ; try{
-                ; if (window.hwnd==explorerHwnd)
-                    ; return window.Document.Folder.Self.Path
+                ; If (window.hwnd==explorerHwnd)
+                    ; Return window.Document.Folder.Self.Path
             ; }
         ; }
     ; }
-; return false
+; Return False
 ; }
 
 MouseIsOverTaskbar() {
@@ -5333,7 +5363,7 @@ MouseIsOverTaskbar() {
     MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If (InStr(mClass,"TrayWnd",false) && InStr(mClass,"Shell",false) && CtrlUnderMouseId != "ToolbarWindow323" && CtrlUnderMouseId != "TrayNotifyWnd1")
+    If (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId != "ToolbarWindow323" && CtrlUnderMouseId != "TrayNotifyWnd1")
         Return True
     Else
         Return False
@@ -5345,7 +5375,7 @@ MouseIsOverTaskbarButtonGroup() {
     MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If (InStr(mClass,"TrayWnd",false) && InStr(mClass,"Shell",false) && CtrlUnderMouseId != "TrayNotifyWnd1") {
+    If (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId != "TrayNotifyWnd1") {
         pt := UIA.ElementFromPoint(x,y,False)
         ; tooltip, % "val is " pt.CurrentControlType
         Return (pt.CurrentControlType == 50000)
@@ -5370,27 +5400,27 @@ MouseIsOverTaskbarBlank() {
     MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
     WinGetClass, cl, ahk_id %WindowUnderMouseID%
     try {
-        If (InStr(cl, "Shell",false) && InStr(cl, "TrayWnd",false) && CtrlUnderMouseId != "TrayNotifyWnd1") {
+        If (InStr(cl, "Shell",False) && InStr(cl, "TrayWnd",False) && CtrlUnderMouseId != "TrayNotifyWnd1") {
             If WinExist("ahk_class TaskListThumbnailWnd") {
-                return False
+                Return False
             }
             Else {
                 pt := UIA.ElementFromPoint(x,y,False)
                 ; tooltip, % "val is " pt.CurrentControlType
-                return (pt.CurrentControlType == 50033)
+                Return (pt.CurrentControlType == 50033)
             }
         }
         Else
             Return False
     } catch e {
-        return False
+        Return False
     }
 }
 
 DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
    Gui, WindowTitle: Destroy
 
-    If !InStr(vtext, " - ", false)
+    If !InStr(vtext, " - ", False)
         showFullTitle := True
 
     If showFullTitle {
@@ -5408,7 +5438,7 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
     Gui, WindowTitle: Font, s24  ; Set a large font size (32-point).
-    If InStr(pathToExe, "ApplicationFrameHost", false) {
+    If InStr(pathToExe, "ApplicationFrameHost", False) {
         Gui, WindowTitle: Add, Picture, xm-20 w48 h48 Icon3, %A_WinDir%\System32\SHELL32.dll
     }
     Else {
@@ -5450,11 +5480,11 @@ Return ( v3>v7 ? [v7, Y, 0x18] : v4>v8 ? [X, v8, 0x24]
 GetNameOfIconUnderMouse() {
    MouseGetPos, , , hwnd, CtrlClass
    WinGetClass, WinClass, ahk_id %hwnd%
-   try if (WinClass = "CabinetWClass" && (CtrlClass = "DirectUIHWND3"|| CtrlClass = "DirectUIHWND2")) {
+   try If (WinClass = "CabinetWClass" && (CtrlClass = "DirectUIHWND3"|| CtrlClass = "DirectUIHWND2")) {
       oAcc := Acc_ObjectFromPoint()
       Name := Acc_Parent(oAcc).accValue(0)
       Name := Name ? Name : oAcc.accValue(0)
-   } else if (WinClass = "Progman" || WinClass = "WorkerW") {
+   } Else If (WinClass = "Progman" || WinClass = "WorkerW") {
       oAcc := Acc_ObjectFromPoint(ChildID)
       Name := ChildID ? oAcc.accName(ChildID) : ""
    }
@@ -5475,10 +5505,10 @@ Acc_ObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
 }
 Acc_Parent(Acc) {
 	try parent:=Acc.accParent
-	return parent?Acc_Query(parent):
+	Return parent?Acc_Query(parent):
 }
 Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=81731&p=509530#509530
-	try return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
+	try Return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
 }
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
@@ -5914,7 +5944,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ot::to
 ::fo::of
 ::ni::in
-::fi::if
+::fi::If
 ::pu::up
 ::od::do
 ::ro::or
@@ -6428,7 +6458,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::alrigth::alright
 ::alriht::alright
 ::alsation::Alsatian
-::alse::else
+::alse::Else
 ::alseep::asleep
 ::alsot::also
 ::alterior::ulterior
