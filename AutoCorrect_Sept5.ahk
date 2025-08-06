@@ -603,7 +603,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
                     try {
-                        exEl := UIA.ElementFromHandle(mouseHoverId)
+                        exEl := UIA.ElementFromHandle(hWnd)
                         shellEl := exEl.FindFirstByName("Items View")
                         shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
                     } catch e {
@@ -822,8 +822,9 @@ Return
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
             }
+            sleep, 100
             Send, ^{NumpadAdd}
-            sleep, 200
+            sleep, 100
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
             }
@@ -865,8 +866,9 @@ Return
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
             }
+            sleep, 100
             Send, ^{NumpadAdd}
-            sleep, 200
+            sleep, 100
             If !GetKeyState("Ctrl") {
                 Send, {Ctrl Up}
             }
@@ -1119,19 +1121,22 @@ Return
 Return
 
 $!Space::
-    CapsDown := True
-    KeyWait, Space, U T10
-    CapsDown := False
+    StopAutoFix := True
+    ; CapsDown := True
+    ; KeyWait, Space, U T10
+    ; CapsDown := False
+    Send, {LEFT}
+    StopAutoFix := False
 Return
 
-!i::
+$!i::
     StopAutoFix := True
     Send, {UP}
     Hotstring("Reset")
     StopAutoFix := False
 Return
 
-!k::
+$!k::
     StopAutoFix := True
     Send, {DOWN}
     Hotstring("Reset")
@@ -1140,9 +1145,9 @@ Return
 
 $!j::
     StopAutoFix := True
-    If CapsDown
-        Send, {LEFT}
-    Else
+    ; If CapsDown
+        ; Send, {LEFT}
+    ; Else
         Send, ^{LEFT}
     Hotstring("Reset")
     StopAutoFix := False
@@ -1158,9 +1163,9 @@ Return
 
 $!l::
     StopAutoFix := True
-    If CapsDown
-        Send, {RIGHT}
-    Else
+    ; If CapsDown
+        ; Send, {RIGHT}
+    ; Else
         Send, ^{RIGHT}
     Hotstring("Reset")
     StopAutoFix := False
@@ -1303,7 +1308,7 @@ Esc::
     escHwndID := FindTopMostWindow()
     WinGetTitle, escTitle, ahk_id %escHwndID%
 
-    If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < 550 && escHwndID == escHwndID_old && escTitle == escTitle_old) {
+    If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
         DetectHiddenWindows, Off
 
         ; If IsAltTabWindow(escHwndID) {
@@ -1335,7 +1340,7 @@ Esc::
                         WinGet, dialog_hwndID, ID, A
                         executedOnce := True
                         WinSet, AlwaysOnTop, On, ahk_class #32770
-                        GoSub, SendCtrlAdd
+                        SendCtrlAdd(escHwndID)
                         WinWaitClose, ahk_id %dialog_hwndID%
                         break
                     }
@@ -2445,7 +2450,7 @@ Return
     tooltip,
     HotString("Reset")
     textBoxSelected := False
-    SetTimer, SendCtrlAdd, Off
+    SetTimer, SendCtrlAddLabel, Off
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
 
@@ -2461,9 +2466,7 @@ Return
         && (_winCtrlD == "SysListView321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3")) {
 
         currentPath    := ""
-
         ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3%  - %X1% %X2% %Y1% %Y2% - %_winCtrlD% - %A_ThisHotkey% - %A_PriorHotkey%
-
         If ((LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
             If (_winCtrlD == "SysListView321") {
                 Send, {Backspace}
@@ -2507,7 +2510,7 @@ Return
             Return
         }
         Else {
-            SetTimer, SendCtrlAdd, -1
+            SendCtrlAdd(_winIdD)
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
             sleep, 250
@@ -2547,7 +2550,7 @@ Return
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)
         && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" ))  {
 
-        SetTimer, SendCtrlAdd, -125
+        SetTimer, SendCtrlAddLabel, -125
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (_winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3")
@@ -2560,9 +2563,14 @@ Return
                 ControlGetFocus, initFocusedCtrl , ahk_id %_winIdU%
                 If (initFocusedCtrl == "SysTreeView321")
                     Send, {tab}
-                GoSub, SendCtrlAdd
+                SendCtrlAdd(_winIdU, prevPath)
             }
         } catch e {
+            tooltip, TIMED OUT!!!!
+            UIA :=  ;// set to a different value
+            ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+            UIA := UIA_Interface() ; Initialize UIA interface
+            UIA.ConnectionTimeout := 6000
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
@@ -2574,17 +2582,25 @@ Return
             If ((pt.CurrentControlType == 50000 || pt.CurrentControlType == 50020)  && !inStr(pt.Name, "Refresh", True)) {
                 sleep, 150
                 If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
+                    tooltip, forget it
                     SetTimer, keyTrack, On
                     SetTimer, mouseTrack, On
-                    tooltip, forget it
                     Return
                 }
             }
         } catch e {
+            tooltip, TIMED OUT!!!!
+            UIA :=  ;// set to a different value
+            ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+            UIA := UIA_Interface() ; Initialize UIA interface
+            UIA.ConnectionTimeout := 6000
+            SetTimer, keyTrack, On
+            SetTimer, mouseTrack, On
+            Return
         }
 
         If inStr(pt.Name, "Refresh", True)
-            GoSub, SendCtrlAdd
+            SendCtrlAdd(_winIdU, prevPath)
         Else {
             currentPath := ""
             loop 100 {
@@ -2594,7 +2610,7 @@ Return
                 sleep, 2
             }
             If (currentPath != prevPath)
-                SetTimer, SendCtrlAdd, -1
+                SetTimer, SendCtrlAddLabel, -1
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
@@ -2609,11 +2625,9 @@ Return
                 break
             sleep, 2
         }
-        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
-        SetTimer, SendCtrlAdd, -1
+        SetTimer, SendCtrlAddLabel, -1
     }
     Else {
-        SetTimer, SendCtrlAdd, Off
         try {
             pt := UIA.ElementFromPoint(lbX1,lbY1,False)
             mElPos := pt.CurrentBoundingRectangle
@@ -2637,6 +2651,10 @@ Return
     SetTimer, mouseTrack, On
 Return
 #If
+
+SendCtrlAddLabel:
+    SendCtrlAdd(_winIdU, prevPath, currentPath)
+Return
 
 RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2) ; from the FindText library, credit goes to feiyue
 {
@@ -3111,53 +3129,61 @@ SendWindowAndGo:
     GoToDesktop := False
 Return
 
-SendCtrlAdd:
-    MouseGetPos, , , mouseHoverId, initFocusedCtrl
-    WinGetClass, lClassCheck, ahk_id %mouseHoverId%
+SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "") {
+    Global UIA
+
+    WinGetClass, wmClassD, ahk_id %initTargetHwnd%
+    WinGetClass, lClassCheck, A
     tooltip, here1
-    If (lClassCheck != wmClassD) {
+
+    WinGet, lastCheckID, ID, A
+
+    If (lClassCheck != wmClassD || lastCheckID != initTargetHwnd) {
         SetTimer, SendCtrlAdd, Off
+        tooltip, %lClassCheck% - %wmClassD% - %lastCheckID% - %initTargetHwnd%
         Return
     }
 
-    If (!GetKeyState("LShift","P" ) && lClassCheck == wmClassD && wmClassD != "WorkerW" && wmClassD != "ProgMan" && wmClassD != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
+    If (!GetKeyState("LShift","P" ) && wmClassD != "WorkerW" && wmClassD != "ProgMan" && wmClassD != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
 
-        while (initFocusedCtrl == "ShellTabWindowClass1") {
-            MouseGetPos, , , , initFocusedCtrl
+        MouseGetPos, , , , initHoveredCtrlNN
+
+        while (initHoveredCtrlNN == "ShellTabWindowClass1") {
+            MouseGetPos, , , , initHoveredCtrlNN
         }
 
         ; tooltip, hovering over %initFocusedCtrl%
 
         OutputVar1 := OutputVar2 := OutputVar3 := 0
 
-        If (!InStr(initFocusedCtrl,"SysListView32",True) && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
+        If (!InStr(initHoveredCtrlNN,"SysListView32",True) && initHoveredCtrlNN != "DirectUIHWND2" && initHoveredCtrlNN != "DirectUIHWND3") {
             loop 200 {
-                ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %mouseHoverId%
-                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %mouseHoverId%
-                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %mouseHoverId%
+                ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %initTargetHwnd%
+                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %initTargetHwnd%
+                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %initTargetHwnd%
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
                     break
                 sleep, 2
             }
         }
         Else {
-            If (InStr(initFocusedCtrl,"SysListView32",True))
+            If (InStr(initHoveredCtrlNN,"SysListView32",True))
                 OutputVar1 := 1
-            Else If (initFocusedCtrl == "DirectUIHWND2")
+            Else If (initHoveredCtrlNN == "DirectUIHWND2")
                 OutputVar2 := 1
-            Else If (initFocusedCtrl == "DirectUIHWND3")
+            Else If (initHoveredCtrlNN == "DirectUIHWND3")
                 OutputVar3 := 1
         }
 
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
 
-            tooltip, init focus is %initFocusedCtrl%
-            WinGet, proc, ProcessName, ahk_id %mouseHoverId%
-            WinGetTitle, vWinTitle, ahk_id %mouseHoverId%
+            tooltip, init focus is %initHoveredCtrlNN%
+            WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
+            WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
                 If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                     try {
-                        exEl := UIA.ElementFromHandle(mouseHoverId)
+                        exEl := UIA.ElementFromHandle(initTargetHwnd)
                         shellEl := exEl.FindFirstByName("Items View")
                         shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
                     } catch e {
@@ -3180,27 +3206,27 @@ SendCtrlAdd:
             Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
                 OutHeight2 := 0
                 OutHeight3 := 0
-                ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %mouseHoverId%, , , ,
-                ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %mouseHoverId%, , , ,
+                ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
+                ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
                 If (OutHeight2 > OutHeight3)
                     TargetControl := "DirectUIHWND2"
                 Else
                     TargetControl := "DirectUIHWND3"
             }
 
-            tooltip, targeted is %TargetControl% with init at %initFocusedCtrl% ; - %OutHeight2% - %OutHeight3%
-            If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initFocusedCtrl != TargetControl) {
+            tooltip, targeted is %TargetControl% with init at %initHoveredCtrlNN% ; - %OutHeight2% - %OutHeight3%
+            If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initHoveredCtrlNN != TargetControl) {
                 loop, 500 {
-                    ControlFocus, %TargetControl%, ahk_id %mouseHoverId%
-                    ControlGetFocus, testCtrlFocus , ahk_id %mouseHoverId%
+                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                    ControlGetFocus, testCtrlFocus , ahk_id %initTargetHwnd%
                     If (testCtrlFocus == TargetControl)
                         break
                     sleep, 1
                 }
             }
 
-            WinGet, lastCheckID, ID, A
-            If (mouseHoverId == lastCheckID) {
+            WinGet, finalActiveHwnd, ID, A
+            If (initTargetHwnd == finalActiveHwnd) {
                 Send, ^{NumpadAdd}
 
                 If (prevPath != "" && currentPath != "" && prevPath != currentPath)
@@ -3209,11 +3235,11 @@ SendCtrlAdd:
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
                     sleep, 125
 
-                    If ((InStr(initFocusedCtrl,"Edit",True) || InStr(initFocusedCtrl,"Tree",True)) && initFocusedCtrl != TargetControl) {
+                    If ((InStr(initHoveredCtrlNN,"Edit",True) || InStr(initHoveredCtrlNN,"Tree",True)) && initHoveredCtrlNN != TargetControl) {
                         loop, 500 {
-                            ControlFocus , %initFocusedCtrl%, ahk_id %mouseHoverId%
-                            ControlGetFocus, testCtrlFocus , ahk_id %mouseHoverId%
-                            If (testCtrlFocus == initFocusedCtrl)
+                            ControlFocus , %initHoveredCtrlNN%, ahk_id %initTargetHwnd%
+                            ControlGetFocus, testCtrlFocus , ahk_id %initTargetHwnd%
+                            If (testCtrlFocus == initHoveredCtrlNN)
                                 break
                             sleep, 1
                         }
@@ -3225,6 +3251,7 @@ SendCtrlAdd:
         }
     }
 Return
+}
 
 ; https://www.autohotkey.com/boards/viewtopic.php?style=2&t=113107
 check() {
@@ -4074,22 +4101,28 @@ keyTrack() {
     WinGetClass, currClass, A
     If (currCtrl == "Edit1" && InStr(currClass, "EVERYTHING", True)) {
         StopAutoFix := True
+        ; A_PriorKey and Loops — How It Works
+        ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a loop.
+        ; You can read A_PriorKey at any point in the loop, and it will show the most recent key pressed up to that moment.
         If ((A_TickCount-TimeOfLastKey) < 700 && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
             SetTimer, keyTrack,   Off
             WinGetClass, testClass, A
 
             If (testClass == currClass) {
-                lastHotkeyBefore := ""
+                lastKeyPress := ""
+                ; When you're in a function and you want to know which hotkey triggered the function, always use A_ThisHotKey
                 If inStr(keys, A_PriorKey, False)
-                    lastHotkeyBefore := A_PriorKey
+                    lastKeyPress := A_PriorKey
+
                 DeAssignHotkeys()
 
                 Critical, On
                 Send, ^{NumpadAdd}
                 Critical, Off
 
-                If (inStr(keys, A_PriorKey, False) && lastHotkeyBefore != "" && A_PriorKey != lastHotkeyBefore)
+                If (inStr(keys, A_PriorKey, False) && lastKeyPress != "" && A_PriorKey != lastKeyPress)
                     Send, %A_PriorKey%
+
                 ReAssignHotkeys()
                 ; BlockKeyboard(False)
                 sleep, 400
@@ -5290,14 +5323,16 @@ IsPopup(winID) {
     Return False
 }
 ; https://www.autohotkey.com/boards/viewtopic.php?t=107842
+; This effectively "eats" all keystrokes while active.
 BlockKeyboard( bAction )
 {
-	static Blocker := InputHook( "L0 I" )
-	Blocker.KeyOpt( "{All}", "S" )
-	If bAction
-		Blocker.Start()
-	Else
-		Blocker.Stop()
+    ; A_PriorKey will still be up to date before you start blocking the keyboard — but not during or after the keyboard is blocked by the InputHook.
+    static Blocker := InputHook( "L0 I" )
+    Blocker.KeyOpt( "{All}", "S" )
+    If bAction
+        Blocker.Start()
+    Else
+        Blocker.Stop()
 }
 ; https://www.autohotkey.com/boards/viewtopic.php?p=583366#p583366
 GetIEobject()
