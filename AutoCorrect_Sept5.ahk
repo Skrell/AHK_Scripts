@@ -425,6 +425,7 @@ ReAssignHotkeys() {
     {
         HotKey ~%A_LoopField%, HotyANDFixSlash, On
     }
+    HotKey ~$Ctrl, LaunchWinFind, On
     Return
 }
 
@@ -444,6 +445,7 @@ DeAssignHotkeys() {
     {
         HotKey %A_LoopField%, DoNothing, On
     }
+    Hotkey Ctrl, DoNothing, On
     Return
 }
 
@@ -1311,7 +1313,7 @@ Esc::
     If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
         DetectHiddenWindows, Off
 
-        ; If IsAltTabWindow(escHwndID) {
+        If IsAltTabWindow(escHwndID) {
             WinActivate, ahk_id %escHwndID%
             GoSub, DrawRect
 
@@ -1323,16 +1325,16 @@ Esc::
             }
 
             If !CancelClose {
-                tooltip, Waiting for `"%escTitle%`" to close... ; "
                 Winclose, ahk_id %escHwndID%
 
                 loop 10 {
+                    tooltip, Waiting for `"%escTitle%`" to close... ; "
                     If !WinExist("ahk_id " . escHwndID) {
                         ClearRect(escHwndID)
                         ActivateTopMostWindow()
                         break
                     }
-                    sleep, 150
+                    sleep, 100
 
                     WinGetClass, actClass, A
 
@@ -1344,10 +1346,10 @@ Esc::
                         WinWaitClose, ahk_id %dialog_hwndID%
                         break
                     }
-                    If !executedOnce && WinExist("ahk_id " . escHwndID) {
-                        WinGet, kill_pid, PID, ahk_id %escHwndID%
-                        Process, Close, %kill_pid%
-                    }
+                }
+                If !executedOnce && WinExist("ahk_id " . escHwndID) {
+                    WinGet, kill_pid, PID, ahk_id %escHwndID%
+                    Process, Close, %kill_pid%
                 }
 
                 If (WinExist("ahk_id " . escHwndID) && !executedOnce) {
@@ -1365,7 +1367,7 @@ Esc::
             }
             Else
                 CancelClose := False
-        ; }
+        }
         tooltip
     }
 
@@ -2710,6 +2712,10 @@ Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
 ~$Ctrl::
+    GoSub, LaunchWinFind
+Return
+
+LaunchWinFind:
     If (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < 250)
     {
         StopRecursion   := True
@@ -3144,7 +3150,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "") {
         Return
     }
 
-    If (!GetKeyState("LShift","P" ) && wmClassD != "WorkerW" && wmClassD != "ProgMan" && wmClassD != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
+    If (!GetKeyState("LShift","P" ) && !GetKeyState("LButton", "P") && wmClassD != "WorkerW" && wmClassD != "ProgMan" && wmClassD != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
 
         MouseGetPos, , , , initHoveredCtrlNN
 
@@ -3152,7 +3158,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "") {
             MouseGetPos, , , , initHoveredCtrlNN
         }
 
-        ; tooltip, hovering over %initFocusedCtrl%
+        If GetKeyState("LButton", "P")
+            Return
 
         OutputVar1 := OutputVar2 := OutputVar3 := 0
 
@@ -3175,6 +3182,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "") {
                 OutputVar3 := 1
         }
 
+        If GetKeyState("LButton", "P")
+            Return
+
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
 
             tooltip, init focus is %initHoveredCtrlNN%
@@ -3196,6 +3206,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "") {
                     }
                 }
             }
+
+            If GetKeyState("LButton", "P")
+                Return
 
             Critical, On
             BlockInput, On
