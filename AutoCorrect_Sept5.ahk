@@ -620,10 +620,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         Return
                     }
                 }
-                DeAssignHotkeys()
+
                 Critical, On
-                ; BlockKeyboard(True)
-                ; BlockInput, On
+                BlockInput, On
+
                 If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                     loop, 100 {
                         ControlFocus, %TargetControl%, ahk_id %hWnd%
@@ -638,50 +638,44 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     SetTimer, keyTrack,   On
                     SetTimer, mouseTrack, On
                     LbuttonEnabled := True
+                    BlockInput, Off
                     Critical, Off
-                    ; BlockKeyboard(False)
-                    ReAssignHotkeys()
                     Return
                 }
                 Else {
                     WaitForFadeInStop(hWnd)
-                    Send, ^{NumpadAdd}
+                    WinGet, finalActiveHwnd, ID, A
+                    If (hWnd == finalActiveHwnd) {
+                        Send, ^{NumpadAdd}
 
-                    If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
-                        sleep, 125
+                        If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+                            sleep, 125
 
-                        If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
-                            loop, 500 {
-                                ControlFocus , %initFocusedCtrl%, ahk_id %hWnd%
-                                ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                                If (testCtrlFocus == initFocusedCtrl)
-                                    break
-                                sleep, 1
-                            }
-                            If (GetKeyState("Lbutton", "P")) {
-                                DetectHiddenWindows, Off
-                                SetTimer, keyTrack,   On
-                                SetTimer, mouseTrack, On
-                                LbuttonEnabled := True
-                                Critical, Off
-                                ; BlockKeyboard(False)
-                                ReAssignHotkeys()
-                                Return
+                            If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
+                                loop, 500 {
+                                    ControlFocus , %initFocusedCtrl%, ahk_id %hWnd%
+                                    ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
+                                    If (testCtrlFocus == initFocusedCtrl)
+                                        break
+                                    sleep, 1
+                                }
+                                If (GetKeyState("Lbutton", "P")) {
+                                    DetectHiddenWindows, Off
+                                    SetTimer, keyTrack,   On
+                                    SetTimer, mouseTrack, On
+                                    LbuttonEnabled := True
+                                    BlockInput, Off
+                                    Critical, Off
+                                    ; BlockKeyboard(False)
+                                    Return
+                                }
                             }
                         }
                     }
-
-                    ; ControlGetFocus, isEdit1 , ahk_id %hWnd%
-                    ; If (isEdit1 == "Edit1" && OutputVar1 == 1 && !InStr(vWinTitle, "Save", True)) {
-                        ; Send, {Ctrl Up}
-                        ; Send, {Backspace}{Backspace}
-                        ; break
-                    ; }
                 }
-                ; BlockInput, Off
-                ; BlockKeyboard(False)
+
+                BlockInput, Off
                 Critical, Off
-                ReAssignHotkeys()
             }
 
             LbuttonEnabled := True
@@ -5340,6 +5334,10 @@ IsPopup(winID) {
 BlockKeyboard( bAction )
 {
     ; A_PriorKey will still be up to date before you start blocking the keyboard — but not during or after the keyboard is blocked by the InputHook.
+    ; L0: Zero-length input — this captures no actual characters.
+    ; I: Ignore non-modifier keys.
+    ; Blocker.KeyOpt("{All}", "S"): Suppresses all keys — blocks their input and prevents them from reaching the active window.
+
     static Blocker := InputHook( "L0 I" )
     Blocker.KeyOpt( "{All}", "S" )
     If bAction
