@@ -646,7 +646,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     WaitForFadeInStop(hWnd)
                     WinGet, finalActiveHwnd, ID, A
                     If (hWnd == finalActiveHwnd) {
+                        Send, {Ctrl UP}
                         Send, ^{NumpadAdd}
+                        Send, {Ctrl UP}
 
                         If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
                             sleep, 125
@@ -945,6 +947,15 @@ CapsLock::
     TimeOfLastKey := A_TickCount
 Return
 
+^d::
+    StopAutoFix := True
+    Send, {end}
+    Send, +{home}
+    Send, {delete}
+    Hotstring("Reset")
+    StopAutoFix := False
+Return
+
 !a::
     StopAutoFix := True
     Send, {home}
@@ -952,26 +963,12 @@ Return
     StopAutoFix := False
 Return
 
-+!a::
-    StopAutoFix := True
-    Send, +{home}
-    Hotstring("Reset")
-    StopAutoFix := False
-Return
-
 !;::
     StopAutoFix := True
-    If GetKeyState("a")
-        Send, +{end}
-    Else
+    ; If GetKeyState("a")
+        ; Send, +{end}
+    ; Else
         Send, {end}
-    Hotstring("Reset")
-    StopAutoFix := False
-Return
-
-!+;::
-    StopAutoFix := True
-    Send, +{end}
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -1566,12 +1563,15 @@ Altup:
         Else {
             If (GetKeyState("x","P") || actWndID == ValidWindows[1] || GroupedWindows.length() <= 1) {
                 If (GetKeyState("x","P")) {
-                    Gui, GUI4Boarder: Hide
+                    BlockInput, MouseMove
                     GoSub, ResetWins
+                    BlockInput, MouseMoveOff
                 }
             }
             Else If (startHighlight && (GroupedWindows.length() > 2)  && actWndID != ValidWindows[1]) {
+                BlockInput, MouseMove
                 GoSub, FadeInWin2
+                BlockInput, MouseMoveOff
             }
         }
     }
@@ -2506,7 +2506,7 @@ Return
             Return
         }
         Else {
-            SendCtrlAdd(_winIdD)
+            SendCtrlAdd(_winIdD,,wmClassD)
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
             sleep, 250
@@ -2535,7 +2535,7 @@ Return
 
     KeyWait, LButton, U T5
 
-    MouseGetPos, lbX2, lbY2, _winIdU
+    MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU
 
     rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
@@ -2549,17 +2549,22 @@ Return
         SetTimer, SendCtrlAddLabel, -125
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (_winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3")
+        && (_winCtrlD == "SysHeader321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3")
         && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3 != 0xFFFFFF)) {
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
 
-            If (pt.CurrentControlType == 50031) {
+            If (pt.CurrentControlType == 50031 || pt.CurrentControlType == 50035) {
                 ControlGetFocus, initFocusedCtrl , ahk_id %_winIdU%
+                ; tooltip, init is %initFocusedCtrl%
                 If (initFocusedCtrl == "SysTreeView321")
                     Send, {tab}
-                SendCtrlAdd(_winIdU, prevPath)
+
+                If (pt.CurrentControlType == 50031)
+                    ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
+                Send, ^{NumpadAdd}
+                ; tooltip, sent
             }
         } catch e {
             tooltip, TIMED OUT!!!!
@@ -2595,8 +2600,10 @@ Return
             Return
         }
 
-        If inStr(pt.Name, "Refresh", True)
-            SendCtrlAdd(_winIdU, prevPath)
+        If inStr(pt.Name, "Refresh", True) {
+            SendCtrlAdd(_winIdU, prevPath,, wmClassD)
+            ; SetTimer, SendCtrlAddLabel, -1
+        }
         Else {
             currentPath := ""
             loop 100 {
@@ -2605,8 +2612,10 @@ Return
                     break
                 sleep, 2
             }
-            If (currentPath != prevPath)
-                SetTimer, SendCtrlAddLabel, -1
+            If (currentPath != prevPath) {
+                SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
+                ; SetTimer, SendCtrlAddLabel, -1
+            }
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
@@ -2621,9 +2630,10 @@ Return
                 break
             sleep, 2
         }
-        SetTimer, SendCtrlAddLabel, -1
+        SendCtrlAdd(_winIdU, prevPath, currentPath,wmClassD)
+        ; SetTimer, SendCtrlAddLabel, -1
     }
-    Else {
+    Else If (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25) {
         try {
             pt := UIA.ElementFromPoint(lbX1,lbY1,False)
             mElPos := pt.CurrentBoundingRectangle
@@ -3129,22 +3139,28 @@ SendWindowAndGo:
     GoToDesktop := False
 Return
 
-SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "") {
+SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "") {
     Global UIA
 
-    WinGetClass, wmClassD, ahk_id %initTargetHwnd%
-    WinGetClass, lClassCheck, A
-    tooltip, here1
+    ; tooltip, here1
+
+    If (initTargetClass == "")
+        WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
+    Else
+        lClassCheck := initTargetClass
 
     WinGet, lastCheckID, ID, A
-
-    If (lClassCheck != wmClassD || lastCheckID != initTargetHwnd) {
+    If (lastCheckID != initTargetHwnd) {
         SetTimer, SendCtrlAdd, Off
-        tooltip, %lClassCheck% - %wmClassD% - %lastCheckID% - %initTargetHwnd%
+        WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
+        tooltip, %lClassCheck% - %lastCheckID% - %initTargetHwnd%
         Return
     }
 
-    If (!GetKeyState("LShift","P" ) && !GetKeyState("LButton", "P") && wmClassD != "WorkerW" && wmClassD != "ProgMan" && wmClassD != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
+    If (!GetKeyState("LShift","P" )
+        && !GetKeyState("LButton", "P")
+        && lClassCheck != "WorkerW" && lClassCheck != "ProgMan"
+        && lClassCheck != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
 
         MouseGetPos, , , , initHoveredCtrlNN
 
@@ -3155,7 +3171,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "") {
         If GetKeyState("LButton", "P")
             Return
 
-        OutputVar1 := OutputVar2 := OutputVar3 := 0
+        OutputVar1 := 0
+        OutputVar2 := 0
+        OutputVar3 := 0
 
         If (!InStr(initHoveredCtrlNN,"SysListView32",True) && initHoveredCtrlNN != "DirectUIHWND2" && initHoveredCtrlNN != "DirectUIHWND3") {
             loop 200 {
@@ -3175,13 +3193,13 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "") {
             Else If (initHoveredCtrlNN == "DirectUIHWND3")
                 OutputVar3 := 1
         }
-
+        ; tooltip, %OutputVal1% - %OutputVal2% - %OutputVal3%
         If GetKeyState("LButton", "P")
             Return
 
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
 
-            tooltip, init focus is %initHoveredCtrlNN%
+            ; tooltip, init focus is %initHoveredCtrlNN% - %OutputVal1% - %OutputVal2% - %OutputVal3%
             WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
             WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
@@ -3368,13 +3386,13 @@ Return
 Return
 
 RButton & WheelUp::
-    SetTimer, SendCtrlAdd, Off
+    SetTimer, SendCtrlAddLabel, Off
     ComboActive := True
     Send, ^{Home}
 Return
 
 RButton & WheelDown::
-    SetTimer, SendCtrlAdd, Off
+    SetTimer, SendCtrlAddLabel, Off
     ComboActive := True
     Send, ^{End}
 Return
@@ -4131,7 +4149,6 @@ keyTrack() {
                     Send, %A_PriorKey%
 
                 ReAssignHotkeys()
-                ; BlockKeyboard(False)
                 sleep, 400
                 TimeOfLastKey := A_TickCount
             }
@@ -6328,6 +6345,25 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:wx::x
 :*:yx::x
 :*:zx::x
+:*:bb::b
+:*:cc::c
+:*:dd::d
+:*:ff::f
+:*:gg::g
+:*:hh::h
+:*:ii::i
+:*:jj::j
+:*:kk::k
+:*:mm::m
+:*:nn::n
+:*:pp::p
+:*:qq::q
+:*:rr::r
+:*:ss::s
+:*:tt::t
+:*:uu::u
+:*:vv::v
+:*:yy::y
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
