@@ -274,7 +274,7 @@ OnExit("PreventRecur")
 ReAssignHotkeys()
 
 HotKey ~/,  FixSlash
-HotKey ~',  Hoty
+HotKey ~',  Hoty ;'
 HotKey ~?,  Hoty
 HotKey ~!,  Hoty
 HotKey ~`,, Hoty
@@ -506,13 +506,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 break
             sleep, 2
         }
-
-        ; this check to prevent accidental sends to windows that contain a SysListView321 panel not a file list such as Notepad++
-        ; If (!InStr(initFocusedCtrl,"Edit",True) && initFocusedCtrl != "SysListView321" && initFocusedCtrl != "DirectUIHWND2" && initFocusedCtrl != "DirectUIHWND3") {
-            ; SetTimer, keyTrack,   On
-            ; SetTimer, mouseTrack, On
-            ; Return
-        ; }
 
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
             If (vWinClass == "#32770") {
@@ -947,14 +940,42 @@ CapsLock::
     TimeOfLastKey := A_TickCount
 Return
 
-^d::
+#IfWinNotActive ahk_exe notepad++.exe
+^+d::
     StopAutoFix := True
-    Send, {end}
-    Send, +{home}
-    Send, {delete}
+    Send, {End}
+    Send, +{Home}
+    Send, +{Home}
+    Send, {Delete}
+    Send, {Delete}
     Hotstring("Reset")
     StopAutoFix := False
 Return
+
+^d::
+    StopAutoFix := True
+    Send, {End}
+    Send, +{Home}
+    If WinExist("ahk_exe Clipjump.exe") {
+        Send, !+^{x}
+        sleep, 100
+        Send, {d}
+        sleep, 100
+    }
+    store := Clip()
+    Send, {Right}
+    Send, {Enter}
+    Clip(store)
+    If WinExist("ahk_exe Clipjump.exe") {
+        sleep, 100
+        Send, !+^{x}
+        sleep, 100
+        Send, {d}
+    }
+    Hotstring("Reset")
+    StopAutoFix := False
+Return
+#IfWinNotActive
 
 !a::
     StopAutoFix := True
@@ -987,7 +1008,7 @@ Return
     StopAutoFix := False
 Return
 
-!+'::
+!+':: ;'
     Critical, On
     store := Clip()
     len := StrLen(store)
@@ -2557,14 +2578,12 @@ Return
 
             If (pt.CurrentControlType == 50031 || pt.CurrentControlType == 50035) {
                 ControlGetFocus, initFocusedCtrl , ahk_id %_winIdU%
-                ; tooltip, init is %initFocusedCtrl%
                 If (initFocusedCtrl == "SysTreeView321")
                     Send, {tab}
 
                 If (pt.CurrentControlType == 50031)
                     ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
                 Send, ^{NumpadAdd}
-                ; tooltip, sent
             }
         } catch e {
             tooltip, TIMED OUT!!!!
@@ -2602,7 +2621,6 @@ Return
 
         If inStr(pt.Name, "Refresh", True) {
             SendCtrlAdd(_winIdU, prevPath,, wmClassD)
-            ; SetTimer, SendCtrlAddLabel, -1
         }
         Else {
             currentPath := ""
@@ -2614,7 +2632,6 @@ Return
             }
             If (currentPath != prevPath) {
                 SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
-                ; SetTimer, SendCtrlAddLabel, -1
             }
         }
     }
@@ -2630,8 +2647,8 @@ Return
                 break
             sleep, 2
         }
-        SendCtrlAdd(_winIdU, prevPath, currentPath,wmClassD)
-        ; SetTimer, SendCtrlAddLabel, -1
+        If (currentPath != prevPath)
+            SendCtrlAdd(_winIdU, prevPath, currentPath)
     }
     Else If (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25) {
         try {
@@ -3243,7 +3260,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initHoveredCtrlNN != TargetControl) {
                 loop, 500 {
                     ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ControlGetFocus, testCtrlFocus , ahk_id %initTargetHwnd%
+                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
                     If (testCtrlFocus == TargetControl)
                         break
                     sleep, 1
