@@ -487,7 +487,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     static exEl, shellEl, listEl
 
     If !StopRecursion && !hitTab {
-
+        DetectHiddenWindows, Off
         loop 500 {
             WinGetClass, vWinClass, % "ahk_id " hWnd
             WinGetTitle, vWinTitle, % "ahk_id " hWnd
@@ -524,14 +524,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         SetTimer, keyTrack,   Off
         SetTimer, mouseTrack, Off
 
-        loop, 100 {
-            ControlGetFocus, initFocusedCtrl , ahk_id %hWnd%
-            If (initFocusedCtrl != "")
-                break
-            sleep, 2
-        }
-
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+            loop, 100 {
+                ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
+                If (initFocusedCtrl != "")
+                    break
+                sleep, 2
+            }
+
             If (vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
             }
@@ -679,7 +679,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                     sleep, 1
                                 }
                                 If (GetKeyState("Lbutton", "P")) {
-                                    DetectHiddenWindows, Off
                                     SetTimer, keyTrack,   On
                                     SetTimer, mouseTrack, On
                                     LbuttonEnabled := True
@@ -967,18 +966,22 @@ Return
 #If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything64.exe") && !WinActive("ahk_exe Code.exe"))
 ^+d::
     StopAutoFix := True
-    Send, {End}
-    Send, +{Home}
-    Send, +{Home}
-    Send, {Delete}
+    SetTimer, keyTrack, Off
+    Send, {Down}
+    Send, {Home}
+    Send, {Home}
+    Send, +{up}
     Send, {Delete}
     Hotstring("Reset")
     StopAutoFix := False
+    SetTimer, keyTrack, On
 Return
 
 ^d::
     StopAutoFix := True
+    SetTimer, keyTrack, Off
     Send, {End}
+    Send, +{Home}
     Send, +{Home}
     store := Clip()
     Send, {End}
@@ -988,6 +991,7 @@ Return
     Send, {Home}
     Hotstring("Reset")
     StopAutoFix := False
+    SetTimer, keyTrack, On
 Return
 #If
 
@@ -2574,8 +2578,8 @@ Return
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
 
             If (pt.CurrentControlType == 50031 || pt.CurrentControlType == 50035) {
-                ControlGetFocus, initFocusedCtrl , ahk_id %_winIdU%
-                If (initFocusedCtrl == "SysTreeView321")
+                ControlGetFocus, isTree, ahk_id %_winIdU%
+                If (isTree == "SysTreeView321")
                     Send, {tab}
 
                 If (pt.CurrentControlType == 50035) ; this most likely would indicate an explorer based window
@@ -6137,21 +6141,18 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:incorretc::incorrect
 :*:methodo::methodology `
 :*:orthog::orthogonal
-:*:pecific::specific
-:*:secific::specific
-:*:spcific::specific
-:*:speific::specific
-:*:specfic::specific
-:*:speciic::specific
-:*:specifc::specific
-:*:specifi::specific
-:*:psecific::specific
-:*:sepcific::specific
-:*:spceific::specific
-:*:speicfic::specific
-:*:specfiic::specific
-:*:speciifc::specific
-:*:specifci::specific
+:*:pecifi::specifi
+:*:secifi::specifi
+:*:spcifi::specifi
+:*:speifi::specifi
+:*:specfi::specifi
+:*:specii::specifi
+:*:psecifi::specifi
+:*:sepcifi::specifi
+:*:spceifi::specifi
+:*:speicfi::specifi
+:*:specfii::specifi
+:*:speciif::specifi
 :*:fucn::func
 :*:retreiv::retriev
 :*:dj::j
