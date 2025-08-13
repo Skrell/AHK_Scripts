@@ -971,6 +971,7 @@ Return
     Send, +{Home}
     Send, +{Home}
     Send, {Delete}
+    Send, {Delete}
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -982,6 +983,7 @@ Return
     store := Clip()
     Send, {End}
     Send, {Enter}
+    Send, {Home}
     Clip(store)
     Send, {Home}
     Hotstring("Reset")
@@ -991,7 +993,7 @@ Return
 
 !a::
     StopAutoFix := True
-    Send, {home}
+    Send, {Home}
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -1001,7 +1003,7 @@ Return
     ; If GetKeyState("a")
         ; Send, +{end}
     ; Else
-        Send, {end}
+        Send, {End}
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -1015,7 +1017,7 @@ Return
 
 !+k::
     StopAutoFix := True
-    Send +{DOWN}
+    Send +{Down}
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -1151,7 +1153,7 @@ $!Space::
     ; CapsDown := True
     ; KeyWait, Space, U T10
     ; CapsDown := False
-    Send, {LEFT}
+    Send, {Left}
     StopAutoFix := False
 Return
 
@@ -1164,7 +1166,7 @@ Return
 
 $!k::
     StopAutoFix := True
-    Send, {DOWN}
+    Send, {Down}
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -1174,7 +1176,7 @@ $!j::
     ; If CapsDown
         ; Send, {LEFT}
     ; Else
-        Send, ^{LEFT}
+    Send, ^{Left}
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -1182,7 +1184,7 @@ Return
 $!+j::
     StopAutoFix := True
     SendLevel, 1
-    Send, ^+{LEFT}
+    Send, ^+{Left}
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -1192,14 +1194,14 @@ $!l::
     ; If CapsDown
         ; Send, {RIGHT}
     ; Else
-        Send, ^{RIGHT}
+    Send, ^{Right}
     Hotstring("Reset")
     StopAutoFix := False
 Return
 
 $!+l::
     StopAutoFix := True
-    Send ^+{RIGHT}
+    Send ^+{Right}
     Hotstring("Reset")
     StopAutoFix := False
 Return
