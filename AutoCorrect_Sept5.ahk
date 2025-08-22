@@ -963,14 +963,18 @@ CapsLock::
     TimeOfLastKey := A_TickCount
 Return
 
-#If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything64.exe") && !WinActive("ahk_exe Code.exe"))
+#If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything64.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE"))
 ^+d::
     StopAutoFix := True
     SetTimer, keyTrack, Off
     Send, {Down}
-    Send, {Home}
-    Send, {Home}
+    sleep, 10
+    Send, {Home}{Home}
+    sleep, 10
     Send, +{up}
+    ; Send, {End}
+    ; Send, +{Home}+{Home}+{Home}
+    sleep, 10
     Send, {Delete}
     Hotstring("Reset")
     StopAutoFix := False
@@ -981,17 +985,22 @@ Return
     StopAutoFix := True
     SetTimer, keyTrack, Off
     Send, {End}
-    Send, +{Home}
-    Send, +{Home}
+    sleep, 10
+    Send, +{Home}+{Home}+{Home}
+    sleep, 10
     store := Clip()
+    tooltip, %store%
+    sleep, 10
     Send, {End}
+    sleep, 10
     Send, {Enter}
+    sleep, 10
     Send, {Home}
     Clip(store)
-    Send, {Home}
     Hotstring("Reset")
     StopAutoFix := False
     SetTimer, keyTrack, On
+    sleep, 500
 Return
 #If
 
@@ -1646,22 +1655,22 @@ FadeInWin1:
     If (_winIdD != ValidWindows[4] && Highlighter != ValidWindows[4] && ValidWindows.MaxIndex() >= 4)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
 
-    If (_winIdD != ValidWindows[4] &&ValidWindows.MaxIndex() >= 4) {
+    If (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4) {
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[4]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[4]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
-    If (_winIdD != ValidWindows[3] &&ValidWindows.MaxIndex() >= 3) {
+    If (_winIdD != ValidWindows[3] && ValidWindows.MaxIndex() >= 3) {
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
-    If (_winIdD != ValidWindows[2] &&ValidWindows.MaxIndex() >= 2) {
+    If (_winIdD != ValidWindows[2] && ValidWindows.MaxIndex() >= 2) {
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
-    If (_winIdD != ValidWindows[1] &&ValidWindows.MaxIndex() >= 1) {
+    If (_winIdD != ValidWindows[1] && ValidWindows.MaxIndex() >= 1) {
             WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
@@ -2751,7 +2760,7 @@ Return
 Return
 
 LaunchWinFind:
-    If (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < 250)
+    If (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < 200)
     {
         StopRecursion   := True
         SetTimer, mouseTrack, off
@@ -4673,7 +4682,7 @@ HasVal(haystack, needle) {
 ; Clip() - Send and Retrieve Text Using the Clipboard
 ; by berban - updated February 18, 2019
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=62156
-Clip(Text="", Reselect="")
+Clip(Text := "", Reselect := "")
 {
     Static BackUpClip, Stored, LastClip
     If (A_ThisLabel = A_ThisFunc) {
@@ -4686,25 +4695,34 @@ Clip(Text="", Reselect="")
             BackUpClip := ClipboardAll ; ClipboardAll must be on its own line
         } Else
             SetTimer, %A_ThisFunc%, Off
-        LongCopy := A_TickCount, Clipboard := "", LongCopy -= A_TickCount ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
-        If (Text = "") {
+        LongCopyMs := A_TickCount
+        Clipboard := ""
+        LongCopyMs -= A_TickCount ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
+        LongCopySec := LongCopyMs / 1000.0
+        If RegExMatch(Text, "^\s+$")
+            Return
+        Else If (Text == "") {
             Send, ^c
-            ClipWait, LongCopy ? 0.6 : 0.2, True
+            ; ClipWait, LongCopy ? 0.6 : 0.2, True
+            ; ClipWait, LongCopySec, True
+            ClipWait, %LongCopySec%
         } Else {
             Clipboard := LastClip := Text
-            ClipWait, 10
+            ; ClipWait, 10
+            ClipWait, %LongCopyMs%
             Send, ^v
         }
         SetTimer, %A_ThisFunc%, -700
         Sleep 20 ; Short sleep in case Clip() is followed by more keystrokes such as {Enter}
-        If (Text = "")
+        If (Text == "")
             Return LastClip := Clipboard
-        Else If ReSelect and ((ReSelect = True) or (StrLen(Text) < 3000))
+        Else If ReSelect && ((ReSelect == True) || (StrLen(Text) < 3000))
             Send, % "{Shift Down}{Left " StrLen(StrReplace(Text, "`r")) "}{Shift Up}"
     }
     Return
+
     Clip:
-    Return Clip()
+        Return Clip()
 }
 
 
