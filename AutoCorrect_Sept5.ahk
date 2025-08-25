@@ -493,7 +493,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             WinGetTitle, vWinTitle, % "ahk_id " hWnd
             If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768"))
                 break
-            sleep, 2
+            sleep, 1
         }
 
         WinGet, vWinStyle, Style, % "ahk_id " hWnd
@@ -1232,6 +1232,22 @@ Return
     ControlGetFocus, currCtrl, A
     WinGetClass, currCl, A
     If (currCl == "CabinetWClass" && currCtrl == "Edit1") || (currCl == "#32770" && currCtrl == "Edit1") {
+        Keywait, Enter, U T3
+        try {
+            exEl := UIA.ElementFromHandle(hWnd)
+            shellEl := exEl.FindFirstByName("Items View")
+            shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+        } catch e {
+            tooltip, TIMED OUT!!!!
+            UIA :=  ;// set to a different value
+            ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+            UIA := UIA_Interface() ; Initialize UIA interface
+            UIA.ConnectionTimeout := 6000
+            SetTimer, keyTrack,   On
+            SetTimer, mouseTrack, On
+            LbuttonEnabled := True
+            Return
+        }
         Send, ^{NumpadAdd}
     }
 Return
@@ -4174,12 +4190,11 @@ keyTrack() {
             WinGetClass, testClass, A
 
             If (testClass == currClass) {
+                DeAssignHotkeys()
                 lastKeyPress := ""
                 ; When you're in a function and you want to know which hotkey triggered the function, always use A_ThisHotKey
                 If inStr(keys, A_PriorKey, False)
                     lastKeyPress := A_PriorKey
-
-                DeAssignHotkeys()
 
                 Critical, On
                 Send, ^{NumpadAdd}
