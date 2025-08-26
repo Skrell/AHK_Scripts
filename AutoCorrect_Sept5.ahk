@@ -1013,10 +1013,7 @@ Return
 
 !;::
     StopAutoFix := True
-    ; If GetKeyState("a")
-        ; Send, +{end}
-    ; Else
-        Send, {End}
+    Send, {End}
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -4333,7 +4330,18 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
     SysGet, SM_CXSIZEFRAME, 32
     SysGet, SM_CYSIZEFRAME , 33
 
+
+    CoordMode, Mouse, Screen
+    If (xPos != "" && yPos != "")
+        MouseGetPos, , , WindowUnderMouseID
+    Else
+        MouseGetPos, xPos, yPos, WindowUnderMouseID
+
+    WinGet, isMax, MinMax, ahk_id %WindowUnderMouseID%
+
     titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
+    If (isMax == 1)
+        titlebarHeight := SM_CYSIZE
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     If (   (mClass != "Shell_TrayWnd")
@@ -4343,11 +4351,7 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
         && (mClass != "#32768")
         && (mClass != "Net UI Tool Window")) {
 
-        CoordMode, Mouse, Screen
-        If (xPos != "" && yPos != "")
-            MouseGetPos, , , WindowUnderMouseID
-        Else
-            MouseGetPos, xPos, yPos, WindowUnderMouseID
+        ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME% : %SM_CXSIZE% - %SM_CYSIZE%
 
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
         If (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-SM_CXBORDER-(45*3))) {
@@ -4355,7 +4359,6 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
             If ((yPos > y) && (yPos < (y+titlebarHeight)) && (ErrorLevel == 2))
                 Return True
             Else If ((ErrorLevel != 12) && (mClass != "Chrome_WidgetWin_1")) {
-                ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
                 pt := UIA.ElementFromPoint(xPos,yPos,False)
                 Return (pt.CurrentControlType == 50037)
             }
@@ -6060,6 +6063,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:kx::k
 :?:nx::n
 :?:oz::o
+:?:tn::nt
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
