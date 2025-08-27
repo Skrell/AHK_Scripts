@@ -801,16 +801,18 @@ Return
 WheelDown::
     ; tooltip, % IsConsoleWindow() "-" IsMouseOnLeftSide() "-" textBoxSelected
     StopRecursion := True
-    Send, {DOWN}
     SetTimer, MbuttonTimer, Off
+    Send, {DOWN}
+    sleep, 125
     SetTimer, MbuttonTimer, -1
     StopRecursion := False
 Return
 
 WheelUp::
     StopRecursion := True
-    Send, {UP}
     SetTimer, MbuttonTimer, Off
+    Send, {UP}
+    sleep, 125
     SetTimer, MbuttonTimer, -1
     StopRecursion := False
 Return
