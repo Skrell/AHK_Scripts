@@ -797,7 +797,7 @@ Return
     Send, {Enter}
 Return
 
-#If ((IsConsoleWindow() && IsMouseOnLeftSide()) || textBoxSelected)
+#If ((IsConsoleWindow() && IsMouseOnLeftSide()) || textBoxSelected) && !MouseIsOverTitleBar()
 WheelDown::
     ; tooltip, % IsConsoleWindow() "-" IsMouseOnLeftSide() "-" textBoxSelected
     StopRecursion := True
@@ -4358,8 +4358,9 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
         If (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-SM_CXBORDER-(45*3))) {
             SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID
-            If ((yPos > y) && (yPos < (y+titlebarHeight)) && (ErrorLevel == 2))
+            If ((yPos > y) && (yPos < (y+titlebarHeight)) && (ErrorLevel == 2)) {
                 Return True
+            }
             Else If ((ErrorLevel != 12) && (mClass != "Chrome_WidgetWin_1")) {
                 pt := UIA.ElementFromPoint(xPos,yPos,False)
                 Return (pt.CurrentControlType == 50037)
@@ -6272,11 +6273,13 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::stuats::status
 ::claend::cleaned
 ::its he::is the
 ::Shoudl::Should
 ::a mnot::am not
 ::a tthat::at that
+::not hat::on that
 ::aanother::another
 ::abandonned::abandoned
 ::abbout::about
@@ -9304,9 +9307,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::zeebra::zebra
 :C:Nto::Not
 :C:nto::not
-;-------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
 ;  Capitalise dates
-;-------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
 ::monday::Monday
 ::tuesday::Tuesday
 ::wednesday::Wednesday
@@ -9330,9 +9333,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::fw::FW
 ::scadapp::SCADApp
 ::scad::SCAD
-;-------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
 ; Anything below this point was added to the script by the user via the Win+H hotkey.
-;-------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
 ::ahven't::haven't
 ::ahvent::haven't
 ::arent'::aren't
