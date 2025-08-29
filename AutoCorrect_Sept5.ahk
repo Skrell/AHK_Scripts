@@ -1230,7 +1230,9 @@ Return
 ~Enter::
     ControlGetFocus, currCtrl, A
     WinGetClass, currCl, A
-    If (currCl == "CabinetWClass" && currCtrl == "Edit1") || (currCl == "#32770" && currCtrl == "Edit1") {
+    WinGetTitle, currTi, A
+    If     (currCl == "CabinetWClass" && InStr(currCtrl, "Edit", True))
+        || (currCl == "#32770" && InStr(currCtrl, "Edit", True) && (InStr(currTi, "Save", True) || InStr(currTi, "Open", True))) {
         Keywait, Enter, U T3
         try {
             exEl := UIA.ElementFromHandle(hWnd)
