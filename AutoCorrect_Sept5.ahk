@@ -98,6 +98,7 @@ Global keys                        := "abcdefghijklmnopqrstuvwxyz"
 Global numbers                     := "0123456789"
 Global DoubleClickTime             := DllCall("GetDoubleClickTime")
 Global isWin11                     := DetectWin11()
+Global TaskBarHeight               := 0
 
 Process, Priority,, High
 
@@ -291,6 +292,8 @@ Send #^{Left}
 sleep, 50
 Send #^{Left}
 sleep, 50
+
+WinGetPos, , , , TaskBarHeight, ahk_class Shell_TrayWnd
 
 ;EVENT_SYSTEM_FOREGROUND := 0x3
 DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
@@ -1649,7 +1652,7 @@ Altup:
     LclickSelected := False
     BlockKeyboard(False)
     Critical, Off
-    ClearRect()
+    ; ClearRect()
     ; tooltip,
 Return
 
@@ -1746,25 +1749,40 @@ FadeInWin2:
     WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
-    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1])
+    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) {
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2])
+        WinActivate, % "ahk_id " ValidWindows[1]
+    }
+    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) {
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3])
+        WinActivate, % "ahk_id " ValidWindows[2]
+    }
+    If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) {
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
+        WinActivate, % "ahk_id " ValidWindows[3]
+    }
+    If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) {
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
+        WinActivate, % "ahk_id " ValidWindows[4]
+    }
 
+    If (ValidWindows.MaxIndex() >= 4) {
+            WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[4]
+            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[4]
+            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    }
     If (ValidWindows.MaxIndex() >= 3) {
-            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[3]
+            WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (ValidWindows.MaxIndex() >= 2) {
-            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[2]
+            WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
     If (ValidWindows.MaxIndex() >= 1) {
-            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[1]
+            WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
             WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     }
@@ -1838,6 +1856,7 @@ If !hitTAB {
     SetTimer, mouseTrack, Off
     SetTimer, keyTrack,   Off
     Cycle()
+    Gui, GUI4Boarder: Hide
     GoSub, Altup
     SetTimer, mouseTrack, On
     SetTimer, keyTrack,   On
@@ -1854,10 +1873,15 @@ Return
     WinGet, activeProcessName, ProcessName, A
     WinGetClass, activeClassName, A
 
-    HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
-    ClearRect()
-
-    ; tooltip,
+    lastActWinID := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
+    ; ClearRect()
+    Gui, GUI4Boarder: Hide
+    If (cycleCount > 2)
+        GoSub, FadeInWin2
+    WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
+    WinActivate, ahk_id %lastActWinID%
+    ValidWindows   := []
+    GroupedWindows := []
     StopRecursion := False
 Return
 
@@ -2093,7 +2117,7 @@ Cycle()
 
             If (MonCount > 1) {
                 currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                currentMonHasActWin := IsWindowOnCurrMon(hwndID, currentMon)
             }
             Else {
                 currentMonHasActWin := True
@@ -2108,7 +2132,7 @@ Cycle()
                         ValidWindows.push(hwndID)
 
                         ; If (prev_cl != cl || prev_exe != exe) {
-                            GroupedWindows.push(hwndId)
+                            GroupedWindows.push(hwndID)
 
                             If (GroupedWindows.MaxIndex() == 2) {
                                 WinActivate, % "ahk_id " hwndID
@@ -2121,7 +2145,7 @@ Cycle()
                                     GoSub, DrawRect
                                     If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
                                         GroupedWindows := []
-                                        ValidWindows := []
+                                        ValidWindows   := []
                                         Critical, Off
                                         Return
                                     }
@@ -2135,7 +2159,7 @@ Cycle()
                             }
                             If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
                                 GroupedWindows := []
-                                ValidWindows := []
+                                ValidWindows   := []
                                 Critical, Off
                                 Return
                             }
@@ -3936,20 +3960,48 @@ findDesktopWindowIsOn(hwnd)
 ***** UTILITY FUNCTIONS *****
 *****************************
 */
+UpdateValidWindows() {
+Global ValidWindows
+Global MonCount
+
+    currentMon := MWAGetMonitorMouseIsIn()
+    WinGet, allWindows, List
+    loop % allWindows
+    {
+        hwndID := allWindows%A_Index%
+
+        If (IsAltTabWindow(hwndID)) {
+            WinGet, state, MinMax, ahk_id %hwndID%
+            If (MonCount > 1 && state > -1) {
+                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+            }
+            Else If (state > -1) {
+                currentMonHasActWin := True
+            }
+            If (currentMonHasActWin && state > -1) {
+                ValidWindows.push(hwndID)
+            }
+        }
+    }
+Return
+}
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    Global MonCount, VD, Highlighter, hitTAB, WindowTitleID
+    Global MonCount, VD, Highlighter, hitTAB, WindowTitleID, GroupedWindows, cycleCount
     SetTimer, mouseTrack, Off
     windowsToMinimize := []
     minimizedWindows  := []
-    finalWindowsListWithProcAndClass := []
+    ; finalWindowsListWithProcAndClass := []
     lastActWinID      := ""
     hitTAB            := False
 
+    ; SetTimer, UpdateValidWindows, -1
+    UpdateValidWindows()
+
     currentMon := MWAGetMonitorMouseIsIn()
     Critical, On
-    counter := 2
+    cycleCount := 2
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
 
     loop % windowsListWithSameProcessAndClass
@@ -3965,7 +4017,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
 
         If (currentMonHasActWin && tit != ""  && mmState > -1) {
-            finalWindowsListWithProcAndClass.push(hwndID)
+            GroupedWindows.push(hwndID)
         }
         Else If (mmState == -1) {
             minimizedWindows.push(hwndID)
@@ -3975,10 +4027,10 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     loop % minimizedWindows.length()
     {
         minHwndID := minimizedWindows[A_Index]
-        finalWindowsListWithProcAndClass.push(minHwndID)
+        GroupedWindows.push(minHwndID)
     }
 
-    numWindows := finalWindowsListWithProcAndClass.length()
+    numWindows := GroupedWindows.length()
 
     If (numWindows <= 1) {
         SetTimer, mouseTrack, On
@@ -3990,15 +4042,15 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         Return
     }
 
-    WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
-    WinGet, mmState, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[counter]
+    WinActivate, % "ahk_id " GroupedWindows[1]
+    WinGet, mmState, MinMax, % "ahk_id " GroupedWindows[cycleCount]
     If (MonCount > 1 && mmState == -1) {
-        windowsToMinimize.push(finalWindowsListWithProcAndClass[counter])
-        lastActWinID := finalWindowsListWithProcAndClass[counter]
+        windowsToMinimize.push(GroupedWindows[cycleCount])
+        lastActWinID := GroupedWindows[cycleCount]
     }
-    WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[counter]
-    WinGetTitle, actTitle, % "ahk_id " finalWindowsListWithProcAndClass[counter]
-    WinGet, pp, ProcessPath , % "ahk_id " finalWindowsListWithProcAndClass[counter]
+    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+    WinGetTitle, actTitle, % "ahk_id " GroupedWindows[cycleCount]
+    WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
     Critical, Off
 
@@ -4007,12 +4059,12 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     KeyWait, ``, U T1
 
-    counter++
-    If (counter > numWindows) {
-        counter := 1
+    cycleCount++
+    If (cycleCount > numWindows) {
+        cycleCount := 1
     }
 
-    hwndId := finalWindowsListWithProcAndClass[counter]
+    hwndId := GroupedWindows[cycleCount]
 
     loop
     {
@@ -4049,20 +4101,20 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             KeyWait, ``, U
             If !ErrorLevel
             {
-                counter++
-                If (counter > numWindows)
+                cycleCount++
+                If (cycleCount > numWindows)
                 {
-                    counter := 1
+                    cycleCount := 1
                 }
                 loop {
-                    hwndId := finalWindowsListWithProcAndClass[counter]
+                    hwndId := GroupedWindows[cycleCount]
                     If !IsWindowOnCurrMon(hwndId, currentMon) {
-                        counter++
-                        If (counter > numWindows)
+                        cycleCount++
+                        If (cycleCount > numWindows)
                         {
-                            counter := 1
+                            cycleCount := 1
                         }
-                        hwndId := finalWindowsListWithProcAndClass[counter]
+                        hwndId := GroupedWindows[cycleCount]
                     }
                     Else
                         break
@@ -4089,42 +4141,42 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     }
     Critical, On
     BlockKeyboard(True)
-    counter := counter - 1
-    If (counter <= 0)
-        counter := finalWindowsListWithProcAndClass.MaxIndex()
+    cycleCount := cycleCount - 1
+    If (cycleCount <= 0)
+        cycleCount := GroupedWindows.MaxIndex()
 
-    If (counter > 2) {
-        WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
-        WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-        WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    ; If (cycleCount > 2) {
+        ; WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
+        ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+        ; WinSet, AlwaysOnTop, On,  ahk_id %Highlighter%
 
-        If (finalWindowsListWithProcAndClass.MaxIndex() >= 4 && finalWindowsListWithProcAndClass[4] != lastActWinID) {
-            WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[4]
-            If (isMin > -1)
-                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[4]
-        }
-        If (finalWindowsListWithProcAndClass.MaxIndex() >= 3 && finalWindowsListWithProcAndClass[3] != lastActWinID) {
-            WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[3]
-            If (isMin > -1)
-                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[3]
-        }
-        If (finalWindowsListWithProcAndClass.MaxIndex() >= 2 &&  finalWindowsListWithProcAndClass[2] != lastActWinID) {
-            WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[2]
-            If (isMin > -1)
-                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[2]
-        }
-        If (finalWindowsListWithProcAndClass.MaxIndex() >= 1 && finalWindowsListWithProcAndClass[1] != lastActWinID) {
-            WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[1]
-            If (isMin > -1)
-                WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
-        }
-    }
-    WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
-    WinActivate, ahk_id %lastActWinID%
+        ; If (finalWindowsListWithProcAndClass.MaxIndex() >= 4 && finalWindowsListWithProcAndClass[4] != lastActWinID) {
+            ; WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[4]
+            ; If (isMin > -1)
+                ; WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[4]
+        ; }
+        ; If (finalWindowsListWithProcAndClass.MaxIndex() >= 3 && finalWindowsListWithProcAndClass[3] != lastActWinID) {
+            ; WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[3]
+            ; If (isMin > -1)
+                ; WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[3]
+        ; }
+        ; If (finalWindowsListWithProcAndClass.MaxIndex() >= 2 &&  finalWindowsListWithProcAndClass[2] != lastActWinID) {
+            ; WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[2]
+            ; If (isMin > -1)
+                ; WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[2]
+        ; }
+        ; If (finalWindowsListWithProcAndClass.MaxIndex() >= 1 && finalWindowsListWithProcAndClass[1] != lastActWinID) {
+            ; WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[1]
+            ; If (isMin > -1)
+                ; WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
+        ; }
+    ; }
+    ; WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
+    ; WinActivate, ahk_id %lastActWinID%
     BlockKeyboard(False)
     Critical, Off
     SetTimer, mouseTrack, On
-    Return
+    Return lastActWinID
 }
 
 FrameShadow(HGui) {
@@ -4223,7 +4275,7 @@ Return
 }
 
 mouseTrack() {
-    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, LbuttonEnabled, textBoxSelected
+    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, LbuttonEnabled, textBoxSelected, TaskBarHeight
     Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
     Static LbuttonHeld := False
     ListLines Off
@@ -4295,7 +4347,7 @@ mouseTrack() {
     }
 
     If (MonCount > 1 && !GetKeyState("LButton","P")) {
-        currentMon := MWAGetMonitorMouseIsIn(40)
+        currentMon := MWAGetMonitorMouseIsIn(TaskBarHeight)
         If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
             StopRecursion := True
             DetectHiddenWindows, Off
@@ -5980,6 +6032,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:;nt::'nt
 :?:;d::'d
 :?:;s::'s
+:?:'ts::t's
 :?:sice::sive
 :?:t hem::them
 :?:toin::tion
@@ -6197,65 +6250,65 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:speciif::specifi
 :*:fucn::func
 :*:retreiv::retriev
-:*:dj::j
-:*:fj::j
-:*:gj::j
-:*:hz::z
-:*:ij::j
-:*:jq::q
-:*:kq::q
-:*:qj::j
-:*:qw::w
-:*:qz::z
-:*:vx::x
-:*:vz::z
-:*:wq::q
-:*:wz::z
-:*:xj::j
-:*:xz::z
-:*:yq::q
-:*:zq::q
-:*:zz::z
-:*:aj::j
-:*:bq::q
-:*:cj::j
-:*:dk::k
-:*:ez::z
-:*:ix::x
-:*:jx::x
-:*:kf::f
-:*:lx::x
-:*:mx::x
-:*:nz::z
-:*:oj::j
-:*:px::x
-:*:qx::x
-:*:rx::x
-:*:sx::x
-:*:ux::x
-:*:vx::x
-:*:wx::x
-:*:yx::x
-:*:zx::x
-:*:bb::b
-:*:cc::c
-:*:dd::d
-:*:ff::f
-:*:gg::g
-:*:hh::h
-:*:ii::i
-:*:jj::j
-:*:kk::k
-:*:mm::m
-:*:nn::n
-:*:pp::p
-:*:qq::q
-:*:rr::r
-:*:ss::s
-:*:tt::t
-:*:uu::u
-:*:vv::v
-:*:yy::y
+; :*:dj::j
+; :*:fj::j
+; :*:gj::j
+; :*:hz::z
+; :*:ij::j
+; :*:jq::q
+; :*:kq::q
+; :*:qj::j
+; :*:qw::w
+; :*:qz::z
+; :*:vx::x
+; :*:vz::z
+; :*:wq::q
+; :*:wz::z
+; :*:xj::j
+; :*:xz::z
+; :*:yq::q
+; :*:zq::q
+; :*:zz::z
+; :*:aj::j
+; :*:bq::q
+; :*:cj::j
+; :*:dk::k
+; :*:ez::z
+; :*:ix::x
+; :*:jx::x
+; :*:kf::f
+; :*:lx::x
+; :*:mx::x
+; :*:nz::z
+; :*:oj::j
+; :*:px::x
+; :*:qx::x
+; :*:rx::x
+; :*:sx::x
+; :*:ux::x
+; :*:vx::x
+; :*:wx::x
+; :*:yx::x
+; :*:zx::x
+; :*:bb::b
+; :*:cc::c
+; :*:dd::d
+; :*:ff::f
+; :*:gg::g
+; :*:hh::h
+; :*:ii::i
+; :*:jj::j
+; :*:kk::k
+; :*:mm::m
+; :*:nn::n
+; :*:pp::p
+; :*:qq::q
+; :*:rr::r
+; :*:ss::s
+; :*:tt::t
+; :*:uu::u
+; :*:vv::v
+; :*:yy::y
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
