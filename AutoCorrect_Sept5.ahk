@@ -100,6 +100,12 @@ Global DoubleClickTime             := DllCall("GetDoubleClickTime")
 Global isWin11                     := DetectWin11()
 Global TaskBarHeight               := 0
 
+; --- Config ---
+UseWorkArea := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+
+; Skip dragging these classes (taskbar/desktop)
+skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
+
 Process, Priority,, High
 
 UIA := UIA_Interface() ; Initialize UIA interface
@@ -479,6 +485,44 @@ DetectWin11()
     else
         return False
 }
+
+; --- Helper: Get monitor rect (work area or full monitor) for a given window ---
+GetMonitorRectForWindow(hWnd, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) {
+    ; MONITOR_DEFAULTTONEAREST = 0x00000002
+    hMon := DllCall("MonitorFromWindow", "ptr", hWnd, "uint", 2, "ptr")
+    if (!hMon) {
+        if (useWorkArea)
+            SysGet, wa, MonitorWorkArea, 1
+        else
+            SysGet, wa, Monitor, 1
+        L := waLeft, T := waTop, R := waRight, B := waBottom
+        return
+    }
+
+    VarSetCapacity(mi, A_PtrSize=8 ? 72 : 40, 0) ; MONITORINFO
+    NumPut(VarSetCapacity(mi), mi, 0, "uint")    ; cbSize
+    if !(DllCall("GetMonitorInfo", "ptr", hMon, "ptr", &mi)) {
+        if (useWorkArea)
+            SysGet, wa, MonitorWorkArea, 1
+        else
+            SysGet, wa, Monitor, 1
+        L := waLeft, T := waTop, R := waRight, B := waBottom
+        return
+    }
+
+    if (useWorkArea) {
+        L := NumGet(mi, 20, "int")
+        T := NumGet(mi, 24, "int")
+        R := NumGet(mi, 28, "int")
+        B := NumGet(mi, 32, "int")
+    } else {
+        L := NumGet(mi,  4, "int")
+        T := NumGet(mi,  8, "int")
+        R := NumGet(mi, 12, "int")
+        B := NumGet(mi, 16, "int")
+    }
+}
+
 ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
@@ -527,7 +571,19 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         SetTimer, keyTrack,   Off
         SetTimer, mouseTrack, Off
 
+
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+
+            WinGet, state, MinMax, ahk_id %hWnd%
+            If (state > -1 && vWinTitle != "" && MonCount > 1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := IsWindowOnCurrMon(hWnd, currentMon)
+                If !currentMonHasActWin {
+                    WinActivate, ahk_id %hWnd%
+                    Send, #+{Left}
+                }
+            }
+
             loop, 100 {
                 ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
                 If (initFocusedCtrl != "")
@@ -563,17 +619,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Return
             }
 
-            WinGet, proc, ProcessName, ahk_id %hWnd%
-            WinGet, state, MinMax, ahk_id %hWnd%
-            If (state > -1 && vWinTitle != "" && MonCount > 1) {
-                currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnCurrMon(hWnd, currentMon)
-                If !currentMonHasActWin {
-                    WinActivate, ahk_id %hWnd%
-                    Send, #+{Left}
-                }
-            }
-
             ;EVENT_SYSTEM_FOREGROUND := 0x3
             ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
@@ -601,7 +646,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             ; tooltip, init focus is %initFocusedCtrl% and proc is %proc%
             If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
-
                 If (OutputVar1 == 1) {
                     TargetControl := "SysListView321"
                     ; ControlGet, ctrlNnHwnd, Hwnd,, SysListView321, ahk_id %hWnd%
@@ -623,6 +667,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         TargetControl := "DirectUIHWND3"
                 }
 
+                WinGet, proc, ProcessName, ahk_id %hWnd%
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
                     try {
                         exEl := UIA.ElementFromHandle(hWnd)
@@ -927,7 +972,8 @@ IsMouseOnLeftSide() {
     If (!ctrlN) {
         WinGetPos, x, y, w, h, ahk_id %hwnd%
         ; tooltip, % x "-" y "-" x+w "-" y+h "-" mx "-" my
-        If (mx > x && mx < (x+w/divisor) && my > y && my < (y+h)) {
+        ; If (mx > x && mx < (x+w/divisor) && my > y && my < (y+h)) {
+        If (mx > x && mx < (x+300) && my > y && my < (y+h)) {
             Return True
         }
         Else
@@ -936,7 +982,8 @@ IsMouseOnLeftSide() {
     Else {
         ControlGetPos , cx, cy, cw, ch, %ctrlN%, ahk_id %hwnd%
         If (cx && cy && cw && ch) {
-            If (mx > cx && mx < (cx+cw/divisor) && my > cy && my < (cy+ch)) {
+            ; If (mx > cx && mx < (cx+cw/divisor) && my > cy && my < (cy+ch)) {
+            If (mx > cx && mx < (cx+300) && my > cy && my < (cy+ch)) {
                 Return True
             }
         }
@@ -957,6 +1004,54 @@ Mbutton::
     SetTimer, MbuttonTimer, Off
     SetTimer, MbuttonTimer, -1
 Return
+#If
+
+#If !MbuttonIsEnter && !MouseIsOverTitleBar()
+MButton::
+    ; Get window under cursor (top-level)
+    MouseGetPos, mx0, my0, hWnd, ctrl, 2
+    if (!hWnd)
+        return
+
+    ; Skip taskbar/desktop/etc.
+    WinGetClass, cls, ahk_id %hWnd%
+    if (skipClasses.HasKey(cls))
+        return
+
+    ; Get starting window position/size
+    WinGetPos, wx0, wy0, ww, wh, ahk_id %hWnd%
+    if (ww = "" || wh = "")
+        return
+
+    ; Get monitor rect containing this window
+    GetMonitorRectForWindow(hWnd, UseWorkArea, monL, monT, monR, monB)
+
+    ; Vertical bounds inside monitor
+    minY := monT
+    maxY := monB - wh
+
+    Critical, On
+    while GetKeyState("MButton", "P")
+    {
+        MouseGetPos, mx, my
+        dx := mx - mx0
+        dy := my - my0
+
+        newX := wx0 + dx
+        newY := wy0 + dy
+
+        ; --- One-way vertical clamp (top/bottom) ---
+        if (newY < minY)
+            newY := minY
+        else if (newY > maxY)
+            newY := maxY
+
+        ; --- No horizontal clamp: allow moving off-screen left/right ---
+        WinMove, ahk_id %hWnd%, , %newX%, %newY%
+        Sleep, 10
+    }
+    Critical, Off
+return
 #If
 
 ^+Esc::
@@ -1666,13 +1761,13 @@ FadeInWin1:
     WinSet, AlwaysOnTop, On, ahk_id %_winIdD%
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
-    If (_winIdD != ValidWindows[1] && Highlighter != ValidWindows[1] && ValidWindows.MaxIndex() >= 1)
+    If (_winIdD != ValidWindows[1] && ValidWindows.MaxIndex() >= 1)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    If (_winIdD != ValidWindows[2] && Highlighter != ValidWindows[2] && ValidWindows.MaxIndex() >= 2)
+    If (_winIdD != ValidWindows[2] && ValidWindows.MaxIndex() >= 2)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    If (_winIdD != ValidWindows[3] && Highlighter != ValidWindows[3] && ValidWindows.MaxIndex() >= 3)
+    If (_winIdD != ValidWindows[3] && ValidWindows.MaxIndex() >= 3)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
-    If (_winIdD != ValidWindows[4] && Highlighter != ValidWindows[4] && ValidWindows.MaxIndex() >= 4)
+    If (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4)
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
 
     If (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4) {
@@ -1700,7 +1795,7 @@ FadeInWin1:
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, % "ahk_id " _winIdD
 
-    If (ValidWindows.MaxIndex() >= 1 && Highlighter != ValidWindows[1] && _winIdD != ValidWindows[1]) {
+    If (ValidWindows.MaxIndex() >= 1 && _winIdD != ValidWindows[1]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
@@ -1709,7 +1804,7 @@ FadeInWin1:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
     }
-    If (ValidWindows.MaxIndex() >= 2 && Highlighter != ValidWindows[2] && _winIdD != ValidWindows[2]) {
+    If (ValidWindows.MaxIndex() >= 2 && _winIdD != ValidWindows[2]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
@@ -1718,7 +1813,7 @@ FadeInWin1:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
     }
-    If (ValidWindows.MaxIndex() >= 3 && Highlighter != ValidWindows[3] && _winIdD != ValidWindows[3]) {
+    If (ValidWindows.MaxIndex() >= 3 && _winIdD != ValidWindows[3]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
@@ -1727,7 +1822,7 @@ FadeInWin1:
         sleep 10
         WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
     }
-    If (ValidWindows.MaxIndex() >= 4 && Highlighter != ValidWindows[4] && _winIdD != ValidWindows[4]) {
+    If (ValidWindows.MaxIndex() >= 4 && _winIdD != ValidWindows[4]) {
         WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
         sleep 10
         WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
@@ -1749,43 +1844,43 @@ FadeInWin2:
     WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
-    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) {
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-        WinActivate, % "ahk_id " ValidWindows[1]
-    }
-    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) {
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-        WinActivate, % "ahk_id " ValidWindows[2]
+    If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) {
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
+        WinActivate, % "ahk_id " ValidWindows[4]
     }
     If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) {
         WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
         WinActivate, % "ahk_id " ValidWindows[3]
     }
-    If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) {
-        WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
-        WinActivate, % "ahk_id " ValidWindows[4]
+    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) {
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
+        WinActivate, % "ahk_id " ValidWindows[2]
+    }
+    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) {
+        WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
+        WinActivate, % "ahk_id " ValidWindows[1]
     }
 
-    If (ValidWindows.MaxIndex() >= 4) {
-            WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[4]
-            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[4]
-            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
-    }
-    If (ValidWindows.MaxIndex() >= 3) {
-            WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[3]
-            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
-            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
-    }
-    If (ValidWindows.MaxIndex() >= 2) {
-            WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[2]
-            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
-            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
-    }
-    If (ValidWindows.MaxIndex() >= 1) {
-            WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[1]
-            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
-            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
-    }
+    ; If (ValidWindows.MaxIndex() >= 4) {
+            ; WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[4]
+            ; WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[4]
+            ; WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    ; }
+    ; If (ValidWindows.MaxIndex() >= 3) {
+            ; WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[3]
+            ; WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
+            ; WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    ; }
+    ; If (ValidWindows.MaxIndex() >= 2) {
+            ; WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[2]
+            ; WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
+            ; WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    ; }
+    ; If (ValidWindows.MaxIndex() >= 1) {
+            ; WinSet, AlwaysOnTop, On,  % "ahk_id " ValidWindows[1]
+            ; WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
+            ; WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    ; }
 
     WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
@@ -4277,7 +4372,7 @@ Return
 mouseTrack() {
     Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, LbuttonEnabled, textBoxSelected, TaskBarHeight
     Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
-    Static LbuttonHeld := False
+    Static LbuttonHeld := False, timeOfLastMove
     ListLines Off
     HexColor1 := 0x0
     HexColor2 := 0x1
@@ -4290,7 +4385,8 @@ mouseTrack() {
 
     CoordMode Mouse
 
-    ; tooltip, %LbuttonEnabled%
+    If (timeOfLastMove == "")
+        timeOfLastMove := A_TickCount
 
     If (LbuttonHeld && GetKeyState("Lbutton", "P") && x < A_ScreenWidth-3 && x > 3)
     {
@@ -4301,15 +4397,15 @@ mouseTrack() {
     {
         LbuttonHeld := False
     }
-
-    If ((abs(x - lastX) > 10 || abs(y - lastY) > 10) && lastX != "" && lastY != "") {
+    If ((abs(x - lastX) > 3 || abs(y - lastY) > 3) && lastX != "" && lastY != "") {
+        ; tooltip, %mouseMoving%
         mouseMoving := True
         textBoxSelected := False
-        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770")
-            sleep 250
-    } Else {
+        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770") {
+            timeOfLastMove := A_TickCount
+        }
+    } Else If (mouseMoving && (A_TickCount - timeOfLastMove) > 250) {
         mouseMoving := False
-        ; tooltip, False
     }
 
     lastX := x, lastY := y,
@@ -5703,6 +5799,7 @@ SetTitleMatchMode, 2
 ::arose::
 ::caching::
 ::bot::
+::bots::
 ::campaign::
 ::'ing::
 ::ing::
@@ -5765,150 +5862,149 @@ SetTitleMatchMode, 2
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
-::org::
-::com::
-::net::
-::txt::
-::aif::
-::cda::
-::mid::
-::mp3::
-::mpa::
-::ogg::
-::wav::
-::wma::
-::wpl::
+::3g2::
+::3gp::
 ::7z ::
+::ai::
+::aif::
+::apk::
 ::arj::
-::deb::
-::pkg::
-::rar::
-::rpm::
-::tar::
-::gz::
-::zip::
+::asp::
+::avi::
+::bak::
+::bat::
 ::bin::
-::dmg::
-::iso::
-::toast::
-::vcd::
+::bin::
+::bmp::
+::c::
+::cab::
+::cda::
+::cer::
+::cfg::
+::cfm::
+::cgi::
+::cgi::
+::cgi::
+::com::
+::com::
+::cpl::
+::cpp::
+::cs::
+::css::
 ::csv::
+::cur::
 ::dat::
 ::db::
-::log::
-::mdb::
-::sav::
-::sql::
-::tar::
-::xml::
+::deb::
+::dll::
+::dmg::
+::dmp::
+::doc::
+::drv::
+::elf::
 ::email::
 ::eml::
 ::emlx::
-::msg::
-::oft::
-::ost::
-::pst::
-::vcf::
-::apk::
-::bat::
-::bin::
-::cgi::
-::com::
 ::exe::
-::elf::
-::gadget::
-::jar::
-::msi::
-::py::
-::wsf::
+::flv::
 ::fnt::
 ::fon::
-::otf::
-::ttf::
-::ai::
-::bmp::
+::gadget::
 ::gif::
-::ico::
-::jpeg::
-::png::
-::ps::
-::psd::
-::svg::
-::tif::
-::webp::
-::asp::
-::cer::
-::cfm::
-::cgi::
-::css::
+::gz::
+::h264::
+::h::
 ::htm::
+::icns::
+::ico::
+::ico::
+::ini::
+::iso::
+::jar::
+::java::
+::jpeg::
 ::js::
+::json::
 ::jsp::
-::part::
-::php::
-::py::
-::rss::
-::pri::
-::xhtml::
 ::key::
+::lnk::
+::log::
+::m4v::
+::mdb::
+::mid::
+::mkv::
+::mov::
+::mp3::
+::mp4::
+::mpa::
+::mpg::
+::msg::
+::msi::
+::msi::
+::net::
 ::odp::
+::ods::
+::odt::
+::oft::
+::ogg::
+::org::
+::ost::
+::otf::
+::part::
+::pdf::
+::php::
+::php::
+::pkg::
+::png::
 ::pps::
 ::ppt::
 ::pptx::
-::c::
-::cgi::
-::class::
-::cpp::
-::cs::
-::h::
-::java::
-::php::
+::pri::
+::ps::
+::psd::
+::pst::
 ::py::
+::py::
+::py::
+::rar::
+::rm::
+::rpm::
+::rss::
+::rtf::
+::sav::
 ::sh::
+::sql::
+::svg::
+::swf::
 ::swift::
+::sys::
+::tar::
+::tar::
+::tex::
+::tif::
+::tmp::
+::toast::
+::ttf::
+::txt::
+::txt::
 ::vb::
-::ods::
+::vcd::
+::vcf::
+::vob::
+::wav::
+::webm::
+::webp::
+::wma::
+::wmv::
+::wpd::
+::wpl::
+::wsf::
+::xhtml::
 ::xls::
 ::xlsm::
 ::xlsx::
-::bak::
-::cab::
-::cfg::
-::cpl::
-::cur::
-::dll::
-::dmp::
-::drv::
-::icns::
-::ico::
-::ini::
-::lnk::
-::msi::
-::sys::
-::tmp::
-::3g2::
-::3gp::
-::avi::
-::flv::
-::h264::
-::m4v::
-::mkv::
-::mov::
-::mp4::
-::mpg::
-::rm::
-::swf::
-::vob::
-::webm::
-::wmv::
-::doc::
-::odt::
-::pdf::
-::rtf::
-::tex::
-::txt::
-::wpd::
-::json::
+::xml::
+::zip::
 Return  ; This makes the above hotstrings do nothing so that they override the ign->ing rule below.
 
 #Hotstring B T C k-1
