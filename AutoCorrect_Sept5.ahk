@@ -101,7 +101,10 @@ Global isWin11                     := DetectWin11()
 Global TaskBarHeight               := 0
 
 ; --- Config ---
-UseWorkArea := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+SnapRange    := 16     ; px: distance from edge to begin snapping
+BreakAway    := 52     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+ReleaseAway  := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
 skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
@@ -486,40 +489,57 @@ DetectWin11()
         return False
 }
 
-; --- Helper: Get monitor rect (work area or full monitor) for a given window ---
-GetMonitorRectForWindow(hWnd, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) {
-    ; MONITOR_DEFAULTTONEAREST = 0x00000002
-    hMon := DllCall("MonitorFromWindow", "ptr", hWnd, "uint", 2, "ptr")
-    if (!hMon) {
-        if (useWorkArea)
-            SysGet, wa, MonitorWorkArea, 1
-        else
-            SysGet, wa, Monitor, 1
-        L := waLeft, T := waTop, R := waRight, B := waBottom
-        return
-    }
+; Choose the monitor containing the mouse. If none contains it (rare with odd layouts),
+; pick the nearest monitor by distance.
+; Summary
+; First preference: the monitor that actually contains the mouse.
+; Else: the nearest monitor rectangle (useful if the mouse is exactly outside due to odd DPI layouts, mis-alignment, or negative coords).
+; The function returns the rectangle by reference into L, T, R, B.
+; So in your drag script, every frame we call this with the current mouse (mx, my), and get the correct monitor bounds whether your monitors
+; are side-by-side, stacked vertically, diagonal, or even negative-coordinate setups.
 
-    VarSetCapacity(mi, A_PtrSize=8 ? 72 : 40, 0) ; MONITORINFO
-    NumPut(VarSetCapacity(mi), mi, 0, "uint")    ; cbSize
-    if !(DllCall("GetMonitorInfo", "ptr", hMon, "ptr", &mi)) {
-        if (useWorkArea)
-            SysGet, wa, MonitorWorkArea, 1
-        else
-            SysGet, wa, Monitor, 1
-        L := waLeft, T := waTop, R := waRight, B := waBottom
-        return
-    }
+; (rLeft, rTop) ----------------- (rRight, rTop)
+       ; |                        |
+       ; |                        |
+       ; |        Monitor         |
+       ; |                        |
+; (rLeft, rBottom) ------------- (rRight, rBottom)
 
-    if (useWorkArea) {
-        L := NumGet(mi, 20, "int")
-        T := NumGet(mi, 24, "int")
-        R := NumGet(mi, 28, "int")
-        B := NumGet(mi, 32, "int")
-    } else {
-        L := NumGet(mi,  4, "int")
-        T := NumGet(mi,  8, "int")
-        R := NumGet(mi, 12, "int")
-        B := NumGet(mi, 16, "int")
+GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) {
+    SysGet, count, MonitorCount
+    bestDist := 0x7FFFFFFF, found := false
+
+    Loop, %count% {
+        idx := A_Index
+        if (useWorkArea)
+            SysGet, r, MonitorWorkArea, %idx%
+        else
+            SysGet, r, Monitor, %idx%
+
+        ; Inside?
+        if (mx >= rLeft && mx < rRight && my >= rTop && my < rBottom) {
+            L := rLeft, T := rTop, R := rRight, B := rBottom
+            return
+        }
+
+        ; Distance from point to rect (0 if inside)
+        cx := (mx < rLeft) ? rLeft : (mx > rRight ? rRight : mx)
+        cy := (my < rTop)  ? rTop  : (my > rBottom ? rBottom : my)
+        dx := mx - cx, dy := my - cy
+        dist2 := dx*dx + dy*dy
+        if (dist2 < bestDist) {
+            bestDist := dist2
+            L := rLeft, T := rTop, R := rRight, B := rBottom
+            found := true
+        }
+    }
+    if (!found) {
+        ; Fallback to primary
+        if (useWorkArea)
+            SysGet, r, MonitorWorkArea, 1
+        else
+            SysGet, r, Monitor, 1
+        L := rLeft, T := rTop, R := rRight, B := rBottom
     }
 }
 
@@ -994,7 +1014,7 @@ IsMouseOnLeftSide() {
 
 MbuttonTimer:
     MbuttonIsEnter := True
-    sleep, 3000
+    sleep, 1500
     MbuttonIsEnter := False
 Return
 
@@ -1008,49 +1028,131 @@ Return
 
 #If !MbuttonIsEnter && !MouseIsOverTitleBar()
 MButton::
-    ; Get window under cursor (top-level)
+    StopRecursion := True
+    SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
+
+    wx0 := 0
+    wy0 := 0
+    ww  := 0
+    wh  := 0
+    offsetX := 0
+    offsetY := 0
+    windowSnapped := False
+
     MouseGetPos, mx0, my0, hWnd, ctrl, 2
     if (!hWnd)
         return
 
-    ; Skip taskbar/desktop/etc.
+    WinGet, isMax, MinMax, ahk_id %hWnd%
     WinGetClass, cls, ahk_id %hWnd%
-    if (skipClasses.HasKey(cls))
+    if (skipClasses.HasKey(cls) || isMax == 1)
         return
 
-    ; Get starting window position/size
-    WinGetPos, wx0, wy0, ww, wh, ahk_id %hWnd%
+    ; WinGetPos, wx0, wy0, ww, wh, ahk_id %hWnd%
+    WinGetPosEx(hWnd, wx0, wy0, ww, wh, offsetX, offsetY)
     if (ww = "" || wh = "")
         return
 
-    ; Get monitor rect containing this window
-    GetMonitorRectForWindow(hWnd, UseWorkArea, monL, monT, monR, monB)
+    snapState := ""   ; "", "left", "right"
+    mxPrev := mx0         ; track prior mouse X to know approach direction
 
-    ; Vertical bounds inside monitor
-    minY := monT
-    maxY := monB - wh
+    GetMonitorRectForMouse(mx0, my0, UseWorkArea, monL, monT, monR, monB)
+    leftEdge   := wx0
+    rightEdge  := wx0 + ww
+    if ((leftEdge - monL) <= SnapRange && (leftEdge - monL) >= 0) {
+        snapState := "left"
+    } else if ((rightEdge - monR) <= SnapRange && (rightEdge - monR) >= 0) {
+        snapState := "right"
+    }
 
-    Critical, On
     while GetKeyState("MButton", "P")
     {
+        windowSnapped := False
         MouseGetPos, mx, my
         dx := mx - mx0
         dy := my - my0
+        dxMouse := mx - mxPrev
+        mxPrev := mx
 
-        newX := wx0 + dx
-        newY := wy0 + dy
+        ; rawX is continuously changing with your mouse.
+        ; monL is fixed to the active monitor’s left edge.
+        rawX := wx0 + dx ; (original window X) + (how far the mouse has moved in X since drag start)
+        rawY := wy0 + dy
+
+        GetMonitorRectForMouse(mx, my, UseWorkArea, monL, monT, monR, monB)
+
+        ; Vertical allowable range for current monitor
+        minY := monT
+        maxY := monB - wh
 
         ; --- One-way vertical clamp (top/bottom) ---
-        if (newY < minY)
+        if (rawY < minY)
             newY := minY
-        else if (newY > maxY)
+        else if (rawY > maxY)
             newY := maxY
+        else
+            newY := rawY
 
-        ; --- No horizontal clamp: allow moving off-screen left/right ---
+        ; --- Horizontal snapping with pass-through ---
+        leftEdge   := rawX
+        rightEdge  := rawX + ww
+        rightSnapX := monR - ww  ; X that places the right edge at monitor's right
+
+        if (snapState = "left") {
+            ; While snapped left:
+            ; - Push-through: keep dragging left until rawX <= monL - BreakAway to break snap
+            ; - Release: drag right until rawX >= monL + ReleaseAway to release snap
+            ; ie Have you moved (rawX) far enough past the monitor edge (monL) → BreakAway/ReleaseAway
+            if (rawX <= monL - BreakAway || rawX >= monL + ReleaseAway) {
+                snapState := ""
+                newX := rawX
+            } else {
+                newX := monL
+            }
+        } else if (snapState = "right") {
+            ; While snapped right (window's right edge at monR):
+            ; - Push-through: keep dragging right until rawX >= rightSnapX + BreakAway to break snap
+            ; - Release: drag left until rawX <= rightSnapX - ReleaseAway to release snap
+            if (rawX >= rightSnapX + BreakAway || rawX <= rightSnapX - ReleaseAway) {
+                snapState := ""
+                newX := rawX
+            } else {
+                newX := rightSnapX
+            }
+        } else {
+            ; Not currently snapped: check proximity to edges to start snapping
+            if (Abs(leftEdge - monL) <= SnapRange && (dxMouse < 0)) {
+                snapState := "left"
+                windowSnapped := True
+                newX := monL
+            } else if (Abs(rightEdge - monR) <= SnapRange && (dxMouse > 0)) {
+                snapState := "right"
+                windowSnapped := True
+                newX := rightSnapX
+            } else {
+                newX := rawX
+            }
+        }
+
+        ; correct for windows' shadows
+        newX := newX + offsetX
+        ; No horizontal clamping otherwise: allow off-screen left/right
         WinMove, ahk_id %hWnd%, , %newX%, %newY%
-        Sleep, 10
+        If (windowSnapped) {
+            BlockInput, MouseMove
+            sleep, 250
+            BlockInput, MouseMoveOff
+        }
+
+        Sleep, 1
     }
-    Critical, Off
+    If (wh/abs(monB-monT) > 0.95)
+        WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY)+1
+
+    StopRecursion := False
+    SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 return
 #If
 
@@ -5006,35 +5108,14 @@ getSessionId()
 }
 
 ActivateTopMostWindow() {
-    SysGet, MonCount, MonitorCount
-    DetectHiddenWindows, Off
-    Critical, On
-    WinGet, winList, List,
-    loop % winList
-    {
-        hwndID := winList%A_Index%
-        If IsAltTabWindow(hwndId) {
-            WinGet, mmState, MinMax, ahk_id %hwndId%
-            WinGet, procName, ProcessName, ahk_id %hwndId%
-            WinGet, ExStyle, ExStyle, ahk_id %hwndId%
-            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip If zoom or always on top window
-                continue
-            If (mmState > -1) {
-                If (MonCount > 1) {
-                    currentMon := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
-                }
-                Else {
-                    currentMonHasActWin := True
-                }
-                If currentMonHasActWin {
-                    WinActivate, ahk_id %hwndID%
-                    break
-                }
-            }
-        }
+    hwndID := FindTopMostWindow()
+    If hwndID
+        WinActivate, ahk_id %hwndID% Off
+    Else {
+        tooltip, no topmost window!
+        sleep, 2000
+        tooltip,
     }
-    Critical, Off
     Return
 }
 
@@ -5068,6 +5149,41 @@ FindTopMostWindow() {
     Critical, Off
     Return hwndID
 }
+
+FindSecondMostWindow() {
+    firstFound := False
+    SysGet, MonCount, MonitorCount
+    DetectHiddenWindows, Off
+    Critical, On
+    WinGet, winList, List,
+    loop % winList
+    {
+        hwndID := winList%A_Index%
+        If IsAltTabWindow(hwndId) {
+            WinGet, mmState, MinMax, ahk_id %hwndId%
+            WinGet, procName, ProcessName, ahk_id %hwndId%
+            WinGet, ExStyle, ExStyle, ahk_id %hwndId%
+            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip If zoom or always on top window
+                continue
+            If (mmState > -1) {
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                }
+                Else {
+                    currentMonHasActWin := True
+                }
+                If (!firstFound && currentMonHasActWin)
+                    firstFound := True
+                Else If (firstFound && currentMonHasActWin)
+                    break
+            }
+        }
+    }
+    Critical, Off
+    Return hwndID
+}
+
 ;-------------------------------------------------------------------------------
 ;-------------------------------------------------------------------------------
 
