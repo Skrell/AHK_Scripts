@@ -1065,7 +1065,7 @@ MButton::
     } else if ((rightEdge - monR) <= SnapRange && (rightEdge - monR) >= 0) {
         snapState := "right"
     }
-
+    Critical, On
     while GetKeyState("MButton", "P")
     {
         windowSnapped := False
@@ -1147,6 +1147,7 @@ MButton::
 
         Sleep, 1
     }
+    Critical, Off
     If (wh/abs(monB-monT) > 0.95)
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY)+1
 
@@ -1165,7 +1166,7 @@ CapsLock::
     TimeOfLastKey := A_TickCount
 Return
 
-#If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything64.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE"))
+#If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything64.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE") && !IsEditFieldActive())
 ^+d::
     StopAutoFix := True
     SetTimer, keyTrack, Off
@@ -5150,7 +5151,7 @@ FindTopMostWindow() {
     Return hwndID
 }
 
-FindSecondMostWindow() {
+FindSecondMostWindow(ref_hwndID := "") {
     firstFound := False
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
@@ -5173,10 +5174,19 @@ FindSecondMostWindow() {
                 Else {
                     currentMonHasActWin := True
                 }
-                If (!firstFound && currentMonHasActWin)
-                    firstFound := True
-                Else If (firstFound && currentMonHasActWin)
-                    break
+                If !ref_hwndID {
+                    If (!firstFound && currentMonHasActWin)
+                        firstFound := True
+                    Else If (firstFound && currentMonHasActWin)
+                        break
+                }
+                Else {
+                    If (hwndID == ref_hwndID) {
+                        firstFound := True
+                    }
+                    Else If (firstFound && currentMonHasActWin)
+                        break
+                }
             }
         }
     }
@@ -5184,6 +5194,13 @@ FindSecondMostWindow() {
     Return hwndID
 }
 
+IsEditFieldActive() {
+    ControlGetFocus, FocusedControl, A
+    If (InStr(FocusedControl, "Edit", True))
+        Return True
+    Else
+        Return False
+}
 ;-------------------------------------------------------------------------------
 ;-------------------------------------------------------------------------------
 
@@ -6296,6 +6313,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:altiy::ality
 :?:alit::ality
 :?:daiton::dation
+:?:aiton::ation
 :?:emtn::ment
 :?:emtns::ments
 :?:ioins::ions
@@ -7646,6 +7664,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::enviornmentalist::environmentalist
 ::envolutionary::evolutionary
 ::epidsodes::episodes
+::epsidoe::episode
 ::equippment::equipment
 ::equitorial::equatorial
 ::equivalant::equivalent
