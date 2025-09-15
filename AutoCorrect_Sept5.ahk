@@ -428,15 +428,15 @@ ReAssignHotkeys() {
 
     Loop Parse, keys
     {
-        HotKey ~+%A_LoopField%, HotyANDFixSlash, On
+        HotKey, ~+%A_LoopField%, HotyANDFixSlash, On
     }
     Loop Parse, keys
     {
-        HotKey ~%A_LoopField%, HotyANDFixSlash, On
+        HotKey,  ~%A_LoopField%, HotyANDFixSlash, On
     }
     Loop Parse, numbers
     {
-        HotKey ~%A_LoopField%, HotyANDFixSlash, On
+        HotKey,  ~%A_LoopField%, HotyANDFixSlash, On
     }
     HotKey ~$Ctrl, LaunchWinFind, On
     Return
@@ -448,15 +448,15 @@ DeAssignHotkeys() {
 
     Loop Parse, keys
     {
-        HotKey +%A_LoopField%, DoNothing, On
+        HotKey, +%A_LoopField%, DoNothing, On
     }
     Loop Parse, keys
     {
-        HotKey %A_LoopField%, DoNothing, On
+        HotKey,  %A_LoopField%, DoNothing, On
     }
     Loop Parse, numbers
     {
-        HotKey %A_LoopField%, DoNothing, On
+        HotKey,  %A_LoopField%, DoNothing, On
     }
     Hotkey Ctrl, DoNothing, On
     Return
@@ -2711,7 +2711,7 @@ Return
 #If
 
 #MaxThreadsPerHotkey 2
-#If (!VolumeHover() && LbuttonEnabled && !IsOverDesktop() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
+#If (!VolumeHover() && LbuttonEnabled && !IsOverException() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
 ~LButton::
     tooltip,
     HotString("Reset")
@@ -3601,7 +3601,7 @@ Return
 LWin & WheelUp::send {Volume_Up}
 LWin & WheelDown::send {Volume_Down}
 
-#If VolumeHover() && !IsOverDesktop()
+#If VolumeHover() && !IsOverException()
 WheelUp::send {Volume_Up}
 WheelDown::send {Volume_Down}
 #If
@@ -3639,7 +3639,7 @@ WheelDown::send {Volume_Down}
 Return
 #If
 
-#If !mouseMoving && !VolumeHover() && !IsOverDesktop()
+#If !mouseMoving && !VolumeHover() && !IsOverException()
 *RButton::
     StopRecursion := True
     ComboActive := False
@@ -3702,10 +3702,11 @@ VolumeHover() {
         Return False
 }
 
-IsOverDesktop() {
+IsOverException() {
     MouseGetPos, , , hwndID
     WinGetClass, cl, ahk_id %hwndID%
-    If (cl == "WorkerW" || cl == "ProgMan")
+    WinGet, proc, ProcessName, ahk_id %hwndID%
+    If (cl == "WorkerW" || cl == "ProgMan" || proc == "peazip.exe")
         Return True
     Else
         Return False
