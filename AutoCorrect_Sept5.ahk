@@ -45,7 +45,6 @@ SendMode, Input
 ; This same is true for Send when SendMode Input is in effect.
 
 Global mouseMoving                 := False
-Global ComboActive                 := False
 Global skipCheck                   := False
 Global hwndVD
 Global forward                     := True
@@ -2049,7 +2048,6 @@ Return
 $!Tab::
 $!+Tab::
 If !hitTAB {
-    ComboActive := False
     textBoxSelected := False
     SetTimer, mouseTrack, Off
     SetTimer, keyTrack,   Off
@@ -2064,7 +2062,6 @@ Return
 !`::
     ; tooltip, swapping between windows of app
     StopRecursion  := True
-    ComboActive    := False
     ActivateTopMostWindow()
 
     DetectHiddenWindows, Off
@@ -2425,7 +2422,6 @@ Cycle()
 
 ClearRect(hwnd := "") {
     Global DrawingRect
-    Global ComboActive
     Global Highlighter
     Global GUI4Boarder
 
@@ -2433,7 +2429,7 @@ ClearRect(hwnd := "") {
         Critical, On
         loop 5 {
             DrawingRect := False
-            If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 Critical, Off
                 Gui, GUI4Boarder: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
@@ -2449,7 +2445,7 @@ ClearRect(hwnd := "") {
         {
             current_trans := 255-(decrement_amount * A_Index)
             WinSet, Transparent, %current_trans%, ahk_id %Highlighter%
-            If !ComboActive && (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 Critical, Off
                 Gui, GUI4Boarder: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
@@ -3580,7 +3576,8 @@ explorerGetPath(hwnd := 0) { ; https://www.autohotkey.com/boards/viewtopic.php?p
 
 #If MouseIsOverTitleBar()
 ~Lbutton & Rbutton::
-    ComboActive := True
+    ; ComboActive := True
+    HotKey, Rbutton, DoNothing, On
     MouseGetPos, , , hwndId
     WinGetTitle, winTitle, ahk_id %hwndId%
     BlockInput, MouseMove
@@ -3595,6 +3592,7 @@ explorerGetPath(hwnd := 0) { ; https://www.autohotkey.com/boards/viewtopic.php?p
     Gui, GUI4Boarder: Color, %border_color%
     WinSet, AlwaysOnTop, toggle, ahk_id %hwndId%
     BlockInput, MouseMoveOff
+    HotKey, Rbutton, DoNothing, Off
 Return
 #If
 
@@ -3633,47 +3631,32 @@ WheelDown::send {Volume_Down}
 ; Return
 ; #If
 
-#If mouseMoving
-~RButton::
-    ComboActive := False
-Return
-#If
-
 #If !mouseMoving && !VolumeHover() && !IsOverException()
-*RButton::
+RButton::
     StopRecursion := True
-    ComboActive := False
-    ; loop 600 {
-        ; If !(GetKeyState("RButton"))
-        ; {
-            ; break
-        ; }
-        ; sleep 5
-    ; }
+
     KeyWait, Rbutton, U T3
-    If !ComboActive
-    {
-        If GetKeyState("LShift") && !GetKeyState("LShift","P")
-            Send, +{Click, Right}
-        Else
-            Send,  {Click, Right}
-    }
+
+    If GetKeyState("LShift") && !GetKeyState("LShift","P")
+        Send, +{Click, Right}
     Else
-        ComboActive := False
+        Send,  {Click, Right}
 
     StopRecursion := False
 Return
 
 RButton & WheelUp::
+    HotKey, Rbutton, DoNothing, On
     SetTimer, SendCtrlAddLabel, Off
-    ComboActive := True
     Send, ^{Home}
+    HotKey, Rbutton, DoNothing, Off
 Return
 
 RButton & WheelDown::
+    HotKey, Rbutton, DoNothing, On
     SetTimer, SendCtrlAddLabel, Off
-    ComboActive := True
     Send, ^{End}
+    HotKey, Rbutton, DoNothing, Off
 Return
 #If
 
@@ -4502,13 +4485,16 @@ mouseTrack() {
         LbuttonHeld := False
     }
     If ((abs(x - lastX) > 3 || abs(y - lastY) > 3) && lastX != "" && lastY != "") {
-        ; tooltip, %mouseMoving%
+        If !mouseMoving {
+            mouseMoving := True
+            return
+        }
         mouseMoving := True
         textBoxSelected := False
         If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770") {
             timeOfLastMove := A_TickCount
         }
-    } Else If (mouseMoving && (A_TickCount - timeOfLastMove) > 250) {
+    } Else If (mouseMoving && (A_TickCount - timeOfLastMove) > 400) {
         mouseMoving := False
     }
 
