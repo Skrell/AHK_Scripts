@@ -13,6 +13,7 @@
 #SingleInstance
 #InstallMouseHook
 #InstallKeybdHook
+#UseHook
 #HotString EndChars ()[]{}:;,.?!`n `t
 #MaxhotKeysPerInterval 500
 #KeyHistory 25
@@ -37,10 +38,12 @@ Global CurrentDesktop := 1
 
 #include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 
+SendMode, Input
+SetKeyDelay, -1, -1
+SetMouseDelay, -1
 SetBatchLines -1
 SetWinDelay   10
 SetControlDelay 10
-SendMode, Input
 ; SetKeyDelay is not obeyed by SendInput; there is no delay between keystrokes in that mode.
 ; This same is true for Send when SendMode Input is in effect.
 
@@ -1362,11 +1365,8 @@ Return
 
 $!Space::
     StopAutoFix := True
-    ; CapsDown := True
-    ; KeyWait, Space, U T10
-    ; CapsDown := False
     Send, {Left}
-    StopAutoFix := False
+    ; StopAutoFix := False
 Return
 
 $!i::
@@ -4386,32 +4386,54 @@ HideTrayTip() {
     }
 }
 
+FixMod(name, vk) {
+    ; If Windows thinks it's down (logical) but physically it's not, force an Up
+    if ( GetKeyState(name) && !GetKeyState(name, "P") )  ; logical down, physical up
+        ForceKeyUpVK(vk)
+}
+; Mouse buttons (optional)
+; FixKey("RButton", "RButton Up")
+FixKey(name, upSpec) {
+    if ( GetKeyState(name) && !GetKeyState(name, "P") ) {
+        Critical, On
+        SendInput, {%upSpec%}
+        Critical, Off
+    }
+}
+; Use a low-level key-up in case Send fails
+ForceKeyUpVK(vk) {
+    static KEYEVENTF_KEYUP := 0x2
+    Critical, On
+    ; keybd_event is old but very dependable for “unsticking”
+    DllCall("keybd_event", "UChar", vk, "UChar", 0, "UInt", KEYEVENTF_KEYUP, "UPtr", 0)
+    Critical, Off
+}
+
 keyTrack() {
     Global keys
     ListLines, Off
     Global StopAutoFix
     Global TimeOfLastKey
 
-    If GetKeyState("LAlt")   && !GetKeyState("LAlt","P") {
-        Critical, On
-        Send, {LAlt Up}
-        Critical, Off
-    }
-    If GetKeyState("Ctrl")   && !GetKeyState("Ctrl","P") {
-        Critical, On
-        Send, {Ctrl Up}
-        Critical, Off
-    }
-    If GetKeyState("LShift") && !GetKeyState("LShift","P") {
-        Critical, On
-        Send, {LShift Up}
-        Critical, Off
-    }
-    If GetKeyState("Rbutton")   && !GetKeyState("Rbutton","P") {
-        Critical, On
-        Send, {Rbutton Up}
-        Critical, Off
-    }
+    FixMod("LShift", 0xA0), FixMod("RShift", 0xA1)
+    FixMod("LCtrl",  0xA2), FixMod("RCtrl",  0xA3)
+    FixMod("LAlt",   0xA4), FixMod("RAlt",   0xA5)
+
+    ; If GetKeyState("LAlt")   && !GetKeyState("LAlt","P") {
+        ; Critical, On
+        ; Send, {LAlt Up}
+        ; Critical, Off
+    ; }
+    ; If GetKeyState("Ctrl")   && !GetKeyState("Ctrl","P") {
+        ; Critical, On
+        ; Send, {Ctrl Up}
+        ; Critical, Off
+    ; }
+    ; If GetKeyState("LShift") && !GetKeyState("LShift","P") {
+        ; Critical, On
+        ; Send, {LShift Up}
+        ; Critical, Off
+    ; }
 
     ControlGetFocus, currCtrl, A
     WinGetClass, currClass, A
@@ -5979,6 +6001,7 @@ SetTitleMatchMode, 2
 ::boil::
 ::logger::
 ::activate::
+::checkin::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
