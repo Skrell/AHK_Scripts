@@ -1,3 +1,9 @@
+::aen::amen
+::amn::amen
+::ame::amen
+::maen::amen
+::aemn::amen
+::amne::amen
 ::nvision::envision
 ::evision::envision
 ::enision::envision
@@ -817,6 +823,22 @@
 ::simultaes::simulates
 ::simulaets::simulates
 ::simulatse::simulates
+::imulated::simulated
+::smulated::simulated
+::siulated::simulated
+::simlated::simulated
+::simuated::simulated
+::simulted::simulated
+::simulaed::simulated
+::simulatd::simulated
+::ismulated::simulated
+::smiulated::simulated
+::siumlated::simulated
+::simluated::simulated
+::simualted::simulated
+::simultaed::simulated
+::simulaetd::simulated
+::simulatde::simulated
 ::imulating::simulating
 ::smulating::simulating
 ::siulating::simulating
@@ -2349,7 +2371,6 @@
 ::ilst::list
 ::lsit::list
 ::lits::list
-::ame::name
 ::nme::name
 ::nae::name
 ::nam::name
@@ -4803,7 +4824,6 @@
 ::oyrk::York
 ::yrok::York
 ::yokr::York
-::amn::man
 ::mna::man
 ::ard::card
 ::crd::card
@@ -10385,7 +10405,6 @@
 ::ean::mean
 ::mea::mean
 ::eman::mean
-::maen::mean
 ::mena::mean
 ::rowth::growth
 ::gowth::growth
@@ -78964,7 +78983,6 @@
 ::mend::amend
 ::aend::amend
 ::amnd::amend
-::amen::amend
 ::maend::amend
 ::aemnd::amend
 ::amned::amend
@@ -141211,7 +141229,6 @@
 ::stimulatns::stimulants
 ::stimulanst::stimulants
 ::timulated::stimulated
-::simulated::stimulated
 ::stmulated::stimulated
 ::stiulated::stimulated
 ::stimlated::stimulated
