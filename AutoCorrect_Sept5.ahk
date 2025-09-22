@@ -1028,7 +1028,7 @@ Mbutton::
 Return
 #If
 
-#If !MbuttonIsEnter && !MouseIsOverTitleBar()
+#If !MbuttonIsEnter ; && !MouseIsOverTitleBar()
 MButton::
     StopRecursion := True
     SetTimer, keyTrack, Off
@@ -1067,7 +1067,9 @@ MButton::
     } else if ((rightEdge - monR) <= SnapRange && (rightEdge - monR) >= 0) {
         snapState := "right"
     }
+
     Critical, On
+    WinSet, Transparent, 185, ahk_id %hWnd%
     while GetKeyState("MButton", "P")
     {
         windowSnapped := False
@@ -1077,7 +1079,9 @@ MButton::
         dxMouse := mx - mxPrev
         mxPrev := mx
 
-        ; rawX is continuously changing with your mouse.
+        ; rawX is continuously changing with your mouse and represents the current theoretical value of the window's x coordinate.
+        ; it's "theoretical" because the window may be "snapped" but this value will still change as the mouse moves which
+        ; is why you can compare rawX against the difference between monL and BreakAway/ReleaseAway distances
         ; monL is fixed to the active monitor’s left edge.
         rawX := wx0 + dx ; (original window X) + (how far the mouse has moved in X since drag start)
         rawY := wy0 + dy
@@ -1100,7 +1104,7 @@ MButton::
         leftEdge   := rawX
         rightEdge  := rawX + ww
         rightSnapX := monR - ww  ; X that places the right edge at monitor's right
-
+        ; tooltip, % rawX "-" rightSnapX - ReleaseAway
         if (snapState = "left") {
             ; While snapped left:
             ; - Push-through: keep dragging left until rawX <= monL - BreakAway to break snap
@@ -1150,9 +1154,12 @@ MButton::
         Sleep, 1
     }
     Critical, Off
-    If (wh/abs(monB-monT) > 0.95)
+    If MouseIsOverTitleBar(mx, my) && (abs(rawX - wx0) <= 3) && (abs(rawY - wy0) <= 3)
+        GoSub, SwitchDesktop
+    Else If (wh/abs(monB-monT) > 0.95)
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY)+1
 
+    WinSet, Transparent, Off, ahk_id %hWnd%
     StopRecursion := False
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
@@ -2547,6 +2554,100 @@ DrawRect:
     Critical, Off
 Return
 
+; ------------------  ChatGPT ------------------------------------------------------------------
+UpdateMasks:
+    WinGet, hA, ID, A
+    if (!hA)
+        return
+    if (hA = hTop || hA = hLeft || hA = hRight || hA = hBottom)
+        return
+
+    ; Get the monitor WORK AREA (excludes taskbar) for the active window's monitor
+    if (!GetMonitorRectsForWindow(hA, mx, my, mw, mh, wx2, wy2, ww2, wh2))
+        return
+    wRight  := wx2 + ww2
+    wBottom := wy2 + wh2
+
+    ; Active window rect (expanded slightly)
+    ; WinGetPos, wx, wy, ww, wh, ahk_id %hA%
+    WinGetPosEx(hA, wx, wy, ww, wh)
+    if (wx = "")
+        return
+    wx -= Margin, wy -= Margin, ww += 2*Margin, wh += 2*Margin
+    holeL := Max(wx2, wx)
+    holeT := Max(wy2, wy)
+    holeR := Min(wRight,  wx + ww)
+    holeB := Min(wBottom, wy + wh)
+
+    ; Mask only within the WORK AREA (taskbar region is untouched, so it's visible & clickable)
+    ; TOP panel (across full work area width, above hole)
+    BlockDesktopBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
+    ; LEFT panel
+    BlockDesktopBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT))
+    ; RIGHT panel
+    BlockDesktopBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT))
+    ; BOTTOM panel
+    BlockDesktopBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB))
+return
+
+; Finds the monitor + work area rect that contains the center of the given window.
+GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
+                       , ByRef workX, ByRef workY, ByRef workW, ByRef workH) {
+    ; WinGetPos, wx, wy, ww, wh, ahk_id %hWnd%
+    WinGetPosEx(hWnd, wx, wy, ww, wh)
+    if (wx = "")
+        return false
+    cx := wx + ww//2
+    cy := wy + wh//2
+
+    SysGet, MonCount, MonitorCount
+    Loop, %MonCount%
+    {
+        SysGet, Mon,  Monitor,         %A_Index% ; MonLeft/MonTop/MonRight/MonBottom
+        SysGet, Work, MonitorWorkArea, %A_Index% ; WorkLeft/WorkTop/WorkRight/WorkBottom
+        if (cx >= MonLeft && cx < MonRight && cy >= MonTop && cy < MonBottom) {
+            monX := MonLeft, monY := MonTop, monW := MonRight - MonLeft, monH := MonBottom - MonTop
+            workX := WorkLeft, workY := WorkTop, workW := WorkRight - WorkLeft, workH := WorkBottom - WorkTop
+            return true
+        }
+    }
+    return false
+}
+
+BlockDesktopBar(guiIndex, x, y, w, h) {
+    Global black1Hwnd
+    Global black2Hwnd
+    Global black3Hwnd
+    Global black4Hwnd
+    Global Opacity
+
+    if (w <= 0 || h <= 0) {
+        Gui, %guiIndex%: Hide
+    } else {
+        Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
+        if (guiIndex == 1) {
+            WinSet, Transparent, %Opacity%, ahk_id %black1Hwnd%
+        }
+        if (guiIndex == 2) {
+            WinSet, Transparent, %Opacity%, ahk_id %black2Hwnd%
+        }
+        if (guiIndex == 3) {
+            WinSet, Transparent, %Opacity%, ahk_id %black3Hwnd%
+        }
+        if (guiIndex == 4) {
+            WinSet, Transparent, %Opacity%, ahk_id %black4Hwnd%
+        }
+    }
+}
+
+Max(a,b) {
+    return a > b ? a : b
+}
+Min(a,b) {
+    return a < b ? a : b
+}
+; -------------------------------------------------------------------------------------------
+
 #If MouseIsOverTaskbarBlank()
 ~Lbutton::
     StopRecursion     := True
@@ -3280,8 +3381,9 @@ ActivateWindow:
 Return
 
 
-#If MouseIsOverTitleBar() && !MbuttonIsEnter
-Mbutton::
+; #If MouseIsOverTitleBar() && !MbuttonIsEnter
+; Mbutton::
+SwitchDesktop:
     Global movehWndId
     Global GoToDesktop := False
 
@@ -3328,10 +3430,8 @@ Mbutton::
     SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
 
-    ; If StopRecursion
-        ; StopRecursion := False
 Return
-#If
+; #If
 
 SendWindow:
     Global movehWndId
