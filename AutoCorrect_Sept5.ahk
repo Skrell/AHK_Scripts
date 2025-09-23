@@ -111,6 +111,19 @@ ReleaseAway  := 24     ; px: while snapped, drag this far AWAY from the edge to 
 ; Skip dragging these classes (taskbar/desktop)
 skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
+; === Settings ===
+BlockClicks := true    ; true = block clicks outside active window, false = let clicks pass through
+Opacity     := 225     ; 255=opaque black; try 200 to "dim" instead of fully black
+Margin      := 1       ; expands the hole around the active window by this many pixels
+
+; === Globals ===
+blackoutOn := false
+
+black1Hwnd := ""
+black2Hwnd := ""
+black3Hwnd := ""
+black4Hwnd := ""
+
 Process, Priority,, High
 
 UIA := UIA_Interface() ; Initialize UIA interface
@@ -137,6 +150,24 @@ Menu, Tray, Add, List Hotkeys, listHotkeys_label
 Menu, Tray, Add, List Vars, listVars_label
 Menu, Tray, Add, List Lines, listLines_label
 Menu, Tray, Click, 1
+
+; Create 4 mask GUIs (top, left, right, bottom)
+CreateMaskGui(index, ByRef hWndOut) {
+    Global BlockClicks, Opacity, black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    clickStyle := BlockClicks ? "" : "+E0x20"
+    ; Build a variable name like "hWnd1", "hWnd2", etc.
+    hwndVarName := "black" index "Hwnd"
+    Gui, %index%: +AlwaysOnTop -Caption +ToolWindow %clickStyle% +Hwnd%hwndVarName%
+    Gui, %index%: Color, Black
+    WinSet, Transparent, %Opacity%, ahk_id %hwndVarName%
+    hWndOut := hwndVarName
+    Gui, %index%: Hide
+}
+
+CreateMaskGui(1, hTop)
+CreateMaskGui(2, hLeft)
+CreateMaskGui(3, hRight)
+CreateMaskGui(4, hBottom)
 
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
@@ -3629,8 +3660,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             If (initTargetHwnd == finalActiveHwnd) {
                 Send, ^{NumpadAdd}
 
-                If (prevPath != "" && currentPath != "" && prevPath != currentPath)
-                    tooltip, sent to %TargetControl% - %prevPath% VS %currentPath%
+                ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
+                    ; tooltip, sent to %TargetControl% - %prevPath% VS %currentPath%
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
                     sleep, 125
