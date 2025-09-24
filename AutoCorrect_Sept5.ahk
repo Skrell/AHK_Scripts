@@ -62,6 +62,7 @@ Global startHighlight              := False
 Global border_thickness            := 4
 Global border_color                := 0xFF00FF
 Global hitTAB                      := False
+Global hitTilde                    := False
 Global SearchingWindows            := False
 Global UserInputTrimmed            := ""
 Global memotext                    := ""
@@ -2072,9 +2073,12 @@ $!+Tab::
 If !hitTAB {
     firstDraw := True
     textBoxSelected := False
+    StopRecursion  := True
     SetTimer, mouseTrack, Off
     SetTimer, keyTrack,   Off
+
     Cycle()
+
     Gui, GUI4Boarder: Hide
     WinSet, Transparent, 255, ahk_id %black1Hwnd%
     WinSet, Transparent, 255, ahk_id %black2Hwnd%
@@ -2082,29 +2086,46 @@ If !hitTAB {
     WinSet, Transparent, 255, ahk_id %black4Hwnd%
     GoSub, Altup
     GoSub, HideMasks
+
     SetTimer, mouseTrack, On
     SetTimer, keyTrack,   On
+    StopRecursion := False
 }
 Return
 
 !`::
     ; tooltip, swapping between windows of app
     StopRecursion  := True
+    SetTimer, mouseTrack, Off
+    SetTimer, keyTrack,   Off
+
     ActivateTopMostWindow()
 
     DetectHiddenWindows, Off
     WinGet, activeProcessName, ProcessName, A
     WinGetClass, activeClassName, A
 
-    lastActWinID := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
-    ; ClearRect()
+    tempWinActID := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
+
+    If !LclickSelected
+        lastActWinID := tempWinActID
+    Else
+        LclickSelected := False
+
+    WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
+
     Gui, GUI4Boarder: Hide
     If (cycleCount > 2)
         GoSub, FadeInWin2
+
     WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
     WinActivate, ahk_id %lastActWinID%
+
     ValidWindows   := []
     GroupedWindows := []
+
+    SetTimer, mouseTrack, On
+    SetTimer, keyTrack,   On
     StopRecursion := False
 Return
 
@@ -2132,6 +2153,22 @@ Return
         KeyWait, LAlt, U
         GoSub, FadeOutWindowTitle
         GoSub, Altup
+        SetTimer, mouseTrack, On
+        SetTimer, keyTrack,   On
+    }
+    Else If hitTilde {
+        LclickSelected := True
+        MouseGetPos, , , _winIdD,
+        WinGetTitle, actTitle, ahk_id %_winIdD%
+        WinGet, pp, ProcessPath , ahk_id %_winIdD%
+
+        WinActivate, ahk_id %_winIdD%
+        lastActWinID := _winIdD
+
+        GoSub, DrawRect
+        WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
+        KeyWait, LAlt, U
+        GoSub, FadeOutWindowTitle
         SetTimer, mouseTrack, On
         SetTimer, keyTrack,   On
     }
@@ -4327,13 +4364,14 @@ Return
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    Global MonCount, VD, Highlighter, hitTAB, WindowTitleID, GroupedWindows, cycleCount
-    SetTimer, mouseTrack, Off
+    Global MonCount, VD, Highlighter, hitTAB, hitTilde, WindowTitleID, GroupedWindows, cycleCount, LclickSelected
+
     windowsToMinimize := []
     minimizedWindows  := []
     ; finalWindowsListWithProcAndClass := []
     lastActWinID      := ""
     hitTAB            := False
+    hitTilde          := True
 
     ; SetTimer, UpdateValidWindows, -1
     UpdateValidWindows()
@@ -4372,7 +4410,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     numWindows := GroupedWindows.length()
 
     If (numWindows <= 1) {
-        SetTimer, mouseTrack, On
         loop 100 {
             Tooltip, Only %numWindows% Window(s) found!
             sleep, 10
@@ -4407,20 +4444,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     loop
     {
-        ; KeyWait, Lbutton, D T0.1
-        ; If !ErrorLevel {
-            ; MouseGetPos, , , _winIdD,
-            ; WinGetTitle, actTitle, ahk_id %_winIdD%
-            ; WinGet, pp, ProcessPath , ahk_id %_winIdD%
-
-            ; LclickSelected := True
-            ; GoSub, DrawRect
-            ; WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
-            ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
-            ; lastActWinID := _winIdD
-
-            ; KeyWait, Lbutton, U
-        ; }
+        If LclickSelected
+            break
 
         KeyWait, ``, D T0.1
         If !ErrorLevel
@@ -4478,8 +4503,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             }
         }
     }
-    Critical, On
-    BlockKeyboard(True)
     cycleCount := cycleCount - 1
     If (cycleCount <= 0)
         cycleCount := GroupedWindows.MaxIndex()
@@ -4512,9 +4535,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     ; }
     ; WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
     ; WinActivate, ahk_id %lastActWinID%
-    BlockKeyboard(False)
-    Critical, Off
-    SetTimer, mouseTrack, On
     Return lastActWinID
 }
 
