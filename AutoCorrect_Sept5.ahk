@@ -5835,10 +5835,12 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     drawX := CoordXCenterScreen()
     drawY := CoordYCenterScreen()
     Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
-    WinGetPos, x, y, w , h, ahk_id %WindowTitleID%
-    WinSet, Transparent, 225, ahk_id %WindowTitleID%
+
+    WinGetPos, , , w , h, ahk_id %WindowTitleID%
+    WinSet, Transparent, 1, ahk_id %WindowTitleID%
     WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
     WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
+    WinSet, Transparent, 225, ahk_id %WindowTitleID%
     Return WindowTitleID
 }
 
