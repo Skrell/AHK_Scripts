@@ -357,12 +357,16 @@ OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEv
     ; tooltip, pop!
 }
 
-HotyANDFixSlash:
+MarkKeypressTime:
     TimeOfLastKey := A_TickCount
     lastKeyPress := ""
     ; When you're in a function and you want to know which hotkey triggered the function, always use A_ThisHotKey
-    If inStr(keys, A_ThisHotkey, False)
+    If inStr(keys, A_ThisHotkey, False) || inStr(numbers, A_ThisHotkey, False)
         lastKeyPress := A_ThisHotkey
+Return
+
+HotyANDFixSlash:
+    GoSub, MarkKeypressTime
     GoSub, Hoty
     GoSub, FixSlash
 Return
@@ -477,7 +481,10 @@ ReAssignHotkeys() {
     {
         HotKey,  ~%A_LoopField%, HotyANDFixSlash, On
     }
-    HotKey ~$Ctrl, LaunchWinFind, On
+    Hotkey, Ctrl, DoNothing, Off
+    Hotkey, ., DoNothing, Off
+    HotKey, ~$Ctrl, LaunchWinFind, On
+    Hotkey, ~., MarkKeypressTime, On
     Return
 }
 
@@ -497,7 +504,10 @@ DeAssignHotkeys() {
     {
         HotKey,  %A_LoopField%, DoNothing, On
     }
-    Hotkey Ctrl, DoNothing, On
+    HotKey, ~$Ctrl, LaunchWinFind, Off
+    Hotkey, ~., MarkKeypressTime, Off
+    Hotkey, Ctrl, DoNothing, On
+    Hotkey, ., DoNothing, On
     Return
 }
 
@@ -2695,7 +2705,7 @@ UpdateMasks:
         WinSet, AlwaysOnTop, On, ahk_id %black4Hwnd%
 
         transVal += ceil(Opacity/5)
-        sleep, 5
+        sleep, 3
     }
 Return
 
@@ -3790,8 +3800,8 @@ Return
 LWin & WheelUp::send {Volume_Up}
 LWin & WheelDown::send {Volume_Down}
 
-^WheelUp::send, {PgUp}
-^WheelDown::send, {PgDn}
+!WheelUp::send, {PgUp}
+!WheelDown::send, {PgDn}
 
 #If VolumeHover() && !IsOverException()
 WheelUp::send {Volume_Up}
