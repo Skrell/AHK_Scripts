@@ -102,7 +102,7 @@ Global numbers                     := "0123456789"
 Global DoubleClickTime             := DllCall("GetDoubleClickTime")
 Global isWin11                     := DetectWin11()
 Global TaskBarHeight               := 0
-Global lastKeyPress                := ""
+Global lastHotKeyPress                := ""
 
 ; --- Config ---
 UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
@@ -310,7 +310,7 @@ ExprTimeout =
 OnExit("PreventRecur")
 
 ;------------------------------------------------------------------------------
-    ; AUto-COrrect TWo COnsecutive CApitals.
+; AUto-COrrect TWo COnsecutive CApitals.
 ; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
 ; To enable it, remove the /*..*/ symbols around it.
 ; From Laszlo's script at http://www.autohotkey.com/forum/topic9689.html
@@ -321,11 +321,11 @@ OnExit("PreventRecur")
 ReAssignHotkeys()
 
 HotKey ~/,  FixSlash
-HotKey ~',  Hoty
+HotKey ~',  Hoty ;'
 HotKey ~?,  Hoty
 HotKey ~!,  Hoty
 HotKey ~`,, Hoty
-HotKey ~.,  Hoty
+HotKey ~.,  Marktime_Hoty
 HotKey ~_,  Hoty
 HotKey ~-,  Hoty
 
@@ -358,18 +358,24 @@ OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEv
 }
 
 MarkKeypressTime:
-    TimeOfLastKey := A_TickCount
-    lastKeyPress := ""
-    ; When you're in a function and you want to know which hotkey triggered the function, always use A_ThisHotKey
-    If inStr(keys, A_ThisHotkey, False) || inStr(numbers, A_ThisHotkey, False)
-        lastKeyPress := A_ThisHotkey
+    TimeOfLastKey    := A_TickCount
+    lastHotKeyPress  := A_ThisHotkey
 Return
 
-HotyANDFixSlash:
+Marktime_FixSlash:
+    GoSub, MarkKeypressTime
+    GoSub, FixSlash
+Return
+
+Marktime_Hoty:
+    GoSub, MarkKeypressTime
+    GoSub, Hoty
+Return
+
+Marktime_Hoty_FixSlash:
     GoSub, MarkKeypressTime
     GoSub, Hoty
     GoSub, FixSlash
-Return
 
 Startup:
     Menu, Tray, Togglecheck, Run at startup
@@ -471,20 +477,20 @@ ReAssignHotkeys() {
 
     Loop Parse, keys
     {
-        HotKey, ~+%A_LoopField%, HotyANDFixSlash, On
+        HotKey, ~+%A_LoopField%, Marktime_Hoty_FixSlash, On
     }
     Loop Parse, keys
     {
-        HotKey,  ~%A_LoopField%, HotyANDFixSlash, On
+        HotKey,  ~%A_LoopField%, Marktime_Hoty_FixSlash, On
     }
     Loop Parse, numbers
     {
-        HotKey,  ~%A_LoopField%, HotyANDFixSlash, On
+        HotKey,  ~%A_LoopField%, Marktime_Hoty_FixSlash, On
     }
     Hotkey, Ctrl, DoNothing, Off
-    Hotkey, ., DoNothing, Off
+    Hotkey,  ., DoNothing, Off
     HotKey, ~$Ctrl, LaunchWinFind, On
-    Hotkey, ~., MarkKeypressTime, On
+    Hotkey, ~., Marktime_Hoty, On
     Return
 }
 
@@ -505,9 +511,9 @@ DeAssignHotkeys() {
         HotKey,  %A_LoopField%, DoNothing, On
     }
     HotKey, ~$Ctrl, LaunchWinFind, Off
-    Hotkey, ~., MarkKeypressTime, Off
+    Hotkey, ~., Marktime_Hoty, Off
     Hotkey, Ctrl, DoNothing, On
-    Hotkey, ., DoNothing, On
+    Hotkey,  ., DoNothing, On
     Return
 }
 
@@ -1218,8 +1224,9 @@ return
 Return
 
 CapsLock::
-    Send {Delete}
     TimeOfLastKey := A_TickCount
+    Send {Delete}
+    lastHotKeyPress := "CapsLock"
 Return
 
 #If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything64.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE") && !IsEditFieldActive())
@@ -1439,9 +1446,6 @@ Return
 
 $!j::
     StopAutoFix := True
-    ; If CapsDown
-        ; Send, {LEFT}
-    ; Else
     Send, ^{Left}
     Hotstring("Reset")
     StopAutoFix := False
@@ -1457,9 +1461,6 @@ Return
 
 $!l::
     StopAutoFix := True
-    ; If CapsDown
-        ; Send, {RIGHT}
-    ; Else
     Send, ^{Right}
     Hotstring("Reset")
     StopAutoFix := False
@@ -1511,13 +1512,14 @@ Return
 #+s::Return
 
 ~Space::
-    GoSub, Hoty
-    GoSub, FixSlash
+    GoSub, Marktime_Hoty_FixSlash
+    lastHotKeyPress := "Space"
 Return
 
 ; duplicate hotkey in case shift is accidentally  held as a result of attempting to type a '?'
 ~+Space::
-    GoSub, Hoty
+    GoSub, Marktime_Hoty_FixSlash
+    lastHotKeyPress := "Space"
 Return
 
 ~^Backspace::
@@ -1526,6 +1528,7 @@ Return
 
 ~$Backspace::
     TimeOfLastKey := A_TickCount
+    lastHotKeyPress := "Backspace"
 Return
 
 ~$Delete::
@@ -4600,7 +4603,8 @@ ForceKeyUpVK(vk) {
 ; --------------------------------------------------------------------------------
 keyTrack() {
     Global keys
-    Global lastKeyPress
+    Global numbers
+    Global lastHotKeyPress
     Global StopAutoFix
     Global TimeOfLastKey
     ListLines, Off
@@ -4616,18 +4620,27 @@ keyTrack() {
         ; A_PriorKey and Loops — How It Works
         ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a loop.
         ; You can read A_PriorKey at any point in the loop, and it will show the most recent key pressed up to that moment.
-        If ((A_TickCount-TimeOfLastKey) > 400  && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
+        ; tooltip, lastKey-%lastHotKeyPress% missedKey-%A_PriorKey%
+        If (TimeOfLastKey && (A_TickCount-TimeOfLastKey) > 300  && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
+            TimeOfLastKey := 
             SetTimer, keyTrack,   Off
             DeAssignHotkeys()
 
             Critical, On
             Send, ^{NumpadAdd}
             Critical, Off
-
-            If (inStr(keys, A_PriorKey, False) && lastKeyPress != "" && A_PriorKey != "" && A_PriorKey != lastKeyPress) {
-                Send, %A_PriorKey%
-                tooltip, lastKey-%lastKeyPress% missedKey-%A_PriorKey%
-                lastKeyPress := A_PriorKey
+             
+            If ((inStr(keys, lastHotKeyPress, false) || (inStr(numbers, lastHotKeyPress, false) || A_PriorKey == "Space") || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace")
+                && lastHotKeyPress != "" && A_PriorKey != "" && A_PriorKey != lastHotKeyPress) {
+                If (A_PriorKey == "Space")
+                    Send, {SPACE}
+                Else If (A_PriorKey == "CapsLock")
+                    Send, {DELETE}
+                Else If (A_PriorKey == "Backspace")
+                    Send, {Backspace}
+                Else
+                    Send, %A_PriorKey%
+                lastHotKeyPress := A_PriorKey
             }
 
             ReAssignHotkeys()
