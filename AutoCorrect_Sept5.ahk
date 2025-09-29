@@ -115,7 +115,7 @@ skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "Wo
 
 ; === Settings ===
 BlockClicks := true    ; true = block clicks outside active window, false = let clicks pass through
-Opacity     := 225     ; 255=opaque black; try 200 to "dim" instead of fully black
+Opacity     := 200     ; 255=opaque black; try 200 to "dim" instead of fully black
 Margin      := 0       ; expands the hole around the active window by this many pixels
 
 ; === Globals ===
@@ -487,10 +487,10 @@ ReAssignHotkeys() {
     {
         HotKey,  ~%A_LoopField%, Marktime_Hoty_FixSlash, On
     }
-    Hotkey, Ctrl, DoNothing, Off
-    Hotkey,  ., DoNothing, Off
+    Hotkey,   Ctrl, DoNothing,     Off
+    Hotkey,      ., DoNothing,     Off
     HotKey, ~$Ctrl, LaunchWinFind, On
-    Hotkey, ~., Marktime_Hoty, On
+    Hotkey,     ~., Marktime_Hoty, On
     Return
 }
 
@@ -511,9 +511,9 @@ DeAssignHotkeys() {
         HotKey,  %A_LoopField%, DoNothing, On
     }
     HotKey, ~$Ctrl, LaunchWinFind, Off
-    Hotkey, ~., Marktime_Hoty, Off
-    Hotkey, Ctrl, DoNothing, On
-    Hotkey,  ., DoNothing, On
+    Hotkey,     ~., Marktime_Hoty, Off
+    Hotkey,   Ctrl, DoNothing,     On
+    Hotkey,      ., DoNothing,     On
     Return
 }
 
@@ -1613,30 +1613,43 @@ prevChromeTab()
 #If
 
 #If !SearchingWindows && !hitTAB
-Esc::
-    SetTimer, EscTimer, Off
+; Defining Esc & x:: turns Esc into a prefix key. While a prefix is held, AHK delays (or suppresses) the Esc down hotkey until it
+; knows whether a combo (with x) is coming. That’s why your 2nd press + hold never reaches your $Esc routine, so GoSub, DrawRect never runs.
+$Esc::
     StopRecursion := True
-    escTime1 := A_TickCount
+    SetTimer, EscTimer, Off
     SetTimer, keyTrack,   Off
     SetTimer, mouseTrack, Off
     executedOnce   := False
     escHwndID := FindTopMostWindow()
     WinGetTitle, escTitle, ahk_id %escHwndID%
 
-    If ( A_PriorHotkey == A_ThisHotKey && A_TimeSincePriorHotkey  < DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
+    If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey  < DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
+
         DetectHiddenWindows, Off
 
         If IsAltTabWindow(escHwndID) {
             WinActivate, ahk_id %escHwndID%
+            Hotkey, x, DoNothing, On
             GoSub, DrawRect
 
             loop {
                 tooltip Close `"%escTitle%`" ? ;"
-                sleep, 10
-                If !GetKeyState("Esc")
+                sleep, 1
+                If !GetKeyState("Esc","P")
                     break
+                If GetKeyState("x","P") {
+                    Tooltip, Canceled!
+                    ClearRect()
+                    CancelClose := True
+                    sleep, 1500
+                    Tooltip,
+                    StopRecursion := False
+                    SetTimer, keyTrack,   On
+                    SetTimer, mouseTrack, On
+                }
             }
-
+            Hotkey, x, DoNothing, Off
             If !CancelClose {
                 Winclose, ahk_id %escHwndID%
 
@@ -1682,6 +1695,10 @@ Esc::
                 CancelClose := False
         }
         tooltip
+        StopRecursion := False
+        SetTimer, keyTrack,   On
+        SetTimer, mouseTrack, On
+        Return
     }
 
     SetTimer, EscTimer, -150
@@ -1692,13 +1709,6 @@ Esc::
     SetTimer, mouseTrack, On
 Return
 
-Esc & x::
-    Tooltip, Canceled!
-    ClearRect()
-    CancelClose := True
-    sleep, 1500
-    Tooltip,
-Return
 #If
 
 EscTimer:
@@ -4622,14 +4632,14 @@ keyTrack() {
         ; You can read A_PriorKey at any point in the loop, and it will show the most recent key pressed up to that moment.
         ; tooltip, lastKey-%lastHotKeyPress% missedKey-%A_PriorKey%
         If (TimeOfLastKey && (A_TickCount-TimeOfLastKey) > 300  && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
-            TimeOfLastKey := 
+            TimeOfLastKey :=
             SetTimer, keyTrack,   Off
             DeAssignHotkeys()
 
             Critical, On
             Send, ^{NumpadAdd}
             Critical, Off
-             
+
             If ((inStr(keys, lastHotKeyPress, false) || (inStr(numbers, lastHotKeyPress, false) || A_PriorKey == "Space") || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace")
                 && lastHotKeyPress != "" && A_PriorKey != "" && A_PriorKey != lastHotKeyPress) {
                 If (A_PriorKey == "Space")
