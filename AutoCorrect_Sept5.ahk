@@ -1091,6 +1091,8 @@ MButton::
     wy0 := 0
     ww  := 0
     wh  := 0
+    rawX := 0
+    rawY := 0
     offsetX := 0
     offsetY := 0
     windowSnapped := False
@@ -1121,8 +1123,8 @@ MButton::
         snapState := "right"
     }
 
+    WinSet, Transparent, 255, ahk_id %hWnd%
     Critical, On
-    WinSet, Transparent, 185, ahk_id %hWnd%
     while GetKeyState("MButton", "P")
     {
         windowSnapped := False
@@ -1132,6 +1134,16 @@ MButton::
         dxMouse := mx - mxPrev
         mxPrev := mx
 
+        WinGet, trans, Transparent, ahk_id %hWnd%
+        if (trans == 255 && (abs(dx) > 3 || abs(dy) > 3)) {
+            Blockinput, MouseMove
+            WinSet, Transparent, 225, ahk_id %hWnd%
+            sleep, 8
+            WinSet, Transparent, 200, ahk_id %hWnd%
+            sleep, 8
+            WinSet, Transparent, 185, ahk_id %hWnd%
+            Blockinput, MouseMoveOff
+        }
         ; rawX is continuously changing with your mouse and represents the current theoretical value of the window's x coordinate.
         ; it's "theoretical" because the window may be "snapped" but this value will still change as the mouse moves which
         ; is why you can compare rawX against the difference between monL and BreakAway/ReleaseAway distances
@@ -1216,7 +1228,7 @@ MButton::
     StopRecursion := False
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
-return
+    return
 #If
 
 ^+Esc::
@@ -3023,7 +3035,7 @@ Return
     ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && ((rlsTime - initTime) < DoubleClickTime)
+        && ((rlsTime - initTime) < DoubleClickTime/2)
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)
         && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" ))  {
 
@@ -3066,7 +3078,7 @@ Return
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
-        && ((rlsTime - initTime) < DoubleClickTime)) {
+        && ((rlsTime - initTime) < DoubleClickTime/2)) {
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
@@ -3110,7 +3122,7 @@ Return
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
             && (_winCtrlD == "SysTreeView321")
-            && ((rlsTime - initTime) < DoubleClickTime)
+            && ((rlsTime - initTime) < DoubleClickTime/2)
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
