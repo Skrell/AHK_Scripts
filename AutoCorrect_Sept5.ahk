@@ -49,8 +49,6 @@ SetControlDelay 10
 
 Global mouseMoving                 := False
 Global skipCheck                   := False
-Global hwndVD
-Global forward                     := True
 Global cycling                     := False
 Global ValidWindows                := []
 Global GroupedWindows              := []
@@ -71,7 +69,6 @@ Global onlyTitleFound              := ""
 Global nil
 Global CancelClose                 := False
 Global lastWinMinHwndId            := 0x999999
-Global DesktopIconsVisible         := False
 Global DrawingRect                 := False
 Global LclickSelected              := False
 Global StopRecursion               := False
@@ -95,19 +92,19 @@ Global currentPath                 := ""
 Global prevPath                    := ""
 Global MbuttonIsEnter              := False
 Global textBoxSelected             := False
-Global disableArrows               := False
 Global WindowTitleID               :=
 Global keys                        := "abcdefghijklmnopqrstuvwxyz"
 Global numbers                     := "0123456789"
 Global DoubleClickTime             := DllCall("GetDoubleClickTime")
 Global isWin11                     := DetectWin11()
 Global TaskBarHeight               := 0
-Global lastHotKeyPress                := ""
+Global lastHotKeyPress             := ""
+Global DraggingWindow              := False
 
 ; --- Config ---
 UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
 SnapRange    := 16     ; px: distance from edge to begin snapping
-BreakAway    := 52     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+BreakAway    := 64     ; px: while snapped, drag this far further TOWARD the outside to push past edge
 ReleaseAway  := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
@@ -1083,19 +1080,27 @@ Return
 
 #If !MbuttonIsEnter ; && !MouseIsOverTitleBar()
 MButton::
+    Global DraggingWindow
     StopRecursion := True
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
+    Hotkey, Rbutton, DoNothing, On
 
     wx0 := 0
     wy0 := 0
     ww  := 0
     wh  := 0
-    rawX := 0
-    rawY := 0
+    virtwx0 := 0
+    virtwy0 := 0
     offsetX := 0
     offsetY := 0
     windowSnapped := False
+    TL := False
+    TR := False
+    BL := False
+    BR := False
+    snapShotX := 0
+    snapShotY := 0
 
     MouseGetPos, mx0, my0, hWnd, ctrl, 2
     if (!hWnd)
@@ -1106,33 +1111,79 @@ MButton::
     if (skipClasses.HasKey(cls) || isMax == 1)
         return
 
-    ; WinGetPos, wx0, wy0, ww, wh, ahk_id %hWnd%
     WinGetPosEx(hWnd, wx0, wy0, ww, wh, offsetX, offsetY)
     if (ww = "" || wh = "")
         return
 
     snapState := ""   ; "", "left", "right"
     mxPrev := mx0         ; track prior mouse X to know approach direction
+    myPrev := my0         ; track prior mouse X to know approach direction
+
+    leftWinEdge   := wx0
+    topWinEdge    := wy0
+    rightWinEdge  := wx0 + ww
+    bottomWinEdge := wy0 + wh
+
+    ; msgbox, % leftWinEdge "," rightWinEdge "-" topWinEdge "," bottomWinEdge ":" offsetX " & " offsetY
 
     GetMonitorRectForMouse(mx0, my0, UseWorkArea, monL, monT, monR, monB)
-    leftEdge   := wx0
-    rightEdge  := wx0 + ww
-    if ((leftEdge - monL) <= SnapRange && (leftEdge - monL) >= 0) {
+    if ((leftWinEdge - monL) <= SnapRange && (leftWinEdge - monL) >= 0) {
         snapState := "left"
-    } else if ((rightEdge - monR) <= SnapRange && (rightEdge - monR) >= 0) {
+    } else if ((rightWinEdge - monR) <= SnapRange && (rightWinEdge - monR) >= 0) {
         snapState := "right"
     }
+
+    If      (mx0 <= leftWinEdge + floor(ww/2) && my0 <= wy0 + floor(wh/2))
+        TL := True
+    Else If (mx0 >  leftWinEdge + floor(ww/2) && my0 <= wy0 + floor(wh/2))
+        TR := True
+    Else If (mx0 <= leftWinEdge + floor(ww/2) && my0 >  wy0 + floor(wh/2))
+        BL := True
+    Else If (mx0 >  leftWinEdge + floor(ww/2) && my0 >  wy0 + floor(wh/2))
+        BR := True
 
     WinSet, Transparent, 255, ahk_id %hWnd%
     Critical, On
     while GetKeyState("MButton", "P")
     {
+        DraggingWindow := True
+        isRbutton := GetKeyState("Rbutton","P")
+        if (!isRbutton && isRbutton_last) {
+            BlockInput, MouseMove
+            sleep, 200
+            BlockInput, MouseMoveOff
+            switchingBackToMove := True
+        }
+        else
+            switchingBackToMove := False
+
+        if (isRbutton && !isRbutton_last)
+            switchingBacktoResize := True
+        else
+            switchingBacktoResize := False
+
+        isRbutton_last := isRbutton
+
         windowSnapped := False
         MouseGetPos, mx, my
-        dx := mx - mx0
-        dy := my - my0
-        dxMouse := mx - mxPrev
+
+        dragHorz := ""
+        dragVert := ""
+        if ((mx - mxPrev) > 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
+            dragHorz := "right"
+        }
+        else if ((mx - mxPrev) < 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
+            dragHorz := "left"
+        }
+        else if ((my - myPrev) < 0) {
+            dragVert := "up"
+        }
+        else if ((my - myPrev) > 0) {
+            dragVert := "down"
+        }
+
         mxPrev := mx
+        myPrev := my
 
         WinGet, trans, Transparent, ahk_id %hWnd%
         if (trans == 255 && (abs(dx) > 3 || abs(dy) > 3)) {
@@ -1144,72 +1195,239 @@ MButton::
             WinSet, Transparent, 185, ahk_id %hWnd%
             Blockinput, MouseMoveOff
         }
-        ; rawX is continuously changing with your mouse and represents the current theoretical value of the window's x coordinate.
-        ; it's "theoretical" because the window may be "snapped" but this value will still change as the mouse moves which
-        ; is why you can compare rawX against the difference between monL and BreakAway/ReleaseAway distances
-        ; monL is fixed to the active monitor’s left edge.
-        rawX := wx0 + dx ; (original window X) + (how far the mouse has moved in X since drag start)
-        rawY := wy0 + dy
+
+        if switchingBackToMove {
+            MouseGetPos, mx0, my0
+            dx := mx - mx0
+            dy := my - my0
+            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+        }
+        else if switchingBacktoResize {
+            MouseGetPos, mx0, my0
+            dx := mx - mx0
+            dy := my - my0
+            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+        }
+        else {
+            dx := mx - mx0
+            dy := my - my0
+        }
+
+        if (dragHorz_prev != "" && dragHorz_prev != dragHorz) || (dragVert_prev != "" && dragVert_prev != dragVert) {
+            MouseGetPos, mx0, my0
+            dx := mx - mx0
+            dy := my - my0
+            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+        }
+
+        dragHorz_prev := dragHorz
+        dragVert_prev := dragVert
 
         GetMonitorRectForMouse(mx, my, UseWorkArea, monL, monT, monR, monB)
-
         ; Vertical allowable range for current monitor
-        minY := monT
-        maxY := monB - wh
+        minY  := monT
+        maxY  := monB - wh
+        maxH  := (monB - wy0)
+        minX  := monL
+        maxWL := (wx0 + ww) - monL
+        maxWR := (monR - wx0)
 
-        ; --- One-way vertical clamp (top/bottom) ---
-        if (rawY < minY)
-            newY := minY
-        else if (rawY > maxY)
-            newY := maxY
-        else
-            newY := rawY
+        ; virtwx0 is continuously changing with your mouse and represents the current theoretical value of the window's x coordinate.
+        ; it's "theoretical" because the window may be "snapped" but this value will still change as the mouse moves which
+        ; is why you can compare virtwx0 against the difference between monL and BreakAway/ReleaseAway distances
+        ; monL is fixed to the active monitor’s left edge.
+        virtwx0 := wx0 + dx ; (original window X) + (how far the mouse has moved in X since drag start)
+        virtwy0 := wy0 + dy
 
-        ; --- Horizontal snapping with pass-through ---
-        leftEdge   := rawX
-        rightEdge  := rawX + ww
-        rightSnapX := monR - ww  ; X that places the right edge at monitor's right
-        ; tooltip, % rawX "-" rightSnapX - ReleaseAway
-        if (snapState = "left") {
-            ; While snapped left:
-            ; - Push-through: keep dragging left until rawX <= monL - BreakAway to break snap
-            ; - Release: drag right until rawX >= monL + ReleaseAway to release snap
-            ; ie Have you moved (rawX) far enough past the monitor edge (monL) → BreakAway/ReleaseAway
-            if (rawX <= monL - BreakAway || rawX >= monL + ReleaseAway) {
-                snapState := ""
-                newX := rawX
+        if !isRbutton {
+            ; --- One-way vertical clamp (top/bottom) ---
+            if (virtwy0 < minY)
+                newY := minY
+            else if (virtwy0 > maxY)
+                newY := maxY
+            else
+                newY := virtwy0
+
+            ; --- Horizontal snapping with pass-through ---
+            leftWinEdge   := virtwx0
+            rightWinEdge  := virtwx0 + ww
+
+            rightSnapX    := monR - ww  ; X that places the right edge at monitor's right
+
+            WinGetPosEx(hWnd, null, null, ww, wh, null, null)
+            if (snapState = "left") {
+                ; While snapped left:
+                ; - Push-through: keep dragging left until virtwx0 <= monL - BreakAway to break snap
+                ; - Release: drag right until virtwx0 >= monL + ReleaseAway to release snap
+                ; ie Have you moved (virtwx0) far enough past the monitor edge (monL) → BreakAway/ReleaseAway
+                if (virtwx0 <= monL - BreakAway || virtwx0 >= monL + ReleaseAway) {
+                    snapState := ""
+                    newX := virtwx0
+                } else {
+                    newX := monL
+                }
+            } else if (snapState = "right") {
+                ; While snapped right (window's right edge at monR):
+                ; - Push-through: keep dragging right until virtwx0 >= rightSnapX + BreakAway to break snap
+                ; - Release: drag left until virtwx0 <= rightSnapX - ReleaseAway to release snap
+                if (virtwx0 >= rightSnapX + BreakAway || virtwx0 <= rightSnapX - ReleaseAway) {
+                    snapState := ""
+                    newX := virtwx0
+                } else {
+                    newX := rightSnapX
+                }
             } else {
-                newX := monL
+                ; Not currently snapped: check proximity to edges to start snapping
+                if (Abs(leftWinEdge - monL) <= SnapRange && dragHorz == "left") {
+                    snapState := "left"
+                    windowSnapped := True
+                    newX := monL
+                    ; tooltip, snapState %snapState%
+                } else if (Abs(rightWinEdge - monR) <= SnapRange && dragHorz == "right") {
+                    snapState := "right"
+                    windowSnapped := True
+                    newX := rightSnapX
+                    ; tooltip, snapState %snapState%
+                } else {
+                    newX := virtwx0
+                    ; tooltip, snapState "none" - %virtwx0% - %dx% - %dy%
+                }
             }
-        } else if (snapState = "right") {
-            ; While snapped right (window's right edge at monR):
-            ; - Push-through: keep dragging right until rawX >= rightSnapX + BreakAway to break snap
-            ; - Release: drag left until rawX <= rightSnapX - ReleaseAway to release snap
-            if (rawX >= rightSnapX + BreakAway || rawX <= rightSnapX - ReleaseAway) {
-                snapState := ""
-                newX := rawX
-            } else {
-                newX := rightSnapX
+
+            ; correct for windows' shadows
+            newX := newX + offsetX
+            ; No horizontal clamping otherwise: allow off-screen left/right
+            WinMove, ahk_id %hWnd%, , %newX%, %newY%
+        }
+        Else {
+            adjustSize := False
+
+            If  (TL || TR) && (dragVert == "up" || dragVert == "down")  {
+                ; --- One-way vertical clamp (top/bottom) ---
+                if (virtwy0 < minY) {
+                    newY := minY
+                }
+                else {
+                    newY := virtwy0
+                    If (dragVert == "up") {
+                        virtwh0 := wh + abs(dy)
+                        if (virtwh0 > maxH)
+                            virtwh0 := maxH
+                    }
+                    Else If (dragVert == "down") {
+                        virtwh0 := wh - abs(dy)
+                    }
+                }
+
+                newX :=
+                newW :=
+
+                if (dragVert == "up") {
+                    adjustSize := True
+                    if (newH < maxH) {
+                        newH := virtwh0
+                        newH := newH + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
+                    }
+                    else
+                        adjustSize := False
+                }
+                else if (dragVert == "down") {
+                    newH := virtwh0
+                    adjustSize := True
+                }
             }
-        } else {
-            ; Not currently snapped: check proximity to edges to start snapping
-            if (Abs(leftEdge - monL) <= SnapRange && (dxMouse < 0)) {
-                snapState := "left"
-                windowSnapped := True
-                newX := monL
-            } else if (Abs(rightEdge - monR) <= SnapRange && (dxMouse > 0)) {
-                snapState := "right"
-                windowSnapped := True
-                newX := rightSnapX
-            } else {
-                newX := rawX
+            Else If (BL || BR) && (dragVert == "up" || dragVert == "down")  {
+                WinGetPosEx(hWnd, tx, ty, tw, th, offsetX, offsetY)
+                if (th >= maxH) {
+                    newH := maxH
+                }
+                else {
+                    If (dragVert == "down") {
+                        virtwh0 := wh + abs(dy)
+                        if (virtwh0 > maxH)
+                            virtwh0 := maxH
+                    }
+                    Else If (dragVert == "up") {
+                        virtwh0 := wh - abs(dy)
+                    }
+                }
+
+                newX :=
+                newY :=
+                newW :=
+
+                if (dragVert == "up") {
+                    newH := virtwh0
+                    adjustSize := True
+                    newH := newH + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
+                }
+                else if (dragVert == "down") {
+                    adjustSize := True
+                    newH := virtwh0
+                    if (newH < maxH) {
+                        newH := newH + 2*abs(offsetY) + 2 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
+                    }
+                    else
+                        adjustSize := False
+                }
+            }
+            Else If (TL || BL) && (dragHorz == "left" || dragHorz == "right") {
+                WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
+                if (dragHorz == "left" && tx == minX) {
+                    adjustSize := False
+                }
+                else {
+                    If (dragHorz == "left") {
+                        If (virtwx0 < minX || virtwx0 < minX+1) {
+                            virtwx0 := minX + offsetX
+                            virtww0 := maxWL + abs(offsetX)
+                        }
+                        Else
+                            virtww0 := ww + abs(dx)
+                    }
+                    Else If (dragHorz == "right") {
+                        virtww0 := ww - abs(dx)
+                    }
+
+                    adjustSize := True
+                    newX := virtwx0
+                    newY :=
+                    newH :=
+                    newW := virtww0 + abs(offsetX)
+                }
+            }
+            else if (TR || BR) && (dragHorz == "left" || dragHorz == "right") {
+                WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
+                if (dragHorz == "right" && tx+tw == maxWR) {
+                    adjustSize := False
+                }
+                else {
+                    if (dragHorz == "right") {
+                        virtww0 := ww + abs(dx)
+                        if (virtww0 >= maxWR)
+                            virtww0 := maxWR + abs(offsetX)
+                    }
+                    Else If (dragHorz == "left") {
+                        virtww0 := ww - abs(dx)
+                    }
+
+                    adjustSize := True
+                    newX :=
+                    newY :=
+                    newH :=
+                    newW :=virtww0 + abs(offsetX)
+                }
+            }
+
+            ; correct for windows' shadows
+            If adjustSize {
+                ; If newX {
+                    ; newX := newX + offsetX
+                ; }
+                WinMove, ahk_id %hWnd%, , %newX%, %newY%, %newW%, %newH%
             }
         }
 
-        ; correct for windows' shadows
-        newX := newX + offsetX
-        ; No horizontal clamping otherwise: allow off-screen left/right
-        WinMove, ahk_id %hWnd%, , %newX%, %newY%
         If (windowSnapped) {
             BlockInput, MouseMove
             sleep, 250
@@ -1219,16 +1437,19 @@ MButton::
         Sleep, 1
     }
     Critical, Off
-    If MouseIsOverTitleBar(mx, my) && (abs(rawX - wx0) <= 3) && (abs(rawY - wy0) <= 3)
+
+    If MouseIsOverTitleBar(mx, my) && (abs(virtwx0 - wx0) <= 3) && (abs(virtwy0 - wy0) <= 3)
         GoSub, SwitchDesktop
     Else If (wh/abs(monB-monT) > 0.95)
-        WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY)+1
+        WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
 
     WinSet, Transparent, Off, ahk_id %hWnd%
     StopRecursion := False
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
-    return
+    Hotkey, Rbutton, DoNothing, Off
+    DraggingWindow := False
+Return
 #If
 
 ^+Esc::
@@ -3860,8 +4081,8 @@ WheelDown::send {Volume_Down}
 ; Return
 ; #If
 
-#If !mouseMoving && !VolumeHover() && !IsOverException()
-RButton::
+#If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
+$RButton::
     StopRecursion := True
 
     KeyWait, Rbutton, U T3
