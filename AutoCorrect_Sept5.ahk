@@ -1084,7 +1084,7 @@ MButton::
     StopRecursion := True
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
-    Hotkey, Rbutton, DoNothing, On
+    Hotkey, *Rbutton, DoNothing, On
     Hotkey, Mbutton & Rbutton, DoNothing, On
 
     wx0 := 0
@@ -1307,7 +1307,7 @@ MButton::
             gridDy := ceil(dy/gridSize) * gridSize
 
 
-            If  (TL || TR) && (dragVert == "up" || dragVert == "down") {
+            If      (TL || TR) && (dragVert == "up"   || dragVert == "down") {
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
                 if (dragVert == "up" && ty == minY) {
                     adjustSize := False
@@ -1336,7 +1336,7 @@ MButton::
                     newH := virtwh0 + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
                 }
             }
-            Else If (BL || BR) && (dragVert == "up" || dragVert == "down")  {
+            Else If (BL || BR) && (dragVert == "up"   || dragVert == "down")  {
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
                 if (dragVert == "down" && th == maxH) {
                     adjustSize := False
@@ -1437,7 +1437,7 @@ MButton::
     StopRecursion := False
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
-    Hotkey, Rbutton, DoNothing, Off
+    Hotkey, *Rbutton, DoNothing, Off
     Hotkey, Mbutton & Rbutton, DoNothing, Off
     DraggingWindow := False
 Return
@@ -5981,7 +5981,7 @@ IsGoogleDocWindow() {
 
 IsEditCtrl() {
     ControlGetFocus, whatCtrl, A
-    If InStr(whatCtrl,"Edit",True)
+    If InStr(whatCtrl,"Edit", True) && !InStr(whatCtrl, "Rich", True)
         Return True
     Else
         Return False
@@ -6282,6 +6282,7 @@ SetTitleMatchMode, 2
         ; Send {Right}e
     ; SetTimer, MoveCaret, Off
 ; Return
+
 
 #If !WinActive("ahk_exe notepad++.exe")
         && !WinActive("ahk_exe Code.exe")
