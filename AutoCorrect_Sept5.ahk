@@ -103,7 +103,7 @@ Global DraggingWindow              := False
 
 ; --- Config ---
 UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
-SnapRange    := 16     ; px: distance from edge to begin snapping
+SnapRange    := 20     ; px: distance from edge to begin snapping
 BreakAway    := 64     ; px: while snapped, drag this far further TOWARD the outside to push past edge
 ReleaseAway  := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
@@ -1085,6 +1085,7 @@ MButton::
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
     Hotkey, Rbutton, DoNothing, On
+    Hotkey, Mbutton & Rbutton, DoNothing, On
 
     wx0 := 0
     wy0 := 0
@@ -1143,6 +1144,7 @@ MButton::
         BR := True
 
     WinSet, Transparent, 255, ahk_id %hWnd%
+
     Critical, On
     while GetKeyState("MButton", "P")
     {
@@ -1169,24 +1171,24 @@ MButton::
 
         dragHorz := ""
         dragVert := ""
-        if ((mx - mxPrev) > 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
+        if ((my - myPrev) < 0) && abs(my - myPrev) > (abs(mx - mxPrev) + 3) {
+            dragVert := "up"
+        }
+        else if ((my - myPrev) > 0) && abs(my - myPrev) > (abs(mx - mxPrev) + 3) {
+            dragVert := "down"
+        }
+        else if ((mx - mxPrev) > 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
             dragHorz := "right"
         }
         else if ((mx - mxPrev) < 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
             dragHorz := "left"
-        }
-        else if ((my - myPrev) < 0) {
-            dragVert := "up"
-        }
-        else if ((my - myPrev) > 0) {
-            dragVert := "down"
         }
 
         mxPrev := mx
         myPrev := my
 
         WinGet, trans, Transparent, ahk_id %hWnd%
-        if (trans == 255 && (abs(dx) > 3 || abs(dy) > 3)) {
+        if (trans == 255 && (abs(dx) > 5 || abs(dy) > 5)) {
             Blockinput, MouseMove
             WinSet, Transparent, 225, ahk_id %hWnd%
             sleep, 8
@@ -1198,37 +1200,36 @@ MButton::
 
         if switchingBackToMove {
             MouseGetPos, mx0, my0
-            dx := mx - mx0
-            dy := my - my0
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
         else if switchingBacktoResize {
             MouseGetPos, mx0, my0
-            dx := mx - mx0
-            dy := my - my0
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
-        else {
-            dx := mx - mx0
-            dy := my - my0
-        }
 
-        if (dragHorz_prev != "" && dragHorz_prev != dragHorz) || (dragVert_prev != "" && dragVert_prev != dragVert) {
+        if (dragHorz_prev != "" && dragHorz != "" && dragHorz_prev != dragHorz)
+        || (dragVert_prev != "" && dragVert != "" && dragVert_prev != dragVert) {
             MouseGetPos, mx0, my0
-            dx := mx - mx0
-            dy := my - my0
+            mx := mx0
+            my := my0
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
 
-        dragHorz_prev := dragHorz
-        dragVert_prev := dragVert
+        dx := mx - mx0
+        dy := my - my0
+
+        If dragHorz
+            dragHorz_prev := dragHorz
+        If dragVert
+            dragVert_prev := dragVert
 
         GetMonitorRectForMouse(mx, my, UseWorkArea, monL, monT, monR, monB)
         ; Vertical allowable range for current monitor
+        minX  := monL
         minY  := monT
         maxY  := monB - wh
-        maxH  := (monB - wy0)
-        minX  := monL
+        maxHD := (monB - wy0)
+        maxHU := (wy0+wh - monT)
         maxWL := (wx0 + ww) - monL
         maxWR := (monR - wx0)
 
@@ -1300,75 +1301,61 @@ MButton::
             WinMove, ahk_id %hWnd%, , %newX%, %newY%
         }
         Else {
+            gridSize := SnapRange
             adjustSize := False
+            gridDx := ceil(dx/gridSize) * gridSize
+            gridDy := ceil(dy/gridSize) * gridSize
 
-            If  (TL || TR) && (dragVert == "up" || dragVert == "down")  {
-                ; --- One-way vertical clamp (top/bottom) ---
-                if (virtwy0 < minY) {
-                    newY := minY
+
+            If  (TL || TR) && (dragVert == "up" || dragVert == "down") {
+                WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
+                if (dragVert == "up" && ty == minY) {
+                    adjustSize := False
                 }
                 else {
-                    newY := virtwy0
                     If (dragVert == "up") {
-                        virtwh0 := wh + abs(dy)
-                        if (virtwh0 > maxH)
-                            virtwh0 := maxH
+                        virtwy0 := wy0 - abs(gridDy)
+                        if (virtwy0 < minY + 10) {
+                            virtwy0 := minY
+                            virtwh0 := maxHU
+                        }
+                        else {
+                            virtwh0 := wh + abs(gridDy)
+                            if (virtwh0 > maxHU - 1)
+                                virtwh0 := maxHU
+                        }
                     }
                     Else If (dragVert == "down") {
                         virtwh0 := wh - abs(dy)
                     }
-                }
 
-                newX :=
-                newW :=
-
-                if (dragVert == "up") {
                     adjustSize := True
-                    if (newH < maxH) {
-                        newH := virtwh0
-                        newH := newH + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
-                    }
-                    else
-                        adjustSize := False
-                }
-                else if (dragVert == "down") {
-                    newH := virtwh0
-                    adjustSize := True
+                    newX :=
+                    newY := virtwy0
+                    newW :=
+                    newH := virtwh0 + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
                 }
             }
             Else If (BL || BR) && (dragVert == "up" || dragVert == "down")  {
-                WinGetPosEx(hWnd, tx, ty, tw, th, offsetX, offsetY)
-                if (th >= maxH) {
-                    newH := maxH
+                WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
+                if (dragVert == "down" && th == maxH) {
+                    adjustSize := False
                 }
                 else {
                     If (dragVert == "down") {
-                        virtwh0 := wh + abs(dy)
-                        if (virtwh0 > maxH)
-                            virtwh0 := maxH
+                        virtwh0 := wh + abs(gridDy)
+                        if (virtwh0 > maxHD - 10)
+                            virtwh0 := maxHD
                     }
                     Else If (dragVert == "up") {
                         virtwh0 := wh - abs(dy)
                     }
-                }
 
-                newX :=
-                newY :=
-                newW :=
-
-                if (dragVert == "up") {
-                    newH := virtwh0
                     adjustSize := True
-                    newH := newH + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
-                }
-                else if (dragVert == "down") {
-                    adjustSize := True
-                    newH := virtwh0
-                    if (newH < maxH) {
-                        newH := newH + 2*abs(offsetY) + 2 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
-                    }
-                    else
-                        adjustSize := False
+                    newX :=
+                    newY :=
+                    newW :=
+                    newH := virtwh0 + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
                 }
             }
             Else If (TL || BL) && (dragHorz == "left" || dragHorz == "right") {
@@ -1378,22 +1365,26 @@ MButton::
                 }
                 else {
                     If (dragHorz == "left") {
-                        If (virtwx0 < minX || virtwx0 < minX+1) {
-                            virtwx0 := minX + offsetX
-                            virtww0 := maxWL + abs(offsetX)
+                        virtwx0 := wx0 - abs(gridDx)
+                        If (virtwx0 < minX+1) {
+                            virtwx0 := minX
+                            virtww0 := maxWL
                         }
-                        Else
-                            virtww0 := ww + abs(dx)
+                        Else {
+                            virtww0 := ww + abs(gridDx)
+                            if (virtww0 > maxWL - 1)
+                                virtww0 := maxWL
+                        }
                     }
                     Else If (dragHorz == "right") {
                         virtww0 := ww - abs(dx)
                     }
 
                     adjustSize := True
-                    newX := virtwx0
+                    newX := virtwx0 + offsetX
                     newY :=
+                    newW := virtww0  + 2*abs(offsetX)
                     newH :=
-                    newW := virtww0 + abs(offsetX)
                 }
             }
             else if (TR || BR) && (dragHorz == "left" || dragHorz == "right") {
@@ -1403,9 +1394,9 @@ MButton::
                 }
                 else {
                     if (dragHorz == "right") {
-                        virtww0 := ww + abs(dx)
-                        if (virtww0 >= maxWR)
-                            virtww0 := maxWR + abs(offsetX)
+                        virtww0 := ww + abs(gridDx)
+                        if (virtww0 > maxWR - 1)
+                            virtww0 := maxWR
                     }
                     Else If (dragHorz == "left") {
                         virtww0 := ww - abs(dx)
@@ -1414,16 +1405,13 @@ MButton::
                     adjustSize := True
                     newX :=
                     newY :=
+                    newW :=virtww0 + 2*abs(offsetX)
                     newH :=
-                    newW :=virtww0 + abs(offsetX)
                 }
             }
 
             ; correct for windows' shadows
             If adjustSize {
-                ; If newX {
-                    ; newX := newX + offsetX
-                ; }
                 WinMove, ahk_id %hWnd%, , %newX%, %newY%, %newW%, %newH%
             }
         }
@@ -1438,8 +1426,10 @@ MButton::
     }
     Critical, Off
 
-    If MouseIsOverTitleBar(mx, my) && (abs(virtwx0 - wx0) <= 3) && (abs(virtwy0 - wy0) <= 3)
+    If MouseIsOverTitleBar(mx, my) && (abs(virtwx0 - wx0) <= 5) && (abs(virtwy0 - wy0) <= 5) {
+        WinSet, Transparent, Off, ahk_id %hWnd%
         GoSub, SwitchDesktop
+    }
     Else If (wh/abs(monB-monT) > 0.95)
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
 
@@ -1448,6 +1438,7 @@ MButton::
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
     Hotkey, Rbutton, DoNothing, Off
+    Hotkey, Mbutton & Rbutton, DoNothing, Off
     DraggingWindow := False
 Return
 #If
