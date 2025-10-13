@@ -1102,18 +1102,19 @@ MButton::
     BR := False
     snapShotX := 0
     snapShotY := 0
+    adjustSize := True
 
     MouseGetPos, mx0, my0, hWnd, ctrl, 2
-    if (!hWnd)
+    If (!hWnd)
         return
 
     WinGet, isMax, MinMax, ahk_id %hWnd%
     WinGetClass, cls, ahk_id %hWnd%
-    if (skipClasses.HasKey(cls) || isMax == 1)
+    If (skipClasses.HasKey(cls) || isMax == 1)
         return
 
     WinGetPosEx(hWnd, wx0, wy0, ww, wh, offsetX, offsetY)
-    if (ww = "" || wh = "")
+    If (ww = "" || wh = "")
         return
 
     snapState := ""   ; "", "left", "right"
@@ -1128,9 +1129,9 @@ MButton::
     ; msgbox, % leftWinEdge "," rightWinEdge "-" topWinEdge "," bottomWinEdge ":" offsetX " & " offsetY
 
     GetMonitorRectForMouse(mx0, my0, UseWorkArea, monL, monT, monR, monB)
-    if ((leftWinEdge - monL) <= SnapRange && (leftWinEdge - monL) >= 0) {
+    If ((leftWinEdge - monL) <= SnapRange && (leftWinEdge - monL) >= 0) {
         snapState := "left"
-    } else if ((rightWinEdge - monR) <= SnapRange && (rightWinEdge - monR) >= 0) {
+    } Else If ((rightWinEdge - monR) <= SnapRange && (rightWinEdge - monR) >= 0) {
         snapState := "right"
     }
 
@@ -1150,37 +1151,38 @@ MButton::
     {
         DraggingWindow := True
         isRbutton := GetKeyState("Rbutton","P")
-        if (!isRbutton && isRbutton_last) {
+        If (!isRbutton && isRbutton_last) {
             BlockInput, MouseMove
             sleep, 200
             BlockInput, MouseMoveOff
             switchingBackToMove := True
         }
-        else
+        Else
             switchingBackToMove := False
 
-        if (isRbutton && !isRbutton_last)
+        If (isRbutton && !isRbutton_last)
             switchingBacktoResize := True
-        else
+        Else
             switchingBacktoResize := False
 
         isRbutton_last := isRbutton
 
         windowSnapped := False
+
         MouseGetPos, mx, my
 
         dragHorz := ""
         dragVert := ""
-        if ((my - myPrev) < 0) && abs(my - myPrev) > (abs(mx - mxPrev) + 3) {
+        If ((my - myPrev) < 0) && abs(my - myPrev) > (abs(mx - mxPrev) + 3) {
             dragVert := "up"
         }
-        else if ((my - myPrev) > 0) && abs(my - myPrev) > (abs(mx - mxPrev) + 3) {
+        Else If ((my - myPrev) > 0) && abs(my - myPrev) > (abs(mx - mxPrev) + 3) {
             dragVert := "down"
         }
-        else if ((mx - mxPrev) > 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
+        Else If ((mx - mxPrev) > 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
             dragHorz := "right"
         }
-        else if ((mx - mxPrev) < 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
+        Else If ((mx - mxPrev) < 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
             dragHorz := "left"
         }
 
@@ -1188,7 +1190,7 @@ MButton::
         myPrev := my
 
         WinGet, trans, Transparent, ahk_id %hWnd%
-        if (trans == 255 && (abs(dx) > 5 || abs(dy) > 5)) {
+        If (trans == 255 && (abs(dx) > 5 || abs(dy) > 5)) {
             Blockinput, MouseMove
             WinSet, Transparent, 225, ahk_id %hWnd%
             sleep, 8
@@ -1198,16 +1200,19 @@ MButton::
             Blockinput, MouseMoveOff
         }
 
-        if switchingBackToMove {
+        ; If WinExist("ahk_class tooltips_class32")
+            ; WinClose, ahk_class tooltips_class32
+
+        If switchingBackToMove {
             MouseGetPos, mx0, my0
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
-        else if switchingBacktoResize {
+        Else If switchingBacktoResize {
             MouseGetPos, mx0, my0
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
 
-        if (dragHorz_prev != "" && dragHorz != "" && dragHorz_prev != dragHorz)
+        If (dragHorz_prev != "" && dragHorz != "" && dragHorz_prev != dragHorz)
         || (dragVert_prev != "" && dragVert != "" && dragVert_prev != dragVert) {
             MouseGetPos, mx0, my0
             mx := mx0
@@ -1215,15 +1220,17 @@ MButton::
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
 
-        dx := mx - mx0
-        dy := my - my0
-
         If dragHorz
             dragHorz_prev := dragHorz
         If dragVert
             dragVert_prev := dragVert
 
+        dx := mx - mx0
+        dy := my - my0
+
         GetMonitorRectForMouse(mx, my, UseWorkArea, monL, monT, monR, monB)
+        monW := monR-monL
+        monH := monB-monT
         ; Vertical allowable range for current monitor
         minX  := monL
         minY  := monT
@@ -1240,13 +1247,14 @@ MButton::
         virtwx0 := wx0 + dx ; (original window X) + (how far the mouse has moved in X since drag start)
         virtwy0 := wy0 + dy
 
-        if !isRbutton {
+        If !isRbutton {
+            UnclipCursor()
             ; --- One-way vertical clamp (top/bottom) ---
-            if (virtwy0 < minY)
+            If (virtwy0 < minY)
                 newY := minY
-            else if (virtwy0 > maxY)
+            Else If (virtwy0 > maxY)
                 newY := maxY
-            else
+            Else
                 newY := virtwy0
 
             ; --- Horizontal snapping with pass-through ---
@@ -1256,40 +1264,40 @@ MButton::
             rightSnapX    := monR - ww  ; X that places the right edge at monitor's right
 
             WinGetPosEx(hWnd, null, null, ww, wh, null, null)
-            if (snapState = "left") {
+            If (snapState = "left") {
                 ; While snapped left:
                 ; - Push-through: keep dragging left until virtwx0 <= monL - BreakAway to break snap
                 ; - Release: drag right until virtwx0 >= monL + ReleaseAway to release snap
                 ; ie Have you moved (virtwx0) far enough past the monitor edge (monL) → BreakAway/ReleaseAway
-                if (virtwx0 <= monL - BreakAway || virtwx0 >= monL + ReleaseAway) {
+                If (virtwx0 <= monL - BreakAway || virtwx0 >= monL + ReleaseAway) {
                     snapState := ""
                     newX := virtwx0
-                } else {
+                } Else {
                     newX := monL
                 }
-            } else if (snapState = "right") {
+            } Else If (snapState = "right") {
                 ; While snapped right (window's right edge at monR):
                 ; - Push-through: keep dragging right until virtwx0 >= rightSnapX + BreakAway to break snap
                 ; - Release: drag left until virtwx0 <= rightSnapX - ReleaseAway to release snap
-                if (virtwx0 >= rightSnapX + BreakAway || virtwx0 <= rightSnapX - ReleaseAway) {
+                If (virtwx0 >= rightSnapX + BreakAway || virtwx0 <= rightSnapX - ReleaseAway) {
                     snapState := ""
                     newX := virtwx0
-                } else {
+                } Else {
                     newX := rightSnapX
                 }
-            } else {
+            } Else {
                 ; Not currently snapped: check proximity to edges to start snapping
-                if (Abs(leftWinEdge - monL) <= SnapRange && dragHorz == "left") {
+                If (Abs(leftWinEdge - monL) <= SnapRange && dragHorz == "left") {
                     snapState := "left"
                     windowSnapped := True
                     newX := monL
                     ; tooltip, snapState %snapState%
-                } else if (Abs(rightWinEdge - monR) <= SnapRange && dragHorz == "right") {
+                } Else If (Abs(rightWinEdge - monR) <= SnapRange && dragHorz == "right") {
                     snapState := "right"
                     windowSnapped := True
                     newX := rightSnapX
                     ; tooltip, snapState %snapState%
-                } else {
+                } Else {
                     newX := virtwx0
                     ; tooltip, snapState "none" - %virtwx0% - %dx% - %dy%
                 }
@@ -1302,26 +1310,28 @@ MButton::
         }
         Else {
             gridSize := SnapRange
-            adjustSize := False
+            ; adjustSize := False
             gridDx := ceil(dx/gridSize) * gridSize
             gridDy := ceil(dy/gridSize) * gridSize
 
 
             If      (TL || TR) && (dragVert == "up"   || dragVert == "down") {
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
-                if (dragVert == "up" && ty == minY) {
+                If (dragVert == "up" && ty == minY) {
                     adjustSize := False
+                    MouseMove, mx, my
+                    ConfineMouseToCurrentMonitorArea( "work", 0, my, monW, monH-my)
                 }
-                else {
+                Else {
                     If (dragVert == "up") {
                         virtwy0 := wy0 - abs(gridDy)
-                        if (virtwy0 < minY + 10) {
+                        If (virtwy0 < minY + 1) {
                             virtwy0 := minY
                             virtwh0 := maxHU
                         }
-                        else {
+                        Else {
                             virtwh0 := wh + abs(gridDy)
-                            if (virtwh0 > maxHU - 1)
+                            If (virtwh0 > maxHU - 1)
                                 virtwh0 := maxHU
                         }
                     }
@@ -1338,13 +1348,15 @@ MButton::
             }
             Else If (BL || BR) && (dragVert == "up"   || dragVert == "down")  {
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
-                if (dragVert == "down" && th == maxH) {
+                If (dragVert == "down" && th == maxHD) {
                     adjustSize := False
+                    MouseMove, mx, my
+                    ConfineMouseToCurrentMonitorArea( "work", 0, 0, monW, my)
                 }
-                else {
+                Else {
                     If (dragVert == "down") {
                         virtwh0 := wh + abs(gridDy)
-                        if (virtwh0 > maxHD - 10)
+                        If (virtwh0 > maxHD - 1)
                             virtwh0 := maxHD
                     }
                     Else If (dragVert == "up") {
@@ -1360,10 +1372,12 @@ MButton::
             }
             Else If (TL || BL) && (dragHorz == "left" || dragHorz == "right") {
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
-                if (dragHorz == "left" && tx == minX) {
+                If (dragHorz == "left" && tx == minX) {
                     adjustSize := False
+                    MouseMove, mx, my
+                    ConfineMouseToCurrentMonitorArea( "work", mx, 0, monW-mx, monH)
                 }
-                else {
+                Else {
                     If (dragHorz == "left") {
                         virtwx0 := wx0 - abs(gridDx)
                         If (virtwx0 < minX+1) {
@@ -1372,7 +1386,7 @@ MButton::
                         }
                         Else {
                             virtww0 := ww + abs(gridDx)
-                            if (virtww0 > maxWL - 1)
+                            If (virtww0 > maxWL - 1)
                                 virtww0 := maxWL
                         }
                     }
@@ -1387,15 +1401,17 @@ MButton::
                     newH :=
                 }
             }
-            else if (TR || BR) && (dragHorz == "left" || dragHorz == "right") {
+            Else If (TR || BR) && (dragHorz == "left" || dragHorz == "right") {
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
-                if (dragHorz == "right" && tx+tw == maxWR) {
+                If (dragHorz == "right" && tx+tw == monR) {
                     adjustSize := False
+                    MouseMove, mx, my
+                    ConfineMouseToCurrentMonitorArea( "work", 0, 0, mx, monH)
                 }
-                else {
-                    if (dragHorz == "right") {
+                Else {
+                    If (dragHorz == "right") {
                         virtww0 := ww + abs(gridDx)
-                        if (virtww0 > maxWR - 1)
+                        If (virtww0 > maxWR - 1)
                             virtww0 := maxWR
                     }
                     Else If (dragHorz == "left") {
@@ -1442,6 +1458,80 @@ MButton::
     DraggingWindow := False
 Return
 #If
+
+; =========================
+; ConfineMouseToCurrentMonitorArea(area, x, y, w, h)
+; =========================
+; area  - "work" (exclude taskbar) or "monitor" (full monitor). Default = "work".
+; x, y  - offset from top-left corner of chosen area (in pixels)
+; w, h  - width and height of the box (in pixels)
+ConfineMouseToCurrentMonitorArea(area := "work", x := 0, y := 0, w := 0, h := 0) {
+    ; Get current mouse position
+    MouseGetPos, mx, my
+
+    ; Get monitor handle under cursor
+    hMon := DllCall("user32\MonitorFromPoint", "int64", (my << 32) | (mx & 0xFFFFFFFF), "uint", 2, "ptr")
+    if !hMon
+        return 0
+
+    ; Prepare MONITORINFO structure
+    VarSetCapacity(mi, 40, 0)
+    NumPut(40, mi, 0, "UInt")
+
+    if !DllCall("user32\GetMonitorInfo", "ptr", hMon, "ptr", &mi)
+        return 0
+
+    ; rcMonitor (offset 4), rcWork (offset 20)
+    monL := NumGet(mi,  4, "Int"), monT := NumGet(mi,  8, "Int")
+    monR := NumGet(mi, 12, "Int"), monB := NumGet(mi, 16, "Int")
+    workL := NumGet(mi, 20, "Int"), workT := NumGet(mi, 24, "Int")
+    workR := NumGet(mi, 28, "Int"), workB := NumGet(mi, 32, "Int")
+
+    ; Determine which area to use
+    area := (area = "MONITOR" || area = "monitor") ? "monitor" : "work"
+    if (area = "monitor") {
+        baseL := monL, baseT := monT, baseR := monR, baseB := monB
+    } else {
+        baseL := workL, baseT := workT, baseR := workR, baseB := workB
+    }
+
+    baseW := baseR - baseL
+    baseH := baseB - baseT
+
+    ; Clamp the box within monitor boundaries
+    if (w <= 0) || (w > baseW)
+        w := baseW
+    if (h <= 0) || (h > baseH)
+        h := baseH
+    if (x < 0)
+        x := 0
+    if (y < 0)
+        y := 0
+    if (x + w > baseW)
+        x := baseW - w
+    if (y + h > baseH)
+        y := baseH - h
+
+    ; Compute absolute screen coords
+    left   := baseL + x
+    top    := baseT + y
+    right  := left + w
+    bottom := top + h
+
+    ; Build RECT and clip
+    VarSetCapacity(rc, 16, 0)
+    NumPut(left,   rc,  0, "Int")
+    NumPut(top,    rc,  4, "Int")
+    NumPut(right,  rc,  8, "Int")
+    NumPut(bottom, rc, 12, "Int")
+
+    return DllCall("user32\ClipCursor", "ptr", &rc) ? 1 : 0
+}
+
+; Unclip
+UnclipCursor() {
+    return DllCall("user32\ClipCursor", "ptr", 0) ? 1 : 0
+}
 
 ^+Esc::
     Run, C:\Program Files\SystemInformer\SystemInformer.exe
@@ -6984,6 +7074,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::onesself::oneself
+::violance::violence
 ::stuats::status
 ::claend::cleaned
 ::its he::is the
@@ -8594,6 +8686,88 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its a::it's a
 ::its the::it's the
 ::itwas::it was
+::it's color::its color
+::it's surface::its surface
+::it's texture::its texture
+::it's smell::its smell
+::it's shape::its shape
+::it's size::its size
+::it's weight::its weight
+::it's taste::its taste
+::it's sound::its sound
+::it's name::its name
+::it's appearance::its appearance
+::it's parts::its parts
+::it's design::its design
+::it's structure::its structure
+::it's purpose::its purpose
+::it's role::its role
+::it's position::its position
+::it's location::its location
+::it's function::its function
+::it's system::its system
+::it's process::its process
+::it's operation::its operation
+::it's output::its output
+::it's performance::its performance
+::it's success::its success
+::it's failure::its failure
+::it's data::its data
+::it's users::its users
+::it's interface::its interface
+::it's network::its network
+::it's tail::its tail
+::it's fur::its fur
+::it's nest::its nest
+::it's wings::its wings
+::it's egg::its egg
+::it's prey::its prey
+::it's mate::its mate
+::it's habitat::its habitat
+::it's territory::its territory
+::it's young::its young
+::its raining::it’s raining
+::its sunny::it’s sunny
+::its cold::it’s cold
+::its hot::it’s hot
+::its time::it’s time
+::its late::it’s late
+::its true::it’s true
+::its false::it’s false
+::its over::it’s over
+::its ready::it’s ready
+::its done::it’s done
+::its fine::it’s fine
+::its okay::it’s okay
+::its possible::it’s possible
+::its important::it’s important
+::its clear::it’s clear
+::its complicated::it’s complicated
+::its happening::it’s happening
+::its working::it’s working
+::its broken::it’s broken
+::its beautiful::it’s beautiful
+::its been::great::it’s been great
+::its gone::wrong::it’s gone wrong
+::its finished::it’s finished
+::its started::it’s started
+::its happened::it’s happened
+::its improved::it’s improved
+::its changed::it’s changed
+::its grown::it’s grown
+::its developed::it’s developed
+::its evolved::it’s evolved
+::it's meaning::its meaning
+::it's value::its value
+::it's impact::its impact
+::it's origin::its origin
+::it's influence::its influence
+::it's potential::its potential
+::it's limits::its limits
+::it's reputation::its reputation
+::it's effect::its effect
+::its a::it's a
+::its an::it's an
 ::iunior::junior
 ::jaques::jacques
 ::jeapardy::jeopardy
