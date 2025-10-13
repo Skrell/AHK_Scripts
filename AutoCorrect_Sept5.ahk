@@ -1164,6 +1164,8 @@ MButton::
 
         If (isRbutton && !isRbutton_last) {
             switchingBacktoResize := True
+            mxPrev := mx
+            myPrev := my
         }
         Else
             switchingBacktoResize := False
