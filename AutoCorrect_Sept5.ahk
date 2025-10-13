@@ -1156,12 +1156,15 @@ MButton::
             sleep, 200
             BlockInput, MouseMoveOff
             switchingBackToMove := True
+            mxPrev := mx
+            myPrev := my
         }
         Else
             switchingBackToMove := False
 
-        If (isRbutton && !isRbutton_last)
+        If (isRbutton && !isRbutton_last) {
             switchingBacktoResize := True
+        }
         Else
             switchingBacktoResize := False
 
@@ -1200,8 +1203,8 @@ MButton::
             Blockinput, MouseMoveOff
         }
 
-        ; If WinExist("ahk_class tooltips_class32")
-            ; WinClose, ahk_class tooltips_class32
+        If WinExist("ahk_class tooltips_class32")
+            WinClose, ahk_class tooltips_class32
 
         If switchingBackToMove {
             MouseGetPos, mx0, my0
