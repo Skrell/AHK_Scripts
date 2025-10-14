@@ -1102,9 +1102,13 @@ MButton::
     BR := False
     snapShotX := 0
     snapShotY := 0
-    adjustSize := True
+    adjustSize := False
+    isRbutton  := False
 
     MouseGetPos, mx0, my0, hWnd, ctrl, 2
+    checkClickMx := mx0
+    checkClickMy := my0
+
     If (!hWnd)
         return
 
@@ -1153,19 +1157,15 @@ MButton::
         isRbutton := GetKeyState("Rbutton","P")
         If (!isRbutton && isRbutton_last) {
             BlockInput, MouseMove
-            sleep, 200
+            sleep, 250
             BlockInput, MouseMoveOff
             switchingBackToMove := True
-            mxPrev := mx
-            myPrev := my
         }
         Else
             switchingBackToMove := False
 
         If (isRbutton && !isRbutton_last) {
             switchingBacktoResize := True
-            mxPrev := mx
-            myPrev := my
         }
         Else
             switchingBacktoResize := False
@@ -1176,23 +1176,40 @@ MButton::
 
         MouseGetPos, mx, my
 
-        dragHorz := ""
-        dragVert := ""
-        If ((my - myPrev) < 0) && abs(my - myPrev) > (abs(mx - mxPrev) + 3) {
-            dragVert := "up"
+        If switchingBackToMove {
+            mx0 := mx
+            my0 := my
+            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
-        Else If ((my - myPrev) > 0) && abs(my - myPrev) > (abs(mx - mxPrev) + 3) {
-            dragVert := "down"
-        }
-        Else If ((mx - mxPrev) > 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
-            dragHorz := "right"
-        }
-        Else If ((mx - mxPrev) < 0 && abs(mx - mxPrev) > abs(my - myPrev)) {
-            dragHorz := "left"
+        Else If switchingBacktoResize {
+            mx0 := mx
+            my0 := my
+            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
 
+        dragHorz := ""
+        dragVert := ""
+        If ((my - myPrev) < 0) && abs(my - my0) > 5 && abs(my - myPrev) > (abs(mx - mxPrev))   {
+            dragVert := "up"
+        }
+        Else If ((my - myPrev) > 0) && abs(my - my0) > 5  && abs(my - myPrev) > (abs(mx - mxPrev))  {
+            dragVert := "down"
+        }
+        Else If ((mx - mxPrev) > 0 && abs(mx - mx0) > 5) {
+            dragHorz := "right"
+        }
+        Else If ((mx - mxPrev) < 0 && abs(mx - mx0) > 5) {
+            dragHorz := "left"
+        }
         mxPrev := mx
         myPrev := my
+
+        If (dragHorz_prev != "" && dragHorz != "" && dragHorz_prev != dragHorz)
+        || (dragVert_prev != "" && dragVert != "" && dragVert_prev != dragVert) {
+            mx0 := mx
+            my0 := my
+            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+        }
 
         WinGet, trans, Transparent, ahk_id %hWnd%
         If (trans == 255 && (abs(dx) > 5 || abs(dy) > 5)) {
@@ -1207,23 +1224,6 @@ MButton::
 
         If WinExist("ahk_class tooltips_class32")
             WinClose, ahk_class tooltips_class32
-
-        If switchingBackToMove {
-            MouseGetPos, mx0, my0
-            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
-        }
-        Else If switchingBacktoResize {
-            MouseGetPos, mx0, my0
-            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
-        }
-
-        If (dragHorz_prev != "" && dragHorz != "" && dragHorz_prev != dragHorz)
-        || (dragVert_prev != "" && dragVert != "" && dragVert_prev != dragVert) {
-            MouseGetPos, mx0, my0
-            mx := mx0
-            my := my0
-            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
-        }
 
         If dragHorz
             dragHorz_prev := dragHorz
@@ -1315,7 +1315,7 @@ MButton::
         }
         Else {
             gridSize := SnapRange
-            ; adjustSize := False
+
             gridDx := ceil(dx/gridSize) * gridSize
             gridDy := ceil(dy/gridSize) * gridSize
 
@@ -1324,21 +1324,26 @@ MButton::
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
                 If (dragVert == "up" && ty == minY) {
                     adjustSize := False
+                    BlockInput, MouseMove
                     MouseMove, mx, my
                     ConfineMouseToCurrentMonitorArea( "work", 0, my, monW, monH-my)
+                    sleep, 250
+                    BlockInput, MouseMoveOff
                 }
                 Else {
                     If (dragVert == "up") {
                         virtwy0 := wy0 - abs(gridDy)
-                        If (virtwy0 < minY + 1) {
-                            virtwy0 := minY
-                            virtwh0 := maxHU
-                        }
-                        Else {
+                        ; If (virtwy0 < minY + 1) {
+                            ; virtwy0 := minY
+                            ; virtwh0 := maxHU
+                        ; }
+                        ; Else {
                             virtwh0 := wh + abs(gridDy)
-                            If (virtwh0 > maxHU - 1)
+                            If ((virtwh0 > maxHU - SnapRange) || (virtwy0 < minY + SnapRange)) {
+                                virtwy0 := minY
                                 virtwh0 := maxHU
-                        }
+                            }
+                        ; }
                     }
                     Else If (dragVert == "down") {
                         virtwh0 := wh - abs(dy)
@@ -1355,13 +1360,17 @@ MButton::
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
                 If (dragVert == "down" && th == maxHD) {
                     adjustSize := False
+                    BlockInput, MouseMove
                     MouseMove, mx, my
                     ConfineMouseToCurrentMonitorArea( "work", 0, 0, monW, my)
+                    sleep, 250
+                    BlockInput, MouseMoveOff
                 }
                 Else {
                     If (dragVert == "down") {
+                        ; virtwy0 doesnt matter since it remains fixed when adjusting width
                         virtwh0 := wh + abs(gridDy)
-                        If (virtwh0 > maxHD - 1)
+                        If (virtwh0 > maxHD - SnapRange)
                             virtwh0 := maxHD
                     }
                     Else If (dragVert == "up") {
@@ -1379,21 +1388,26 @@ MButton::
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
                 If (dragHorz == "left" && tx == minX) {
                     adjustSize := False
+                    BlockInput, MouseMove
                     MouseMove, mx, my
                     ConfineMouseToCurrentMonitorArea( "work", mx, 0, monW-mx, monH)
+                    sleep, 250
+                    BlockInput, MouseMoveOff
                 }
                 Else {
                     If (dragHorz == "left") {
                         virtwx0 := wx0 - abs(gridDx)
-                        If (virtwx0 < minX+1) {
-                            virtwx0 := minX
-                            virtww0 := maxWL
-                        }
-                        Else {
+                        ; If (virtwx0 < minX+1) {
+                            ; virtwx0 := minX
+                            ; virtww0 := maxWL
+                        ; }
+                        ; Else {
                             virtww0 := ww + abs(gridDx)
-                            If (virtww0 > maxWL - 1)
+                            If ((virtww0 > (maxWL - SnapRange)) || (virtwx0 < (minX + SnapRange))) {
+                                virtwx0 := minX
                                 virtww0 := maxWL
-                        }
+                            }
+                        ; }
                     }
                     Else If (dragHorz == "right") {
                         virtww0 := ww - abs(dx)
@@ -1410,13 +1424,17 @@ MButton::
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
                 If (dragHorz == "right" && tx+tw == monR) {
                     adjustSize := False
+                    BlockInput, MouseMove
                     MouseMove, mx, my
                     ConfineMouseToCurrentMonitorArea( "work", 0, 0, mx, monH)
+                    sleep, 250
+                    BlockInput, MouseMoveOff
                 }
                 Else {
                     If (dragHorz == "right") {
+                        ; virtwx0 doesnt matter since it remains fixed when adjusting width
                         virtww0 := ww + abs(gridDx)
-                        If (virtww0 > maxWR - 1)
+                        If (virtww0 > (maxWR - SnapRange))
                             virtww0 := maxWR
                     }
                     Else If (dragHorz == "left") {
@@ -1447,7 +1465,7 @@ MButton::
     }
     Critical, Off
 
-    If MouseIsOverTitleBar(mx, my) && (abs(virtwx0 - wx0) <= 5) && (abs(virtwy0 - wy0) <= 5) {
+    If MouseIsOverTitleBar(mx, my) && (abs(checkClickMx - mx0) <= 5) && (abs(checkClickMy - my0) <= 5) {
         WinSet, Transparent, Off, ahk_id %hWnd%
         GoSub, SwitchDesktop
     }
@@ -3087,7 +3105,7 @@ Min(a,b) {
     MouseGetPos, lbX1, lbY1,
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
-        && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)) {
+        && (abs(lbX1-lbX2) < 20 && abs(lbY1-lbY2) < 20)) {
         run, explorer.exe
         StopRecursion     := False
         Return
