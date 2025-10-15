@@ -1333,17 +1333,11 @@ MButton::
                 Else {
                     If (dragVert == "up") {
                         virtwy0 := wy0 - abs(gridDy)
-                        ; If (virtwy0 < minY + 1) {
-                            ; virtwy0 := minY
-                            ; virtwh0 := maxHU
-                        ; }
-                        ; Else {
-                            virtwh0 := wh + abs(gridDy)
-                            If ((virtwh0 > maxHU - SnapRange) || (virtwy0 < minY + SnapRange)) {
-                                virtwy0 := minY
-                                virtwh0 := maxHU
-                            }
-                        ; }
+                        virtwh0 := wh  + abs(gridDy)
+                        If ((virtwh0 > maxHU - SnapRange) || (virtwy0 < minY + SnapRange)) {
+                            virtwy0 := minY
+                            virtwh0 := maxHU
+                        }
                     }
                     Else If (dragVert == "down") {
                         virtwh0 := wh - abs(dy)
@@ -1397,17 +1391,11 @@ MButton::
                 Else {
                     If (dragHorz == "left") {
                         virtwx0 := wx0 - abs(gridDx)
-                        ; If (virtwx0 < minX+1) {
-                            ; virtwx0 := minX
-                            ; virtww0 := maxWL
-                        ; }
-                        ; Else {
-                            virtww0 := ww + abs(gridDx)
-                            If ((virtww0 > (maxWL - SnapRange)) || (virtwx0 < (minX + SnapRange))) {
-                                virtwx0 := minX
-                                virtww0 := maxWL
-                            }
-                        ; }
+                        virtww0 := ww  + abs(gridDx)
+                        If ((virtww0 > (maxWL - SnapRange)) || (virtwx0 < (minX + SnapRange))) {
+                            virtwx0 := minX
+                            virtww0 := maxWL
+                        }
                     }
                     Else If (dragHorz == "right") {
                         virtww0 := ww - abs(dx)
@@ -2575,135 +2563,6 @@ FadeOutWindowTitle:
     sleep, %delayTime%
     Gui, WindowTitle: Destroy
 Return
-
-; !Capslock::
-    ; StopRecursion := True
-    ; totalMenuItemCount := 0
-    ; onlyTitleFound := ""
-    ; winAssoc := {}
-    ; winArraySort := []
-
-    ; DetectHiddenWindows, On
-    ; Critical On
-    ; WinGet, id, list
-    ; Loop, %id%
-    ; {
-        ; this_ID := id%A_Index%
-        ; WinGet, minState, MinMax, ahk_id %this_ID%
-
-        ; If !JEE_WinHasAltTabIcon(this_ID)
-            ; continue
-        ; If minState > -1
-            ; continue
-
-        ; ; desknum := 1
-        ; desknum := findDesktopWindowIsOn(this_ID)
-        ; If desknum <= 0
-            ; continue
-
-        ; WinGetTitle, title, ahk_id %this_ID%
-        ; WinGet, procName, ProcessName , ahk_id %this_ID%
-        ; finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
-        ; If HasVal(minWinArray,finalTitle)
-            ; continue
-
-        ; minWinArray.Push(finalTitle)
-    ; }
-
-    ; If (minWinArray.length() == 0) {
-        ; Tooltip, No matches found...
-        ; Sleep, 1500
-        ; Tooltip,
-        ; StopRecursion := False
-        ; Critical Off
-        ; Return
-    ; }
-
-    ; For k, v in minWinArray
-    ; {
-        ; winAssoc[v] := k
-    ; }
-
-    ; For k, v in winAssoc
-    ; {
-        ; winArraySort.Push(k)
-    ; }
-
-    ; desktopEntryLast := ""
-
-    ; Menu, minWindows, Add
-    ; Menu, minWindows, deleteAll
-    ; For k, ft in winArraySort
-    ; {
-        ; splitEntry1 := StrSplit(ft , "^")
-        ; entry := splitEntry1[1]
-        ; ahkid := splitEntry1[2]
-
-        ; splitEntry2    := StrSplit(entry, "↑")
-        ; desktopEntry   := splitEntry2[1]
-        ; procEntry      := Trim(splitEntry2[2])
-        ; titleEntry     := Trim(splitEntry2[3])
-
-        ; ; If (VD.getDesktopNumOfWindow(titleEntry) == VD.getCurrentDesktopNum())
-        ; finalEntry   := % desktopEntry " : [" titleEntry "] (" procEntry ")"
-            ; ; finalEntry   := %  "[" titleEntry "] (" procEntry ")"
-        ; ; Else
-            ; ; continue
-
-        ; WinGet, Path, ProcessPath, ahk_exe %procEntry%
-        ; If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
-            ; Menu, minWindows, Add
-        ; }
-        ; If (finalEntry != "" && titleEntry != "") {
-            ; totalMenuItemCount := totalMenuItemCount + 1
-            ; onlyTitleFound := finalEntry
-
-            ; Menu, minWindows, Add, %finalEntry%, ActivateWindow
-            ; Try
-                ; Menu, minWindows, Icon, %finalEntry%, %Path%,, 32
-            ; Catch
-                ; Menu, minWindows, Icon, %finalEntry%, %A_WinDir%\System32\SHELL32.dll, 3, 32
-        ; }
-        ; desktopEntryLast := desktopEntry
-    ; }
-
-    ; Critical Off
-
-    ; If (totalMenuItemCount > 1) {
-        ; SetTimer, RunDynaAltUp, -1
-
-        ; CoordMode, Mouse, Screen
-        ; CoordMode, Menu, Screen
-        ; drawX := CoordXCenterScreen()
-        ; drawY := CoordYCenterScreen()
-        ; Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
-        ; ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h0 w0
-
-        ; ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
-        ; ShowMenu(MenuGetHandle("minWindows"), False, drawX, drawY, 0x14)
-        ; ; Tooltip, Done.
-        ; Gui, ShadowFrFull:  Hide
-    ; }
-    ; Else {
-        ; loop 100 {
-            ; tooltip, No windows found!
-            ; sleep, 10
-        ; }
-        ; tooltip,
-    ; }
-
-    ; StopRecursion := False
-
-    ; Menu, minWindows, deleteAll
-    ; i := 1
-    ; while (i <= minWinArray.MaxIndex()) {
-        ; checkID := minWinArray[i]
-        ; If !WinExist("ahk_id " checkID)
-            ; minWinArray.RemoveAt(i)
-        ; Else
-            ; ++i
-    ; }
-; Return
 
 Cycle()
 {
@@ -6200,8 +6059,8 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
         showFullTitle := True
 
     If showFullTitle {
-        If (StrLen(vtext) > 40) {
-            vtext := SubStr(vtext, 1, 40) . "..."
+        If (StrLen(vtext) > 60) {
+            vtext := SubStr(vtext, 1, 60) . "..."
         }
     }
     Else {
@@ -6230,6 +6089,10 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     WinSet, Transparent, 1, ahk_id %WindowTitleID%
     WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
     WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
+    WinSet, Transparent, 25, ahk_id %WindowTitleID%
+    sleep, 3
+    WinSet, Transparent, 125, ahk_id %WindowTitleID%
+    sleep, 3
     WinSet, Transparent, 225, ahk_id %WindowTitleID%
     Return WindowTitleID
 }
@@ -8749,37 +8612,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's habitat::its habitat
 ::it's territory::its territory
 ::it's young::its young
-::its raining::it’s raining
-::its sunny::it’s sunny
-::its cold::it’s cold
-::its hot::it’s hot
-::its time::it’s time
-::its late::it’s late
-::its true::it’s true
-::its false::it’s false
-::its over::it’s over
-::its ready::it’s ready
-::its done::it’s done
-::its fine::it’s fine
-::its okay::it’s okay
-::its possible::it’s possible
-::its important::it’s important
-::its clear::it’s clear
-::its complicated::it’s complicated
-::its happening::it’s happening
-::its working::it’s working
-::its broken::it’s broken
-::its beautiful::it’s beautiful
-::its been::great::it’s been great
-::its gone::wrong::it’s gone wrong
-::its finished::it’s finished
-::its started::it’s started
-::its happened::it’s happened
-::its improved::it’s improved
-::its changed::it’s changed
-::its grown::it’s grown
-::its developed::it’s developed
-::its evolved::it’s evolved
 ::it's meaning::its meaning
 ::it's value::its value
 ::it's impact::its impact
@@ -8789,7 +8621,40 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's limits::its limits
 ::it's reputation::its reputation
 ::it's effect::its effect
-::its a::it's a
+::its raining::it's raining
+::its sunny::it's sunny
+::its cold::it's cold
+::its hot::it's hot
+::its time::it's time
+::its late::it's late
+::its true::it's true
+::its false::it's false
+::its over::it's over
+::its ready::it's ready
+::its done::it's done
+::its fine::it's fine
+::its okay::it's okay
+::its possible::it's possible
+::its important::it's important
+::its clear::it's clear
+::its complicated::it's complicated
+::its happening::it's happening
+::its working::it's working
+::its broken::it's broken
+::its beautiful::it's beautiful
+::its been::it's been
+::its gone::it's gone
+::its easy:: it's easy
+::its hard:: it's hard
+::its difficult:: it's difficult
+::its finished::it's finished
+::its started::it's started
+::its happened::it's happened
+::its improved::it's improved
+::its changed::it's changed
+::its grown::it's grown
+::its developed::it's developed
+::its evolved::it's evolved
 ::its an::it's an
 ::iunior::junior
 ::jaques::jacques
