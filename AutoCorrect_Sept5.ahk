@@ -112,7 +112,7 @@ skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "Wo
 
 ; === Settings ===
 BlockClicks := true    ; true = block clicks outside active window, false = let clicks pass through
-Opacity     := 200     ; 255=opaque black; try 200 to "dim" instead of fully black
+Opacity     := 215     ; 255=opaque black; try 200 to "dim" instead of fully black
 Margin      := 0       ; expands the hole around the active window by this many pixels
 
 ; === Globals ===
@@ -1174,7 +1174,7 @@ MButton::
 
         windowSnapped := False
 
-        MouseGetPos, mx, my
+        MouseGetPos, mx, my, mbuttonHwnID
 
         If switchingBackToMove {
             mx0 := mx
@@ -1253,6 +1253,7 @@ MButton::
         virtwy0 := wy0 + dy
 
         If !isRbutton {
+            WinSet, AlwaysOnTop, On, ahk_id %hWnd%
             UnclipCursor()
             ; --- One-way vertical clamp (top/bottom) ---
             If (virtwy0 < minY)
@@ -1460,6 +1461,7 @@ MButton::
     Else If (wh/abs(monB-monT) > 0.95)
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
 
+    WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
     WinSet, Transparent, Off, ahk_id %hWnd%
     StopRecursion := False
     SetTimer, keyTrack, On
