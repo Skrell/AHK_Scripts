@@ -6340,6 +6340,8 @@ SetTitleMatchMode, 2
 ::campaign::
 ::'ing::
 ::ing::
+::slam::
+::dunk::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -8572,6 +8574,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::itis::it is
 ::ititial::initial
 ::its a::it's a
+::its an::it's an
 ::its the::it's the
 ::itwas::it was
 ::it's color::its color
@@ -8657,7 +8660,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its grown::it's grown
 ::its developed::it's developed
 ::its evolved::it's evolved
-::its an::it's an
+::its not::it's not
 ::iunior::junior
 ::jaques::jacques
 ::jeapardy::jeopardy
@@ -9810,6 +9813,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::thigsn::things
 ::thisyear::this year
 ::thiunk::think
+::thoguth::thought
 ::threee::three
 ::threshhold::threshold
 ::throrough::thorough
