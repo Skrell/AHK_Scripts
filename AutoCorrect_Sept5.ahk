@@ -1104,6 +1104,8 @@ MButton::
     snapShotY := 0
     adjustSize := False
     isRbutton  := False
+    switchingBackToMove := False
+    switchingBacktoResize := False
 
     MouseGetPos, mx0, my0, hWnd, ctrl, 2
     checkClickMx := mx0
@@ -1450,7 +1452,7 @@ MButton::
             BlockInput, MouseMoveOff
         }
 
-        Sleep, 1
+        ; Sleep, 1
     }
     Critical, Off
 
