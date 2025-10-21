@@ -1812,11 +1812,12 @@ Return
 
 #If !disableEnter
 ~Enter::
-    ControlGetFocus, currCtrl, A
-    WinGetClass, currCl, A
-    WinGetTitle, currTi, A
-    If     (currCl == "CabinetWClass" && InStr(currCtrl, "Edit", True))
-        || (currCl == "#32770" && InStr(currCtrl, "Edit", True) && (InStr(currTi, "Save", True) || InStr(currTi, "Open", True))) {
+    ControlGetFocus, entCtrl, A
+    WinGetClass, entCl, A
+    WinGetTitle, entTi, A
+    WinGet, entID, ID, A
+    If     (entCl == "CabinetWClass" && InStr(entCtrl, "Edit", True))
+        || (entCl == "#32770" && InStr(entCtrl, "Edit", True) && (InStr(entTi, "Save", True) || InStr(entTi, "Open", True))) {
         Keywait, Enter, U T3
         try {
             exEl := UIA.ElementFromHandle(hWnd)
@@ -1833,7 +1834,9 @@ Return
             LbuttonEnabled := True
             Return
         }
-        Send, ^{NumpadAdd}
+        WinGet, checkID, ID, A
+        If (checkID == entID)
+            Send, ^{NumpadAdd}
     }
 Return
 #If
@@ -4007,6 +4010,12 @@ explorerGetPath(hwnd := 0) { ; https://www.autohotkey.com/boards/viewtopic.php?p
     WinSet, AlwaysOnTop, toggle, ahk_id %hwndId%
     BlockInput, MouseMoveOff
     HotKey, Rbutton, DoNothing, Off
+Return
+#If
+
+#If MouseIsOverTaskbarBlank()
+Lbutton & Rbutton::
+    Send, #{r}
 Return
 #If
 
@@ -8663,6 +8672,12 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its developed::it's developed
 ::its evolved::it's evolved
 ::its not::it's not
+::its in::it's in
+::its up::it's up
+::its down::it's down
+::its left::it's left
+::its right::it's right
+::its any::it's any
 ::iunior::junior
 ::jaques::jacques
 ::jeapardy::jeopardy
