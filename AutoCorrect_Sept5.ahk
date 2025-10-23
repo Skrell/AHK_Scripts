@@ -698,6 +698,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Return
             }
 
+            WinGet, proc, ProcessName, ahk_id %hWnd%
+            If (proc == "Everything.exe")
+                SendEvent, {Blind}{vkFF} ; send a dummy key (vkFF = undefined key)
+
             Critical, On
             prevActiveWindows.push(hWnd)
             Critical, Off
@@ -744,7 +748,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         TargetControl := "DirectUIHWND3"
                 }
 
-                WinGet, proc, ProcessName, ahk_id %hWnd%
                 If (vWinClass == "CabinetWClass" || vWinClass == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
                     try {
                         exEl := UIA.ElementFromHandle(hWnd)
@@ -1562,7 +1565,7 @@ CapsLock::
     lastHotKeyPress := "CapsLock"
 Return
 
-#If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything64.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE") && !IsEditFieldActive())
+#If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE") && !IsEditFieldActive())
 ^+d::
     StopAutoFix := True
     SetTimer, keyTrack, Off
