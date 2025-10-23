@@ -633,8 +633,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             || !WinExist("ahk_id " hWnd)) {
             If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-                SetTimer, keyTrack,   On
-                SetTimer, mouseTrack, On
             }
             Return
         }
@@ -642,7 +640,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         LbuttonEnabled := False
         SetTimer, keyTrack,   Off
         SetTimer, mouseTrack, Off
-
 
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
 
@@ -705,19 +702,28 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             prevActiveWindows.push(hWnd)
             Critical, Off
 
-            OutputVar1 := OutputVar2 := OutputVar3 := 0
+            WaitForFadeInStop(hWnd)
+            OutputVar1 := 0
+            OutputVar2 := 0
+            OutputVar3 := 0
+            OutputVar4 := 0
+            OutputVar6 := 0
+            OutputVar8 := 0
 
             loop 200 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
                 ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
                 ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
-                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
+                ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %hWnd%
+                ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %hWnd%
+                ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %hWnd%
+                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
                     break
                 sleep, 2
             }
 
             ; tooltip, init focus is %initFocusedCtrl% and proc is %proc%
-            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 ) {
+            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1  || OutputVar4 == 1  || OutputVar6 == 1  || OutputVar8 == 1 ) {
                 If (OutputVar1 == 1) {
                     TargetControl := "SysListView321"
                     ; ControlGet, ctrlNnHwnd, Hwnd,, SysListView321, ahk_id %hWnd%
@@ -728,7 +734,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         LbuttonEnabled := True
                         Return
                     }
-                    ; WinGet, windowStyle, Style, ahk_id %ctrlNnHwnd%
                 }
                 Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
                     ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %hWnd%, , , ,
@@ -780,7 +785,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     Return
                 }
                 Else {
-                    WaitForFadeInStop(hWnd)
+                    ; WaitForFadeInStop(hWnd)
                     WinGet, finalActiveHwnd, ID, A
                     If (hWnd == finalActiveHwnd) {
                         Send, {Ctrl UP}
@@ -804,7 +809,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                     LbuttonEnabled := True
                                     BlockInput, Off
                                     Critical, Off
-                                    ; BlockKeyboard(False)
                                     Return
                                 }
                             }
@@ -2967,19 +2971,19 @@ Min(a,b) {
 
 #If MouseIsOverTaskbarBlank()
 ~Lbutton::
-    StopRecursion     := True
+    ; StopRecursion     := True
     MouseGetPos, lbX1, lbY1,
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < 550)
         && (abs(lbX1-lbX2) < 20 && abs(lbY1-lbY2) < 20)) {
         run, explorer.exe
-        StopRecursion     := False
+        ; StopRecursion     := False
         Return
     }
 
     KeyWait, LButton, U T5
     MouseGetPos, lbX2, lbY2,
-    StopRecursion     := False
+    ; StopRecursion     := False
 Return
 #If
 
@@ -5007,7 +5011,7 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
         titlebarHeight := SM_CYSIZE
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If (   (mClass != "Shell_TrayWnd")
+    If (   !MouseIsOverTaskbar()
         && (mClass != "WorkerW")
         && (mClass != "ProgMan")
         && (mClass != "TaskListThumbnailWnd")
@@ -5094,7 +5098,7 @@ MWAGetMonitorMouseIsIn(buffer := 0) ; we didn't actually need the "Monitor = 0"
         If ( Mx >= (mon%A_Index%left + buffer) ) && ( Mx < (mon%A_Index%right - buffer) ) && ( My >= (mon%A_Index%top + buffer) ) && ( My < (mon%A_Index%bottom - buffer) )
         {
             currMonHeight := abs(mon%A_Index%bottom - mon%A_Index%top)
-            currMonWidth  := abs(mon%A_Index%right - mon%A_Index%left)
+            currMonWidth  := abs(mon%A_Index%right  - mon%A_Index%left)
             ActiveMon := A_Index
             break
         }
@@ -6048,7 +6052,7 @@ MouseIsOverTaskbarBlank() {
     MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
     WinGetClass, cl, ahk_id %WindowUnderMouseID%
     try {
-        If (InStr(cl, "Shell",False) && InStr(cl, "TrayWnd",False) && CtrlUnderMouseId != "TrayNotifyWnd1") {
+        If (InStr(cl, "Shell",False) && InStr(cl, "TrayWnd",False) && !InStr(CtrlUnderMouseId, "TrayNotifyWnd", False)) {
             If WinExist("ahk_class TaskListThumbnailWnd") {
                 Return False
             }
