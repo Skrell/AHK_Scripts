@@ -3873,13 +3873,24 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         OutputVar1 := 0
         OutputVar2 := 0
         OutputVar3 := 0
+        OutputVar4 := 0
+        OutputVar6 := 0
+        OutputVar8 := 0
 
-        If (!InStr(initHoveredCtrlNN,"SysListView32",True) && initHoveredCtrlNN != "DirectUIHWND2" && initHoveredCtrlNN != "DirectUIHWND3") {
+        If (!InStr(initHoveredCtrlNN,"SysListView32",True)
+            && initHoveredCtrlNN != "DirectUIHWND2"
+            && initHoveredCtrlNN != "DirectUIHWND3"
+            && initHoveredCtrlNN != "DirectUIHWND4"
+            && initHoveredCtrlNN != "DirectUIHWND6"
+            && initHoveredCtrlNN != "DirectUIHWND8") {
             loop 200 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %initTargetHwnd%
                 ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %initTargetHwnd%
                 ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %initTargetHwnd%
-                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1)
+                ControlGet, OutputVar3, Visible ,, DirectUIHWND4,  ahk_id %initTargetHwnd%
+                ControlGet, OutputVar3, Visible ,, DirectUIHWND6,  ahk_id %initTargetHwnd%
+                ControlGet, OutputVar3, Visible ,, DirectUIHWND8,  ahk_id %initTargetHwnd%
+                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
                     break
                 sleep, 2
             }
@@ -3891,12 +3902,18 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 OutputVar2 := 1
             Else If (initHoveredCtrlNN == "DirectUIHWND3")
                 OutputVar3 := 1
+            Else If (initHoveredCtrlNN == "DirectUIHWND4")
+                OutputVar4 := 1
+            Else If (initHoveredCtrlNN == "DirectUIHWND6")
+                OutputVar6 := 1
+            Else If (initHoveredCtrlNN == "DirectUIHWND8")
+                OutputVar8 := 1
         }
         ; tooltip, %OutputVal1% - %OutputVal2% - %OutputVal3%
         If GetKeyState("LButton", "P")
             Return
 
-        If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1) {
+        If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1) {
 
             ; tooltip, init focus is %initHoveredCtrlNN% - %OutputVal1% - %OutputVal2% - %OutputVal3%
             WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
@@ -3951,10 +3968,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
             WinGet, finalActiveHwnd, ID, A
             If (initTargetHwnd == finalActiveHwnd) {
-                Send, ^{NumpadAdd}
 
-                ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
-                    ; tooltip, sent to %TargetControl% - %prevPath% VS %currentPath%
+                Send, ^{NumpadAdd}
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
                     sleep, 125
