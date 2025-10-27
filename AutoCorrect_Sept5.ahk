@@ -82,7 +82,7 @@ Global disableWheeldown            := False
 Global pauseWheel                  := False
 Global EVENT_SYSTEM_MENUPOPUPSTART := 0x0006
 Global EVENT_SYSTEM_MENUPOPUPEND   := 0x0007
-Global TimeOfLastKey               := A_TickCount
+Global TimeOfLastHotkeyTyped               := A_TickCount
 Global lbX1
 Global lbX2
 Global currentMon                  := 0
@@ -98,7 +98,7 @@ Global numbers                     := "0123456789"
 Global DoubleClickTime             := DllCall("GetDoubleClickTime")
 Global isWin11                     := DetectWin11()
 Global TaskBarHeight               := 0
-Global lastHotKeyPress             := ""
+Global lastHotkeyTyped             := ""
 Global DraggingWindow              := False
 
 ; --- Config ---
@@ -355,13 +355,8 @@ OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEv
 }
 
 MarkKeypressTime:
-    TimeOfLastKey    := A_TickCount
-    lastHotKeyPress  := A_ThisHotkey
-Return
-
-Marktime_FixSlash:
-    GoSub, MarkKeypressTime
-    GoSub, FixSlash
+    TimeOfLastHotkeyTyped := A_TickCount
+    lastHotkeyTyped := A_ThisHotkey
 Return
 
 Marktime_Hoty:
@@ -1560,9 +1555,9 @@ UnclipCursor() {
 Return
 
 CapsLock::
-    TimeOfLastKey := A_TickCount
+    TimeOfLastHotkeyTyped := A_TickCount
     Send {Delete}
-    lastHotKeyPress := "CapsLock"
+    lastHotkeyTyped := "CapsLock"
 Return
 
 #If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE") && !IsEditFieldActive())
@@ -1852,13 +1847,13 @@ Return
 
 ~Space::
     GoSub, Marktime_Hoty_FixSlash
-    lastHotKeyPress := "Space"
+    lastHotkeyTyped := "Space"
 Return
 
 ; duplicate hotkey in case shift is accidentally  held as a result of attempting to type a '?'
 ~+Space::
     GoSub, Marktime_Hoty_FixSlash
-    lastHotKeyPress := "Space"
+    lastHotkeyTyped := "Space"
 Return
 
 ~^Backspace::
@@ -1866,12 +1861,12 @@ Return
 Return
 
 ~$Backspace::
-    TimeOfLastKey := A_TickCount
-    lastHotKeyPress := "Backspace"
+    TimeOfLastHotkeyTyped := A_TickCount
+    lastHotkeyTyped := "Backspace"
 Return
 
 ~$Delete::
-    TimeOfLastKey := A_TickCount
+    TimeOfLastHotkeyTyped := A_TickCount
 Return
 
 ~$Left::
@@ -3150,7 +3145,7 @@ Return
     If (    A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < DoubleClickTime)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (_winCtrlD == "SysListView321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3")) {
+        && (_winCtrlD == "SysListView321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")) {
 
         currentPath    := ""
         ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3%  - %X1% %X2% %Y1% %Y2% - %_winCtrlD% - %A_ThisHotkey% - %A_PriorHotkey%
@@ -3235,12 +3230,12 @@ Return
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && ((rlsTime - initTime) < DoubleClickTime/2)
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)
-        && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" ))  {
+        && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8"))  {
 
         SetTimer, SendCtrlAddLabel, -125
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (_winCtrlD == "SysHeader321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3")
+        && (_winCtrlD == "SysHeader321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
         && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3 != 0xFFFFFF)) {
 
         try {
@@ -3403,7 +3398,7 @@ UpdateInputBoxTitle:
     ControlGetText, memotext, Edit1, Type Up to 3 Letters of a Window Title to Search
     StringLen, memolength, memotext
 
-    If ((memolength >= 3 && (A_TickCount-TimeOfLastKey > 400)) || (memolength >= 1 && InStr(memotext, " "))) {
+    If ((memolength >= 3 && (A_TickCount-TimeOfLastHotkeyTyped > 400)) || (memolength >= 1 && InStr(memotext, " "))) {
         UserInputTrimmed := Trim(memotext)
         Send, {ENTER}
         SetTimer, UpdateInputBoxTitle, off
@@ -3944,7 +3939,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             If (OutputVar1 == 1) {
                 TargetControl := "SysListView321"
             }
-            Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
+            Else If ((OutputVar2 == 1 && OutputVar3 == 1)  && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
                 OutHeight2 := 0
                 OutHeight3 := 0
                 ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
@@ -3953,6 +3948,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                     TargetControl := "DirectUIHWND2"
                 Else
                     TargetControl := "DirectUIHWND3"
+            }
+            Else {
+                TargetControl := initHoveredCtrlNN
             }
 
             tooltip, targeted is %TargetControl% with init at %initHoveredCtrlNN% ; - %OutHeight2% - %OutHeight3%
@@ -4080,31 +4078,37 @@ WheelDown::send {Volume_Down}
 ; #If
 
 #If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
-$RButton::
-    StopRecursion := True
+; $RButton::
+    ; StopRecursion := True
 
-    KeyWait, Rbutton, U T3
+    ; KeyWait, Rbutton, U T3
 
-    If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        Send, +{Click, Right}
-    Else
-        Send,  {Click, Right}
+    ; If GetKeyState("LShift") && !GetKeyState("LShift","P")
+        ; Send, +{Click, Right}
+    ; Else
+        ; Send,  {Click, Right}
 
-    StopRecursion := False
-Return
+    ; StopRecursion := False
+; Return
 
 RButton & WheelUp::
-    HotKey, Rbutton, DoNothing, On
+    ; HotKey, Rbutton, DoNothing, On
     SetTimer, SendCtrlAddLabel, Off
     Send, ^{Home}
-    HotKey, Rbutton, DoNothing, Off
+    ; HotKey, Rbutton, DoNothing, Off
 Return
 
 RButton & WheelDown::
-    HotKey, Rbutton, DoNothing, On
+    ; HotKey, Rbutton, DoNothing, On
     SetTimer, SendCtrlAddLabel, Off
     Send, ^{End}
-    HotKey, Rbutton, DoNothing, Off
+    ; HotKey, Rbutton, DoNothing, Off
+Return
+
+$RButton::
+    StopRecursion := True
+    Send {Rbutton}
+    StopRecursion := False
 Return
 #If
 
@@ -4845,9 +4849,10 @@ ForceKeyUpVK(vk) {
 keyTrack() {
     Global keys
     Global numbers
-    Global lastHotKeyPress
+    Global lastHotkeyTyped
     Global StopAutoFix
-    Global TimeOfLastKey
+    Global TimeOfLastHotkeyTyped
+    static x_PriorPriorKey
     ListLines, Off
 
     FixMod("LShift", 0xA0), FixMod("RShift", 0xA1)
@@ -4861,9 +4866,9 @@ keyTrack() {
         ; A_PriorKey and Loops — How It Works
         ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a loop.
         ; You can read A_PriorKey at any point in the loop, and it will show the most recent key pressed up to that moment.
-        ; tooltip, lastKey-%lastHotKeyPress% missedKey-%A_PriorKey%
-        If (TimeOfLastKey && (A_TickCount-TimeOfLastKey) > 300  && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_ThisHotKey != "Enter" && A_ThisHotKey != "LButton") {
-            TimeOfLastKey :=
+        ; tooltip, lastKey-%lastHotkeyTyped% missedKey-%A_PriorKey%
+        If (TimeOfLastHotkeyTyped && (A_TickCount-TimeOfLastHotkeyTyped) > 300  && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_PriorKey != "LCtrl"  && x_PriorPriorKey != "LCtrl" && A_PriorKey != "NumpadAdd") {
+            TimeOfLastHotkeyTyped :=
             SetTimer, keyTrack,   Off
             DeAssignHotkeys()
 
@@ -4871,8 +4876,8 @@ keyTrack() {
             Send, ^{NumpadAdd}
             Critical, Off
 
-            If ((inStr(keys, lastHotKeyPress, false) || (inStr(numbers, lastHotKeyPress, false) || A_PriorKey == "Space") || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace")
-                && lastHotKeyPress != "" && A_PriorKey != "" && A_PriorKey != lastHotKeyPress) {
+            If ((inStr(keys, lastHotkeyTyped, false) || (inStr(numbers, lastHotkeyTyped, false) || A_PriorKey == "Space") || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace")
+                && lastHotkeyTyped != "" && A_PriorKey != "" && A_PriorKey != lastHotkeyTyped) {
                 If (A_PriorKey == "Space")
                     Send, {SPACE}
                 Else If (A_PriorKey == "CapsLock")
@@ -4881,7 +4886,7 @@ keyTrack() {
                     Send, {Backspace}
                 Else
                     Send, %A_PriorKey%
-                lastHotKeyPress := A_PriorKey
+                lastHotkeyTyped := A_PriorKey
             }
 
             ReAssignHotkeys()
@@ -4894,6 +4899,9 @@ keyTrack() {
     }
     Else
         StopAutoFix := False
+
+    If (x_PriorPriorKey != A_PriorKey)
+        x_PriorPriorKey := A_PriorKey
 
     ListLines, On
 Return
@@ -6375,6 +6383,7 @@ SetTitleMatchMode, 2
 ::ing::
 ::slam::
 ::dunk::
+::cases::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -6757,6 +6766,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:emtns::ments
 :?:ioins::ions
 :?:ceis::cies
+:?:eses::esses
+:?:ases::asses
 :?:bj::b
 :?:cj::c
 :?:dj::d
@@ -10208,6 +10219,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::isnt'::isn't
 ::isnt::isn't
 ::istn::isn't
+::Istn::Isn't
 ::its'::it's
 ::iv'e::I've
 ::ive::I've
