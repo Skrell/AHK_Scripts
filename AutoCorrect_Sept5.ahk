@@ -4867,7 +4867,14 @@ keyTrack() {
         ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a loop.
         ; You can read A_PriorKey at any point in the loop, and it will show the most recent key pressed up to that moment.
         ; tooltip, lastKey-%lastHotkeyTyped% missedKey-%A_PriorKey%
-        If (TimeOfLastHotkeyTyped && (A_TickCount-TimeOfLastHotkeyTyped) > 300  && A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_PriorKey != "LCtrl"  && x_PriorPriorKey != "LCtrl" && A_PriorKey != "NumpadAdd") {
+        If (   TimeOfLastHotkeyTyped
+            && ((A_TickCount-TimeOfLastHotkeyTyped) > 300)
+            && A_PriorKey != "Enter"
+            && A_PriorKey != "LButton"
+            && A_PriorKey != "LControl"
+            && (InStr(keys, x_PriorPriorKey, false) || InStr(numbers, x_PriorPriorKey, false))
+            && x_PriorPriorKey != "LControl") {
+
             TimeOfLastHotkeyTyped :=
             SetTimer, keyTrack,   Off
             DeAssignHotkeys()
@@ -4876,7 +4883,7 @@ keyTrack() {
             Send, ^{NumpadAdd}
             Critical, Off
 
-            If ((inStr(keys, lastHotkeyTyped, false) || (inStr(numbers, lastHotkeyTyped, false) || A_PriorKey == "Space") || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace")
+            If ((InStr(keys, lastHotkeyTyped, false) || (InStr(numbers, lastHotkeyTyped, false) || A_PriorKey == "Space") || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace")
                 && lastHotkeyTyped != "" && A_PriorKey != "" && A_PriorKey != lastHotkeyTyped) {
                 If (A_PriorKey == "Space")
                     Send, {SPACE}
@@ -4886,6 +4893,7 @@ keyTrack() {
                     Send, {Backspace}
                 Else
                     Send, %A_PriorKey%
+                tooltip, sent %A_PriorKey%
                 lastHotkeyTyped := A_PriorKey
             }
 
