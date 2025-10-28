@@ -3225,10 +3225,11 @@ Return
 
     rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
+
     ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && ((rlsTime - initTime) < DoubleClickTime/2)
+        && (timeDiff < DoubleClickTime/2)
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)
         && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8"))  {
 
@@ -3243,7 +3244,7 @@ Return
 
             If (pt.CurrentControlType == 50031 || pt.CurrentControlType == 50035) {
                 ControlGetFocus, isTree, ahk_id %_winIdU%
-                If (isTree == "SysTreeView321")
+                If (InStr(isTree, "SysTreeView32", True))
                     Send, {tab}
 
                 If (pt.CurrentControlType == 50035) ; this most likely would indicate an explorer based window
@@ -3259,6 +3260,7 @@ Return
                 }
                 Else If !isWin11
                     Send, {F5}
+
                 Send, ^{NumpadAdd}
             }
         } catch e {
@@ -3271,7 +3273,7 @@ Return
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
-        && ((rlsTime - initTime) < DoubleClickTime/2)) {
+        && (timeDiff < DoubleClickTime/2)) {
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
@@ -3296,8 +3298,8 @@ Return
         }
 
         If inStr(pt.Name, "Refresh", True) {
-            SendCtrlAdd(_winIdU, prevPath,, wmClassD)
-            ; SetTimer, SendCtrlAddLabel, -1
+            If !IsTabbedExplorer(_winIdU)
+                SendCtrlAdd(_winIdU, prevPath,, wmClassD)
         }
         Else {
             currentPath := ""
@@ -3309,13 +3311,12 @@ Return
             }
             If (currentPath != prevPath) {
                 SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
-                ; SetTimer, SendCtrlAddLabel, -1
             }
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-            && (_winCtrlD == "SysTreeView321")
-            && ((rlsTime - initTime) < DoubleClickTime/2)
+            && (InStr(_winCtrlD, "SysTreeView32", True))
+            && (timeDiff < DoubleClickTime/2)
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
@@ -3325,8 +3326,11 @@ Return
                 break
             sleep, 2
         }
-        SendCtrlAdd(_winIdU, prevPath, currentPath,wmClassD)
-        ; SetTimer, SendCtrlAddLabel, -1
+        Send, {Tab}
+        WaitForExplorerLoad(_winIdD)
+        Send, ^{NumpadAdd}
+        ; tooltip, %prevPath% -> %currentPath%
+        ; SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
     }
     Else If (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25) {
         try {
@@ -3352,6 +3356,29 @@ Return
     SetTimer, mouseTrack, On
 Return
 #If
+
+IsTabbedExplorer(targetHwndID) {
+    ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %targetHwndID%
+    ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %targetHwndID%
+    ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %targetHwndID%
+    Return (OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
+}
+
+WaitForExplorerLoad(targetHwndID) {
+    Global UIA
+    try {
+        exEl := UIA.ElementFromHandle(targetHwndID)
+        shellEl := exEl.FindFirstByName("Items View")
+        shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+    } catch e {
+        tooltip, TIMED OUT!!!!
+        UIA :=  ;// set to a different value
+        ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+        UIA := UIA_Interface() ; Initialize UIA interface
+        UIA.ConnectionTimeout := 6000
+    }
+    Return
+}
 
 SendCtrlAddLabel:
     SendCtrlAdd(_winIdU, prevPath, currentPath)
@@ -3836,8 +3863,6 @@ Return
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "") {
     Global UIA
 
-    ; tooltip, here1
-
     If (initTargetClass == "")
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
     Else
@@ -3880,11 +3905,11 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             && initHoveredCtrlNN != "DirectUIHWND8") {
             loop 200 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %initTargetHwnd%
+                ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %initTargetHwnd%
+                ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %initTargetHwnd%
+                ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %initTargetHwnd%
                 ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %initTargetHwnd%
                 ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %initTargetHwnd%
-                ControlGet, OutputVar3, Visible ,, DirectUIHWND4,  ahk_id %initTargetHwnd%
-                ControlGet, OutputVar3, Visible ,, DirectUIHWND6,  ahk_id %initTargetHwnd%
-                ControlGet, OutputVar3, Visible ,, DirectUIHWND8,  ahk_id %initTargetHwnd%
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
                     break
                 sleep, 2
@@ -3893,24 +3918,24 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         Else {
             If (InStr(initHoveredCtrlNN,"SysListView32",True))
                 OutputVar1 := 1
-            Else If (initHoveredCtrlNN == "DirectUIHWND2")
-                OutputVar2 := 1
-            Else If (initHoveredCtrlNN == "DirectUIHWND3")
-                OutputVar3 := 1
             Else If (initHoveredCtrlNN == "DirectUIHWND4")
                 OutputVar4 := 1
             Else If (initHoveredCtrlNN == "DirectUIHWND6")
                 OutputVar6 := 1
             Else If (initHoveredCtrlNN == "DirectUIHWND8")
                 OutputVar8 := 1
+            Else If (initHoveredCtrlNN == "DirectUIHWND2")
+                OutputVar2 := 1
+            Else If (initHoveredCtrlNN == "DirectUIHWND3")
+                OutputVar3 := 1
         }
-        ; tooltip, %OutputVal1% - %OutputVal2% - %OutputVal3%
+
         If GetKeyState("LButton", "P")
             Return
 
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1) {
 
-            ; tooltip, init focus is %initHoveredCtrlNN% - %OutputVal1% - %OutputVal2% - %OutputVal3%
+            ; tooltip, init focus is %initHoveredCtrlNN% - %OutputVar1% - %OutputVar2% - %OutputVar3% - %OutputVar4% - %OutputVar6% - %OutputVar8%
             WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
             WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
@@ -3939,7 +3964,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             If (OutputVar1 == 1) {
                 TargetControl := "SysListView321"
             }
-            Else If ((OutputVar2 == 1 && OutputVar3 == 1)  && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
+            Else If (((OutputVar2 == 1 || OutputVar3 == 1) && !OutputVar4 && !OutputVar6 && !OutputVar8)
+                    && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
                 OutHeight2 := 0
                 OutHeight3 := 0
                 ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
@@ -3950,10 +3976,15 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                     TargetControl := "DirectUIHWND3"
             }
             Else {
-                TargetControl := initHoveredCtrlNN
+                If OutputVar4
+                    TargetControl := "DirectUIHWND4"
+                Else If OutputVar6
+                    TargetControl := "DirectUIHWND6"
+                Else If OutputVar8
+                    TargetControl := "DirectUIHWND8"
             }
 
-            tooltip, targeted is %TargetControl% with init at %initHoveredCtrlNN% ; - %OutHeight2% - %OutHeight3%
+            ; tooltip, targeted is %TargetControl% with init at %initHoveredCtrlNN%
             If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initHoveredCtrlNN != TargetControl) {
                 loop, 500 {
                     ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
