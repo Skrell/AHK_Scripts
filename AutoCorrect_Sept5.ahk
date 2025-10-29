@@ -3230,35 +3230,37 @@ Return
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < DoubleClickTime/2)
-        && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)
-        && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8"))  {
+        && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
+        && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
 
         SetTimer, SendCtrlAddLabel, -125
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (_winCtrlD == "SysHeader321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
+        && (InStr(_winCtrlD,"SysHeader32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
         && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3 != 0xFFFFFF)) {
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
 
-            If (pt.CurrentControlType == 50031 || pt.CurrentControlType == 50035) {
-                ControlGetFocus, isTree, ahk_id %_winIdU%
-                If (InStr(isTree, "SysTreeView32", True))
-                    Send, {tab}
-
-                If (pt.CurrentControlType == 50035) ; this most likely would indicate an explorer based window
+            If (pt.CurrentControlType == 50031) {
+                Send, ^{NumpadAdd}
+                Return
+            } ; this specific combination is needed for the "Name" column ONLY
+            Else If (pt.CurrentControlType == 50033 && (_winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")) {
+                Send, ^{NumpadAdd}
+                Return
+            }
+            Else If (pt.CurrentControlType == 50035) { ; this most likely would indicate an explorer based window
+                loop 20
                 {
-                    loop 20
-                    {
-                        ControlFocus, SysListView321, ahk_id %_winIdU%
-                        ControlGetFocus, canCenter, ahk_id %_winIdU%
-                        If (canCenter == "SysListView321")
-                            break
-                        sleep, 5
-                    }
+                    ControlFocus, SysListView321, ahk_id %_winIdU%
+                    ControlGetFocus, canCenter, ahk_id %_winIdU%
+                    If (canCenter == "SysListView321")
+                        break
+                    sleep, 5
                 }
-                Else If !isWin11
+
+                If !isWin11
                     Send, {F5}
 
                 Send, ^{NumpadAdd}
@@ -3298,8 +3300,10 @@ Return
         }
 
         If inStr(pt.Name, "Refresh", True) {
-            If !IsTabbedExplorer(_winIdU)
-                SendCtrlAdd(_winIdU, prevPath,, wmClassD)
+            ; If !IsTabbedExplorer(_winIdU)
+            ; SendCtrlAdd(_winIdU, prevPath,, wmClassD)
+            WaitForExplorerLoad(_winIdD)
+            Send, ^{NumpadAdd}
         }
         Else {
             currentPath := ""
@@ -3307,10 +3311,12 @@ Return
                 currentPath := GetExplorerPath(_winIdD)
                 If (currentPath != "" && currentPath != prevPath)
                     break
-                sleep, 2
+                sleep, 1
             }
             If (currentPath != prevPath) {
-                SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
+                ; SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
+                WaitForExplorerLoad(_winIdD)
+                Send, ^{NumpadAdd}
             }
         }
     }
@@ -3324,9 +3330,8 @@ Return
             currentPath := GetExplorerPath(_winIdD)
             If (currentPath != "" && currentPath != prevPath)
                 break
-            sleep, 2
+            sleep, 1
         }
-        Send, {Tab}
         WaitForExplorerLoad(_winIdD)
         Send, ^{NumpadAdd}
         ; tooltip, %prevPath% -> %currentPath%
@@ -3357,6 +3362,57 @@ Return
 Return
 #If
 
+; FocusHwndFast(hwnd)
+; - Activates the top-level window, brings it to foreground safely, and sets keyboard focus to 'hwnd'.
+; - Pure Win32, avoids UIA. Works only for HWND-backed controls.
+FocusHwndFast(hwndTarget) {
+    if !DllCall("IsWindow", "ptr", hwndTarget)
+        return false
+
+    ; Get top-level window
+    hwndTop := DllCall("GetAncestor", "ptr", hwndTarget, "uint", 2, "ptr") ; GA_ROOT
+    if (!hwndTop)
+        hwndTop := hwndTarget
+
+    ; If minimized, restore first
+    if (DllCall("IsIconic", "ptr", hwndTop))
+        DllCall("ShowWindow", "ptr", hwndTop, "int", 9)  ; SW_RESTORE
+
+    hFG := DllCall("GetForegroundWindow", "ptr")
+    tidFG := DllCall("GetWindowThreadProcessId", "ptr", hFG,     "uint*", 0, "uint")
+    tidTW := DllCall("GetWindowThreadProcessId", "ptr", hwndTop, "uint*", 0, "uint")
+    tidAHK := DllCall("GetCurrentThreadId", "uint")
+
+    ; Safely steal foreground using AttachThreadInput to bypass focus restrictions.
+    ; Sequence: attach → bring to top/activate → set focus → detach.
+    DllCall("AttachThreadInput", "uint", tidFG, "uint", tidAHK, "int", 1)
+    DllCall("AttachThreadInput", "uint", tidTW, "uint", tidAHK, "int", 1)
+
+    DllCall("BringWindowToTop", "ptr", hwndTop)
+    DllCall("SetForegroundWindow", "ptr", hwndTop)
+    DllCall("SetActiveWindow", "ptr", hwndTop)
+
+    ; If the target is not focusable, this will quietly do nothing.
+    ok := DllCall("SetFocus", "ptr", hwndTarget, "ptr")
+
+    ; Verify (still attached)
+    curFocus := DllCall("GetFocus", "ptr")
+    success := (curFocus = hwndTarget)
+
+    ; Detach
+    DllCall("AttachThreadInput", "uint", tidTW, "uint", tidAHK, "int", 0)
+    DllCall("AttachThreadInput", "uint", tidFG, "uint", tidAHK, "int", 0)
+
+    return success
+}
+
+FocusByClassNN(classNN, winTitle:="A") {
+    ControlGet, hCtl, Hwnd,, %classNN%, %winTitle%
+    if (!hCtl)
+        return false
+    return FocusHwndFast(hCtl)
+}
+
 IsTabbedExplorer(targetHwndID) {
     ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %targetHwndID%
     ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %targetHwndID%
@@ -3370,6 +3426,14 @@ WaitForExplorerLoad(targetHwndID) {
         exEl := UIA.ElementFromHandle(targetHwndID)
         shellEl := exEl.FindFirstByName("Items View")
         shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+        loop 50 {
+            ; shellEl.setFocus()
+            FocusByClassNN("DirectUIHWND2")
+            sleep, 1
+            ControlGetFocus, testFocus, ahk_id %targetHwndID%
+            if (InStr(testFocus, "DirectUIHWND", false))
+                break
+        }
     } catch e {
         tooltip, TIMED OUT!!!!
         UIA :=  ;// set to a different value
