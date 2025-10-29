@@ -1116,6 +1116,7 @@ MButton::
     If (!hWnd)
         return
 
+    BlockInput, MouseMove
     WinGet, isMax, MinMax, ahk_id %hWnd%
     WinGetClass, cls, ahk_id %hWnd%
     If (skipClasses.HasKey(cls) || isMax == 1)
@@ -1153,6 +1154,17 @@ MButton::
         BR := True
 
     WinSet, Transparent, 255, ahk_id %hWnd%
+
+    If (wh/abs(monB-monT) > 0.95) {
+        WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
+        WinGetPosEx(hWnd, wx0, wy0, ww, wh, offsetX, offsetY)
+        leftWinEdge   := wx0
+        topWinEdge    := wy0
+        rightWinEdge  := wx0 + ww
+        bottomWinEdge := wy0 + wh
+    }
+
+    BlockInput, MouseMoveOff
 
     Critical, On
     while GetKeyState("MButton", "P")
@@ -1215,16 +1227,6 @@ MButton::
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
 
-        WinGet, trans, Transparent, ahk_id %hWnd%
-        If (trans == 255 && (abs(dx) > 5 || abs(dy) > 5)) {
-            Blockinput, MouseMove
-            WinSet, Transparent, 225, ahk_id %hWnd%
-            sleep, 8
-            WinSet, Transparent, 200, ahk_id %hWnd%
-            sleep, 8
-            WinSet, Transparent, 185, ahk_id %hWnd%
-            Blockinput, MouseMoveOff
-        }
 
         If WinExist("ahk_class tooltips_class32")
             WinClose, ahk_class tooltips_class32
@@ -1236,6 +1238,17 @@ MButton::
 
         dx := mx - mx0
         dy := my - my0
+
+        WinGet, trans, Transparent, ahk_id %hWnd%
+        If (trans == 255 && (abs(dx) > 5 || abs(dy) > 5)) {
+            Blockinput, MouseMove
+            WinSet, Transparent, 225, ahk_id %hWnd%
+            sleep, 8
+            WinSet, Transparent, 200, ahk_id %hWnd%
+            sleep, 8
+            WinSet, Transparent, 185, ahk_id %hWnd%
+            Blockinput, MouseMoveOff
+        }
 
         GetMonitorRectForMouse(mx, my, UseWorkArea, monL, monT, monR, monB)
         monW := monR-monL
@@ -1458,7 +1471,7 @@ MButton::
     }
     Critical, Off
 
-    If MouseIsOverTitleBar(mx, my) && (abs(checkClickMx - mx0) <= 5) && (abs(checkClickMy - my0) <= 5) {
+    If (MouseIsOverTitleBar(mx, my) && (abs(checkClickMx - mx0) <= 5) && (abs(checkClickMy - my0) <= 5)) {
         WinSet, Transparent, Off, ahk_id %hWnd%
         GoSub, SwitchDesktop
     }
@@ -3790,9 +3803,6 @@ ActivateWindow:
 
 Return
 
-
-; #If MouseIsOverTitleBar() && !MbuttonIsEnter
-; Mbutton::
 SwitchDesktop:
     Global movehWndId
     Global GoToDesktop := False
@@ -3835,13 +3845,13 @@ SwitchDesktop:
     }
     Menu, vdeskMenu, Show
 
-    sleep, 1000
+    If GoToDesktop
+        sleep, 1000
     StopRecursion := False
     SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
 
 Return
-; #If
 
 SendWindow:
     Global movehWndId
@@ -3851,9 +3861,6 @@ SendWindow:
     moveConst := 0
 
     DetectHiddenWindows, On
-
-    ; If !GoToDesktop
-        ; StopRecursion := True
 
     InitialDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
 
@@ -3901,9 +3908,6 @@ SendWindow:
         WinSet, Transparent, 255, ahk_id %movehWndId%
 
     DetectHiddenWindows, Off
-
-    ; If !GoToDesktop
-        ; StopRecursion := False
 Return
 
 SendWindowAndGo:
@@ -3934,7 +3938,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
     WinGet, lastCheckID, ID, A
     If (lastCheckID != initTargetHwnd) {
-        SetTimer, SendCtrlAdd, Off
+        SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
         tooltip, %lClassCheck% - %lastCheckID% - %initTargetHwnd%
         Return
