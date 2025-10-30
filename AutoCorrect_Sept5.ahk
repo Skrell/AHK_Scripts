@@ -733,31 +733,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         LbuttonEnabled := True
                         Return
                     }
-                }
-                Else If ((OutputVar2 == 1 || OutputVar3 == 1)  && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
-                    ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %hWnd%, , , ,
-                    ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %hWnd%, , , ,
-                    If (OutHeight2 > OutHeight3)
-                        TargetControl := "DirectUIHWND2"
-                    Else
-                        TargetControl := "DirectUIHWND3"
-                }
-
-                If (vWinClass == "CabinetWClass" || vWinClass == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
-                    try {
-                        exEl := UIA.ElementFromHandle(hWnd)
-                        shellEl := exEl.FindFirstByName("Items View")
-                        shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
-                    } catch e {
-                        tooltip, TIMED OUT!!!!
-                        UIA :=  ;// set to a different value
-                        ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                        UIA := UIA_Interface() ; Initialize UIA interface
-                        UIA.ConnectionTimeout := 6000
-                        SetTimer, keyTrack,   On
-                        SetTimer, mouseTrack, On
-                        LbuttonEnabled := True
-                        Return
+                    Else {
+                        loop, 100 {
+                            ControlFocus, %TargetControl%, ahk_id %hWnd%
+                            ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
+                            If (testCtrlFocus == TargetControl)
+                                break
+                            sleep, 2
+                        }
                     }
                 }
 
@@ -765,13 +748,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 BlockInput, On
 
                 If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
-                    loop, 100 {
-                        ControlFocus, %TargetControl%, ahk_id %hWnd%
-                        ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                        If (testCtrlFocus == TargetControl)
-                            break
-                        sleep, 2
-                    }
+                    WaitForExplorerLoad(hWnd)
                 }
 
                 If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
@@ -790,27 +767,27 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         Send, ^{NumpadAdd}
                         Send, {Ctrl UP}
 
-                        If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
-                            sleep, 125
-
-                            If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
-                                loop, 500 {
-                                    ControlFocus , %initFocusedCtrl%, ahk_id %hWnd%
-                                    ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                                    If (testCtrlFocus == initFocusedCtrl)
-                                        break
-                                    sleep, 1
-                                }
-                                If (GetKeyState("Lbutton", "P")) {
-                                    SetTimer, keyTrack,   On
-                                    SetTimer, mouseTrack, On
-                                    LbuttonEnabled := True
-                                    BlockInput, Off
-                                    Critical, Off
-                                    Return
-                                }
+                        ; If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+                        sleep, 125
+                        ; tooltip, %initFocusedCtrl% - %TargetControl%
+                        If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
+                            loop, 500 {
+                                ControlFocus , %initFocusedCtrl%, ahk_id %hWnd%
+                                ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
+                                If (testCtrlFocus == initFocusedCtrl)
+                                    break
+                                sleep, 1
+                            }
+                            If (GetKeyState("Lbutton", "P")) {
+                                SetTimer, keyTrack,   On
+                                SetTimer, mouseTrack, On
+                                LbuttonEnabled := True
+                                BlockInput, Off
+                                Critical, Off
+                                Return
                             }
                         }
+                        ; }
                     }
                 }
 
@@ -841,6 +818,70 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     SetTimer, mouseTrack, On
     LbuttonEnabled := True
     Return
+}
+
+; Waits until the shell view’s item list has finished populating.
+; Works for both:
+;   - Explorer windows (ahk_class CabinetWClass)
+;   - Common file dialogs (ahk_class #32770)
+; Returns an object { hwnd: <hwnd>, itemsView: <UIA element>, count: <int> }
+; or 0 on timeout.
+WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll := 100) {
+    if !hwnd {
+        ; If no hwnd provided, use the active window (either class will work)
+        WinGet, hwnd, ID, A
+        if !hwnd
+            return 0
+    }
+
+    UIA   := UIA_Interface()
+    root  := UIA.ElementFromHandle(hwnd)
+    if !root
+        return 0
+
+    start := A_TickCount
+    items := ""
+
+    ; -------- 1) Find the shell view’s item list (works across Explorer + dialogs)
+    ; Try List first (Explorer “Items View”), then DataGrid/Table (some dialogs), then Tree (rare)
+    for _, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
+        items := root.FindFirstBy("ControlType=" . ctlType)
+        if (items)
+            break
+    }
+    if !items
+        return 0
+
+    ; -------- 2) If there’s an active “Working on it…” progress bar, wait for it to go away
+    ; Not all windows show one; that’s fine—we’ll proceed either way.
+    while (A_TickCount - start < timeout) {
+        prog := root.FindFirstBy("ControlType=UIA_ProgressBarControlTypeId")
+        if !prog
+            break
+        ; Heuristic: if the progress bar is offscreen/hidden, treat as gone
+        off := prog.GetCurrentPropertyValue(UIA_IsOffscreenPropertyId)
+        if (off = 1)
+            break
+        Sleep, %poll%
+    }
+
+    ; -------- 3) Wait for the item count to stabilize
+    last := -1, stable := 0
+    while (A_TickCount - start < timeout) {
+        ; Children() is inexpensive here and works for both Explorer + dialogs.
+        cnt := items.Children().Length()
+
+        if (cnt = last) {
+            stable++
+            if (stable >= stableChecks)
+                return { hwnd: hwnd, itemsView: items, count: cnt }
+        } else {
+            last := cnt
+            stable := 0
+        }
+        Sleep, %poll%
+    }
+    return 0
 }
 
 WaitForFadeInStop(hwnd) {
@@ -1108,6 +1149,7 @@ MButton::
     isRbutton  := False
     switchingBackToMove := False
     switchingBacktoResize := False
+    skipAlwaysOnTop := False
 
     MouseGetPos, mx0, my0, hWnd, ctrl, 2
     checkClickMx := mx0
@@ -1165,6 +1207,8 @@ MButton::
     }
 
     BlockInput, MouseMoveOff
+
+    skipAlwaysOnTop := IsAlwaysOnTop(hWnd)
 
     Critical, On
     while GetKeyState("MButton", "P")
@@ -1478,7 +1522,8 @@ MButton::
     Else If (wh/abs(monB-monT) > 0.95)
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
 
-    WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
+    If !skipAlwaysOnTop
+        WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
     WinSet, Transparent, Off, ahk_id %hWnd%
     StopRecursion := False
     SetTimer, keyTrack, On
@@ -4118,12 +4163,12 @@ explorerGetPath(hwnd := 0) { ; https://www.autohotkey.com/boards/viewtopic.php?p
     WinGetTitle, winTitle, ahk_id %hwndId%
     BlockInput, MouseMove
     WinGet, ExStyle, ExStyle, ahk_id %hwndId%
-    If (ExStyle & 0x8)
+    If IsAlwaysOnTop(hwndID)
         Gui, GUI4Boarder: Color, 0x00FF00
     Else
         Gui, GUI4Boarder: Color, 0xFF0000
     GoSub, DrawRect
-    sleep, 100
+    sleep, 200
     ClearRect()
     Gui, GUI4Boarder: Color, %border_color%
     WinSet, AlwaysOnTop, toggle, ahk_id %hwndId%
@@ -4131,6 +4176,14 @@ explorerGetPath(hwnd := 0) { ; https://www.autohotkey.com/boards/viewtopic.php?p
     HotKey, Rbutton, DoNothing, Off
 Return
 #If
+
+IsAlwaysOnTop(hwndID) {
+    WinGet, ExStyle, ExStyle, ahk_id %hwndId%
+    If (ExStyle & 0x8)
+        Return True
+    Else
+        Return False
+}
 
 #If MouseIsOverTaskbarBlank()
 Lbutton & Rbutton::
