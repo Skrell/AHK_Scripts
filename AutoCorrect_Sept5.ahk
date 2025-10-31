@@ -3301,6 +3301,8 @@ Return
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
 
             If (pt.CurrentControlType == 50031) {
+                If (wmClassD == "#32770")
+                    ControlFocus, %_winCtrlD%, ahk_id %_winIdU%
                 Send, ^{NumpadAdd}
                 Return
             } ; this specific combination is needed for the "Name" column ONLY
@@ -3308,16 +3310,8 @@ Return
                 Send, ^{NumpadAdd}
                 Return
             }
-            Else If (pt.CurrentControlType == 50035) { ; this most likely would indicate an explorer based window
-                loop 20
-                {
-                    ControlFocus, SysListView321, ahk_id %_winIdU%
-                    ControlGetFocus, canCenter, ahk_id %_winIdU%
-                    If (canCenter == "SysListView321")
-                        break
-                    sleep, 5
-                }
-
+            Else If (pt.CurrentControlType == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
+                ControlFocus, SysListView321, ahk_id %_winIdU%
                 If !isWin11
                     Send, {F5}
 
