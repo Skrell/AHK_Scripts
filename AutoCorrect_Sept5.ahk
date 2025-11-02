@@ -3275,7 +3275,7 @@ Return
         lbX1 += 1
         lbY1 += 1
     }
-    CoordMode, Mouse, screen
+    CoordMode, Mouse, Screen
 
     KeyWait, LButton, U T5
 
@@ -3287,7 +3287,7 @@ Return
     ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (timeDiff < DoubleClickTime/2)
+        && (timeDiff < floor(DoubleClickTime/2))
         && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
 
@@ -3301,7 +3301,7 @@ Return
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
 
             If (pt.CurrentControlType == 50031) {
-                If (wmClassD == "#32770")
+                If (wmClassD == "#32770" || _winCtrlD == "DirectUIHWND3")
                     ControlFocus, %_winCtrlD%, ahk_id %_winIdU%
                 Send, ^{NumpadAdd}
                 Return
@@ -3374,7 +3374,7 @@ Return
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
             && (InStr(_winCtrlD, "SysTreeView32", True))
-            && (timeDiff < DoubleClickTime/2)
+            && (timeDiff < floor(DoubleClickTime/2))
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
@@ -6003,6 +6003,39 @@ GetActiveExplorerPath()
     }
 }
 
+; ChatGPT
+GetExplorerPath(hwnd:="")  {
+    if hwnd
+        WinGetClass, class, ahk_id %hwnd%
+    else
+        WinGetClass, class, A
+
+    if (class = "CabinetWClass") {
+        for window in ComObjCreate("Shell.Application").Windows {
+            try {
+                if (window.hwnd = WinActive("A"))
+                    return window.Document.Folder.Self.Path
+            }
+        }
+    }
+    else if (class = "#32770") {
+        ; For file open/save dialogs
+        hwnd := WinActive("A")
+        hCtrl := DllCall("FindWindowEx", "Ptr", hwnd, "Ptr", 0, "Str", "ComboBoxEx32", "Ptr", 0, "Ptr")
+        if (hCtrl)
+            hCtrl := DllCall("FindWindowEx", "Ptr", hCtrl, "Ptr", 0, "Str", "ComboBox", "Ptr", 0, "Ptr")
+        if (hCtrl)
+        {
+            len := DllCall("SendMessage", "Ptr", hCtrl, "UInt", 0x0E, "Ptr", 0, "Ptr", 0) ; WM_GETTEXTLENGTH
+            VarSetCapacity(buf, len * 2 + 2)
+            DllCall("SendMessage", "Ptr", hCtrl, "UInt", 0x0D, "Ptr", len + 1, "Ptr", &buf) ; WM_GETTEXT
+            return StrGet(&buf)
+        }
+    }
+
+    return ""
+}
+
 ; https://www.reddit.com/r/AutoHotkey/comments/10fmk4h/get_path_of_active_explorer_tab/
 GetExplorerPath(hwnd:="") {
     ; tooltip, entering
@@ -6025,24 +6058,15 @@ GetExplorerPath(hwnd:="") {
         WinGetTitle, expTitle, ahk_id %hwnd%
         cleaned := StrReplace(expTitle, " - File Explorer",,,1)
         ; tooltip, cleaned is %cleaned%
-        loop 500 {
-            If (cleaned == "This PC"
-                || cleaned == "Downloads"
-                || cleaned == "Recycle Bin"
-                || cleaned == "Pictures"
-                || cleaned == "Videos"
-                || cleaned == "Documents"
-                || cleaned == "Music"
-                || cleaned == "Desktop" )
+        Loop, 50  ; limit to ~0.75 s total worst-case
+        {
+            if (RegExMatch(cleaned, "i)^(This PC|Downloads|Recycle Bin|Pictures|Videos|Documents|Music|Desktop)$"))
                 break
-            Else If inStr(cleaned, "\", False) {
+            else if InStr(cleaned, "\")
                 break
-            }
-            Else {
-                WinGetTitle, expTitle, ahk_id %hwnd%
-                cleaned := StrReplace(expTitle, " - File Explorer",,,1)
-            }
-            sleep, 1
+            Sleep, 10  ; smoother pacing (~500 ms max total)
+            WinGetTitle, expTitle, ahk_id %hwnd%
+            cleaned := Trim(StrReplace(expTitle, " - File Explorer"))
         }
 
         Return cleaned
