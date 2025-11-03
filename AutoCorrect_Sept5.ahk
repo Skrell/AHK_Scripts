@@ -652,7 +652,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
                 If (initFocusedCtrl != "")
                     break
-                sleep, 2
+                sleep, 1
             }
 
             If (vWinClass == "#32770") {
@@ -718,7 +718,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %hWnd%
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
                     break
-                sleep, 2
+                sleep, 1
             }
 
             ; tooltip, init focus is %initFocusedCtrl% and proc is %proc%
@@ -739,13 +739,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                             ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
                             If (testCtrlFocus == TargetControl)
                                 break
-                            sleep, 2
+                            sleep, 1
                         }
                     }
                 }
 
                 Critical, On
-                BlockInput, On
 
                 If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
                     WaitForExplorerLoad(hWnd)
@@ -755,21 +754,21 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     SetTimer, keyTrack,   On
                     SetTimer, mouseTrack, On
                     LbuttonEnabled := True
-                    BlockInput, Off
                     Critical, Off
                     Return
                 }
                 Else {
-                    ; WaitForFadeInStop(hWnd)
                     WinGet, finalActiveHwnd, ID, A
                     If (hWnd == finalActiveHwnd) {
+                        BlockInput, On
                         Send, {Ctrl UP}
                         Send, ^{NumpadAdd}
                         Send, {Ctrl UP}
+                        BlockInput, Off
 
-                        ; If (vWinClass == "#32770" || vWinClass == "CabinetWClass") {
-                        sleep, 125
-                        ; tooltip, %initFocusedCtrl% - %TargetControl%
+                        If (vWinClass == "#32770" || vWinClass == "CabinetWClass")
+                            sleep, 125
+
                         If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
                             loop, 500 {
                                 ControlFocus , %initFocusedCtrl%, ahk_id %hWnd%
@@ -782,16 +781,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                                 SetTimer, keyTrack,   On
                                 SetTimer, mouseTrack, On
                                 LbuttonEnabled := True
-                                BlockInput, Off
                                 Critical, Off
                                 Return
                             }
                         }
-                        ; }
                     }
                 }
-
-                BlockInput, Off
                 Critical, Off
             }
 
@@ -998,13 +993,13 @@ Return
         ControlGetFocus, TargetControl, A
         If (TargetControl == wuCtrl) {
             BlockInput, On
-            If !GetKeyState("Ctrl") {
+            If !GetKeyState("Control") {
                 Send, {Ctrl Up}
             }
             sleep, 100
             Send, ^{NumpadAdd}
             sleep, 100
-            If !GetKeyState("Ctrl") {
+            If !GetKeyState("Control") {
                 Send, {Ctrl Up}
             }
             BlockInput, Off
@@ -1042,13 +1037,13 @@ Return
         ControlGetFocus, TargetControl, A
         If (TargetControl == wuCtrl) {
             BlockInput, On
-            If !GetKeyState("Ctrl") {
+            If !GetKeyState("Control") {
                 Send, {Ctrl Up}
             }
             sleep, 100
             Send, ^{NumpadAdd}
             sleep, 100
-            If !GetKeyState("Ctrl") {
+            If !GetKeyState("Control") {
                 Send, {Ctrl Up}
             }
             BlockInput, Off
@@ -1870,7 +1865,7 @@ Enter::
 Return
 #If
 
-#If !disableEnter
+#If !disableEnter && (WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770"))
 ~Enter::
     ControlGetFocus, entCtrl, A
     WinGetClass, entCl, A
@@ -1878,26 +1873,34 @@ Return
     WinGet, entID, ID, A
     If     (entCl == "CabinetWClass" && InStr(entCtrl, "Edit", True))
         || (entCl == "#32770" && InStr(entCtrl, "Edit", True) && (InStr(entTi, "Save", True) || InStr(entTi, "Open", True))) {
+
         Keywait, Enter, U T3
-        try {
-            exEl := UIA.ElementFromHandle(hWnd)
-            shellEl := exEl.FindFirstByName("Items View")
-            shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
-        } catch e {
-            tooltip, TIMED OUT!!!!
-            UIA :=  ;// set to a different value
-            ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-            UIA := UIA_Interface() ; Initialize UIA interface
-            UIA.ConnectionTimeout := 6000
-            SetTimer, keyTrack,   On
-            SetTimer, mouseTrack, On
-            LbuttonEnabled := True
-            Return
-        }
+
+        WaitForExplorerLoad(entID)
         WinGet, checkID, ID, A
         If (checkID == entID)
             Send, ^{NumpadAdd}
     }
+Return
+
+~$F2::
+    LbuttonEnabled := False
+    StopRecursion  := True
+    SetTimer, mouseTrack, Off
+    SetTimer, keyTrack,   Off
+
+    KeyWait, F2, U T3
+
+    loop 10000 {
+        If (GetKeyState("Enter") || GetKeyState("Lbutton") || GetKeyState("Esc"))
+            break
+        sleep, 1
+    }
+
+    LbuttonEnabled := True
+    StopRecursion  := False
+    SetTimer, mouseTrack, On
+    SetTimer, keyTrack,   On
 Return
 #If
 
@@ -1935,30 +1938,6 @@ Return
     X_PriorPriorHotKey :=
 Return
 
-$F2::
-    LbuttonEnabled := False
-    StopRecursion := True
-    SetTimer, mouseTrack, Off
-    SetTimer, keyTrack,   Off
-
-    KeyWait, F2, U T1
-    Send, {F2}
-    sleep, 150
-    ; ControlFocus, Edit1, A
-    ; result := UIA.GetFocusedElement()
-    ; ControlFocus, Edit1, A
-    ; tooltip, % "name is " result.value
-    loop 500 {
-        If GetKeyState("Enter") || GetKeyState("Lbutton") || GetKeyState("Esc")
-            break
-        sleep, 10
-    }
-
-    LbuttonEnabled := True
-    StopRecursion := False
-    SetTimer, mouseTrack, On
-    SetTimer, keyTrack,   On
-Return
 
 ; Ctl+Tab in chrome to goto recent
 prevChromeTab()
@@ -3205,7 +3184,6 @@ Return
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (_winCtrlD == "SysListView321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")) {
 
-        currentPath    := ""
         ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3%  - %X1% %X2% %Y1% %Y2% - %_winCtrlD% - %A_ThisHotkey% - %A_PriorHotkey%
         If ((LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
             If (_winCtrlD == "SysListView321") {
@@ -3222,25 +3200,16 @@ Return
         LbuttonEnabled     := False
 
         If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
+            currentPath    := ""
             loop 100 {
                 currentPath := GetExplorerPath(_winIdD)
                 If (currentPath != "" && prevPath != currentPath )
                     break
-                sleep, 2
+                sleep, 1
             }
             ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
-                try {
-                    exEl := UIA.ElementFromHandle(_winIdD)
-                    shellEl := exEl.FindFirstByName("Items View")
-                    shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
-                } catch e {
-                    tooltip, TIMED OUT!!!!
-                    UIA :=  ;// set to a different value
-                    ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                    UIA := UIA_Interface() ; Initialize UIA interface
-                    UIA.ConnectionTimeout := 6000
-                }
+                WaitForExplorerLoad(_winIdD)
                 Send, ^{NumpadAdd}
             }
 
@@ -3250,7 +3219,8 @@ Return
             Return
         }
         Else {
-            SendCtrlAdd(_winIdD,,wmClassD)
+            tooltip, sending
+            SendCtrlAdd(_winIdD,,,wmClassD)
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
             sleep, 250
@@ -3280,7 +3250,7 @@ Return
         lbX1 += 1
         lbY1 += 1
     }
-    CoordMode, Mouse, Screen
+    CoordMode, Mouse, screen
 
     KeyWait, LButton, U T5
 
@@ -3292,7 +3262,7 @@ Return
     ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (timeDiff < floor(DoubleClickTime/2))
+        && (timeDiff < DoubleClickTime/2)
         && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
 
@@ -3306,7 +3276,7 @@ Return
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
 
             If (pt.CurrentControlType == 50031) {
-                If (wmClassD == "#32770" || _winCtrlD == "DirectUIHWND3")
+                If (wmClassD == "#32770")
                     ControlFocus, %_winCtrlD%, ahk_id %_winIdU%
                 Send, ^{NumpadAdd}
                 Return
@@ -3368,15 +3338,13 @@ Return
                     break
                 sleep, 1
             }
-            If (currentPath != prevPath) {
-                WaitForExplorerLoad(_winIdD)
-                Send, ^{NumpadAdd}
-            }
+            WaitForExplorerLoad(_winIdD)
+            Send, ^{NumpadAdd}
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
             && (InStr(_winCtrlD, "SysTreeView32", True))
-            && (timeDiff < floor(DoubleClickTime/2))
+            && (timeDiff < DoubleClickTime/2)
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
@@ -3986,18 +3954,15 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     }
 
     If (!GetKeyState("LShift","P" )
-        && !GetKeyState("LButton", "P")
         && lClassCheck != "WorkerW" && lClassCheck != "ProgMan"
         && lClassCheck != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
 
         MouseGetPos, , , , initHoveredCtrlNN
-
         while (initHoveredCtrlNN == "ShellTabWindowClass1") {
             MouseGetPos, , , , initHoveredCtrlNN
         }
 
-        If GetKeyState("LButton", "P")
-            Return
+        GetKeyState("LButton","P") ? Return : ""
 
         OutputVar1 := 0
         OutputVar2 := 0
@@ -4012,6 +3977,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             && initHoveredCtrlNN != "DirectUIHWND4"
             && initHoveredCtrlNN != "DirectUIHWND6"
             && initHoveredCtrlNN != "DirectUIHWND8") {
+
             loop 200 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %initTargetHwnd%
                 ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %initTargetHwnd%
@@ -4039,36 +4005,24 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 OutputVar3 := 1
         }
 
-        If GetKeyState("LButton", "P")
-            Return
+        GetKeyState("LButton","P") ? Return : ""
+
 
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1) {
-
             ; tooltip, init focus is %initHoveredCtrlNN% - %OutputVar1% - %OutputVar2% - %OutputVar3% - %OutputVar4% - %OutputVar6% - %OutputVar8%
+
             WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
             WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
             If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
                 If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
-                    try {
-                        exEl := UIA.ElementFromHandle(initTargetHwnd)
-                        shellEl := exEl.FindFirstByName("Items View")
-                        shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
-                    } catch e {
-                        tooltip, TIMED OUT!!!!
-                        UIA :=  ;// set to a different value
-                        ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                        UIA := UIA_Interface() ; Initialize UIA interface
-                        UIA.ConnectionTimeout := 6000
-                        Return
-                    }
+                    WaitForExplorerLoad(initTargetHwnd)
                 }
             }
 
-            If GetKeyState("LButton", "P")
-                Return
+            GetKeyState("LButton","P") ? Return : ""
 
-            Critical, On
-            BlockInput, On
+
+            Critical,   On
 
             If (OutputVar1 == 1) {
                 TargetControl := "SysListView321"
@@ -4084,7 +4038,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 Else
                     TargetControl := "DirectUIHWND3"
             }
-            Else {
+            Else If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
                 If OutputVar4
                     TargetControl := "DirectUIHWND4"
                 Else If OutputVar6
@@ -4093,7 +4047,10 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                     TargetControl := "DirectUIHWND8"
             }
 
-            ; tooltip, targeted is %TargetControl% with init at %initHoveredCtrlNN%
+            GetKeyState("LButton","P") ? Return : ""
+
+
+            tooltip, targeted is %TargetControl% with init at %initHoveredCtrlNN%
             If ((lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initHoveredCtrlNN != TargetControl) {
                 loop, 500 {
                     ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
@@ -4104,27 +4061,32 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 }
             }
 
+            GetKeyState("LButton","P") ? Return : ""
+
+
             WinGet, finalActiveHwnd, ID, A
             If (initTargetHwnd == finalActiveHwnd) {
-
+                BlockInput, On
                 Send, ^{NumpadAdd}
+                BlockInput, Off
 
-                If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") {
+                If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")
                     sleep, 125
 
-                    If ((InStr(initHoveredCtrlNN,"Edit",True) || InStr(initHoveredCtrlNN,"Tree",True)) && initHoveredCtrlNN != TargetControl) {
-                        loop, 500 {
-                            ControlFocus , %initHoveredCtrlNN%, ahk_id %initTargetHwnd%
-                            ControlGetFocus, testCtrlFocus , ahk_id %initTargetHwnd%
-                            If (testCtrlFocus == initHoveredCtrlNN)
-                                break
-                            sleep, 1
-                        }
+                GetKeyState("LButton","P") ? Return : ""
+
+
+                If ((InStr(initHoveredCtrlNN,"Edit",True) || InStr(initHoveredCtrlNN,"Tree",True)) && initHoveredCtrlNN != TargetControl) {
+                    loop, 500 {
+                        ControlFocus , %initHoveredCtrlNN%, ahk_id %initTargetHwnd%
+                        ControlGetFocus, testCtrlFocus , ahk_id %initTargetHwnd%
+                        If (testCtrlFocus == initHoveredCtrlNN)
+                            break
+                        sleep, 1
                     }
                 }
             }
-            BlockInput, Off
-            Critical, Off
+            Critical,   Off
         }
     }
 Return
@@ -6005,138 +5967,79 @@ GetActiveExplorerPath()
     }
 }
 
-; ChatGPT
-GetExplorerPath(hwndID:="")  {
-    if hwndID
-        WinGetClass, class, ahk_id %hwndID%
-    else {
-        hwndID := WinActive("A")
-        WinGetClass, class, A
-    }
-
-    if (class = "CabinetWClass") {
-        for window in ComObjCreate("Shell.Application").Windows {
-            try {
-                if (window.hwnd == hwndID) {
-                    try p := window.Document.Folder.Self.Path
-                    catch
-                        p := ""
-                    if (p != "")
-                        return p
-                }
-            }
-        }
-    }
-    else if (class = "#32770") {
-        ; For file open/save dialogs
-        ; Detect type
-        if IsModernFileDialog(hwndID) {
-            ControlGetText, path, Edit1, ahk_id %hwndID%
-            if (RegExMatch(path, "^[A-Z]:\\|^\\\\"))
-                return path
-        }
-        
-        ControlFocus, ToolbarWindow323, ahk_id %hwndID%
-        ControlGetText, dir, ToolbarWindow323, ahk_id %hwndID%
-        If (dir == "" || !InStr(dir,"address",False)) {
-            ControlFocus, ToolbarWindow323, ahk_id %hwndID%
-            ControlGetText, dir, ToolbarWindow324, ahk_id %hwndID%
-        }
-        if (dir != "")
-            Return dir
-            
-        hCtrl := 0
-        loop {
-            hTemp := DllCall("FindWindowEx", "Ptr", hwndID, "Ptr", hCtrl, "Str", "ComboBoxEx32", "Ptr", 0, "Ptr")
-            if (!hTemp)
-                break
-            hCtrl := hTemp
-        }
-        if (hCtrl)
-            hCtrl := DllCall("FindWindowEx", "Ptr", hCtrl, "Ptr", 0, "Str", "ComboBox", "Ptr", 0, "Ptr")
-        if (hCtrl)
-        {
-            len := DllCall("SendMessage", "Ptr", hCtrl, "UInt", 0x0E, "Ptr", 0, "Ptr", 0)
-            if (len > 0) {
-                VarSetCapacity(buf, len * 2 + 2)
-                DllCall("SendMessage", "Ptr", hCtrl, "UInt", 0x0D, "Ptr", len + 1, "Ptr", &buf)
-                return StrGet(&buf)
-            }
-        }
-    }
-
-    return ""
-}
-
 ; https://www.reddit.com/r/AutoHotkey/comments/10fmk4h/get_path_of_active_explorer_tab/
-; GetExplorerPath(hwnd:="") {
-    ; ; tooltip, entering
-    ; If !hwnd
-        ; hwnd := WinExist("A")
+GetExplorerPath(hwnd:="") {
+    ; tooltip, entering
+    If !hwnd
+        hwnd := WinExist("A")
 
-    ; If !WinExist("ahk_id " . hwnd)
-        ; Return ""
+    If !WinExist("ahk_id " . hwnd)
+        Return ""
 
-    ; WinGetClass, clCheck, ahk_id %hwnd%
+    WinGetClass, clCheck, ahk_id %hwnd%
 
-    ; If (clCheck == "#32770") {
-        ; ; ControlFocus, ToolbarWindow323, ahk_id %hwnd%
-        ; ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-        ; If (dir == "" || !InStr(dir,"address",False))
-            ; ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-        ; Return dir
-    ; }
-    ; Else If (clCheck == "CabinetWClass") {
-        ; WinGetTitle, expTitle, ahk_id %hwnd%
-        ; cleaned := StrReplace(expTitle, " - File Explorer",,,1)
-        ; ; tooltip, cleaned is %cleaned%
-        ; Loop, 50  ; limit to ~0.75 s total worst-case
-        ; {
-            ; if (RegExMatch(cleaned, "i)^(This PC|Downloads|Recycle Bin|Pictures|Videos|Documents|Music|Desktop)$"))
-                ; break
-            ; else if InStr(cleaned, "\")
-                ; break
-            ; Sleep, 10  ; smoother pacing (~500 ms max total)
-            ; WinGetTitle, expTitle, ahk_id %hwnd%
-            ; cleaned := Trim(StrReplace(expTitle, " - File Explorer"))
-        ; }
+    If (clCheck == "#32770") {
+        ; ControlFocus, ToolbarWindow323, ahk_id %hwnd%
+        ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+        If (dir == "" || !InStr(dir,"address",False)) {
+            ; ControlFocus, ToolbarWindow324, ahk_id %hwnd%
+            ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+        }
+        Return dir
+    }
+    Else If (clCheck == "CabinetWClass") {
+        WinGetTitle, expTitle, ahk_id %hwnd%
+        cleaned := StrReplace(expTitle, " - File Explorer",,,1)
+        ; tooltip, cleaned is %cleaned%
+        If (   cleaned == "This PC"
+            || cleaned == "Home"
+            || cleaned == "Downloads"
+            || cleaned == "Recycle Bin"
+            || cleaned == "Pictures"
+            || cleaned == "Videos"
+            || cleaned == "Documents"
+            || cleaned == "Music"
+            || cleaned == "Desktop" )
+            Return cleaned
+        Else If inStr(cleaned, "\", False) {
+            Return cleaned
+        }
+        Return ""
+    }
+    Else {
+        activeTab := 0
+        try {
+            ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
+            for w in ComObjCreate("Shell.Application").Windows {
+                If (w.hwnd != hwnd)
+                    continue
+                If activeTab {
+                    static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
+                    shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
+                    DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
+                    If (thisTab != activeTab)
+                        continue
+                    ObjRelease(shellBrowser)
+                }
+                If (w.Document.Folder.Self.Path == 0) {
+                    ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+                    If (dir == "" || !InStr(dir,"address",False))
+                        ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+                    Return dir
+                }
+                Else
+                    Return w.Document.Folder.Self.Path
+            }
+        }catch e {
+            ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+            If (dir == "" || !InStr(dir,"address",False))
+                ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
 
-        ; Return cleaned
-    ; }
-    ; Else {
-        ; activeTab := 0
-        ; try {
-            ; ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
-            ; for w in ComObjCreate("Shell.Application").Windows {
-                ; If (w.hwnd != hwnd)
-                    ; continue
-                ; If activeTab {
-                    ; static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
-                    ; shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
-                    ; DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
-                    ; If (thisTab != activeTab)
-                        ; continue
-                    ; ObjRelease(shellBrowser)
-                ; }
-                ; If (w.Document.Folder.Self.Path == 0) {
-                    ; ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-                    ; If (dir == "" || !InStr(dir,"address",False))
-                        ; ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-                    ; Return dir
-                ; }
-                ; Else
-                    ; Return w.Document.Folder.Self.Path
-            ; }
-        ; }catch e {
-            ; ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-            ; If (dir == "" || !InStr(dir,"address",False))
-                ; ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-
-            ; Return dir
-        ; }
-    ; }
-    ; Return ""
-; }
+            Return dir
+        }
+    }
+    Return ""
+}
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=60403
 Explorer_GetSelection() {
@@ -6522,7 +6425,7 @@ SetTitleMatchMode, 2
         && !SearchingWindows
         && !hitTAB
         && !GetKeyState("LAlt","P")
-        && !GetKeyState("Ctrl","P")
+        && !GetKeyState("Control","P")
         && !StopAutoFix
         && !IsGoogleDocWindow()
         && !IsEditCtrl()
