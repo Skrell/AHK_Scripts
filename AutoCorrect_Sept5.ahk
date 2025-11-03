@@ -3261,7 +3261,12 @@ Return
 
     prevPath := ""
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
-        prevPath := GetExplorerPath(_winIdD)
+        loop 100 {
+            prevPath := GetExplorerPath(_winIdD)
+            If (prevPath != "")
+                break
+            sleep, 1
+        }
     }
 
     LBD_HexColor1 := 0x000000
@@ -3352,8 +3357,6 @@ Return
         }
 
         If inStr(pt.Name, "Refresh", True) {
-            ; If !IsTabbedExplorer(_winIdU)
-            ; SendCtrlAdd(_winIdU, prevPath,, wmClassD)
             WaitForExplorerLoad(_winIdD)
             Send, ^{NumpadAdd}
         }
@@ -3366,7 +3369,6 @@ Return
                 sleep, 1
             }
             If (currentPath != prevPath) {
-                ; SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
                 WaitForExplorerLoad(_winIdD)
                 Send, ^{NumpadAdd}
             }
@@ -6004,32 +6006,62 @@ GetActiveExplorerPath()
 }
 
 ; ChatGPT
-GetExplorerPath(hwnd:="")  {
-    if hwnd
-        WinGetClass, class, ahk_id %hwnd%
-    else
+GetExplorerPath(hwndID:="")  {
+    if hwndID
+        WinGetClass, class, ahk_id %hwndID%
+    else {
+        hwndID := WinActive("A")
         WinGetClass, class, A
+    }
 
     if (class = "CabinetWClass") {
         for window in ComObjCreate("Shell.Application").Windows {
             try {
-                if (window.hwnd = WinActive("A"))
-                    return window.Document.Folder.Self.Path
+                if (window.hwnd == hwndID) {
+                    try p := window.Document.Folder.Self.Path
+                    catch
+                        p := ""
+                    if (p != "")
+                        return p
+                }
             }
         }
     }
     else if (class = "#32770") {
         ; For file open/save dialogs
-        hwnd := WinActive("A")
-        hCtrl := DllCall("FindWindowEx", "Ptr", hwnd, "Ptr", 0, "Str", "ComboBoxEx32", "Ptr", 0, "Ptr")
+        ; Detect type
+        if IsModernFileDialog(hwndID) {
+            ControlGetText, path, Edit1, ahk_id %hwndID%
+            if (RegExMatch(path, "^[A-Z]:\\|^\\\\"))
+                return path
+        }
+        
+        ControlFocus, ToolbarWindow323, ahk_id %hwndID%
+        ControlGetText, dir, ToolbarWindow323, ahk_id %hwndID%
+        If (dir == "" || !InStr(dir,"address",False)) {
+            ControlFocus, ToolbarWindow323, ahk_id %hwndID%
+            ControlGetText, dir, ToolbarWindow324, ahk_id %hwndID%
+        }
+        if (dir != "")
+            Return dir
+            
+        hCtrl := 0
+        loop {
+            hTemp := DllCall("FindWindowEx", "Ptr", hwndID, "Ptr", hCtrl, "Str", "ComboBoxEx32", "Ptr", 0, "Ptr")
+            if (!hTemp)
+                break
+            hCtrl := hTemp
+        }
         if (hCtrl)
             hCtrl := DllCall("FindWindowEx", "Ptr", hCtrl, "Ptr", 0, "Str", "ComboBox", "Ptr", 0, "Ptr")
         if (hCtrl)
         {
-            len := DllCall("SendMessage", "Ptr", hCtrl, "UInt", 0x0E, "Ptr", 0, "Ptr", 0) ; WM_GETTEXTLENGTH
-            VarSetCapacity(buf, len * 2 + 2)
-            DllCall("SendMessage", "Ptr", hCtrl, "UInt", 0x0D, "Ptr", len + 1, "Ptr", &buf) ; WM_GETTEXT
-            return StrGet(&buf)
+            len := DllCall("SendMessage", "Ptr", hCtrl, "UInt", 0x0E, "Ptr", 0, "Ptr", 0)
+            if (len > 0) {
+                VarSetCapacity(buf, len * 2 + 2)
+                DllCall("SendMessage", "Ptr", hCtrl, "UInt", 0x0D, "Ptr", len + 1, "Ptr", &buf)
+                return StrGet(&buf)
+            }
         }
     }
 
@@ -6037,74 +6069,74 @@ GetExplorerPath(hwnd:="")  {
 }
 
 ; https://www.reddit.com/r/AutoHotkey/comments/10fmk4h/get_path_of_active_explorer_tab/
-GetExplorerPath(hwnd:="") {
-    ; tooltip, entering
-    If !hwnd
-        hwnd := WinExist("A")
+; GetExplorerPath(hwnd:="") {
+    ; ; tooltip, entering
+    ; If !hwnd
+        ; hwnd := WinExist("A")
 
-    If !WinExist("ahk_id " . hwnd)
-        Return ""
+    ; If !WinExist("ahk_id " . hwnd)
+        ; Return ""
 
-    WinGetClass, clCheck, ahk_id %hwnd%
+    ; WinGetClass, clCheck, ahk_id %hwnd%
 
-    If (clCheck == "#32770") {
-        ; ControlFocus, ToolbarWindow323, ahk_id %hwnd%
-        ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-        If (dir == "" || !InStr(dir,"address",False))
-            ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-        Return dir
-    }
-    Else If (clCheck == "CabinetWClass") {
-        WinGetTitle, expTitle, ahk_id %hwnd%
-        cleaned := StrReplace(expTitle, " - File Explorer",,,1)
-        ; tooltip, cleaned is %cleaned%
-        Loop, 50  ; limit to ~0.75 s total worst-case
-        {
-            if (RegExMatch(cleaned, "i)^(This PC|Downloads|Recycle Bin|Pictures|Videos|Documents|Music|Desktop)$"))
-                break
-            else if InStr(cleaned, "\")
-                break
-            Sleep, 10  ; smoother pacing (~500 ms max total)
-            WinGetTitle, expTitle, ahk_id %hwnd%
-            cleaned := Trim(StrReplace(expTitle, " - File Explorer"))
-        }
+    ; If (clCheck == "#32770") {
+        ; ; ControlFocus, ToolbarWindow323, ahk_id %hwnd%
+        ; ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+        ; If (dir == "" || !InStr(dir,"address",False))
+            ; ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+        ; Return dir
+    ; }
+    ; Else If (clCheck == "CabinetWClass") {
+        ; WinGetTitle, expTitle, ahk_id %hwnd%
+        ; cleaned := StrReplace(expTitle, " - File Explorer",,,1)
+        ; ; tooltip, cleaned is %cleaned%
+        ; Loop, 50  ; limit to ~0.75 s total worst-case
+        ; {
+            ; if (RegExMatch(cleaned, "i)^(This PC|Downloads|Recycle Bin|Pictures|Videos|Documents|Music|Desktop)$"))
+                ; break
+            ; else if InStr(cleaned, "\")
+                ; break
+            ; Sleep, 10  ; smoother pacing (~500 ms max total)
+            ; WinGetTitle, expTitle, ahk_id %hwnd%
+            ; cleaned := Trim(StrReplace(expTitle, " - File Explorer"))
+        ; }
 
-        Return cleaned
-    }
-    Else {
-        activeTab := 0
-        try {
-            ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
-            for w in ComObjCreate("Shell.Application").Windows {
-                If (w.hwnd != hwnd)
-                    continue
-                If activeTab {
-                    static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
-                    shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
-                    DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
-                    If (thisTab != activeTab)
-                        continue
-                    ObjRelease(shellBrowser)
-                }
-                If (w.Document.Folder.Self.Path == 0) {
-                    ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-                    If (dir == "" || !InStr(dir,"address",False))
-                        ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-                    Return dir
-                }
-                Else
-                    Return w.Document.Folder.Self.Path
-            }
-        }catch e {
-            ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-            If (dir == "" || !InStr(dir,"address",False))
-                ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+        ; Return cleaned
+    ; }
+    ; Else {
+        ; activeTab := 0
+        ; try {
+            ; ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
+            ; for w in ComObjCreate("Shell.Application").Windows {
+                ; If (w.hwnd != hwnd)
+                    ; continue
+                ; If activeTab {
+                    ; static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
+                    ; shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
+                    ; DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
+                    ; If (thisTab != activeTab)
+                        ; continue
+                    ; ObjRelease(shellBrowser)
+                ; }
+                ; If (w.Document.Folder.Self.Path == 0) {
+                    ; ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+                    ; If (dir == "" || !InStr(dir,"address",False))
+                        ; ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+                    ; Return dir
+                ; }
+                ; Else
+                    ; Return w.Document.Folder.Self.Path
+            ; }
+        ; }catch e {
+            ; ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+            ; If (dir == "" || !InStr(dir,"address",False))
+                ; ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
 
-            Return dir
-        }
-    }
-    Return ""
-}
+            ; Return dir
+        ; }
+    ; }
+    ; Return ""
+; }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=60403
 Explorer_GetSelection() {
