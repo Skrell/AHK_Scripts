@@ -3250,7 +3250,7 @@ Return
         lbX1 += 1
         lbY1 += 1
     }
-    CoordMode, Mouse, screen
+    CoordMode, Mouse, Screen
 
     KeyWait, LButton, U T5
 
@@ -3278,10 +3278,12 @@ Return
             If (pt.CurrentControlType == 50031) {
                 If (wmClassD == "#32770")
                     ControlFocus, %_winCtrlD%, ahk_id %_winIdU%
+                    
                 Send, ^{NumpadAdd}
                 Return
             } ; this specific combination is needed for the "Name" column ONLY
             Else If (pt.CurrentControlType == 50033 && (_winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")) {
+                
                 Send, ^{NumpadAdd}
                 Return
             }
@@ -3291,6 +3293,7 @@ Return
                     Send, {F5}
 
                 Send, ^{NumpadAdd}
+                Return
             }
         } catch e {
             tooltip, TIMED OUT!!!!
@@ -3958,6 +3961,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         && lClassCheck != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
 
         MouseGetPos, , , , initHoveredCtrlNN
+
         while (initHoveredCtrlNN == "ShellTabWindowClass1") {
             MouseGetPos, , , , initHoveredCtrlNN
         }
