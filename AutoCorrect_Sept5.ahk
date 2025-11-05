@@ -90,6 +90,7 @@ Global previousMon                 := 0
 Global targetDesktop               := 0
 Global currentPath                 := ""
 Global prevPath                    := ""
+Global _winCtrlD                   := ""
 Global MbuttonIsEnter              := False
 Global textBoxSelected             := False
 Global WindowTitleID               :=
@@ -3382,7 +3383,7 @@ Return
                 break
             sleep, 1
         }
-        SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
+        SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD, _winCtrlD)
     }
     Else If (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25) {
         try {
@@ -3494,7 +3495,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
 }
 
 SendCtrlAddLabel:
-    SendCtrlAdd(_winIdU, prevPath, currentPath)
+    SendCtrlAdd(_winIdU, prevPath, currentPath, _winCtrlD)
 Return
 
 RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2) ; from the FindText library, credit goes to feiyue
@@ -3984,7 +3985,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         && lClassCheck != "WorkerW" && lClassCheck != "ProgMan"
         && lClassCheck != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
 
-        If (initFocusedCtrlNN != "") {
+        If (initFocusedCtrlNN == "") {
             MouseGetPos, , , , initFocusedCtrlNN
             while (initFocusedCtrlNN == "ShellTabWindowClass1") {
                 MouseGetPos, , , , initFocusedCtrlNN
