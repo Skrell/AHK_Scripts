@@ -703,116 +703,118 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             WaitForFadeInStop(hWnd)
 
-            OutputVar1 := 0
-            OutputVar2 := 0
-            OutputVar3 := 0
-            OutputVar4 := 0
-            OutputVar6 := 0
-            OutputVar8 := 0
+            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
 
-            loop 200 {
-                ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
-                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
-                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
-                ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %hWnd%
-                ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %hWnd%
-                ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %hWnd%
-                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
-                    break
-                sleep, 1
-            }
+            ; OutputVar1 := 0
+            ; OutputVar2 := 0
+            ; OutputVar3 := 0
+            ; OutputVar4 := 0
+            ; OutputVar6 := 0
+            ; OutputVar8 := 0
+
+            ; loop 200 {
+                ; ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
+                ; ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
+                ; ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
+                ; ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %hWnd%
+                ; ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %hWnd%
+                ; ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %hWnd%
+                ; If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
+                    ; break
+                ; sleep, 1
+            ; }
 
             ; tooltip, %OutputVar1% - %OutputVar2% - %OutputVar3% - %OutputVar4% - %OutputVar6% - %OutputVar8%
-            If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1 ) {
-                If (OutputVar1 == 1) {
-                    TargetControl := "SysListView321"
-                    ; ControlGet, ctrlNnHwnd, Hwnd,, SysListView321, ahk_id %hWnd%
-                    ControlGetPos, ctrlX, ctrlY, ctrlW, ctrlH, SysListView321, ahk_id %hWnd%
-                    WinGetPos, winX, winY, winW, winH, ahk_id %hWnd%
-                    ; tooltip, %ctrlW% - %winW%
-                    If (ctrlW < floor(0.5*winW)) {
-                        LbuttonEnabled := True
-                        Return
-                    }
-                    Else {
-                        loop, 100 {
-                            ControlFocus, %TargetControl%, ahk_id %hWnd%
-                            ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                            If (testCtrlFocus == TargetControl)
-                                break
-                            sleep, 1
-                        }
-                    }
-                }
-                Else If (((OutputVar2 == 1 && OutputVar3 == 1) && !OutputVar4 && !OutputVar6 && !OutputVar8)
-                    && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
+            ; If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1 ) {
+                ; If (OutputVar1 == 1) {
+                    ; TargetControl := "SysListView321"
+                    ; ; ControlGet, ctrlNnHwnd, Hwnd,, SysListView321, ahk_id %hWnd%
+                    ; ControlGetPos, ctrlX, ctrlY, ctrlW, ctrlH, SysListView321, ahk_id %hWnd%
+                    ; WinGetPos, winX, winY, winW, winH, ahk_id %hWnd%
+                    ; ; tooltip, %ctrlW% - %winW%
+                    ; If (ctrlW < floor(0.5*winW)) {
+                        ; LbuttonEnabled := True
+                        ; Return
+                    ; }
+                    ; Else {
+                        ; loop, 100 {
+                            ; ControlFocus, %TargetControl%, ahk_id %hWnd%
+                            ; ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
+                            ; If (testCtrlFocus == TargetControl)
+                                ; break
+                            ; sleep, 1
+                        ; }
+                    ; }
+                ; }
+                ; Else If (((OutputVar2 == 1 && OutputVar3 == 1) && !OutputVar4 && !OutputVar6 && !OutputVar8)
+                    ; && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
 
-                    OutHeight2 := 0
-                    OutHeight3 := 0
-                    ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %hWnd%, , , ,
-                    ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %hWnd%, , , ,
-                    If (OutHeight2 > OutHeight3)
-                        TargetControl := "DirectUIHWND2"
-                    Else
-                        TargetControl := "DirectUIHWND3"
-                }
+                    ; OutHeight2 := 0
+                    ; OutHeight3 := 0
+                    ; ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %hWnd%, , , ,
+                    ; ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %hWnd%, , , ,
+                    ; If (OutHeight2 > OutHeight3)
+                        ; TargetControl := "DirectUIHWND2"
+                    ; Else
+                        ; TargetControl := "DirectUIHWND3"
+                ; }
 
-                Critical, On
-                ; tooltip, init focus is %initFocusedCtrl% and target is %TargetControl%
-                If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
-                    If (OutputVar3 == 1) {
-                        WaitForExplorerLoad(hWnd, True)
-                        loop, 100 {
-                            ControlFocus, %TargetControl%, ahk_id %hWnd%
-                            ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                            If (testCtrlFocus == TargetControl)
-                                break
-                            sleep, 1
-                        }
-                    }
-                    Else
-                        WaitForExplorerLoad(hWnd)
-                }
+                ; Critical, On
+                ; ; tooltip, init focus is %initFocusedCtrl% and target is %TargetControl%
+                ; If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
+                    ; If (OutputVar3 == 1) {
+                        ; WaitForExplorerLoad(hWnd, True)
+                        ; loop, 100 {
+                            ; ControlFocus, %TargetControl%, ahk_id %hWnd%
+                            ; ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
+                            ; If (testCtrlFocus == TargetControl)
+                                ; break
+                            ; sleep, 1
+                        ; }
+                    ; }
+                    ; Else
+                        ; WaitForExplorerLoad(hWnd)
+                ; }
 
-                If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
-                    SetTimer, keyTrack,   On
-                    SetTimer, mouseTrack, On
-                    LbuttonEnabled := True
-                    Critical, Off
-                    Return
-                }
-                Else {
-                    WinGet, finalActiveHwnd, ID, A
-                    If (hWnd == finalActiveHwnd) {
-                        BlockInput, On
-                        Send, {Ctrl UP}
-                        Send, ^{NumpadAdd}
-                        Send, {Ctrl UP}
-                        BlockInput, Off
+                ; If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
+                    ; SetTimer, keyTrack,   On
+                    ; SetTimer, mouseTrack, On
+                    ; LbuttonEnabled := True
+                    ; Critical, Off
+                    ; Return
+                ; }
+                ; Else {
+                    ; WinGet, finalActiveHwnd, ID, A
+                    ; If (hWnd == finalActiveHwnd) {
+                        ; BlockInput, On
+                        ; Send, {Ctrl UP}
+                        ; Send, ^{NumpadAdd}
+                        ; Send, {Ctrl UP}
+                        ; BlockInput, Off
 
-                        If (vWinClass == "#32770" || vWinClass == "CabinetWClass")
-                            sleep, 125
+                        ; If (vWinClass == "#32770" || vWinClass == "CabinetWClass")
+                            ; sleep, 125
 
-                        If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
-                            loop, 500 {
-                                ControlFocus , %initFocusedCtrl%, ahk_id %hWnd%
-                                ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                                If (testCtrlFocus == initFocusedCtrl)
-                                    break
-                                sleep, 1
-                            }
-                            If (GetKeyState("Lbutton", "P")) {
-                                SetTimer, keyTrack,   On
-                                SetTimer, mouseTrack, On
-                                LbuttonEnabled := True
-                                Critical, Off
-                                Return
-                            }
-                        }
-                    }
-                }
-                Critical, Off
-            }
+                        ; If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
+                            ; loop, 500 {
+                                ; ControlFocus , %initFocusedCtrl%, ahk_id %hWnd%
+                                ; ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
+                                ; If (testCtrlFocus == initFocusedCtrl)
+                                    ; break
+                                ; sleep, 1
+                            ; }
+                            ; If (GetKeyState("Lbutton", "P")) {
+                                ; SetTimer, keyTrack,   On
+                                ; SetTimer, mouseTrack, On
+                                ; LbuttonEnabled := True
+                                ; Critical, Off
+                                ; Return
+                            ; }
+                        ; }
+                    ; }
+                ; }
+                ; Critical, Off
+            ; }
 
             LbuttonEnabled := True
             DetectHiddenWindows, On
@@ -3235,8 +3237,6 @@ Return
             ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                 SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
-                ; WaitForExplorerLoad(_winIdD)
-                ; Send, ^{NumpadAdd}
             }
 
             LbuttonEnabled     := True
@@ -3357,11 +3357,9 @@ Return
         }
 
         If inStr(pt.Name, "Refresh", True) {
-            SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
-            ; WaitForExplorerLoad(_winIdD)
-            ; Send, ^{NumpadAdd}
+            SendCtrlAdd(_winIdU, , , wmClassD)
         }
-        Else {
+        Else { ; not Refresh and hence a button was hit which would navigate to new folder
             currentPath := ""
             loop 100 {
                 currentPath := GetExplorerPath(_winIdD)
@@ -3370,8 +3368,6 @@ Return
                 sleep, 1
             }
             SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
-            ; WaitForExplorerLoad(_winIdD)
-            ; Send, ^{NumpadAdd}
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
@@ -3387,9 +3383,7 @@ Return
             sleep, 1
         }
         SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
-        ; WaitForExplorerLoad(_winIdD)
-        ; Send, ^{NumpadAdd}
-            }
+    }
     Else If (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25) {
         try {
             pt := UIA.ElementFromPoint(lbX1,lbY1,False)
@@ -3970,7 +3964,7 @@ SendWindowAndGo:
     GoToDesktop := False
 Return
 
-SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "") {
+SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
     Global UIA
 
     If (initTargetClass == "")
@@ -3990,10 +3984,11 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         && lClassCheck != "WorkerW" && lClassCheck != "ProgMan"
         && lClassCheck != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
 
-        MouseGetPos, , , , initHoveredCtrlNN
-
-        while (initHoveredCtrlNN == "ShellTabWindowClass1") {
-            MouseGetPos, , , , initHoveredCtrlNN
+        If (initFocusedCtrlNN != "") {
+            MouseGetPos, , , , initFocusedCtrlNN
+            while (initFocusedCtrlNN == "ShellTabWindowClass1") {
+                MouseGetPos, , , , initFocusedCtrlNN
+            }
         }
 
         GetKeyState("LButton","P") ? Return : ""
@@ -4005,12 +4000,12 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         OutputVar6 := 0
         OutputVar8 := 0
 
-        If (!InStr(initHoveredCtrlNN,"SysListView32",True)
-            && initHoveredCtrlNN != "DirectUIHWND2"
-            && initHoveredCtrlNN != "DirectUIHWND3"
-            && initHoveredCtrlNN != "DirectUIHWND4"
-            && initHoveredCtrlNN != "DirectUIHWND6"
-            && initHoveredCtrlNN != "DirectUIHWND8") {
+        If (!InStr(initFocusedCtrlNN,"SysListView32",True)
+             && initFocusedCtrlNN != "DirectUIHWND2"
+             && initFocusedCtrlNN != "DirectUIHWND3"
+             && initFocusedCtrlNN != "DirectUIHWND4"
+             && initFocusedCtrlNN != "DirectUIHWND6"
+             && initFocusedCtrlNN != "DirectUIHWND8") {
 
             loop 200 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %initTargetHwnd%
@@ -4021,21 +4016,21 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %initTargetHwnd%
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
                     break
-                sleep, 2
+                sleep, 1
             }
         }
         Else {
-            If (InStr(initHoveredCtrlNN,"SysListView32",True))
+            If (InStr(initFocusedCtrlNN,  "SysListView32",True))
                 OutputVar1 := 1
-            Else If (initHoveredCtrlNN == "DirectUIHWND4")
+            Else If (initFocusedCtrlNN == "DirectUIHWND4")
                 OutputVar4 := 1
-            Else If (initHoveredCtrlNN == "DirectUIHWND6")
+            Else If (initFocusedCtrlNN == "DirectUIHWND6")
                 OutputVar6 := 1
-            Else If (initHoveredCtrlNN == "DirectUIHWND8")
+            Else If (initFocusedCtrlNN == "DirectUIHWND8")
                 OutputVar8 := 1
-            Else If (initHoveredCtrlNN == "DirectUIHWND2")
+            Else If (initFocusedCtrlNN == "DirectUIHWND2")
                 OutputVar2 := 1
-            Else If (initHoveredCtrlNN == "DirectUIHWND3")
+            Else If (initFocusedCtrlNN == "DirectUIHWND3")
                 OutputVar3 := 1
         }
 
@@ -4043,11 +4038,10 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
 
         If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1) {
-            ; tooltip, init focus is %initHoveredCtrlNN% - %OutputVar1% - %OutputVar2% - %OutputVar3% - %OutputVar4% - %OutputVar6% - %OutputVar8%
+            ; tooltip, init focus is %initFocusedCtrlNN% - %OutputVar1% - %OutputVar2% - %OutputVar3% - %OutputVar4% - %OutputVar6% - %OutputVar8%
 
             WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
             WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
-
 
             GetKeyState("LButton","P") ? Return : ""
 
@@ -4084,10 +4078,21 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
             GetKeyState("LButton","P") ? Return : ""
 
-            tooltip, targeted is %TargetControl% with init at %initHoveredCtrlNN%
-            If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass") && initHoveredCtrlNN != TargetControl) {
+            tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
                 If (prevPath != "" && currentPath != "" && prevPath != currentPath)
                     WaitForExplorerLoad(initTargetHwnd, , True)
+
+                loop, 500 {
+                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                    If (testCtrlFocus == TargetControl)
+                        break
+                    sleep, 1
+                }
+            }
+            Else If (TargetControl == "DirectUIHWND2" && lClassCheck == "#32770") {
+                WaitForExplorerLoad(initTargetHwnd, , True)
 
                 loop, 500 {
                     ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
@@ -4107,7 +4112,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             WinGet, finalActiveHwnd, ID, A
             If (initTargetHwnd == finalActiveHwnd) {
                 BlockInput, On
+                Send, {Ctrl UP}
                 Send, ^{NumpadAdd}
+                Send, {Ctrl UP}
                 BlockInput, Off
 
                 If (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")
@@ -4115,11 +4122,11 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
                 GetKeyState("LButton","P") ? Return : ""
 
-                If ((InStr(initHoveredCtrlNN,"Edit",True) || InStr(initHoveredCtrlNN,"Tree",True)) && initHoveredCtrlNN != TargetControl) {
+                If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
                     loop, 500 {
-                        ControlFocus , %initHoveredCtrlNN%, ahk_id %initTargetHwnd%
+                        ControlFocus , %initFocusedCtrlNN%, ahk_id %initTargetHwnd%
                         ControlGetFocus, testCtrlFocus , ahk_id %initTargetHwnd%
-                        If (testCtrlFocus == initHoveredCtrlNN)
+                        If (testCtrlFocus == initFocusedCtrlNN)
                             break
                         sleep, 1
                     }
