@@ -625,6 +625,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             || (InStr(vWinClass, "Shell",False) && InStr(vWinClass, "TrayWnd",False))
             || vWinClass == ""
             || vWinTitle == ""
+            || vWinTitle == "Home - File Explorer"
+            || vWinTitle == "This PC - File Explorer"
+            || vWinTitle == "Gallery - File Explorer"
             || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
             || !WinExist("ahk_id " hWnd)) {
             If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
@@ -638,6 +641,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         SetTimer, mouseTrack, Off
 
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+
+            KeyWait, Lbutton, U T10
 
             WinGet, state, MinMax, ahk_id %hWnd%
             If (state > -1 && vWinTitle != "" && MonCount > 1) {
@@ -687,12 +692,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ;EVENT_SYSTEM_FOREGROUND := 0x3
             ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
-            If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
-                SetTimer, keyTrack,   On
-                SetTimer, mouseTrack, On
-                LbuttonEnabled := True
-                Return
-            }
+            ; If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
+                ; SetTimer, keyTrack,   On
+                ; SetTimer, mouseTrack, On
+                ; LbuttonEnabled := True
+                ; Return
+            ; }
 
             WinGet, proc, ProcessName, ahk_id %hWnd%
             If (proc == "Everything.exe")
@@ -706,118 +711,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
 
-            ; OutputVar1 := 0
-            ; OutputVar2 := 0
-            ; OutputVar3 := 0
-            ; OutputVar4 := 0
-            ; OutputVar6 := 0
-            ; OutputVar8 := 0
-
-            ; loop 200 {
-                ; ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %hWnd%
-                ; ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %hWnd%
-                ; ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %hWnd%
-                ; ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %hWnd%
-                ; ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %hWnd%
-                ; ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %hWnd%
-                ; If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
-                    ; break
-                ; sleep, 1
-            ; }
-
-            ; tooltip, %OutputVar1% - %OutputVar2% - %OutputVar3% - %OutputVar4% - %OutputVar6% - %OutputVar8%
-            ; If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1 ) {
-                ; If (OutputVar1 == 1) {
-                    ; TargetControl := "SysListView321"
-                    ; ; ControlGet, ctrlNnHwnd, Hwnd,, SysListView321, ahk_id %hWnd%
-                    ; ControlGetPos, ctrlX, ctrlY, ctrlW, ctrlH, SysListView321, ahk_id %hWnd%
-                    ; WinGetPos, winX, winY, winW, winH, ahk_id %hWnd%
-                    ; ; tooltip, %ctrlW% - %winW%
-                    ; If (ctrlW < floor(0.5*winW)) {
-                        ; LbuttonEnabled := True
-                        ; Return
-                    ; }
-                    ; Else {
-                        ; loop, 100 {
-                            ; ControlFocus, %TargetControl%, ahk_id %hWnd%
-                            ; ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                            ; If (testCtrlFocus == TargetControl)
-                                ; break
-                            ; sleep, 1
-                        ; }
-                    ; }
-                ; }
-                ; Else If (((OutputVar2 == 1 && OutputVar3 == 1) && !OutputVar4 && !OutputVar6 && !OutputVar8)
-                    ; && (vWinClass == "CabinetWClass" || vWinClass == "#32770")) {
-
-                    ; OutHeight2 := 0
-                    ; OutHeight3 := 0
-                    ; ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %hWnd%, , , ,
-                    ; ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %hWnd%, , , ,
-                    ; If (OutHeight2 > OutHeight3)
-                        ; TargetControl := "DirectUIHWND2"
-                    ; Else
-                        ; TargetControl := "DirectUIHWND3"
-                ; }
-
-                ; Critical, On
-                ; ; tooltip, init focus is %initFocusedCtrl% and target is %TargetControl%
-                ; If ((vWinClass == "#32770" || vWinClass == "CabinetWClass") && initFocusedCtrl != TargetControl) {
-                    ; If (OutputVar3 == 1) {
-                        ; WaitForExplorerLoad(hWnd, True)
-                        ; loop, 100 {
-                            ; ControlFocus, %TargetControl%, ahk_id %hWnd%
-                            ; ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                            ; If (testCtrlFocus == TargetControl)
-                                ; break
-                            ; sleep, 1
-                        ; }
-                    ; }
-                    ; Else
-                        ; WaitForExplorerLoad(hWnd)
-                ; }
-
-                ; If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
-                    ; SetTimer, keyTrack,   On
-                    ; SetTimer, mouseTrack, On
-                    ; LbuttonEnabled := True
-                    ; Critical, Off
-                    ; Return
-                ; }
-                ; Else {
-                    ; WinGet, finalActiveHwnd, ID, A
-                    ; If (hWnd == finalActiveHwnd) {
-                        ; BlockInput, On
-                        ; Send, {Ctrl UP}
-                        ; Send, ^{NumpadAdd}
-                        ; Send, {Ctrl UP}
-                        ; BlockInput, Off
-
-                        ; If (vWinClass == "#32770" || vWinClass == "CabinetWClass")
-                            ; sleep, 125
-
-                        ; If (initFocusedCtrl != "" && initFocusedCtrl != TargetControl) {
-                            ; loop, 500 {
-                                ; ControlFocus , %initFocusedCtrl%, ahk_id %hWnd%
-                                ; ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                                ; If (testCtrlFocus == initFocusedCtrl)
-                                    ; break
-                                ; sleep, 1
-                            ; }
-                            ; If (GetKeyState("Lbutton", "P")) {
-                                ; SetTimer, keyTrack,   On
-                                ; SetTimer, mouseTrack, On
-                                ; LbuttonEnabled := True
-                                ; Critical, Off
-                                ; Return
-                            ; }
-                        ; }
-                    ; }
-                ; }
-                ; Critical, Off
-            ; }
-
             LbuttonEnabled := True
+
             DetectHiddenWindows, On
             i := 1
             while (i <= prevActiveWindows.MaxIndex()) {
@@ -1143,9 +1038,10 @@ Mbutton::
 Return
 #If
 
-#If !MbuttonIsEnter ; && !MouseIsOverTitleBar()
-MButton::
+#If !MbuttonIsEnter && !MouseIsOverTaskbar()
+$MButton::
     Global DraggingWindow
+
     StopRecursion := True
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
@@ -1177,8 +1073,10 @@ MButton::
     checkClickMx := mx0
     checkClickMy := my0
 
-    If (!hWnd)
+    If (!hWnd || !JEE_WinHasAltTabIcon(hWnd))
         return
+
+    initTime := A_TickCount
 
     BlockInput, MouseMove
     WinGet, isMax, MinMax, ahk_id %hWnd%
@@ -1233,8 +1131,8 @@ MButton::
     skipAlwaysOnTop := IsAlwaysOnTop(hWnd)
 
     Critical, On
-    while GetKeyState("MButton", "P")
-    {
+    while GetKeyState("MButton", "P") {
+
         DraggingWindow := True
         isRbutton := GetKeyState("Rbutton","P")
         If (!isRbutton && isRbutton_last) {
@@ -1292,7 +1190,6 @@ MButton::
             my0 := my
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
-
 
         If WinExist("ahk_class tooltips_class32")
             WinClose, ahk_class tooltips_class32
@@ -1532,21 +1429,29 @@ MButton::
             sleep, 250
             BlockInput, MouseMoveOff
         }
-
-        ; Sleep, 1
     }
     Critical, Off
 
-    If (MouseIsOverTitleBar(mx, my) && (abs(checkClickMx - mx0) <= 5) && (abs(checkClickMy - my0) <= 5)) {
+    rlsTime := A_TickCount
+    If (rlsTime - initTime < floor(DoubleClickTime/2)
+        && MouseIsOverTitleBar(mx, my)
+        && (abs(checkClickMx - mx0) <= 5)
+        && (abs(checkClickMy - my0) <= 5)) {
+
         WinSet, Transparent, Off, ahk_id %hWnd%
         GoSub, SwitchDesktop
+    }
+    Else If (rlsTime - initTime < floor(DoubleClickTime/2)) {
+        Send, {Mbutton}
     }
     Else If (wh/abs(monB-monT) > 0.95)
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
 
     If !skipAlwaysOnTop
         WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
+
     WinSet, Transparent, Off, ahk_id %hWnd%
+
     StopRecursion := False
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
@@ -3192,7 +3097,7 @@ Return
 #If
 
 #MaxThreadsPerHotkey 2
-#If (!VolumeHover() && LbuttonEnabled && !IsOverException() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
+#If (!VolumeHover() && LbuttonEnabled && !IsOverException() && !hitTAB && !MouseIsOverTitleBar() && !MouseIsOverTaskbar())
 ~LButton::
     tooltip,
     HotString("Reset")
@@ -3332,6 +3237,7 @@ Return
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
+        && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
         && (_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
         && (timeDiff < DoubleClickTime/2)) {
 
@@ -3983,7 +3889,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
     If (!GetKeyState("LShift","P" )
         && lClassCheck != "WorkerW" && lClassCheck != "ProgMan"
-        && lClassCheck != "Shell_TrayWnd" && !InStr(lClassCheck, "EVERYTHING", True)) {
+        && !InStr(lClassCheck, "Shell",False) && !InStr(lClassCheck, "TrayWnd",False)
+        && !InStr(lClassCheck, "EVERYTHING", True)) {
 
         If (initFocusedCtrlNN == "") {
             MouseGetPos, , , , initFocusedCtrlNN
@@ -4104,7 +4011,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 }
             }
             Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
-                If (prevPath != "" && currentPath != "" && prevPath != currentPath)
+                ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
                     WaitForExplorerLoad(initTargetHwnd)
             }
 
@@ -4515,8 +4422,10 @@ ProcessIsElevated(vPID)
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=37184
-;gives you roughly the correct results (tested on Windows 7)
-;JEE_WinIsAltTab
+; gives you roughly the correct results (tested on Windows 7)
+; The function approximates Windows’ Alt-Tab eligibility:
+; Include: visible, enabled, top-level windows; anything explicitly marked WS_EX_APPWINDOW.
+; Exclude: child/owned/tool windows, non-activating windows, disabled/invisible windows, and some known host processes.
 JEE_WinHasAltTabIcon(hWnd)
 {
 	local
@@ -5217,9 +5126,14 @@ MouseIsOverTitleBar(xPos := "", yPos := "") {
             If ((yPos > y) && (yPos < (y+titlebarHeight)) && (ErrorLevel == 2)) {
                 Return True
             }
-            Else If ((ErrorLevel != 12) && (mClass != "Chrome_WidgetWin_1")) {
-                pt := UIA.ElementFromPoint(xPos,yPos,False)
-                Return (pt.CurrentControlType == 50037)
+            Else If (ErrorLevel != 12) {
+                pt := UIA.ElementFromPoint(xPos, yPos, False)
+                If ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50033 && pt.CurrentClassName == "FrameGrabHandle")) {
+                    Return True
+                }
+                Else {
+                    Return False
+                }
             }
             Else
                 Return True
@@ -6156,55 +6070,26 @@ IsGoogleDocWindow() {
 
 IsEditCtrl() {
     ControlGetFocus, whatCtrl, A
-    If InStr(whatCtrl,"Edit", True) && !InStr(whatCtrl, "Rich", True)
-        Return True
-    Else
-        Return False
+
+    Return InStr(whatCtrl,"Edit", True) && !InStr(whatCtrl, "Rich", True)
 }
-; ___________________________________
 
-;    Get Explorer Path https://www.autohotkey.com/boards/viewtopic.php?p=587509#p587509
-; ___________________________________
+MouseIsOverTaskbarTray() {
+    CoordMode, Mouse, Screen
+    MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
 
-; GetExplorerPath(explorerHwnd=0){
-    ; If(!explorerHwnd)
-        ; ExplorerHwnd:= winactive("ahk_class CabinetWClass")
+    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
 
-    ; If(!explorerHwnd){
-        ; WinGet, explorerHwnd, List, ahk_class CabinetWClass
-        ; loop, % explorerHwnd
-        ; {
-            ; loopindex:= A_Index
-            ; for window in ComObjCreate("Shell.Application").Windows{
-                ; try{
-                    ; If (window.hwnd==explorerHwnd%loopindex%){
-                        ; folder:= window.Document.Folder.Self.Path
-                        ; If (instr(folder,"\"))
-                            ; Return folder
-                    ; }
-                ; }
-            ; }
-        ; }
-    ; }Else{
-        ; for window in ComObjCreate("Shell.Application").Windows{
-            ; try{
-                ; If (window.hwnd==explorerHwnd)
-                    ; Return window.Document.Folder.Self.Path
-            ; }
-        ; }
-    ; }
-; Return False
-; }
+    Return (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId == "TrayNotifyWnd1")
+}
 
 MouseIsOverTaskbar() {
     CoordMode, Mouse, Screen
     MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId != "ToolbarWindow323" && CtrlUnderMouseId != "TrayNotifyWnd1")
-        Return True
-    Else
-        Return False
+
+    Return (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId != "ToolbarWindow323")
 }
 
 MouseIsOverTaskbarButtonGroup() {
@@ -6227,10 +6112,8 @@ MouseIsOverTaskbarWidgets() {
     MouseGetPos, , , WindowUnderMouseID
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If (mClass == "TaskListThumbnailWnd" || mClass == "Windows.UI.Core.CoreWindow")
-        Return True
-    Else
-        Return False
+
+    Return (mClass == "TaskListThumbnailWnd" || mClass == "Windows.UI.Core.CoreWindow")
 }
 
 MouseIsOverTaskbarBlank() {
