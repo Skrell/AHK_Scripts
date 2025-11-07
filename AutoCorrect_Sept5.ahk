@@ -1078,15 +1078,22 @@ $MButton::
 
     initTime := A_TickCount
 
-    BlockInput, MouseMove
     WinGet, isMax, MinMax, ahk_id %hWnd%
     WinGetClass, cls, ahk_id %hWnd%
-    If (skipClasses.HasKey(cls) || isMax == 1)
+    If (skipClasses.HasKey(cls) || isMax == 1) {
+        KeyWait, Mbutton, U T3
+        Send, {Mbutton}
         return
+    }
 
+    BlockInput, MouseMove
     WinGetPosEx(hWnd, wx0, wy0, ww, wh, offsetX, offsetY)
-    If (ww = "" || wh = "")
+    If (ww = "" || wh = "") {
+        BlockInput, MouseMoveOff
+        KeyWait, Mbutton, U T3
+        Send, {Mbutton}
         return
+    }
 
     snapState := ""   ; "", "left", "right"
     mxPrev := mx0         ; track prior mouse X to know approach direction
@@ -4014,11 +4021,22 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
                     WaitForExplorerLoad(initTargetHwnd)
             }
+            Else {
+                loop, 100 {
+                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                    If (testCtrlFocus == TargetControl)
+                        break
+                    sleep, 1
+                    If (A_Index == 100)
+                        TargetControl := ""
+                }
+            }
 
             GetKeyState("LButton","P") ? Return : ""
 
             WinGet, finalActiveHwnd, ID, A
-            If (initTargetHwnd == finalActiveHwnd) {
+            If (initTargetHwnd == finalActiveHwnd && (InStr(TargetControl,  "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True))) {
                 BlockInput, On
                 Send, {Ctrl UP}
                 Send, ^{NumpadAdd}
@@ -8753,6 +8771,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its down::it's down
 ::its left::it's left
 ::its right::it's right
+::its of::it's of
+::its off::it's off
+::its on::it's on
 ::its any::it's any
 ::iunior::junior
 ::jaques::jacques
