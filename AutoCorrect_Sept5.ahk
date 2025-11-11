@@ -3913,7 +3913,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     If (quickCheckID != initTargetHwnd) {
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
-        tooltip, %lClassCheck% - %quickCheckID% - %initTargetHwnd%
+        tooltip, failed quick check: %lClassCheck% - %quickCheckID% - %initTargetHwnd%
         Return
     }
 
