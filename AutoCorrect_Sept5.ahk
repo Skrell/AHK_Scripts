@@ -39,13 +39,14 @@ Global CurrentDesktop := 1
 #include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 
 SendMode, Input ; It injects the whole keystroke atomically, reducing the window where logical/physical can disagree
-SetKeyDelay, -1, -1
-SetMouseDelay, -1
-SetBatchLines -1
-SetWinDelay   10
-SetControlDelay 10
+
 ; SetKeyDelay is not obeyed by SendInput; there is no delay between keystrokes in that mode.
 ; This same is true for Send when SendMode Input is in effect.
+; SetKeyDelay, -1, -1
+SetMouseDelay,   -1
+SetBatchLines,   -1
+SetWinDelay,      1 ; 10
+SetControlDelay,  1 ; 10
 
 Global mouseMoving                 := False
 Global skipCheck                   := False
@@ -105,7 +106,7 @@ Global DraggingWindow              := False
 ; --- Config ---
 UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
 SnapRange    := 20     ; px: distance from edge to begin snapping
-BreakAway    := 64     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+BreakAway    := 60     ; px: while snapped, drag this far further TOWARD the outside to push past edge
 ReleaseAway  := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
@@ -351,6 +352,10 @@ SetTimer keyTrack, 1
 
 Return
 
+; ==========================================================================================================================================
+; -----------------------------------------------          START OF APPLICATION           --------------------------------------------------
+; ==========================================================================================================================================
+
 OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
     ; tooltip, pop!
 }
@@ -411,6 +416,9 @@ listLines_label:
     ListLines
 Return
 
+; ==========================================================================================================================================
+; -----------------------------------------------          TYPING MANIUPLATION           --------------------------------------------------
+; ==========================================================================================================================================
 Hoty:
     CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey<999) ? CapCount+1 : 1 ; note that CapCount is ALWAYS at least 1
     If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
@@ -440,7 +448,7 @@ FixSlash:
     If IsPriorHotKeyCapital()
         X_PriorPriorHotKey := Substr(A_PriorHotkey,3,1) ; record only the letter key pressed If captialized
 Return
-;------------------------------------------------------------------------------
+
 IsPriorHotKeyLetterKey() {
     Return (IsPriorHotKeyCapital() || IsPriorHotKeyLowerCase())
 }
@@ -513,6 +521,8 @@ DeAssignHotkeys() {
 DoNothing:
 Return
 
+; ==========================================================================================================================================
+; ==========================================================================================================================================
 DetectWin11()
 {
     ; Get version via WMI to capture the build number
@@ -836,25 +846,6 @@ PreventRecur() {
     DllCall( "CoUninitialize" )
 Return
 }
-
-; CapsCorrectionFront($) {
-    ; tofix := $.Value(2)
-    ; StringLower, fixed, tofix
-    ; Send, % $.Value(1) fixed $.Value(3)
-; Return
-; }
-
-; CapsCorrectionBack($) {
-    ; tofix := $.Value(2)
-    ; StringLower, fixed, tofix
-    ; Send, % $.Value(1) fixed
-; Return
-; }
-
-; QuestionMarkorrection($) {
-    ; Send, % $.Value(1) "?" $.Value(2)
-; Return
-; }
 
 ~^Enter::
 DetectHiddenWindows, Off
@@ -1542,6 +1533,29 @@ UnclipCursor() {
     return DllCall("user32\ClipCursor", "ptr", 0) ? 1 : 0
 }
 
+$^f::
+    WinGet, actID, ID, A
+    ; ControlGetFocus, actCtrlNN, A
+    actCtrlNN  := UIA.GetFocusedElement() ; works better in Chrome and VSCode
+    store := CopySelection()
+    len := StrLen(store)
+    if (len > 0) {
+        Send, ^{f}
+        WinGet, testID, ID, A
+        if (testID == actID) {
+            ; ControlGetFocus, testCtrlNN, A
+            testCtrlNN  := UIA.GetFocusedElement()
+            if (actCtrlNN != testCtrlNN) {
+                PastePreservingClipboard(store)
+                Send, +{End}
+                Send, {Delete}
+            }
+        }
+    }
+    else
+        Send, ^{f}
+Return
+
 ^+Esc::
     Run, C:\Program Files\SystemInformer\SystemInformer.exe
 Return
@@ -1796,6 +1810,9 @@ $!+l::
     StopAutoFix := False
 Return
 
+$!h::
+    Send, {Backspace}
+Return
 
 #If disableEnter
 Enter::
@@ -4156,32 +4173,6 @@ WheelUp::send {Volume_Up}
 WheelDown::send {Volume_Down}
 #If
 
-; $LButton::
-    ; Run, C:\Windows\System32\SndVol.exe
-    ; WinWait, ahk_exe SndVol.exe
-    ; WinGetPos, sx, sy, sw, sh, ahk_exe SndVol.exe
-    ; sw := sw + 200
-    ; WinMove, ahk_exe SndVol.exe, , A_ScreenWidth-sw, MonitorWorkAreaBottom-sh, sw
-    ; WinActivate, ahk_exe SndVol.exe
-    ; x_coord := A_ScreenWidth - floor((sx+sw)/2)
-    ; y_coord := MonitorWorkAreaBottom - 30
-    ; CoordMode, Pixel, Screen
-    ; sleep 300
-    ; Critical On
-    ; loop
-    ; {
-        ; PixelGetColor, HexColor, %x_coord%, %y_coord%, RGB
-        ; ; msgbox, %HexColor% - %x_coord% - %y_coord%
-        ; newX := A_ScreenWidth-sw-(10*A_Index)
-        ; newW := sw + (10*A_Index)
-        ; If (HexColor == 0xCDCDCD || HexColor == 0xF0F0F0)
-            ; WinMove, ahk_exe SndVol.exe, , %newX%, , %newW%
-        ; Else
-            ; break
-    ; }
-    ; Critical Off
-; Return
-; #If
 
 #If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
 ; $RButton::
@@ -5512,6 +5503,183 @@ HasVal(haystack, needle) {
             Return index
     Return 0
 }
+
+;========================
+; Copy highlighted text, return it, preserve clipboard
+; Blocks until the clipboard changes to the copied text.
+;========================
+; CopySelection() {
+    ; Critical, On
+    ; ; Backup clipboard
+    ; ClipBak := ClipboardAll
+
+    ; ; Unique sentinel to detect a real change
+    ; sentinel := "«ahk_sentinel_" A_TickCount "»"
+    ; Clipboard := sentinel
+
+    ; ; Ask app to copy selection
+    ; SendInput, ^c
+
+    ; ; Wait until clipboard != sentinel AND contains text (CF_UNICODETEXT = 13)
+    ; Loop {
+        ; if (Clipboard != sentinel) {
+            ; if DllCall("IsClipboardFormatAvailable","UInt",13)
+                ; break
+        ; }
+        ; Sleep, 10
+    ; }
+
+    ; sel := Clipboard
+
+    ; ; Restore original clipboard
+    ; Clipboard := ClipBak
+    ; VarSetCapacity(ClipBak, 0)
+    ; Critical, Off
+    ; return sel
+; }
+; CopySelection(): copies highlighted text, returns it, preserves clipboard.
+; - Avoids infinite wait in Chrome when no text is selected.
+; - If UIA.ahk is available, uses it to detect empty selection instantly.
+; - Otherwise uses a bounded wait + quick retry (no long fixed timeout).
+CopySelection() {
+    Global UIA
+    Critical, On
+
+    ; If Chrome (or Edge/Electron), try UIA to see if there is any selected text:
+    WinGetClass, cls, A
+    if (cls = "Chrome_WidgetWin_1") {
+        sel := __TryGetSelectionViaUIA()
+        if (sel != "__UIA_UNAVAILABLE__") {
+            ; UIA worked: either actual text or ""
+            Critical, Off
+            return sel
+        }
+        ; else: UIA not available → fall through to clipboard path
+    }
+
+    ; Clipboard path (works for most apps; guarded to avoid hang)
+    ClipBak := ClipboardAll
+    sentinel := "«ahk_sentinel_" A_TickCount "»"
+    Clipboard := sentinel
+
+    SendInput, ^c
+
+    ; Wait until clipboard != sentinel and has text (guard ~300ms total)
+    start := A_TickCount
+    changed := false
+    Loop {
+        if (Clipboard != sentinel) {
+            ; CF_UNICODETEXT = 13
+            if DllCall("IsClipboardFormatAvailable", "UInt", 13) {
+                changed := true
+                break
+            }
+        }
+        if ((A_TickCount - start) > 180)  ; small guard to avoid hang in "no selection" case
+            break
+        Sleep, 10
+    }
+
+    if (!changed) {
+        ; quick retry once (some apps need two ^c's)
+        SendInput, ^c
+        start := A_TickCount
+        Loop {
+            if (Clipboard != sentinel && DllCall("IsClipboardFormatAvailable","UInt",13)) {
+                changed := true
+                break
+            }
+            if ((A_TickCount - start) > 120)
+                break
+            Sleep, 10
+        }
+    }
+
+    if (changed)
+        sel := Clipboard
+    else
+        sel := ""   ; nothing selected
+
+    Clipboard := ClipBak
+    VarSetCapacity(ClipBak, 0)
+    Critical, Off
+    return sel
+}
+
+; --- UIA helper: returns selected text quickly in Chrome if possible.
+; Requires UIA.ahk (Descolada’s UIA). If not available, returns "__UIA_UNAVAILABLE__".
+__TryGetSelectionViaUIA() {
+    Global UIA
+    try {
+        if !IsFunc("UIA_Interface")
+            throw Exception("no UIA")
+        UIA := UIA_Interface()
+        el  := UIA.GetFocusedElement()
+
+        ; If Text pattern is available, get selection range(s)
+        if el.PatternAvailable("Text") {
+            selRanges := el.TextPattern.GetSelection()
+            if (selRanges.Length() = 0) {
+                return ""   ; definitely no selection
+            } else {
+                ; Combine selection ranges (usually one)
+                out := ""
+                for k, r in selRanges
+                    out .= r.GetText(0)  ; 0 = all text in range
+                return out
+            }
+        }
+        ; If Value pattern is available but no selection, treat as none
+        if el.PatternAvailable("Value") {
+            ; Value pattern doesn’t give selection; assume none
+            return ""
+        }
+        return ""  ; default: assume none if we can talk to UIA but no selection info
+    } catch e {
+        return "__UIA_UNAVAILABLE__"
+    }
+}
+
+;========================
+; Paste text and restore the user's clipboard afterward.
+; Uses a short one-shot timer to avoid paste race conditions.
+;========================
+PastePreservingClipboard(text, reselect := 0, restoreDelayMs := 200) {
+    Critical, On
+    global __ClipBakForPaste
+    __ClipBakForPaste := ClipboardAll
+
+    ; Publish the text to clipboard and wait until it sticks
+    Clipboard := ""
+    Clipboard := text
+    ; Wait until clipboard equals our text (no fixed timeout).
+    Loop {
+        if (Clipboard = text)
+            break
+        Sleep, 10
+    }
+
+    ; Paste
+    SendInput, ^v
+
+    ; Optional: reselect just-pasted text
+    if (reselect && text != "") {
+        len := StrLen(StrReplace(text, "`r"))   ; strip CR so {Left n} matches
+        if (len)
+            SendInput, {Shift Down}{Left %len%}{Shift Up}
+    }
+
+    ; Restore original clipboard slightly AFTER paste completes
+    SetTimer, __RestoreClipboard_AfterPaste, -%restoreDelayMs%
+    Critical, Off
+}
+
+__RestoreClipboard_AfterPaste:
+    global __ClipBakForPaste
+    Clipboard := __ClipBakForPaste
+    VarSetCapacity(__ClipBakForPaste, 0)
+return
+
 
 ; Clip() - Send and Retrieve Text Using the Clipboard
 ; by berban - updated February 18, 2019
@@ -8703,10 +8871,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it' snot::it's not
 ::itis::it is
 ::ititial::initial
-::its a::it's a
-::its an::it's an
-::its the::it's the
-::itwas::it was
+::it's::its
 ::it's color::its color
 ::it's surface::its surface
 ::it's texture::its texture
@@ -8756,49 +8921,57 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's limits::its limits
 ::it's reputation::its reputation
 ::it's effect::its effect
-::its raining::it's raining
-::its sunny::it's sunny
-::its cold::it's cold
-::its hot::it's hot
-::its time::it's time
-::its late::it's late
-::its true::it's true
-::its false::it's false
-::its over::it's over
-::its ready::it's ready
-::its done::it's done
-::its fine::it's fine
-::its okay::it's okay
-::its possible::it's possible
-::its important::it's important
-::its clear::it's clear
-::its complicated::it's complicated
-::its happening::it's happening
-::its working::it's working
-::its broken::it's broken
+::its a::it's a
+::its an::it's an
+::its the::it's the
+::itwas::it was
 ::its beautiful::it's beautiful
 ::its been::it's been
-::its gone::it's gone
-::its easy:: it's easy
-::its hard:: it's hard
-::its difficult:: it's difficult
-::its finished::it's finished
-::its started::it's started
-::its happened::it's happened
-::its improved::it's improved
+::its broken::it's broken
 ::its changed::it's changed
-::its grown::it's grown
+::its clear::it's clear
+::its cold::it's cold
+::its complicated::it's complicated
 ::its developed::it's developed
-::its evolved::it's evolved
-::its not::it's not
-::its in::it's in
-::its up::it's up
+::its difficult:: it's difficult
+::its done::it's done
 ::its down::it's down
+::its easy:: it's easy
+::its evolved::it's evolved
+::its false::it's false
+::its fine::it's fine
+::its finished::it's finished
+::its gone::it's gone
+::its grown::it's grown
+::its happened::it's happened
+::its happening::it's happening
+::its hard:: it's hard
+::its here:: it's here
+::its her::it's her
+::its his::it's his
+::its hot::it's hot
+::its important::it's important
+::its improved::it's improved
+::its in::it's in
+::its late::it's late
 ::its left::it's left
-::its right::it's right
+::its not::it's not
 ::its of::it's of
 ::its off::it's off
+::its okay::it's okay
 ::its on::it's on
+::its over::it's over
+::its possible::it's possible
+::its raining::it's raining
+::its ready::it's ready
+::its right::it's right
+::its started::it's started
+::its sunny::it's sunny
+::its there::it's there
+::its time::it's time
+::its true::it's true
+::its up::it's up
+::its working::it's working
 ::its any::it's any
 ::iunior::junior
 ::jaques::jacques
@@ -8842,6 +9015,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::legitamite::legitimate
 ::leibnitz::leibniz
 ::lerans::learns
+::lets'::let's
 ::let's him::lets him
 ::let's it::lets it
 ::leutenant::lieutenant
