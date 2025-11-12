@@ -3913,14 +3913,13 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     If (quickCheckID != initTargetHwnd) {
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
-        tooltip, failed quick check: %lClassCheck% - %quickCheckID% - %initTargetHwnd%
+        tooltip, failed quick check: %lClassCheck% - %quickCheckID% - %initTargetHwnd%
         Return
     }
 
     If (!GetKeyState("LShift","P" )
         && lClassCheck != "WorkerW" && lClassCheck != "ProgMan"
-        && !InStr(lClassCheck, "Shell",False) && !InStr(lClassCheck, "TrayWnd",False)
-        && !InStr(lClassCheck, "EVERYTHING", True)) {
+        && !InStr(lClassCheck, "Shell",False) && !InStr(lClassCheck, "TrayWnd",False)) {
 
         If (initFocusedCtrlNN == "") {
             MouseGetPos, , , , initFocusedCtrlNN
@@ -3948,11 +3947,11 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
             loop 200 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %initTargetHwnd%
+                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %initTargetHwnd%
+                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %initTargetHwnd%
                 ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %initTargetHwnd%
                 ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %initTargetHwnd%
                 ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %initTargetHwnd%
-                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %initTargetHwnd%
-                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %initTargetHwnd%
                 If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
                     break
                 sleep, 1
