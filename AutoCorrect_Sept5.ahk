@@ -5508,35 +5508,6 @@ HasVal(haystack, needle) {
 ; Copy highlighted text, return it, preserve clipboard
 ; Blocks until the clipboard changes to the copied text.
 ;========================
-; CopySelection() {
-    ; Critical, On
-    ; ; Backup clipboard
-    ; ClipBak := ClipboardAll
-
-    ; ; Unique sentinel to detect a real change
-    ; sentinel := "«ahk_sentinel_" A_TickCount "»"
-    ; Clipboard := sentinel
-
-    ; ; Ask app to copy selection
-    ; SendInput, ^c
-
-    ; ; Wait until clipboard != sentinel AND contains text (CF_UNICODETEXT = 13)
-    ; Loop {
-        ; if (Clipboard != sentinel) {
-            ; if DllCall("IsClipboardFormatAvailable","UInt",13)
-                ; break
-        ; }
-        ; Sleep, 10
-    ; }
-
-    ; sel := Clipboard
-
-    ; ; Restore original clipboard
-    ; Clipboard := ClipBak
-    ; VarSetCapacity(ClipBak, 0)
-    ; Critical, Off
-    ; return sel
-; }
 ; CopySelection(): copies highlighted text, returns it, preserves clipboard.
 ; - Avoids infinite wait in Chrome when no text is selected.
 ; - If UIA.ahk is available, uses it to detect empty selection instantly.
