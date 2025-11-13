@@ -664,6 +664,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
             }
 
+            initFocusedCtrl := ""
             loop, 100 {
                 ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
                 If (initFocusedCtrl != "")
@@ -1533,28 +1534,68 @@ UnclipCursor() {
     return DllCall("user32\ClipCursor", "ptr", 0) ? 1 : 0
 }
 
-$^f::
-    WinGet, actID, ID, A
+; ~$^f::
+    ; SetTimer, keyTrack,   Off
+    ; SetTimer, mouseTrack, Off
+
+    ; testCtrlNN :=
+    ; actCtrlNN  :=
+
+    ; useUIA := False
+    ; WinGet, actID, ID, A
     ; ControlGetFocus, actCtrlNN, A
-    actCtrlNN  := UIA.GetFocusedElement() ; works better in Chrome and VSCode
-    store := CopySelection()
-    len := StrLen(store)
-    if (len > 0) {
-        Send, ^{f}
-        WinGet, testID, ID, A
-        if (testID == actID) {
-            ; ControlGetFocus, testCtrlNN, A
-            testCtrlNN  := UIA.GetFocusedElement()
-            if (actCtrlNN != testCtrlNN) {
-                PastePreservingClipboard(store)
-                Send, +{End}
-                Send, {Delete}
-            }
-        }
-    }
-    else
-        Send, ^{f}
-Return
+    ; if (!actCtrlNN) {
+        ; actCtrlNN  := UIA.GetFocusedElement().AutomationId
+        ; useUIA := True
+    ; }
+
+    ; tooltip, current focus is %actCtrlNN%
+    ; ; actCtrlNN  := UIA.GetFocusedElement() ; works better in Chrome and VSCode
+    ; ; store := CopySelection()
+    ; store := Clip()
+    ; len := StrLen(store)
+    ; if (len >= 2) {
+        ; ; Critical, On
+        ; ; Send, {Ctrl Up}
+        ; ; Send, ^{f}
+        ; ; Send, {Ctrl Up}
+        ; ; Critical, Off
+        ; WinGet, testID, ID, A
+        ; if (testID == actID) {
+            ; if useUIA
+                ; testCtrlNN  := UIA.GetFocusedElement().AutomationId
+            ; else {
+                ; loop 10 {
+                    ; ControlGetFocus, testCtrlNN, A
+                    ; if (testCtrlNN != "")
+                        ; break
+                    ; sleep, 1
+                ; }
+            ; }
+
+            ; if (testCtrlNN != "" && actCtrlNN != testCtrlNN) {
+                ; tooltip, ctrl is %testCtrlNN%
+                ; if RegExMatch(testCtrlNN, "^Edit\d+$") {
+                    ; tooltip, normal find
+                    ; ControlGetText, testText, %testCtrlNN%, A
+                    ; if (testText == store)
+                        ; return
+                ; }
+                ; ; PastePreservingClipboard(store)
+                ; Clip(store)
+                ; Send, +{End}
+                ; Send, {Delete}
+                ; Send, {Shift Up}
+                ; ; break
+            ; }
+        ; }
+    ; }
+    ; ; else
+        ; ; Send, ^{f}
+
+    ; SetTimer, mouseTrack, On
+    ; SetTimer, keyTrack,   On
+; Return
 
 ^+Esc::
     Run, C:\Program Files\SystemInformer\SystemInformer.exe
@@ -3939,9 +3980,10 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         && !InStr(lClassCheck, "Shell",False) && !InStr(lClassCheck, "TrayWnd",False)) {
 
         If (initFocusedCtrlNN == "") {
-            MouseGetPos, , , , initFocusedCtrlNN
+            ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
             while (initFocusedCtrlNN == "ShellTabWindowClass1") {
-                MouseGetPos, , , , initFocusedCtrlNN
+                ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
+                sleep, 1
             }
         }
 
@@ -3955,12 +3997,12 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         OutputVar6 := 0
         OutputVar8 := 0
 
-        If (!InStr(initFocusedCtrlNN,"SysListView32",True)
-             && initFocusedCtrlNN != "DirectUIHWND2"
-             && initFocusedCtrlNN != "DirectUIHWND3"
-             && initFocusedCtrlNN != "DirectUIHWND4"
-             && initFocusedCtrlNN != "DirectUIHWND6"
-             && initFocusedCtrlNN != "DirectUIHWND8") {
+        If (!InStr(initFocusedCtrlNN,   "SysListView32", True)
+                && initFocusedCtrlNN != "DirectUIHWND2"
+                && initFocusedCtrlNN != "DirectUIHWND3"
+                && initFocusedCtrlNN != "DirectUIHWND4"
+                && initFocusedCtrlNN != "DirectUIHWND6"
+                && initFocusedCtrlNN != "DirectUIHWND8" ) {
 
             loop 200 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %initTargetHwnd%
@@ -4077,6 +4119,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             GetKeyState("LButton","P") || (finalCheckID != initTargetHwnd) ? Return : ""
 
             If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
+                tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
                 BlockInput, On
                 Send, {Ctrl UP}
                 Send, ^{NumpadAdd}
@@ -5655,49 +5698,110 @@ return
 ; Clip() - Send and Retrieve Text Using the Clipboard
 ; by berban - updated February 18, 2019
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=62156
-Clip(Text := "", Reselect := "")
-{
-    Static BackUpClip, Stored, LastClip
-    If (A_ThisLabel = A_ThisFunc) {
-        If (Clipboard == LastClip)
-            Clipboard := BackUpClip
-        BackUpClip := LastClip := Stored := ""
-    } Else {
-        If !Stored {
-            Stored := True
-            BackUpClip := ClipboardAll ; ClipboardAll must be on its own line
-        } Else
-            SetTimer, %A_ThisFunc%, Off
-        LongCopyMs := A_TickCount
-        Clipboard := ""
-        LongCopyMs -= A_TickCount ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
-        LongCopySec := LongCopyMs / 1000.0
-        If RegExMatch(Text, "^\s+$")
-            Return
-        Else If (Text == "") {
-            Send, ^c
-            ; ClipWait, LongCopy ? 0.6 : 0.2, True
-            ; ClipWait, LongCopySec, True
-            ClipWait, %LongCopySec%
-        } Else {
-            Clipboard := LastClip := Text
-            ; ClipWait, 10
-            ClipWait, %LongCopyMs%
-            Send, ^v
-        }
-        SetTimer, %A_ThisFunc%, -700
-        Sleep 20 ; Short sleep in case Clip() is followed by more keystrokes such as {Enter}
-        If (Text == "")
-            Return LastClip := Clipboard
-        Else If ReSelect && ((ReSelect == True) || (StrLen(Text) < 3000))
-            Send, % "{Shift Down}{Left " StrLen(StrReplace(Text, "`r")) "}{Shift Up}"
-    }
-    Return
+; Clip(Text := "", Reselect := "")
+; {
+    ; Static BackUpClip, Stored, LastClip
+    ; ; Did this run because of the label Clip: (a timer callback)? Or because the function Clip() was called directly?
+    ; If (A_ThisLabel = A_ThisFunc) {
+        ; If (Clipboard == LastClip)
+            ; Clipboard := BackUpClip
+        ; BackUpClip := LastClip := Stored := ""
+    ; } Else {
+        ; If !Stored {
+            ; Stored := True
+            ; BackUpClip := ClipboardAll ; ClipboardAll must be on its own line
+        ; } Else
+            ; SetTimer, %A_ThisFunc%, Off
+        ; LongCopyMs := A_TickCount
+        ; Clipboard := ""
+        ; LongCopyMs -= A_TickCount ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
+        ; LongCopySec := LongCopyMs / 1000.0
+        ; If RegExMatch(Text, "^\s+$")
+            ; Return
+        ; Else If (Text == "") {
+            ; Send, ^c
+            ; ; ClipWait, LongCopy ? 0.6 : 0.2, True
+            ; ; ClipWait, LongCopySec, True
+            ; ClipWait, %LongCopySec%
+        ; } Else {
+            ; Clipboard := LastClip := Text
+            ; ; ClipWait, 10
+            ; ClipWait, %LongCopyMs%
+            ; Send, ^v
+        ; }
+        ; SetTimer, %A_ThisFunc%, -700
+        ; Sleep 20 ; Short sleep in case Clip() is followed by more keystrokes such as {Enter}
+        ; If (Text == "")
+            ; Return LastClip := Clipboard
+        ; Else If ReSelect && ((ReSelect == True) || (StrLen(Text) < 3000))
+            ; Send, % "{Shift Down}{Left " StrLen(StrReplace(Text, "`r")) "}{Shift Up}"
+    ; }
+    ; Return
 
-    Clip:
-        Return Clip()
+    ; Clip:
+        ; Return Clip()
+; }
+; https://www.autohotkey.com/boards/viewtopic.php?p=526665#p526665
+; AutoHotkey v1 version of Clip()
+Clip(Text := "", Reselect := "", Restore := "")
+{
+    Static BackUpClip := "", Stored := False, LastClip := "", Restored := ""
+
+    if (Restore) {
+        if (Clipboard == LastClip)
+            Clipboard := BackUpClip
+        BackUpClip := "", LastClip := "", Stored := ""
+        SetTimer, ClipRestore, Off
+        return
+    } else {
+        if !Stored {
+            Stored := True
+            ; ClipboardAll must be on its own line in v1
+            BackUpClip := ClipboardAll
+        } else {
+            ; cancel any pending restore (run immediately in v2 code with 0)
+            SetTimer, ClipRestore, Off
+        }
+
+        LongCopy := A_TickCount
+        Clipboard := ""
+        LongCopy -= A_TickCount
+        ; LongCopy indicates how long it took to clear the clipboard,
+        ; used to guess how long ClipWait may need.
+
+        if (Text = "") {
+            SendInput, ^c
+            ; mimic v2: ClipWait (LongCopy ? 0.6 : 0.2), True
+            if (LongCopy) {
+                ClipWait, 0.6, 1
+            } else {
+                ClipWait, 0.2, 1
+            }
+        } else {
+            Clipboard := LastClip := Text
+            ClipWait, 10
+            SendInput, ^v
+        }
+
+        ; schedule a one-shot restore in ~700ms
+        SetTimer, ClipRestore, -700
+        Sleep, 20  ; small buffer in case more keystrokes (e.g., Enter) follow
+
+        if (Text = "") {
+            ; return the copied text, normalizing CR
+            return LastClip := StrReplace(Clipboard, "`r")
+            } else if ((Reselect = True) || (Reselect && (StrLen(Text) < 3000))) {
+            Text := StrReplace(Text, "`r")
+            SendInput, % "{Shift Down}{Left " StrLen(Text) "}{Shift Up}"
+        }
+    }
+    return
 }
 
+; v1 uses a label for timers; call the function in "restore" mode.
+ClipRestore:
+    Clip("", "", "RESTORE")
+return
 
 ;-------------------------------------------------------------------------------
 ; https://github.com/radosi/virtualdesktop/tree/main
@@ -5895,7 +5999,7 @@ FindSecondMostWindow(ref_hwndID := "") {
 
 IsEditFieldActive() {
     ControlGetFocus, FocusedControl, A
-    If (InStr(FocusedControl, "Edit", True))
+    If (RegExMatch(FocusedControl, "^Edit\d+$"))
         Return True
     Else
         Return False
