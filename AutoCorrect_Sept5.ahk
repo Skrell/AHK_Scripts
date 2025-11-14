@@ -4,10 +4,6 @@
 ; ? = triggered even when the character typed immediately before it is alphanumeric
 ; r = raw output
 
-
-; dummyFunction1() {
-    ; static dummyStatic1 := VD.init()
-; }
 ; the auto-exec section ends at the first hotkey/hotstring or return or exit or at the script end - whatever comes first; function definitions get ignored by the execution flow.
 #NoEnv
 #SingleInstance
@@ -1534,69 +1530,6 @@ UnclipCursor() {
     return DllCall("user32\ClipCursor", "ptr", 0) ? 1 : 0
 }
 
-; ~$^f::
-    ; SetTimer, keyTrack,   Off
-    ; SetTimer, mouseTrack, Off
-
-    ; testCtrlNN :=
-    ; actCtrlNN  :=
-
-    ; useUIA := False
-    ; WinGet, actID, ID, A
-    ; ControlGetFocus, actCtrlNN, A
-    ; if (!actCtrlNN) {
-        ; actCtrlNN  := UIA.GetFocusedElement().AutomationId
-        ; useUIA := True
-    ; }
-
-    ; tooltip, current focus is %actCtrlNN%
-    ; ; actCtrlNN  := UIA.GetFocusedElement() ; works better in Chrome and VSCode
-    ; ; store := CopySelection()
-    ; store := Clip()
-    ; len := StrLen(store)
-    ; if (len >= 2) {
-        ; ; Critical, On
-        ; ; Send, {Ctrl Up}
-        ; ; Send, ^{f}
-        ; ; Send, {Ctrl Up}
-        ; ; Critical, Off
-        ; WinGet, testID, ID, A
-        ; if (testID == actID) {
-            ; if useUIA
-                ; testCtrlNN  := UIA.GetFocusedElement().AutomationId
-            ; else {
-                ; loop 10 {
-                    ; ControlGetFocus, testCtrlNN, A
-                    ; if (testCtrlNN != "")
-                        ; break
-                    ; sleep, 1
-                ; }
-            ; }
-
-            ; if (testCtrlNN != "" && actCtrlNN != testCtrlNN) {
-                ; tooltip, ctrl is %testCtrlNN%
-                ; if RegExMatch(testCtrlNN, "^Edit\d+$") {
-                    ; tooltip, normal find
-                    ; ControlGetText, testText, %testCtrlNN%, A
-                    ; if (testText == store)
-                        ; return
-                ; }
-                ; ; PastePreservingClipboard(store)
-                ; Clip(store)
-                ; Send, +{End}
-                ; Send, {Delete}
-                ; Send, {Shift Up}
-                ; ; break
-            ; }
-        ; }
-    ; }
-    ; ; else
-        ; ; Send, ^{f}
-
-    ; SetTimer, mouseTrack, On
-    ; SetTimer, keyTrack,   On
-; Return
-
 ^+Esc::
     Run, C:\Program Files\SystemInformer\SystemInformer.exe
 Return
@@ -1609,6 +1542,9 @@ Return
 
 #If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE") && !IsEditFieldActive())
 ^+d::
+    if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
+        Send, {Esc}
+
     StopAutoFix := True
     SetTimer, keyTrack, Off
     Send, {Down}
@@ -1616,6 +1552,8 @@ Return
     Send, {Home}{Home}
     sleep, 10
     Send, +{up}
+    sleep, 10
+    Send, +{Home}
     ; Send, {End}
     ; Send, +{Home}+{Home}+{Home}
     sleep, 10
@@ -1626,27 +1564,75 @@ Return
 Return
 
 ^d::
+    if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
+        Send, {Esc}
     StopAutoFix := True
     SetTimer, keyTrack, Off
+    ; Send, {End}
+    ; sleep, 10
+    ; Send, +{Home}+{Home}+{Home}
+    ; sleep, 10
+    ; store := Clip()
+    ; tooltip, %store%
+    ; sleep, 10
+    ; Send, {End}
+    ; sleep, 10
+    ; Send, {Enter}
+    ; sleep, 10
+    ; Send, {Home}
+    ; Clip(store)
+    ; Hotstring("Reset")
+    ; StopAutoFix := False
+    ; SetTimer, keyTrack, On
+    ; sleep, 500
+
+    ; If there’s no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
+    if (A_CaretX = "")
+    {
+        Send ^+d
+        return
+    }
+    Send, {Ctrl Up}
+    ; Your environment hooks
+    StopAutoFix := True
+    SetTimer, keyTrack, Off
+
+    ; 1) Go to absolute start of the line and select it
+    Send, {Home}{Home}
+    Sleep, 10
+    Send, +{End}
+    Sleep, 10
+
+    ; 2) Copy the line text via your clipboard-safe helper
+    lineText := Clip()   ; returns the copied text, clipboard will auto-restore later
+
+    ; 3) Insert a newline and paste the duplicate line BELOW
     Send, {End}
-    sleep, 10
-    Send, +{Home}+{Home}+{Home}
-    sleep, 10
-    store := Clip()
-    tooltip, %store%
-    sleep, 10
-    Send, {End}
-    sleep, 10
+    Sleep, 10
     Send, {Enter}
-    sleep, 10
-    Send, {Home}
-    Clip(store)
+    Sleep, 10
+    Send, +{Home}
+    Sleep, 10
+    Clip(lineText)       ; paste via helper (keeps clipboard safe)
+    Sleep, 10
+
+    ; 4) Return caret to the original line at column 1 (reliably cross-editor)
+    Send, {Up} ; {Home}{Home}
+    Sleep, 100
+    ; Optional: if you prefer immediate clipboard restore instead of the ~700ms timer, uncomment:
+    ; Clip("", "", "RESTORE")
+
+    ; Your environment reset
     Hotstring("Reset")
     StopAutoFix := False
     SetTimer, keyTrack, On
-    sleep, 500
 Return
 #If
+
+ControlExist(ctrl, winTitle := "", winText := "") {
+    ControlGet, hCtl, Hwnd,, %ctrl%, %winTitle%, %winText%
+    return !!hCtl
+}
 
 !a::
     StopAutoFix := True
@@ -4399,30 +4385,6 @@ MyTimer() {
    menux := menux + 10
    menuy := menuy + 10
    MouseMove, %menux%, %menuy%
-
-   ; WinMove, ahk_id %IGUIF%  , ,menux, menuy, menuw, menuh,
-   ; ; WinMove, ahk_id %IGUIF2%  , ,menux, menuy, menuw, menuh,
-   ; WinSet, TransColor, FF00FF 50, ahk_id %IGUIF%
-   ; sleep, 20
-   ; ; WinSet, TransColor, FF00FF 50, ahk_id %IGUIF2%
-   ; sleep, 20
-   ; WinSet, TransColor, FF00FF 100, ahk_id %IGUIF%
-   ; sleep, 20
-   ; ; WinSet, TransColor, FF00FF 100, ahk_id %IGUIF2%
-   ; sleep, 20
-   ; WinSet, TransColor, FF00FF 150, ahk_id %IGUIF%
-   ; sleep, 20
-   ; ; WinSet, TransColor, FF00FF 150, ahk_id %IGUIF2%
-   ; sleep, 20
-   ; WinSet, TransColor, FF00FF 200, ahk_id %IGUIF%
-   ; sleep, 20
-   ; ; WinSet, TransColor, FF00FF 200, ahk_id %IGUIF2%
-   ; sleep, 20
-   ; WinSet, TransColor, FF00FF 254, ahk_id %IGUIF%
-   ; sleep, 20
-   ; ; WinSet, TransColor, FF00FF 254, ahk_id %IGUIF2%
-
-   ; WinSet, AlwaysOnTop, on,  ahk_class #32768
 }
 
 MyFader() {
@@ -4953,15 +4915,6 @@ FrameShadow(HGui) {
     }
 }
 
-; Copy this function into your script to use it.
-HideTrayTip() {
-    TrayTip  ; Attempt to hide it the normal way.
-    If SubStr(A_OSVersion,1,3) = "10." {
-        Menu Tray, NoIcon
-        Sleep 200  ; It may be necessary to adjust this sleep.
-        Menu Tray, Icon
-    }
-}
 ; --------------------   ChatGPT -------------------------------------------------
 FixMod(name, vk) {
     if (A_IsSending)  ; skip if script is sending keys
@@ -5008,12 +4961,12 @@ keyTrack() {
         ; A_PriorKey and Loops — How It Works
         ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a loop.
         ; You can read A_PriorKey at any point in the loop, and it will show the most recent key pressed up to that moment.
-        ; tooltip, lastKey-%lastHotkeyTyped% missedKey-%A_PriorKey%
+        ; tooltip, % "lastKey- " . A_PriorKey . " - " . A_TickCount-TimeOfLastHotkeyTyped
         If (   TimeOfLastHotkeyTyped
             && ((A_TickCount-TimeOfLastHotkeyTyped) > 300)
             && (A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_PriorKey != "LControl" && x_PriorPriorKey != "LControl")
-            && (InStr(keys, x_PriorPriorKey, false) || InStr(numbers, x_PriorPriorKey, false || A_PriorKey == "Space") || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace") ) {
-
+            && (InStr(keys, x_PriorPriorKey, false) || InStr(numbers, x_PriorPriorKey, false) || A_PriorKey == "Space" || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace") ) {
+            ; tooltip, adjusting bc of %A_PriorKey%
             TimeOfLastHotkeyTyped :=
             SetTimer, keyTrack,   Off
             DeAssignHotkeys()
@@ -5022,7 +4975,8 @@ keyTrack() {
             Send, ^{NumpadAdd}
             Critical, Off
 
-            If ((InStr(keys, lastHotkeyTyped, false) || (InStr(numbers, lastHotkeyTyped, false) || A_PriorKey == "Space") || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace")
+            If (InStr(keys, lastHotkeyTyped, false)
+                || (InStr(numbers, lastHotkeyTyped, false) || A_PriorKey == "Space" || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace")
                 && lastHotkeyTyped != "" && A_PriorKey != "" && A_PriorKey != lastHotkeyTyped) {
                 If (A_PriorKey == "Space")
                     Send, {SPACE}
@@ -7097,39 +7051,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:ceis::cies
 :?:eses::esses
 :?:ases::asses
-:?:bj::b
-:?:cj::c
-:?:dj::d
-:?:fq::f
-:?:gj::g
-:?:iq::i
-:?:jq::j
-:?:jx::j
-:?:kj::k
-:?:kq::k
-:?:mq::m
-:?:oj::o
-:?:qj::q
-:?:qq::q
-:?:qx::q
-:?:qz::q
-:?:uj::u
-:?:vq::v
-:?:wq::w
-:?:wz::w
-:?:xq::x
-:?:xz::x
-:?:yq::y
-:?:zq::z
-:?:zz::z
-:?:cz::c
-:?:dx::d
-:?:ez::e
-:?:hx::h
-:?:jy::j
-:?:kx::k
-:?:nx::n
-:?:oz::o
 :?:tn::nt
 ;------------------------------------------------------------------------------
 ; Word beginnings
@@ -7259,65 +7180,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:speciif::specifi
 :*:fucn::func
 :*:retreiv::retriev
-; :*:dj::j
-; :*:fj::j
-; :*:gj::j
-; :*:hz::z
-; :*:ij::j
-; :*:jq::q
-; :*:kq::q
-; :*:qj::j
-; :*:qw::w
-; :*:qz::z
-; :*:vx::x
-; :*:vz::z
-; :*:wq::q
-; :*:wz::z
-; :*:xj::j
-; :*:xz::z
-; :*:yq::q
-; :*:zq::q
-; :*:zz::z
-; :*:aj::j
-; :*:bq::q
-; :*:cj::j
-; :*:dk::k
-; :*:ez::z
-; :*:ix::x
-; :*:jx::x
-; :*:kf::f
-; :*:lx::x
-; :*:mx::x
-; :*:nz::z
-; :*:oj::j
-; :*:px::x
-; :*:qx::x
-; :*:rx::x
-; :*:sx::x
-; :*:ux::x
-; :*:vx::x
-; :*:wx::x
-; :*:yx::x
-; :*:zx::x
-; :*:bb::b
-; :*:cc::c
-; :*:dd::d
-; :*:ff::f
-; :*:gg::g
-; :*:hh::h
-; :*:ii::i
-; :*:jj::j
-; :*:kk::k
-; :*:mm::m
-; :*:nn::n
-; :*:pp::p
-; :*:qq::q
-; :*:rr::r
-; :*:ss::s
-; :*:tt::t
-; :*:uu::u
-; :*:vv::v
-; :*:yy::y
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
@@ -7337,6 +7199,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::SO::So
 ::onesself::oneself
 ::violance::violence
 ::stuats::status
@@ -7539,7 +7402,19 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::anbd::and
 ::ancestory::ancestry
 ::ancilliary::ancillary
-::andone::and one
+::Andone::and one
+::Anroid::Android
+::Andoid::Android
+::Andrid::Android
+::Androd::Android
+::Androi::Android
+::Android::Android
+::nAdroid::Android
+::Adnroid::Android
+::Anrdoid::Android
+::Andorid::Android
+::Andriod::Android
+::Androdi::Android
 ::androgenous::androgynous
 ::androgeny::androgyny
 ::andt he::and the
