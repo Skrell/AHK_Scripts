@@ -1036,30 +1036,29 @@ $MButton::
     Hotkey, *Rbutton, DoNothing, On
     Hotkey, Mbutton & Rbutton, DoNothing, On
 
-    wx0 := 0
-    wy0 := 0
-    ww  := 0
-    wh  := 0
-    virtwx0 := 0
-    virtwy0 := 0
-    offsetX := 0
-    offsetY := 0
-    windowSnapped := False
-    TL := False
-    TR := False
-    BL := False
-    BR := False
-    snapShotX := 0
-    snapShotY := 0
-    adjustSize := False
-    isRbutton  := False
-    switchingBackToMove := False
-    switchingBacktoResize := False
-    skipAlwaysOnTop := False
-
     MouseGetPos, mx0, my0, hWnd, ctrl, 2
-    checkClickMx := mx0
-    checkClickMy := my0
+    checkClickMx          := mx0
+    checkClickMy          := my0
+    wx0                   := 0
+    wy0                   := 0
+    ww                    := 0
+    wh                    := 0
+    virtwx0               := 0
+    virtwy0               := 0
+    offsetX               := 0
+    offsetY               := 0
+    windowSnapped         := False
+    TL                    := False
+    TR                    := False
+    BL                    := False
+    BR                    := False
+    snapShotX             := 0
+    snapShotY             := 0
+    adjustSize            := False
+    isRbutton             := False
+    switchingBackToMove   := False
+    switchingBacktoResize := False
+    skipAlwaysOnTop       := False
 
     If (!hWnd || !JEE_WinHasAltTabIcon(hWnd))
         return
@@ -1068,7 +1067,7 @@ $MButton::
 
     WinGet, isMax, MinMax, ahk_id %hWnd%
     WinGetClass, cls, ahk_id %hWnd%
-    If (skipClasses.HasKey(cls) || isMax == 1) {
+    If (skipClasses.HasKey(cls)) {
         KeyWait, Mbutton, U T3
         Send, {Mbutton}
         return
@@ -1149,7 +1148,7 @@ $MButton::
 
         windowSnapped := False
 
-        MouseGetPos, mx, my, mbuttonHwnID
+        MouseGetPos, mx, my,
 
         If switchingBackToMove {
             mx0 := mx
@@ -1160,6 +1159,36 @@ $MButton::
             mx0 := mx
             my0 := my
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+        }
+
+        If (isMax == 1 && (abs(mx - mx0) > 5 || abs(my - my0) > 5)) {
+            BlockInput, Mousemove
+            xRatio := (mx-monL)/ww
+            yRatio := (my-monT)/wh
+            ; Guard against weirdness
+            if (xRatio < 0)
+                xRatio := 0
+            if (xRatio > 1)
+                xRatio := 1
+            if (yRatio < 0)
+                yRatio := 0
+            if (yRatio > 1)
+                yRatio := 1
+
+            WinRestore, ahk_id %hWnd%
+            WaitForStableWindow(hWnd)
+
+            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+            moveToX := Round(mx - xRatio * ww)
+            moveToY := Round(my - yRatio * wh)
+
+            WinMove, ahk_id %hWnd%,, %moveToX%, %moveToY%
+            WaitForStableWindow(hWnd)
+
+            isMax == 0
+            WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+            MouseGetPos, mx, my,
+            BlockInput, MouseMoveOff
         }
 
         dragHorz := ""
@@ -1199,13 +1228,11 @@ $MButton::
 
         WinGet, trans, Transparent, ahk_id %hWnd%
         If (trans == 255 && (abs(dx) > 5 || abs(dy) > 5)) {
-            Blockinput, MouseMove
             WinSet, Transparent, 225, ahk_id %hWnd%
             sleep, 8
             WinSet, Transparent, 200, ahk_id %hWnd%
             sleep, 8
             WinSet, Transparent, 185, ahk_id %hWnd%
-            Blockinput, MouseMoveOff
         }
 
         GetMonitorRectForMouse(mx, my, UseWorkArea, monL, monT, monR, monB)
@@ -1436,7 +1463,9 @@ $MButton::
         WinSet, Transparent, Off, ahk_id %hWnd%
         GoSub, SwitchDesktop
     }
-    Else If (rlsTime - initTime < floor(DoubleClickTime/2)) {
+    Else If (rlsTime - initTime < floor(DoubleClickTime/2)
+            && (abs(checkClickMx - mx0) <= 5)
+            && (abs(checkClickMy - my0) <= 5)) {
         Send, {Mbutton}
     }
     Else If (wh/abs(monB-monT) > 0.95)
@@ -1456,6 +1485,20 @@ $MButton::
 Return
 #If
 
+WaitForStableWindow(hwnd, delay := 30, timeout := 1000) {
+    lastW := lastH := 0
+    elapsed := 0
+    Loop {
+        WinGetPos,,, w, h, ahk_id %hwnd%
+        if (w = lastW && h = lastH)
+            return true
+        lastW := w, lastH := h
+        Sleep, delay
+        elapsed += delay
+        if (elapsed > timeout)
+            return false
+    }
+}
 ; =========================
 ; ConfineMouseToCurrentMonitorArea(area, x, y, w, h)
 ; =========================
@@ -4965,7 +5008,7 @@ keyTrack() {
         If (   TimeOfLastHotkeyTyped
             && ((A_TickCount-TimeOfLastHotkeyTyped) > 300)
             && (A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_PriorKey != "LControl" && x_PriorPriorKey != "LControl")
-            && (InStr(keys, x_PriorPriorKey, false) || InStr(numbers, x_PriorPriorKey, false) || A_PriorKey == "Space" || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace") ) {
+            && (InStr(keys, x_PriorPriorKey, false) || InStr(numbers, x_PriorPriorKey, false) || x_PriorPriorKey == "Space" || x_PriorPriorKey == "CapsLock" || x_PriorPriorKey == "Backspace") ) {
             ; tooltip, adjusting bc of %A_PriorKey%
             TimeOfLastHotkeyTyped :=
             SetTimer, keyTrack,   Off
@@ -4975,9 +5018,8 @@ keyTrack() {
             Send, ^{NumpadAdd}
             Critical, Off
 
-            If (InStr(keys, lastHotkeyTyped, false)
-                || (InStr(numbers, lastHotkeyTyped, false) || A_PriorKey == "Space" || A_PriorKey == "CapsLock" || A_PriorKey == "Backspace")
-                && lastHotkeyTyped != "" && A_PriorKey != "" && A_PriorKey != lastHotkeyTyped) {
+            If ((InStr(keys, lastHotkeyTyped, false) || InStr(numbers, lastHotkeyTyped, false) || lastHotkeyTyped == "Space" || lastHotkeyTyped == "CapsLock" || lastHotkeyTyped == "Backspace")
+                && lastHotkeyTyped != "" && A_PriorKey != "" && A_PriorKey != lastHotkeyTyped ) {
                 If (A_PriorKey == "Space")
                     Send, {SPACE}
                 Else If (A_PriorKey == "CapsLock")
@@ -4986,6 +5028,7 @@ keyTrack() {
                     Send, {Backspace}
                 Else
                     Send, %A_PriorKey%
+
                 tooltip, sent %A_PriorKey%
                 lastHotkeyTyped := A_PriorKey
             }
@@ -8822,55 +8865,56 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::itis::it is
 ::ititial::initial
 ::it's::its
+::it's appearance::its appearance
 ::it's color::its color
-::it's surface::its surface
-::it's texture::its texture
-::it's smell::its smell
+::it's data::its data
+::it's design::its design
+::it's effect::its effect
+::it's egg::its egg
+::it's failure::its failure
+::it's function::its function
+::it's fur::its fur
+::it's habitat::its habitat
+::it's impact::its impact
+::it's influence::its influence
+::it's interface::its interface
+::it's limits::its limits
+::it's location::its location
+::it's mate::its mate
+::it's meaning::its meaning
+::it's name::its name
+::it's nest::its nest
+::it's network::its network
+::it's operation::its operation
+::it's origin::its origin
+::it's output::its output
+::it's own::its own
+::it's parts::its parts
+::it's performance::its performance
+::it's position::its position
+::it's potential::its potential
+::it's prey::its prey
+::it's process::its process
+::it's purpose::its purpose
+::it's reputation::its reputation
+::it's role::its role
 ::it's shape::its shape
 ::it's size::its size
-::it's weight::its weight
-::it's taste::its taste
+::it's smell::its smell
 ::it's sound::its sound
-::it's name::its name
-::it's appearance::its appearance
-::it's parts::its parts
-::it's design::its design
 ::it's structure::its structure
-::it's purpose::its purpose
-::it's role::its role
-::it's position::its position
-::it's location::its location
-::it's function::its function
-::it's system::its system
-::it's process::its process
-::it's operation::its operation
-::it's output::its output
-::it's performance::its performance
 ::it's success::its success
-::it's failure::its failure
-::it's data::its data
-::it's users::its users
-::it's interface::its interface
-::it's network::its network
+::it's surface::its surface
+::it's system::its system
 ::it's tail::its tail
-::it's fur::its fur
-::it's nest::its nest
-::it's wings::its wings
-::it's egg::its egg
-::it's prey::its prey
-::it's mate::its mate
-::it's habitat::its habitat
+::it's taste::its taste
 ::it's territory::its territory
-::it's young::its young
-::it's meaning::its meaning
+::it's texture::its texture
+::it's users::its users
 ::it's value::its value
-::it's impact::its impact
-::it's origin::its origin
-::it's influence::its influence
-::it's potential::its potential
-::it's limits::its limits
-::it's reputation::its reputation
-::it's effect::its effect
+::it's weight::its weight
+::it's wings::its wings
+::it's young::its young
 ::its a::it's a
 ::its an::it's an
 ::its the::it's the
@@ -8904,11 +8948,14 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its improved::it's improved
 ::its in::it's in
 ::its late::it's late
+::its lacking::it's lacking
 ::its left::it's left
+::its new::it's new
 ::its not::it's not
 ::its of::it's of
 ::its off::it's off
 ::its okay::it's okay
+::its old::it's old
 ::its on::it's on
 ::its over::it's over
 ::its possible::it's possible
