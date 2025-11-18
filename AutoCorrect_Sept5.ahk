@@ -660,14 +660,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
             }
 
-            initFocusedCtrl := ""
-            loop, 100 {
-                ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
-                If (initFocusedCtrl != "")
-                    break
-                sleep, 1
-            }
-
             If (vWinClass == "#32770") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
             }
@@ -716,6 +708,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             WaitForFadeInStop(hWnd)
 
+            initFocusedCtrl := ""
+            loop, 100 {
+                ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
+                If (initFocusedCtrl != "")
+                    break
+                sleep, 1
+            }
             SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
 
             LbuttonEnabled := True
@@ -819,7 +818,7 @@ WaitForFadeInStop(hwnd) {
     sampleX := (sx + sw)/2
     sampleY := (sy + 13)
     CoordMode, Pixel, Screen
-    loop 100 {
+    loop 200 {
         PixelGetColor, HexColor%A_Index%, %sampleX%, %sampleY%, RGB
         If (A_Index >= 5) {
             If (HexColor%A_Index% == HexColorLast1 && HexColorLast1 == HexColorLast2 && HexColorLast2 == HexColorLast3 && HexColorLast3 == HexColorLast4 && HexColorLast4 == HexColorLast5)
@@ -830,7 +829,7 @@ WaitForFadeInStop(hwnd) {
             HexColorLast4 := HexColorLast3
             HexColorLast5 := HexColorLast4
         }
-        sleep, 2
+        sleep, 1
     }
     CoordMode, Mouse, screen
     Return
@@ -2029,7 +2028,8 @@ $Esc::
         If IsAltTabWindow(escHwndID) {
             WinActivate, ahk_id %escHwndID%
             Hotkey, x, DoNothing, On
-            GoSub, DrawRect
+            ; GoSub, DrawRect
+            GoSub, DrawMasks
 
             loop {
                 tooltip Close `"%escTitle%`" ? ;"
@@ -2038,7 +2038,8 @@ $Esc::
                     break
                 If GetKeyState("x","P") {
                     Tooltip, Canceled!
-                    ClearRect()
+                    ; ClearRect()
+                    ClearMasks()
                     CancelClose := True
                     sleep, 1500
                     Tooltip,
@@ -2054,7 +2055,8 @@ $Esc::
                 loop 10 {
                     tooltip, Waiting for `"%escTitle%`" to close... ; "
                     If !WinExist("ahk_id " . escHwndID) {
-                        ClearRect(escHwndID)
+                        ; ClearRect(escHwndID)
+                        ClearMasks(escHwndID)
                         ActivateTopMostWindow()
                         break
                     }
@@ -2080,7 +2082,8 @@ $Esc::
                     WinKill , ahk_id %escHwndID%
                     loop 50 {
                         If !WinExist("ahk_id " . escHwndID) {
-                            ClearRect(escHwndID)
+                            ; ClearRect(escHwndID)
+                            ClearMasks(escHwndID)
                             ActivateTopMostWindow()
                             break
                         }
@@ -2506,7 +2509,7 @@ If !hitTAB {
     WinSet, Transparent, 255, ahk_id %black3Hwnd%
     WinSet, Transparent, 255, ahk_id %black4Hwnd%
     GoSub, Altup
-    GoSub, HideMasks
+    ClearMasks()
 
     SetTimer, mouseTrack, On
     SetTimer, keyTrack,   On
@@ -2696,7 +2699,7 @@ Cycle()
                                 Else {
                                     Critical, Off
                                     ; GoSub, DrawRect
-                                    GoSub, UpdateMasks
+                                    GoSub, DrawMasks
                                     If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
                                         GroupedWindows := []
                                         ValidWindows   := []
@@ -2710,7 +2713,7 @@ Cycle()
                                 cycleCount := 3
                                 Critical, Off
                                 ; GoSub, DrawRect
-                                GoSub, UpdateMasks
+                                GoSub, DrawMasks
                             }
                             If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
                                 GroupedWindows := []
@@ -2763,7 +2766,7 @@ Cycle()
                     WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                     WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                     ; GoSub, DrawRect
-                    GoSub, UpdateMasks
+                    GoSub, DrawMasks
                     WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                     WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
@@ -2910,7 +2913,9 @@ DrawRect:
 Return
 
 ; ------------------  ChatGPT ------------------------------------------------------------------
-HideMasks:
+ClearMasks(hwnd := "")
+{
+    Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
     transVal   := 255
     iterations := 10
     Critical, On
@@ -2922,14 +2927,23 @@ HideMasks:
         WinSet, Transparent, %currentVal%, ahk_id %black3Hwnd%
         WinSet, Transparent, %currentVal%, ahk_id %black4Hwnd%
         transVal := transVal - (floor(255/iterations))
+
+        If (hwnd != "" && !WinExist("ahk_id " . hwnd)) {
+            Loop, 4
+                Gui, %A_Index%: Hide
+            Critical, Off
+            Return
+        }
+
         sleep, 10
     }
     Loop, 4
         Gui, %A_Index%: Hide
     Critical, Off
 Return
+}
 
-UpdateMasks:
+DrawMasks:
     WinGet, hA, ID, A
     if (!hA)
         return
@@ -2971,7 +2985,7 @@ UpdateMasks:
         transVal := Opacity
         incrValue := 1
     }
-
+    Critical, On
     loop, %incrValue%
     {
         WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
@@ -2989,6 +3003,7 @@ UpdateMasks:
         transVal += ceil(Opacity/5)
         sleep, 3
     }
+    Critical, Off
 Return
 
 ; Finds the monitor + work area rect that contains the center of the given window.
@@ -4009,9 +4024,11 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         && !InStr(lClassCheck, "Shell",False) && !InStr(lClassCheck, "TrayWnd",False)) {
 
         If (initFocusedCtrlNN == "") {
-            ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
+            ; ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
+            MouseGetPos, , , , initFocusedCtrlNN
             while (initFocusedCtrlNN == "ShellTabWindowClass1") {
-                ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
+                ; ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
+                MouseGetPos, , , , initFocusedCtrlNN
                 sleep, 1
             }
         }
@@ -8919,6 +8936,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its an::it's an
 ::its the::it's the
 ::itwas::it was
+::its any::it's any
 ::its beautiful::it's beautiful
 ::its been::it's been
 ::its broken::it's broken
@@ -8962,6 +8980,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its raining::it's raining
 ::its ready::it's ready
 ::its right::it's right
+::its something::it's something
 ::its started::it's started
 ::its sunny::it's sunny
 ::its there::it's there
@@ -8969,7 +8988,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its true::it's true
 ::its up::it's up
 ::its working::it's working
-::its any::it's any
+::its your::it's your
+::its yours::it's yours
 ::iunior::junior
 ::jaques::jacques
 ::jeapardy::jeopardy
