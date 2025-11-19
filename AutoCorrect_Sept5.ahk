@@ -80,8 +80,6 @@ Global pauseWheel                  := False
 Global EVENT_SYSTEM_MENUPOPUPSTART := 0x0006
 Global EVENT_SYSTEM_MENUPOPUPEND   := 0x0007
 Global TimeOfLastHotkeyTyped               := A_TickCount
-Global lbX1
-Global lbX2
 Global currentMon                  := 0
 Global previousMon                 := 0
 Global targetDesktop               := 0
@@ -126,12 +124,6 @@ Process, Priority,, High
 
 UIA := UIA_Interface() ; Initialize UIA interface
 UIA.ConnectionTimeout := 6000
-; cacheRequest := UIA.CreateCacheRequest()
-; cacheRequest.TreeScope := 5 ; Set TreeScope to include the starting element and all descendants as well
-; cacheRequest.AddProperty("ControlType") ; Add all the necessary properties that DumpAll uses: ControlType, LocalizedControlType, AutomationId, Name, Value, ClassName, AcceleratorKey
-; cacheRequest.AddProperty("LocalizedControlType")
-; cacheRequest.AddProperty("Name")
-; cacheRequest.AddProperty("ClassName")
 
 Menu, Tray, Icon
 Menu, Tray, NoStandard
@@ -148,6 +140,13 @@ Menu, Tray, Add, List Hotkeys, listHotkeys_label
 Menu, Tray, Add, List Vars, listVars_label
 Menu, Tray, Add, List Lines, listLines_label
 Menu, Tray, Click, 1
+
+link := A_Startup "\AutoCorrect.lnk"
+runAtStartup := FileExist(link) ? 1 : 0
+If (runAtStartup)
+    Menu, Tray, Check, Run at startup
+Else
+    Menu, Tray, Uncheck, Run at startup
 
 ; Create 4 mask GUIs (top, left, right, bottom)
 CreateMaskGui(index, ByRef hWndOut) {
@@ -343,6 +342,7 @@ If (MonCount > 1) {
     currentMon := MWAGetMonitorMouseIsIn()
     previousMon := currentMon
 }
+
 SetTimer mouseTrack, 10
 SetTimer keyTrack, 1
 
@@ -372,12 +372,16 @@ Marktime_Hoty_FixSlash:
     GoSub, FixSlash
 
 Startup:
-    Menu, Tray, Togglecheck, Run at startup
-    IfExist, %A_Startup%/AutoCorrect.lnk
-        FileDelete, %A_Startup%/AutoCorrect.lnk
-    Else
-        FileCreateShortcut, % H_Compiled ? A_AhkPath : A_ScriptFullPath, %A_Startup%/AutoCorrect.lnk
-Return
+    runAtStartup := !runAtStartup
+    if (runAtStartup) {
+        FileCreateShortcut, % (H_Compiled ? A_AhkPath : A_ScriptFullPath), %link%
+        Menu, Tray, Check, Run at startup
+    } else {
+        IfExist, %link%
+            FileDelete, %link%
+        Menu, Tray, Uncheck, Run at startup
+    }
+return
 
 Tray_SingleLclick:
     msgbox You left-clicked tray icon
@@ -604,8 +608,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
     Global prevActiveWindows
     Global StopRecursion
-    Global UIA
-    static exEl, shellEl, listEl
 
     If !StopRecursion && !hitTab {
         DetectHiddenWindows, Off
@@ -627,13 +629,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             || vWinClass == "Progman"
             || vWinClass == "WorkerW"
             || vWinClass == "tooltips_class32"
+            || vWinClass == "DropDown"
+            || vWinClass == "Microsoft.UI.Content.PopupWindowSiteBridge"
             || vWinClass == "OperationStatusWindow"
             || (InStr(vWinClass, "Shell",False) && InStr(vWinClass, "TrayWnd",False))
             || vWinClass == ""
             || vWinTitle == ""
-            || vWinTitle == "Home - File Explorer"
-            || vWinTitle == "This PC - File Explorer"
-            || vWinTitle == "Gallery - File Explorer"
             || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
             || !WinExist("ahk_id " hWnd)) {
             If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
@@ -642,11 +643,19 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Return
         }
 
+        If (hWnd == WinExist("Run ahk_class #32770 ahk_exe explorer.exe")) {
+            WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
+            If UIA_GetStartButtonCenter(sx, sy) {
+                x := sx - (rw/2) - 44 ; 44 is the width of a single taskbar button
+                WinMove, ahk_id %hWnd%,, x,
+            }
+        }
+
         LbuttonEnabled := False
         SetTimer, keyTrack,   Off
         SetTimer, mouseTrack, Off
 
-        If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass") {
+        If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
 
             KeyWait, Lbutton, U T10
 
@@ -658,6 +667,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     WinActivate, ahk_id %hWnd%
                     Send, #+{Left}
                 }
+            }
+
+            If (vWinTitle == "Home - File Explorer" || vWinTitle == "This PC - File Explorer" || vWinTitle == "Gallery - File Explorer") {
+                LbuttonEnabled := True
+                SetTimer, keyTrack,   On
+                SetTimer, mouseTrack, On
+                Return
             }
 
             If (vWinClass == "#32770") {
@@ -679,7 +695,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 }
                 Send, {Backspace}
             }
-            ; tooltip, here we go
 
             If (InStr(vWinTitle, "Save", False) && vWinClass != "#32770") {
                 WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
@@ -691,16 +706,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             ;EVENT_SYSTEM_FOREGROUND := 0x3
             ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
-            ; If !WinExist("ahk_id " hWnd) || !WinActive("ahk_id " hWnd) {
-                ; SetTimer, keyTrack,   On
-                ; SetTimer, mouseTrack, On
-                ; LbuttonEnabled := True
-                ; Return
-            ; }
-
             WinGet, proc, ProcessName, ahk_id %hWnd%
-            If (proc == "Everything.exe")
+            If (proc == "Everything.exe") {
+                Send, {Ctrl UP}
+                Send, {Space UP}
                 SendEvent, {Blind}{vkFF} ; send a dummy key (vkFF = undefined key)
+            }
 
             Critical, On
             prevActiveWindows.push(hWnd)
@@ -715,9 +726,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     break
                 sleep, 1
             }
-            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
-
             LbuttonEnabled := True
+            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
 
             DetectHiddenWindows, On
             i := 1
@@ -841,6 +851,41 @@ PreventRecur() {
     nCheck := DllCall( "UnhookWinEvent", Ptr,hWinEventHook )
     DllCall( "CoUninitialize" )
 Return
+}
+
+; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
+UIA_GetStartButtonCenter(ByRef sx, ByRef sy) {
+    Global UIA
+    try {
+        hTask := WinExist("ahk_class Shell_TrayWnd")
+        if !hTask
+            return false
+
+        tb := UIA.ElementFromHandle(hTask)
+
+        ; Try several robust queries (name is localized; AutomationId often stable)
+        startEl := tb.FindFirstBy("AutomationId=StartButton")
+        if !startEl
+        startEl := tb.FindFirstByNameAndType("Start", "Button")
+        if !startEl
+        startEl := tb.FindFirstByNameAndType("Start menu", "Button")
+        if !startEl
+            return false
+
+        ; Get bounding rectangle and compute center
+        ; UIA_Interface exposes CurrentBoundingRectangle (object with x,y,w,h)
+        rect := startEl.CurrentBoundingRectangle
+        if (rect == "") {
+            ; Older versions may expose .BoundingRectangle or GetBoundingRectangle()
+            rect := startEl.BoundingRectangle ? startEl.BoundingRectangle : startEl.GetBoundingRectangle()
+        }
+
+        sx := round(rect.l + (rect.r-rect.l)/2)
+        sy := round(rect.t + (rect.b-rect.t)/2)
+        return true
+    } catch e {
+        return false
+    }
 }
 
 ~^Enter::
@@ -2102,7 +2147,8 @@ $Esc::
         Return
     }
 
-    SetTimer, EscTimer, -150
+    delayValue := -1*(DoubleClickTime/2)
+    SetTimer, EscTimer, %delayValue%
     escTitle_old  := escTitle
     escHwndID_old := escHwndID
     StopRecursion := False
@@ -2113,6 +2159,7 @@ Return
 #If
 
 EscTimer:
+    tooltip, escaped!
     Send, {Esc}
 Return
 
@@ -3048,19 +3095,18 @@ Min(a,b) {
 
 #If MouseIsOverTaskbarBlank()
 ~Lbutton::
-    ; StopRecursion     := True
-    MouseGetPos, lbX1, lbY1,
+    MouseGetPos, expX1, expY1,
     If (A_PriorHotkey == A_ThisHotkey
-        && (A_TimeSincePriorHotkey < 550)
-        && (abs(lbX1-lbX2) < 20 && abs(lbY1-lbY2) < 20)) {
+        && (A_TimeSincePriorHotkey < DoubleClickTime)
+        && (abs(expX1-expX2) < 20 && abs(expY1-expY2) < 20)) {
         run, explorer.exe
-        ; StopRecursion     := False
+        expX2 := 0
+        expY2 := 0
         Return
     }
 
     KeyWait, LButton, U T5
-    MouseGetPos, lbX2, lbY2,
-    ; StopRecursion     := False
+    MouseGetPos, expX2, expY2,
 Return
 #If
 
@@ -3348,18 +3394,22 @@ Return
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
         && (_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
-        && (timeDiff < DoubleClickTime/2)) {
+        && (timeDiff < (DoubleClickTime/2))) {
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
-            If ((pt.CurrentControlType == 50000 || pt.CurrentControlType == 50020)  && !inStr(pt.Name, "Refresh", True)) {
-                sleep, 150
-                If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
-                    tooltip, forget it
-                    SetTimer, keyTrack, On
-                    SetTimer, mouseTrack, On
-                    Return
-                }
+            ; tooltip, % pt.CurrentControlType "-" pt.CurrentName "-" pt.CurrentLocalizedControlType
+            If (pt.CurrentControlType == 50000
+                && pt.CurrentName != "Back" && pt.CurrentName != "Forward" && !inStr(pt.Name, "Up", True) && !inStr(pt.CurrentName, "Refresh", True)) {
+
+                Return
+                ; sleep, 150
+                ; If (WinExist("ahk_class Microsoft.UI.Content.PopupWindowSiteBridge") || WinExist("ahk_class #32768") || GetKeyState("Lbutton","P")) {
+                    ; tooltip, forget it we have a new menu
+                    ; SetTimer, keyTrack, On
+                    ; SetTimer, mouseTrack, On
+                    ; Return
+                ; }
             }
         } catch e {
             tooltip, TIMED OUT!!!!
@@ -3372,10 +3422,15 @@ Return
             Return
         }
 
-        If inStr(pt.Name, "Refresh", True) {
+        If inStr(pt.CurrentName, "Refresh", True) {
             SendCtrlAdd(_winIdU, , , wmClassD)
         }
-        Else { ; not Refresh and hence a button was hit which would navigate to new folder
+        Else If (  (pt.CurrentControlType == 50000) ; handles explorer based buttons
+                || (pt.CurrentControlType == 50011) ; handles #32770 breadcrumb bar
+                || (pt.CurrentControlType == 50020) ; handles normal explorer breadcrumb bar
+                || (pt.CurrentControlType == 50031 && !inStr(pt.CurrentName, "Open", True)) ; handles #32770 breadcrumb bar
+                || (pt.CurrentControlType == 50031 && !inStr(pt.CurrentLocalizedControlType, "split", True))) { ; handles normal explorer breadcrumb bar
+
             currentPath := ""
             loop 100 {
                 currentPath := GetExplorerPath(_winIdD)
@@ -4094,11 +4149,17 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
             Else If (((OutputVar2 == 1 && OutputVar3 == 1) && !OutputVar4 && !OutputVar6 && !OutputVar8)
                     && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
-                OutHeight2 := 0
-                OutHeight3 := 0
-                ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
-                ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
-                If (OutHeight2 > OutHeight3)
+
+                loop 20
+                {
+                    ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
+                    ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
+                    If (OutHeight2 := "" && OutHeight2 > 0 && OutHeight3 := "" && OutHeight3 > 0)
+                        break
+                    sleep, 1
+                }
+                tooltip, %OutHeight2% vs %OutHeight3%
+                If ((OutHeight2 == 0) || (OutHeight2 > OutHeight3))
                     TargetControl := "DirectUIHWND2"
                 Else
                     TargetControl := "DirectUIHWND3"
@@ -4165,7 +4226,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             GetKeyState("LButton","P") || (finalCheckID != initTargetHwnd) ? Return : ""
 
             If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
-                tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
+                ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
                 BlockInput, On
                 Send, {Ctrl UP}
                 Send, ^{NumpadAdd}
