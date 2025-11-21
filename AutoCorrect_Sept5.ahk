@@ -4297,9 +4297,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             BlockInput, On
             If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
 
-                Send, {Ctrl UP}
+                Send,  {Ctrl UP}
                 Send, ^{NumpadAdd}
-                Send, {Ctrl UP}
+                Send,  {Ctrl UP}
                 ; tooltip, targeted is %TargetControl% at %currentPath% with init at %initFocusedCtrlNN%
 
                 If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
@@ -6402,33 +6402,41 @@ GetExplorerPath(hwnd:="") {
     }
     Else {
         activeTab := 0
+        ControlGet, activeTab, Hwnd,, ShellTabWindowClass1, % "ahk_id " hwnd
+
         try {
-            ControlGet, activeTab, Hwnd,, % "ShellTabWindowClass1", % "ahk_id" hwnd
             for w in ComObjCreate("Shell.Application").Windows {
                 If (w.hwnd != hwnd)
                     continue
-                If activeTab {
+
+                ; Tab gating (noop on Win10)
+                If (activeTab) {
                     static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
                     shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
                     DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
+                    ObjRelease(shellBrowser)
                     If (thisTab != activeTab)
                         continue
-                    ObjRelease(shellBrowser)
                 }
-                If (w.Document.Folder.Self.Path == 0) {
+                ; Prefer COM path
+                path := ""
+                try path := w.Document.Folder.Self.Path
+
+                If (path = "") {
+                    ; Fallback for virtual folders: read breadcrumb text (brittle but works on Win10)
                     ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-                    If (dir == "" || !InStr(dir,"address",False))
+                    If (dir = "" || !InStr(dir, "address", false))
                         ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
                     Return dir
+                } Else {
+                    Return path
                 }
-                Else
-                    Return w.Document.Folder.Self.Path
             }
         } catch e {
+            ; Last-chance fallback to breadcrumb on errors
             ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
             If (dir == "" || !InStr(dir,"address",False))
                 ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-
             Return dir
         }
     }
@@ -9083,6 +9091,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its done::it's done
 ::its down::it's down
 ::its easy:: it's easy
+::its easiest:: it's easiest
 ::its evolved::it's evolved
 ::its false::it's false
 ::its fine::it's fine
