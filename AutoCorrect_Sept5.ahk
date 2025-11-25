@@ -601,6 +601,48 @@ GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) 
     }
 }
 
+IsPlainDialog32770(hWnd) {
+    WinGetClass, cls, ahk_id %hWnd%
+    if (cls != "#32770")
+        return false
+
+    WinGet, style, Style, ahk_id %hWnd%
+
+    ; Optional: reject dialogs with min/max buttons (usually “big” windows)
+    if (style & 0x00010000)  ; WS_MAXIMIZEBOX
+        return false
+    if (style & 0x00020000)  ; WS_MINIMIZEBOX
+        return false
+
+    ; Do NOT reject WS_THICKFRAME / WS_SIZEBOX here,
+    ; so Notepad++ Find (0x94CC004C) will pass.
+
+    ; Core requirement: must NOT look like a file container
+    return !HasFileViewChild(hWnd)
+}
+
+HasFileViewChild(hParent) {
+    ; Get list of all controls (ClassNNs) in the window.
+    WinGet, ctrlList, ControlList, ahk_id %hParent%
+    if (ErrorLevel)
+        return false
+
+    ; Classes that are strong indicators of a file view or shell namespace view.
+    static suspectPattern := "i)^(SysListView32|SHELLDLL_DefView|DirectUIHWND|NamespaceTreeControl|SysTreeView32|CabinetWClass)"
+
+    Loop, Parse, ctrlList, `n
+    {
+        ctrl := A_LoopField
+        ; Extract the class part from ClassNN (e.g. "SysListView32" from "SysListView321")
+        if RegExMatch(ctrl, "^[^0-9]+", className)
+        {
+            if RegExMatch(className, suspectPattern)
+                return true
+        }
+    }
+    return false
+}
+
 ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
@@ -631,7 +673,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
 
         WinGet, vWinStyle, Style, % "ahk_id " hWnd
-        If (   vWinClass == "#32768"
+        If (   !WinExist("ahk_id " hWnd)
+            || vWinClass == ""
+            || vWinTitle == ""
+            || vWinClass == "#32768"
             || vWinClass == "Autohotkey"
             || vWinClass == "AutohotkeyGUI"
             || vWinClass == "SysShadow"
@@ -643,22 +688,29 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             || vWinClass == "DropDown"
             || vWinClass == "Microsoft.UI.Content.PopupWindowSiteBridge"
             || vWinClass == "OperationStatusWindow"
-            || vWinClass == ""
-            || vWinTitle == ""
+            || vWinClass == "NativeHWNDHost"
+            || vWinClass == "Windows.UI.Core.CoreWindow"
+            || vWinClass == "Net UI Tool Window"
+            || vWinClass == "SDL_app"
+            || vWinClass == "DV2ControlHost"
+            || (InStr(vWinTitle, "VirtualBox",True))
+            || IsPlainDialog32770(hWnd)
             || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
-            || !WinExist("ahk_id " hWnd)) {
+            || proc == "SndVol.exe") {
+
             If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
             }
-            Return
-        }
-
-        If (hWnd == WinExist("Run ahk_class #32770 ahk_exe explorer.exe")) {
-            WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
-            If UIA_GetStartButtonCenter(sx, sy) {
-                x := sx - (rw/2) - 44 ; 44 is the width of a single taskbar button
-                WinMove, ahk_id %hWnd%,, x,
+            If (hWnd == WinExist("Run ahk_class #32770 ahk_exe explorer.exe")) {
+                WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
+                If UIA_GetStartButtonCenter(sx, sy, bw) {
+                    x := sx - (rw/2) - bw ; 44 is the width of a single taskbar button
+                    WinMove, ahk_id %hWnd%,, x,
+                    WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                    Return
+                }
             }
+            Return
         }
 
         LbuttonEnabled := False
@@ -855,7 +907,7 @@ Return
 }
 
 ; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
-UIA_GetStartButtonCenter(ByRef sx, ByRef sy) {
+UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
     Global UIA
     try {
         hTask := WinExist("ahk_class Shell_TrayWnd")
@@ -883,6 +935,7 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy) {
 
         sx := round(rect.l + (rect.r-rect.l)/2)
         sy := round(rect.t + (rect.b-rect.t)/2)
+        buttonWidth := rect.r-rect.l
         return true
     } catch e {
         return false
@@ -3286,7 +3339,6 @@ Return
         }
 
         KeyWait, Lbutton, U T3
-        ; LbuttonEnabled     := False
 
         If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
             tooltip, getting path
@@ -3302,9 +3354,10 @@ Return
                 SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
             }
 
-            ; LbuttonEnabled     := True
+            LbuttonEnabled := False
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
+            LbuttonEnabled := True
             Return
         }
         Else {
@@ -3312,9 +3365,10 @@ Return
 
             SendCtrlAdd(_winIdD,,,wmClassD)
             SetTimer, keyTrack, On
-            SetTimer, mouseTrack, On
+            LbuttonEnabled := False
             sleep, 250
             ; LbuttonEnabled     := True
+            LbuttonEnabled := True
             Return
         }
     }
@@ -3438,7 +3492,7 @@ Return
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
             && (InStr(_winCtrlD, "SysTreeView32", True))
-            && (timeDiff < DoubleClickTime/2)
+            && (timeDiff < floor(DoubleClickTime/2))
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
@@ -4114,6 +4168,8 @@ IsModernExplorer_Win32Only(hWnd) {
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
     Global UIA, isWin11
 
+    TargetControl := ""
+    
     If (initTargetClass == "")
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
     Else
@@ -4141,8 +4197,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         tooltip, here2
-        WinGet, quickCheckID, ID, A
-        GetKeyState("LButton","P") || (quickCheckID != initTargetHwnd) ? Return : ""
+        If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd) 
+            Return
 
         OutputVar1 := 0
         OutputVar2 := 0
@@ -4172,33 +4228,38 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             tooltip, here4
         }
         Else {
-            If (InStr(initFocusedCtrlNN,  "SysListView32",True))
+            If (InStr(initFocusedCtrlNN,  "SysListView32",True)) {
                 OutputVar1 := 1
-            Else If (initFocusedCtrlNN == "DirectUIHWND4")
+                TargetControl := initFocusedCtrlNN
+            }
+            Else If (initFocusedCtrlNN == "DirectUIHWND4") {
                 OutputVar4 := 1
-            Else If (initFocusedCtrlNN == "DirectUIHWND6")
+                TargetControl := "DirectUIHWND4"
+            }
+            Else If (initFocusedCtrlNN == "DirectUIHWND6") {
                 OutputVar6 := 1
-            Else If (initFocusedCtrlNN == "DirectUIHWND8")
+                TargetControl := "DirectUIHWND6"
+            }
+            Else If (initFocusedCtrlNN == "DirectUIHWND8") {
                 OutputVar8 := 1
-            Else If (initFocusedCtrlNN == "DirectUIHWND2")
+                TargetControl := "DirectUIHWND8"
+            }
+            Else If (initFocusedCtrlNN == "DirectUIHWND2") {
                 OutputVar2 := 1
-            Else If (initFocusedCtrlNN == "DirectUIHWND3")
+                TargetControl := "DirectUIHWND2"
+            }
+            Else If (initFocusedCtrlNN == "DirectUIHWND3") {
                 OutputVar3 := 1
+                TargetControl := "DirectUIHWND3"
+            }
         }
         tooltip, here5
-        WinGet, quickCheckID, ID, A
-        GetKeyState("LButton","P") || (quickCheckID != initTargetHwnd) ? Return : ""
+        If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd) 
+            Return
 
-        If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1) {
-            ; tooltip, init focus is %initFocusedCtrlNN% - %OutputVar1% - %OutputVar2% - %OutputVar3% - %OutputVar4% - %OutputVar6% - %OutputVar8%
+        If (TargetControl == "" && (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)) {
 
-            WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
-            WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
-
-            WinGet, quickCheckID, ID, A
-            GetKeyState("LButton","P") || (quickCheckID != initTargetHwnd) ? Return : ""
             tooltip, here6
-
             If (OutputVar1 == 1) {
                 TargetControl := "SysListView321"
             }
@@ -4227,9 +4288,11 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 If !IsModernExplorer_Win32Only(initTargetHwnd)
                     ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
 
-                If (!isWin11 && lClassCheck == "CabinetWClass")
+                If ((!isWin11 || !IsModernExplorer_Win32Only(initTargetHwnd)) && lClassCheck == "CabinetWClass")
                     TargetControl := "DirectUIHWND3"
                 Else If (OutHeight2 > OutHeight3)
+                    TargetControl := "DirectUIHWND2"
+                Else 
                     TargetControl := "DirectUIHWND2"
             }
             Else If (OutputVar2 == 1) {
@@ -4247,78 +4310,94 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                     TargetControl := "DirectUIHWND8"
             }
             tooltip, here7
-            WinGet, quickCheckID, ID, A
-            GetKeyState("LButton","P") || (quickCheckID != initTargetHwnd) ? Return : ""
+        }
+        
+        If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd) 
+            Return
 
-            ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
-            Critical, On
-            If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
-                If (prevPath != "" && currentPath != "" && prevPath != currentPath)
-                    WaitForExplorerLoad(initTargetHwnd, , True)
-                tooltip, here7a
-                loop, 500 {
-                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                    If (testCtrlFocus == TargetControl)
-                        break
-                    sleep, 1
-                }
-            }
-            Else If (TargetControl == "DirectUIHWND2" && lClassCheck == "#32770") {
-                WaitForExplorerLoad(initTargetHwnd, True)
-                tooltip, here7a
-                loop, 500 {
-                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                    If (testCtrlFocus == TargetControl)
-                        break
-                    sleep, 1
-                }
-            }
-            Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
-                WaitForExplorerLoad(initTargetHwnd)
-            }
-            Else {
-                tooltip, here7a
-                loop, 100 {
-                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                    If (testCtrlFocus == TargetControl)
-                        break
-                    sleep, 1
-                    If (A_Index == 100)
-                        TargetControl := ""
-                }
-            }
-            tooltip, here8
-            WinGet, finalCheckID, ID, A
-            GetKeyState("LButton","P") || (finalCheckID != initTargetHwnd) ? Return : ""
+        WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
+        WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
 
+        ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
+        Critical, On
+        If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
+            If (prevPath != "" && currentPath != "" && prevPath != currentPath)
+            WaitForExplorerLoad(initTargetHwnd, , True)
+            tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            loop, 125 {
+                ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                If (testCtrlFocus == TargetControl)
+                    break
+                sleep, 1
+                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd) 
+                    Return
+            }
+        }
+        Else If (TargetControl == "DirectUIHWND2" && lClassCheck == "#32770") {
+            WaitForExplorerLoad(initTargetHwnd, True)
+            tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            loop, 125 {
+                ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                If (testCtrlFocus == TargetControl)
+                    break
+                sleep, 1
+                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd) 
+                    Return
+            }
+        }
+        Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
+            WaitForExplorerLoad(initTargetHwnd)
+        }
+        Else {
+            tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            loop, 125 {
+                ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                If (testCtrlFocus == TargetControl)
+                    break
+                sleep, 1
+                If (A_Index == 125)
+                    TargetControl := "" ; then delete it
+                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd) 
+                    Return
+            }
+        }
+        tooltip, here8
+        
+        If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd) 
+            Return
+        
+        tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
+        
+        If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             BlockInput, On
-            If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
 
-                Send,  {Ctrl UP}
-                Send, ^{NumpadAdd}
-                Send,  {Ctrl UP}
-                ; tooltip, targeted is %TargetControl% at %currentPath% with init at %initFocusedCtrlNN%
+            Send,  {Ctrl UP}
+            Send, ^{NumpadAdd}
+            Send, {Ctrl UP}
+            BlockInput, Off
+            ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
+                ; tooltip, sent to %TargetControl% with init at %initHoveredCtrlNN% - %prevPath% VS %currentPath%
 
-                If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
-                    sleep, 125
-                    loop, 200 {
-                        WinGet, quickCheckID, ID, A
-                        GetKeyState("LButton","P") || (quickCheckID != initTargetHwnd) ? Return : ""
+            If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
+                sleep, 125
+                BlockInput, Off
+                loop, 200 {
+                    If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd) 
+                        Return
 
-                        ControlFocus , %initFocusedCtrlNN%, ahk_id %initTargetHwnd%
-                        ControlGetFocus, testCtrlFocus , ahk_id %initTargetHwnd%
-                        If (testCtrlFocus == initFocusedCtrlNN)
-                            break
-                        sleep, 1
-                    }
+                    ControlFocus , %initFocusedCtrlNN%, ahk_id %initTargetHwnd%
+                    ControlGetFocus, testCtrlFocus , ahk_id %initTargetHwnd%
+                    If (testCtrlFocus == initFocusedCtrlNN)
+                        break
+                    sleep, 1
                 }
             }
             BlockInput, Off
-            Critical,   Off
         }
+        Critical,   Off
     }
 Return
 }
