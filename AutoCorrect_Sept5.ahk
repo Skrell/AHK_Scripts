@@ -10,6 +10,7 @@
 #SingleInstance Force
 #InstallMouseHook
 #InstallKeybdHook
+#UseHook
 #include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 #HotString EndChars ()[]{}:;,.?!`n `t
 #MaxhotKeysPerInterval 500
