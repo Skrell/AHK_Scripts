@@ -5,11 +5,12 @@
 ; r = raw output
 
 ; the auto-exec section ends at the first hotkey/hotstring or return or exit or at the script end - whatever comes first; function definitions get ignored by the execution flow.
+
 #NoEnv
-#SingleInstance
+#SingleInstance Force
 #InstallMouseHook
 #InstallKeybdHook
-#UseHook
+#include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
 #HotString EndChars ()[]{}:;,.?!`n `t
 #MaxhotKeysPerInterval 500
 #KeyHistory 25
@@ -30,10 +31,6 @@ SetDesktopNameProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, 
 CreateDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "CreateDesktop", "Ptr")
 RemoveDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "RemoveDesktop", "Ptr")
 
-Global CurrentDesktop := 1
-
-#include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
-
 SendMode, Input ; It injects the whole keystroke atomically, reducing the window where logical/physical can disagree
 
 ; SetKeyDelay is not obeyed by SendInput; there is no delay between keystrokes in that mode.
@@ -44,58 +41,59 @@ SetBatchLines,   -1
 SetWinDelay,      1 ; 10
 SetControlDelay,  1 ; 10
 
-Global mouseMoving                 := False
-Global skipCheck                   := False
-Global cycling                     := False
-Global ValidWindows                := []
-Global GroupedWindows              := []
-Global PrevActiveWindows           := []
-Global minWinArray                 := []
-Global allWinArray                 := []
-Global cycleCount                  := 1
-Global startHighlight              := False
-Global border_thickness            := 4
-Global border_color                := 0xFF00FF
-Global hitTAB                      := False
-Global hitTilde                    := False
-Global SearchingWindows            := False
-Global UserInputTrimmed            := ""
-Global memotext                    := ""
-Global totalMenuItemCount          := 0
-Global onlyTitleFound              := ""
-Global nil
-Global CancelClose                 := False
-Global lastWinMinHwndId            := 0x999999
-Global DrawingRect                 := False
-Global LclickSelected              := False
-Global StopRecursion               := False
-Global currMonHeight               := 0
-Global currMonWidth                := 0
-Global LbuttonEnabled              := True
-Global X_PriorPriorHotKey          :=
-Global StopAutoFix                 := False
-Global disableEnter                := False
-Global disableWheeldown            := False
-Global pauseWheel                  := False
-Global EVENT_SYSTEM_MENUPOPUPSTART := 0x0006
-Global EVENT_SYSTEM_MENUPOPUPEND   := 0x0007
+Global CurrentDesktop                      := 1
+Global mouseMoving                         := False
+Global skipCheck                           := False
+Global cycling                             := False
+Global ValidWindows                        := []
+Global GroupedWindows                      := []
+Global PrevActiveWindows                   := []
+Global minWinArray                         := []
+Global allWinArray                         := []
+Global cycleCount                          := 1
+Global startHighlight                      := False
+Global border_thickness                    := 4
+Global border_color                        := 0xFF00FF
+Global hitTAB                              := False
+Global hitTilde                            := False
+Global SearchingWindows                    := False
+Global UserInputTrimmed                    := ""
+Global memotext                            := ""
+Global totalMenuItemCount                  := 0
+Global onlyTitleFound                      := ""
+Global CancelClose                         := False
+Global lastWinMinHwndId                    := 0x999999
+Global DrawingRect                         := False
+Global LclickSelected                      := False
+Global StopRecursion                       := False
+Global currMonHeight                       := 0
+Global currMonWidth                        := 0
+Global LbuttonEnabled                      := True
+Global X_PriorPriorHotKey                  :=
+Global StopAutoFix                         := False
+Global disableEnter                        := False
+Global disableWheeldown                    := False
+Global pauseWheel                          := False
+Global EVENT_SYSTEM_MENUPOPUPSTART         := 0x0006
+Global EVENT_SYSTEM_MENUPOPUPEND           := 0x0007
 Global TimeOfLastHotkeyTyped               := A_TickCount
-Global currentMon                  := 0
-Global previousMon                 := 0
-Global targetDesktop               := 0
-Global currentPath                 := ""
-Global prevPath                    := ""
-Global _winCtrlD                   := ""
-Global MbuttonIsEnter              := False
-Global textBoxSelected             := False
-Global WindowTitleID               :=
-Global keys                        := "abcdefghijklmnopqrstuvwxyz"
-Global numbers                     := "0123456789"
-Global DoubleClickTime             := DllCall("GetDoubleClickTime")
-Global isWin11                     := DetectWin11()
-Global TaskBarHeight               := 0
-Global lastHotkeyTyped             := ""
-Global DraggingWindow              := False
+Global currentMon                          := 0
+Global previousMon                         := 0
+Global targetDesktop                       := 0
+Global currentPath                         := ""
+Global prevPath                            := ""
+Global _winCtrlD                           := ""
+Global MbuttonIsEnter                      := False
+Global textBoxSelected                     := False
+Global WindowTitleID                       :=
+Global keys                                := "abcdefghijklmnopqrstuvwxyz"
+Global numbers                             := "0123456789"
+Global DoubleClickTime                     := DllCall("GetDoubleClickTime")
+Global isWin11                             := DetectWin11()
+Global TaskBarHeight                       := 0
+Global lastHotkeyTyped                     := ""
+Global DraggingWindow                      := False
+Global ActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
 ; --- Config ---
 UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
@@ -334,10 +332,6 @@ sleep, 50
 
 WinGetPos, , , , TaskBarHeight, ahk_class Shell_TrayWnd
 
-;EVENT_SYSTEM_FOREGROUND := 0x3
-DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
- winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
-
 If (MonCount > 1) {
     currentMon := MWAGetMonitorMouseIsIn()
     previousMon := currentMon
@@ -373,9 +367,17 @@ Marktime_Hoty_FixSlash:
 
 Startup:
     runAtStartup := !runAtStartup
+
     if (runAtStartup) {
-        FileCreateShortcut, % (H_Compiled ? A_AhkPath : A_ScriptFullPath), %link%
+
+        if (A_IsCompiled)
+            target := A_ScriptFullPath
+        else
+            target := A_AhkPath . " " . A_ScriptFullPath
+
+        FileCreateShortcut, %target%, %link%
         Menu, Tray, Check, Run at startup
+
     } else {
         IfExist, %link%
             FileDelete, %link%
@@ -964,7 +966,7 @@ Return
 Return
 
 #If ((IsConsoleWindow() && IsMouseOnLeftSide()) || textBoxSelected) && !MouseIsOverTitleBar()
-WheelDown::
+$WheelDown::
     ; tooltip, % IsConsoleWindow() "-" IsMouseOnLeftSide() "-" textBoxSelected
     StopRecursion := True
     SetTimer, MbuttonTimer, Off
@@ -974,7 +976,7 @@ WheelDown::
     StopRecursion := False
 Return
 
-WheelUp::
+$WheelUp::
     StopRecursion := True
     SetTimer, MbuttonTimer, Off
     Send, {UP}
@@ -985,7 +987,7 @@ Return
 #If
 
 #If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
-~WheelUp::
+~$WheelUp::
     StopRecursion := True
     pauseWheel := True
     MouseGetPos, , , wuID, wuCtrl
@@ -1019,7 +1021,7 @@ Return
 #If
 
 #If MouseIsOverTitleBar() || disableWheeldown
-WheelDown::
+$WheelDown::
     disableWheeldown := True
     MouseGetPos, , , wdID,
     WinMinimize, ahk_id %wdID%
@@ -1029,7 +1031,7 @@ Return
 #If
 
 #If !MouseIsOverTitleBar() && !disableWheeldown && !pauseWheel
-~WheelDown::
+~$WheelDown::
     StopRecursion := True
     pauseWheel := True
     MouseGetPos, , , wdID, wuCtrl
@@ -1988,6 +1990,22 @@ Enter::
     disableEnter := False
 Return
 #If
+
+;=============== KILL WINDOWS SHORTCUT KEYS =============
+LWin & s::
+    Send ^+{PrintScreen}   ; Shift+PrintScreen → triggers Greenshot region capture
+return
+LWin::Return
+*RWin::Return
+LWin up::Return
+*RWin up::Return
+#d::Return
+#i::Return
+#x::Return
+#v::Return
+#space::Return
+#l::Return
+; =========================================================
 
 #If !disableEnter && (WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770"))
 ~Enter::
@@ -4462,12 +4480,12 @@ Return
 LWin & WheelUp::send {Volume_Up}
 LWin & WheelDown::send {Volume_Down}
 
-!WheelUp::send, {PgUp}
-!WheelDown::send, {PgDn}
+!$WheelUp::send, {PgUp}
+!$WheelDown::send, {PgDn}
 
 #If VolumeHover() && !IsOverException()
-WheelUp::send {Volume_Up}
-WheelDown::send {Volume_Down}
+$WheelUp::send {Volume_Up}
+$WheelDown::send {Volume_Down}
 #If
 
 
