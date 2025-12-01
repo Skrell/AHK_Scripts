@@ -95,6 +95,7 @@ Global TaskBarHeight                       := 0
 Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
 Global ActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+Global blockKeys := false
 
 ; --- Config ---
 UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
@@ -284,7 +285,7 @@ ExprAltUp =
     #IfWinNotActive
 )
 
-ExprTimeout =
+TooltipExpr =
 (
     #NoEnv
     #NoTrayIcon
@@ -346,6 +347,30 @@ Return
 ; ==========================================================================================================================================
 ; -----------------------------------------------          START OF APPLICATION           --------------------------------------------------
 ; ==========================================================================================================================================
+; ---- Low-level hardware key filter ----
+LL_KeyFilter(wParam, lParam)
+{
+    global blockKeys
+
+    if (!blockKeys)
+        return  ; allow all keys normally
+
+    ; Get input type
+    if (NumGet(lParam + 0, 0, "UInt") != 1) ; 1 = keyboard
+        return
+
+    flags := NumGet(lParam + 0, 20, "UShort")
+
+    ; LLKHF_INJECTED = bit 4 (0x10)
+    injected := (flags & 0x10)
+
+    ; If injected, allow AHK SendInput to pass through
+    if (injected)
+        return
+
+    ; Otherwise block physical key
+    return 1   ; swallow it completely
+}
 
 OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
     ; tooltip, pop!
@@ -365,6 +390,7 @@ Marktime_Hoty_FixSlash:
     GoSub, MarkKeypressTime
     GoSub, Hoty
     GoSub, FixSlash
+Return
 
 Startup:
     runAtStartup := !runAtStartup
@@ -384,13 +410,16 @@ Startup:
             FileDelete, %link%
         Menu, Tray, Uncheck, Run at startup
     }
-return
+Return
 
 Tray_SingleLclick:
     msgbox You left-clicked tray icon
 Return
 
 Reload_label:
+    StopRecursion := True
+    Suspend
+    sleep, 1000
     Reload
 Return
 
@@ -475,474 +504,57 @@ IsThisHotKeyLowerCase() {
     Return (StrLen(A_ThisHotKey) == 2 && inStr(keys, Substr(A_ThisHotKey,2,1), False))
 }
 
-ReAssignHotkeys() {
-    Global keys
-    Global numbers
+DoNothing() {
+    Return
+}
 
+ReAssignHotkeys() {
+    global keys, numbers
+
+    ; Letters (shifted and unshifted)
     Loop Parse, keys
     {
-        HotKey, ~+%A_LoopField%, Marktime_Hoty_FixSlash, On
+        Hotkey, % "~" . A_LoopField, Marktime_Hoty_FixSlash, On
+        Hotkey, % "~+" . A_LoopField, Marktime_Hoty_FixSlash, On
     }
-    Loop Parse, keys
-    {
-        HotKey,  ~%A_LoopField%, Marktime_Hoty_FixSlash, On
-    }
+
+    ; Numbers
     Loop Parse, numbers
     {
-        HotKey,  ~%A_LoopField%, Marktime_Hoty_FixSlash, On
+        Hotkey, % "~" . A_LoopField, Marktime_Hoty_FixSlash, On
     }
-    Hotkey,   Ctrl, DoNothing,     Off
-    Hotkey,      ., DoNothing,     Off
-    HotKey, ~$Ctrl, LaunchWinFind, On
-    Hotkey,     ~., Marktime_Hoty, On
-    Return
+
+    ; Other specific hotkeys
+    Hotkey, Ctrl, DoNothing, Off
+    Hotkey, ., DoNothing, Off
+    Hotkey, ~., Marktime_Hoty, On
 }
 
 DeAssignHotkeys() {
-    Global keys
-    Global numbers
+    global keys, numbers
 
+    ; Letters
     Loop Parse, keys
     {
-        HotKey, +%A_LoopField%, DoNothing, On
+        Hotkey, % "~"  . A_LoopField, Off
+        Hotkey, % "~+" . A_LoopField, Off
+
+        ; Block typing
+        Hotkey, % A_LoopField, DoNothing, On
+        Hotkey, % "+" . A_LoopField, DoNothing, On
     }
-    Loop Parse, keys
-    {
-        HotKey,  %A_LoopField%, DoNothing, On
-    }
+
+    ; Numbers
     Loop Parse, numbers
     {
-        HotKey,  %A_LoopField%, DoNothing, On
-    }
-    HotKey, ~$Ctrl, LaunchWinFind, Off
-    Hotkey,     ~., Marktime_Hoty, Off
-    Hotkey,   Ctrl, DoNothing,     On
-    Hotkey,      ., DoNothing,     On
-    Return
-}
-
-DoNothing:
-Return
-
-; ==========================================================================================================================================
-; ==========================================================================================================================================
-DetectWin11()
-{
-    ; Get version via WMI to capture the build number
-    version := ""
-    buildNumber := ""
-    try {
-        wmi := ComObjGet("winmgmts:\\.\root\cimv2")
-        for os in wmi.ExecQuery("Select * from Win32_OperatingSystem")
-        {
-            version := os.Version  ; e.g., "10.0.22621"
-            buildNumber := os.BuildNumber  ; e.g., "22621"
-            break
-        }
-    } catch e {
-        MsgBox, Failed to query OS version.`nError: %e%
-        return False
+        Hotkey, % "~" . A_LoopField, Off
+        Hotkey, % A_LoopField, DoNothing, On
     }
 
-    if (SubStr(version, 1, 4) = "10.0" && buildNumber >= 22000)
-        return True
-    else
-        return False
-}
-
-; Choose the monitor containing the mouse. If none contains it (rare with odd layouts),
-; pick the nearest monitor by distance.
-; Summary
-; First preference: the monitor that actually contains the mouse.
-; Else: the nearest monitor rectangle (useful if the mouse is exactly outside due to odd DPI layouts, mis-alignment, or negative coords).
-; The function returns the rectangle by reference into L, T, R, B.
-; So in your drag script, every frame we call this with the current mouse (mx, my), and get the correct monitor bounds whether your monitors
-; are side-by-side, stacked vertically, diagonal, or even negative-coordinate setups.
-
-; (rLeft, rTop) ----------------- (rRight, rTop)
-       ; |                        |
-       ; |                        |
-       ; |        Monitor         |
-       ; |                        |
-; (rLeft, rBottom) ------------- (rRight, rBottom)
-
-GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) {
-    SysGet, count, MonitorCount
-    bestDist := 0x7FFFFFFF, found := false
-
-    Loop, %count% {
-        idx := A_Index
-        if (useWorkArea)
-            SysGet, r, MonitorWorkArea, %idx%
-        else
-            SysGet, r, Monitor, %idx%
-
-        ; Inside?
-        if (mx >= rLeft && mx < rRight && my >= rTop && my < rBottom) {
-            L := rLeft, T := rTop, R := rRight, B := rBottom
-            return
-        }
-
-        ; Distance from point to rect (0 if inside)
-        cx := (mx < rLeft) ? rLeft : (mx > rRight ? rRight : mx)
-        cy := (my < rTop)  ? rTop  : (my > rBottom ? rBottom : my)
-        dx := mx - cx, dy := my - cy
-        dist2 := dx*dx + dy*dy
-        if (dist2 < bestDist) {
-            bestDist := dist2
-            L := rLeft, T := rTop, R := rRight, B := rBottom
-            found := true
-        }
-    }
-    if (!found) {
-        ; Fallback to primary
-        if (useWorkArea)
-            SysGet, r, MonitorWorkArea, 1
-        else
-            SysGet, r, Monitor, 1
-        L := rLeft, T := rTop, R := rRight, B := rBottom
-    }
-}
-
-IsPlainDialog32770(hWnd) {
-    WinGetClass, cls, ahk_id %hWnd%
-    if (cls != "#32770")
-        return false
-
-    WinGet, style, Style, ahk_id %hWnd%
-
-    ; Optional: reject dialogs with min/max buttons (usually “big” windows)
-    if (style & 0x00010000)  ; WS_MAXIMIZEBOX
-        return false
-    if (style & 0x00020000)  ; WS_MINIMIZEBOX
-        return false
-
-    ; Do NOT reject WS_THICKFRAME / WS_SIZEBOX here,
-    ; so Notepad++ Find (0x94CC004C) will pass.
-
-    ; Core requirement: must NOT look like a file container
-    return !HasFileViewChild(hWnd)
-}
-
-HasFileViewChild(hParent) {
-    ; Get list of all controls (ClassNNs) in the window.
-    WinGet, ctrlList, ControlList, ahk_id %hParent%
-    if (ErrorLevel)
-        return false
-
-    ; Classes that are strong indicators of a file view or shell namespace view.
-    static suspectPattern := "i)^(SysListView32|SHELLDLL_DefView|DirectUIHWND|NamespaceTreeControl|SysTreeView32|CabinetWClass)"
-
-    Loop, Parse, ctrlList, `n
-    {
-        ctrl := A_LoopField
-        ; Extract the class part from ClassNN (e.g. "SysListView32" from "SysListView321")
-        if RegExMatch(ctrl, "^[^0-9]+", className)
-        {
-            if RegExMatch(className, suspectPattern)
-                return true
-        }
-    }
-    return false
-}
-
-;------------------------------------------------------------------------------
-;https://www.autohotkey.com/boards/viewtopic.php?t=51265
-;------------------------------------------------------------------------------
-OnWinActiveChange(hWinEventHook, vEvent, hWnd)
-{
-    Global prevActiveWindows
-    Global StopRecursion
-
-    If !StopRecursion && !hitTab {
-
-        DetectHiddenWindows, Off
-        SetTimer, keyTrack,   Off
-        SetTimer, mouseTrack, Off
-
-        loop 500 {
-            WinGetClass, vWinClass, % "ahk_id " hWnd
-            WinGetTitle, vWinTitle, % "ahk_id " hWnd
-            WinGet, proc, ProcessName, ahk_id %hWnd%
-            If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768"))
-                break
-            sleep, 1
-        }
-
-        If (proc == "Everything.exe") {
-            Send, {Ctrl UP}
-            Send, {Space UP}
-            SendEvent, {Blind}{vkFF} ; send a dummy key (vkFF = undefined key)
-        }
-
-        WinGet, vWinStyle, Style, % "ahk_id " hWnd
-        If (   !WinExist("ahk_id " hWnd)
-            || vWinClass == ""
-            || vWinTitle == ""
-            || vWinClass == "#32768"
-            || vWinClass == "Autohotkey"
-            || vWinClass == "AutohotkeyGUI"
-            || vWinClass == "SysShadow"
-            || vWinClass == "TaskListThumbnailWnd"
-            || vWinClass == "Windows.UI.Core.CoreWindow"
-            || vWinClass == "Progman"
-            || vWinClass == "WorkerW"
-            || vWinClass == "tooltips_class32"
-            || vWinClass == "DropDown"
-            || vWinClass == "Microsoft.UI.Content.PopupWindowSiteBridge"
-            || vWinClass == "OperationStatusWindow"
-            || vWinClass == "NativeHWNDHost"
-            || vWinClass == "Windows.UI.Core.CoreWindow"
-            || vWinClass == "Net UI Tool Window"
-            || vWinClass == "SDL_app"
-            || vWinClass == "DV2ControlHost"
-            || (InStr(vWinTitle, "VirtualBox",True))
-            || IsPlainDialog32770(hWnd)
-            || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
-            || proc == "SndVol.exe") {
-
-            If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
-                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-            }
-            If (hWnd == WinExist("Run ahk_class #32770 ahk_exe explorer.exe")) {
-                WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
-                If UIA_GetStartButtonCenter(sx, sy, bw) {
-                    x := sx - (rw/2) - bw ; 44 is the width of a single taskbar button
-                    WinMove, ahk_id %hWnd%,, x,
-                    WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-                    Return
-                }
-            }
-            Return
-        }
-
-        LbuttonEnabled := False
-
-        If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
-
-            KeyWait, Lbutton, U T10
-
-            WinGet, state, MinMax, ahk_id %hWnd%
-            If (state > -1 && vWinTitle != "" && MonCount > 1) {
-                currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnCurrMon(hWnd, currentMon)
-                If !currentMonHasActWin {
-                    WinActivate, ahk_id %hWnd%
-                    Send, #+{Left}
-                }
-            }
-
-            If (inStr("Home - File Explorer", vWinTitle, True) || inStr("This PC - File Explorer", vWinTitle, True) || inStr("Gallery - File Explorer", vWinTitle, True)) {
-                LbuttonEnabled := True
-                SetTimer, keyTrack,   On
-                SetTimer, mouseTrack, On
-                Return
-            }
-
-            If (vWinClass == "#32770") {
-                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-            }
-            Else If (vWinClass != "#32770" && WinExist("ahk_class #32770")) {
-                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-                WinSet, AlwaysOnTop, Off, ahk_class #32770
-                WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
-            }
-
-            If (vWinClass == "wxWindowNR") {
-                loop, 150 {
-                    ControlFocus, Edit1, ahk_id %hWnd%
-                    ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                    If (testCtrlFocus == "Edit1")
-                        break
-                    sleep, 2
-                }
-                Send, {Backspace}
-            }
-
-            If (InStr(vWinTitle, "Save", False) && vWinClass != "#32770") {
-                WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
-                WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
-                LbuttonEnabled := True
-                Return
-            }
-
-            ;EVENT_SYSTEM_FOREGROUND := 0x3
-            ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
-
-            Critical, On
-            prevActiveWindows.push(hWnd)
-            Critical, Off
-
-            WaitForFadeInStop(hWnd)
-
-            initFocusedCtrl := ""
-            loop, 100 {
-                ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
-                If (initFocusedCtrl != "")
-                    break
-                sleep, 1
-            }
-            LbuttonEnabled := True
-            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
-
-            DetectHiddenWindows, On
-            i := 1
-            while (i <= prevActiveWindows.MaxIndex()) {
-                checkID := prevActiveWindows[i]
-                If !WinExist("ahk_id " checkID)
-                    prevActiveWindows.RemoveAt(i)
-                Else
-                    ++i
-                If (GetKeyState("Lbutton", "P")) {
-                    DetectHiddenWindows, Off
-                    SetTimer, keyTrack,   On
-                    SetTimer, mouseTrack, On
-                    Return
-                }
-            }
-        }
-    }
-    DetectHiddenWindows, Off
-    SetTimer, keyTrack,   On
-    SetTimer, mouseTrack, On
-    LbuttonEnabled := True
-    Return
-}
-
-; Waits until the shell view’s item list has finished populating.
-; Works for both:
-;   - Explorer windows (ahk_class CabinetWClass)
-;   - Common file dialogs (ahk_class #32770)
-; Returns an object { hwnd: <hwnd>, itemsView: <UIA element>, count: <int> }
-; or 0 on timeout.
-WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll := 100) {
-    if !hwnd {
-        ; If no hwnd provided, use the active window (either class will work)
-        WinGet, hwnd, ID, A
-        if !hwnd
-            return 0
-    }
-
-    UIA   := UIA_Interface()
-    root  := UIA.ElementFromHandle(hwnd)
-    if !root
-        return 0
-
-    start := A_TickCount
-    items := ""
-
-    ; -------- 1) Find the shell view’s item list (works across Explorer + dialogs)
-    ; Try List first (Explorer “Items View”), then DataGrid/Table (some dialogs), then Tree (rare)
-    for _, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
-        items := root.FindFirstBy("ControlType=" . ctlType)
-        if (items)
-            break
-    }
-    if !items
-        return 0
-
-    ; -------- 2) If there’s an active “Working on it…” progress bar, wait for it to go away
-    ; Not all windows show one; that’s fine—we’ll proceed either way.
-    while (A_TickCount - start < timeout) {
-        prog := root.FindFirstBy("ControlType=UIA_ProgressBarControlTypeId")
-        if !prog
-            break
-        ; Heuristic: if the progress bar is offscreen/hidden, treat as gone
-        off := prog.GetCurrentPropertyValue(UIA_IsOffscreenPropertyId)
-        if (off = 1)
-            break
-        Sleep, %poll%
-    }
-
-    ; -------- 3) Wait for the item count to stabilize
-    last := -1, stable := 0
-    while (A_TickCount - start < timeout) {
-        ; Children() is inexpensive here and works for both Explorer + dialogs.
-        cnt := items.Children().Length()
-
-        if (cnt = last) {
-            stable++
-            if (stable >= stableChecks)
-                return { hwnd: hwnd, itemsView: items, count: cnt }
-        } else {
-            last := cnt
-            stable := 0
-        }
-        Sleep, %poll%
-    }
-    return 0
-}
-
-WaitForFadeInStop(hwnd) {
-    HexColorLast1 :=
-    HexColorLast2 :=
-    HexColorLast3 :=
-    HexColorLast4 :=
-    HexColorLast5 :=
-
-    WinGetPos, sx, sy, sw, sh, ahk_id %hwnd%
-    sampleX := (sx + sw)/2
-    sampleY := (sy + 13)
-    CoordMode, Pixel, Screen
-    loop 200 {
-        PixelGetColor, HexColor%A_Index%, %sampleX%, %sampleY%, RGB
-        If (A_Index >= 5) {
-            If (HexColor%A_Index% == HexColorLast1 && HexColorLast1 == HexColorLast2 && HexColorLast2 == HexColorLast3 && HexColorLast3 == HexColorLast4 && HexColorLast4 == HexColorLast5)
-                break
-            HexColorLast1 := HexColor%A_Index%
-            HexColorLast2 := HexColorLast1
-            HexColorLast3 := HexColorLast2
-            HexColorLast4 := HexColorLast3
-            HexColorLast5 := HexColorLast4
-        }
-        sleep, 1
-    }
-    CoordMode, Mouse, screen
-    Return
-}
-
-PreventRecur() {
-    Global StopRecursion, hWinEventHook
-    StopRecursion := True
-    nCheck := DllCall( "UnhookWinEvent", Ptr,hWinEventHook )
-    DllCall( "CoUninitialize" )
-Return
-}
-
-; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
-UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
-    Global UIA
-    try {
-        hTask := WinExist("ahk_class Shell_TrayWnd")
-        if !hTask
-            return false
-
-        tb := UIA.ElementFromHandle(hTask)
-
-        ; Try several robust queries (name is localized; AutomationId often stable)
-        startEl := tb.FindFirstBy("AutomationId=StartButton")
-        if !startEl
-        startEl := tb.FindFirstByNameAndType("Start", "Button")
-        if !startEl
-        startEl := tb.FindFirstByNameAndType("Start menu", "Button")
-        if !startEl
-            return false
-
-        ; Get bounding rectangle and compute center
-        ; UIA_Interface exposes CurrentBoundingRectangle (object with x,y,w,h)
-        rect := startEl.CurrentBoundingRectangle
-        if (rect == "") {
-            ; Older versions may expose .BoundingRectangle or GetBoundingRectangle()
-            rect := startEl.BoundingRectangle ? startEl.BoundingRectangle : startEl.GetBoundingRectangle()
-        }
-
-        sx := round(rect.l + (rect.r-rect.l)/2)
-        sy := round(rect.t + (rect.b-rect.t)/2)
-        buttonWidth := rect.r-rect.l
-        return true
-    } catch e {
-        return false
-    }
+    ; Other specific keys
+    Hotkey, ~., Marktime_Hoty, Off
+    Hotkey, ., DoNothing, On
+    Hotkey, Ctrl, DoNothing, On
 }
 
 ~^Enter::
@@ -2733,7 +2345,7 @@ RunDynaAltUp:
 Return
 
 RunDynaExprTimeout:
-    DynaRun(ExprTimeout, ExprTimeout_Name)
+    DynaRun(TooltipExpr, ExprTimeout_Name)
 Return
 
 FadeOutWindowTitle:
@@ -3325,7 +2937,7 @@ Return
 #If
 
 #MaxThreadsPerHotkey 2
-#If (!VolumeHover() && LbuttonEnabled && !IsOverException() && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbar())
+#If (!VolumeHover() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbar())
 ~LButton::
     tooltip,
     HotString("Reset")
@@ -3339,6 +2951,10 @@ Return
     WinGetClass, wmClassD, ahk_id %_winIdD%
     Gui, GUI4Boarder: Hide
     initTime := A_TickCount
+
+    If (!InStr(_winCtrlD, "SysTreeView32", True) && IsOverException()) {
+        Return
+    }
 
     If (    A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < DoubleClickTime)
@@ -3425,7 +3041,7 @@ Return
 
     ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (timeDiff < DoubleClickTime/2)
+        && (timeDiff < floor(DoubleClickTime/2))
         && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
 
@@ -3510,9 +3126,10 @@ Return
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-            && (InStr(_winCtrlD, "SysTreeView32", True))
-            && (timeDiff < floor(DoubleClickTime/2))
-            && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
+        && (InStr(_winCtrlD, "SysTreeView32", True))
+        && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
+        && (timeDiff < floor(DoubleClickTime/2))
+        && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
         loop 100 {
@@ -4550,11 +4167,39 @@ VolumeHover() {
         Return False
 }
 
-IsOverException() {
-    MouseGetPos, , , hwndID
+IsOverException(hWnd := "") {
+    If (hWnd == "")
+        MouseGetPos, , , hwndID
+    Else
+        hwndID := hWnd
+        
+    WinGetTitle, tit, ahk_id %hwndID%
     WinGetClass, cl, ahk_id %hwndID%
     WinGet, proc, ProcessName, ahk_id %hwndID%
-    If (cl == "WorkerW" || cl == "ProgMan" || proc == "peazip.exe")
+
+    If (   proc == "peazip.exe" 
+        || proc == "SndVol.exe" 
+        || (inStr("File Explorer", tit, True) && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
+        || cl == "#32768"
+        || cl == "Autohotkey"
+        || cl == "AutohotkeyGUI"
+        || cl == "SysShadow"
+        || cl == "TaskListThumbnailWnd"
+        || cl == "Windows.UI.Core.CoreWindow"
+        || cl == "ProgMan"
+        || cl == "WorkerW"
+        || cl == "tooltips_class32"
+        || cl == "DropDown"
+        || cl == "Microsoft.UI.Content.PopupWindowSiteBridge"
+        || cl == "TopLevelWindowForOverflowXamlIsland"
+        || cl == "OperationStatusWindow"
+        || cl == "NativeHWNDHost"
+        || cl == "Windows.UI.Core.CoreWindow"
+        || cl == "Net UI Tool Window"
+        || cl == "SDL_app"
+        || cl == "DV2ControlHost"
+        || (InStr(vWinTitle, "VirtualBox",True))
+        || inStr(cl, "TrayWnd", True))
         Return True
     Else
         Return False
@@ -5234,7 +4879,10 @@ keyTrack() {
     Global lastHotkeyTyped
     Global StopAutoFix
     Global TimeOfLastHotkeyTyped
-    static x_PriorPriorKey
+    Global blockKeys
+
+    static ThisHotkey_Recd
+    
     ListLines, Off
 
     FixMod("LShift", 0xA0), FixMod("RShift", 0xA1)
@@ -5248,36 +4896,19 @@ keyTrack() {
         ; A_PriorKey and Loops — How It Works
         ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a loop.
         ; You can read A_PriorKey at any point in the loop, and it will show the most recent key pressed up to that moment.
-        ; tooltip, % "lastKey- " . A_PriorKey . " - " . A_TickCount-TimeOfLastHotkeyTyped
+        ; tooltip, % "thisHotkey-" A_ThisHotkey "  lastHotkeyTyped-" Substr(lastHotkeyTyped,2)
         If (   TimeOfLastHotkeyTyped
-            && ((A_TickCount-TimeOfLastHotkeyTyped) > 300)
-            && (A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_PriorKey != "LControl" && x_PriorPriorKey != "LControl")
-            && (InStr(keys, x_PriorPriorKey, false) || InStr(numbers, x_PriorPriorKey, false) || x_PriorPriorKey == "Space" || x_PriorPriorKey == "CapsLock" || x_PriorPriorKey == "Backspace") ) {
-            ; tooltip, adjusting bc of %A_PriorKey%
+            && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
+            && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
+            && (InStr(keys, Substr(A_ThisHotkey,2) , false) || InStr(numbers, Substr(A_ThisHotkey,2) , false) || A_ThisHotkey == "~Space" || A_ThisHotkey == "CapsLock" || A_ThisHotkey == "~$Backspace") ) {
+
             TimeOfLastHotkeyTyped :=
             SetTimer, keyTrack,   Off
-            DeAssignHotkeys()
-
-            Critical, On
+            
+            blockKeys := true
             Send, ^{NumpadAdd}
-            Critical, Off
+            blockKeys := false
 
-            If ((InStr(keys, lastHotkeyTyped, false) || InStr(numbers, lastHotkeyTyped, false) || lastHotkeyTyped == "Space" || lastHotkeyTyped == "CapsLock" || lastHotkeyTyped == "Backspace")
-                && lastHotkeyTyped != "" && A_PriorKey != "" && A_PriorKey != lastHotkeyTyped ) {
-                If (A_PriorKey == "Space")
-                    Send, {SPACE}
-                Else If (A_PriorKey == "CapsLock")
-                    Send, {DELETE}
-                Else If (A_PriorKey == "Backspace")
-                    Send, {Backspace}
-                Else
-                    Send, %A_PriorKey%
-
-                tooltip, sent %A_PriorKey%
-                lastHotkeyTyped := A_PriorKey
-            }
-
-            ReAssignHotkeys()
             SetTimer, keyTrack,   On
         }
         StopAutoFix := False
@@ -5287,10 +4918,7 @@ keyTrack() {
     }
     Else
         StopAutoFix := False
-
-    If (x_PriorPriorKey != A_PriorKey)
-        x_PriorPriorKey := A_PriorKey
-
+        
     ListLines, On
 Return
 }
@@ -6410,7 +6038,12 @@ DynaRun(TempScript, pipename="")
    __PIPE_    := DllCall("CreateNamedPipe","str","\\.\pipe\" name,_,2,_,0,_,255,_,0,_,0,@,0,@,0)
    If (__PIPE_=-1 or __PIPE_GA_=-1)
       Return 0
-   Run, %A_AhkPath% "\\.\pipe\%name%",,UseErrorLevel HIDE, PID
+
+   If A_IsCompiled
+      Run, "%A_AhkPath%" /script "\\.\pipe\%name%",,UseErrorLevel HIDE, PID
+   Else
+      Run, %A_AhkPath% "\\.\pipe\%name%",,UseErrorLevel HIDE, PID
+
    If ErrorLevel
       MsgBox, 262144, ERROR,% "Could not open file:`n" __AHK_EXE_ """\\.\pipe\" name """"
    DllCall("ConnectNamedPipe",@,__PIPE_GA_,@,0)
@@ -9121,7 +8754,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it' snot::it's not
 ::itis::it is
 ::ititial::initial
-::it's::its
 ::it's appearance::its appearance
 ::it's color::its color
 ::it's data::its data
@@ -9203,6 +8835,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its her::it's her
 ::its his::it's his
 ::its hot::it's hot
+::its increased::it's increased
 ::its important::it's important
 ::its improved::it's improved
 ::its in::it's in
@@ -9223,6 +8856,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its raining::it's raining
 ::its ready::it's ready
 ::its right::it's right
+::its run::it's run
 ::its something::it's something
 ::its started::it's started
 ::its sunny::it's sunny
@@ -9230,6 +8864,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its time::it's time
 ::its true::it's true
 ::its up::it's up
+::its very::it's very
 ::its working::it's working
 ::its your::it's your
 ::its yours::it's yours
