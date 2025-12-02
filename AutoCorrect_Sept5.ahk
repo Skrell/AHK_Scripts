@@ -94,6 +94,8 @@ Global TaskBarHeight                       := 0
 Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
 Global ActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+; Global winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
+Global hHook
 Global blockKeys := false
 
 ; --- Config ---
@@ -300,23 +302,6 @@ TooltipExpr =
     ExitApp
 )
 
-CenterExpr =
-(
-    #NoEnv
-    #NoTrayIcon
-    #SingleInstance, Off
-    #Persistent
-    #KeyHistory 0
-    SetBatchLines -1
-    ListLines Off
-
-    BlockInput, On
-    sleep, 20
-    Send, ^{NumpadAdd}
-    sleep, 20
-    BlockInput, Off
-    ExitApp
-)
 
 OnExit("PreventRecur")
 
@@ -329,7 +314,7 @@ OnExit("PreventRecur")
 ; The first line of code below is the set of letters, digits, and/or symbols
 ; that are eligible for this type of correction.  Customize if you wish:
 
-ReAssignHotkeys()
+; ReAssignHotkeys()
 
 HotKey ~/,  FixSlash
 HotKey ~',  Hoty ;'
@@ -351,13 +336,24 @@ sleep, 50
 
 WinGetPos, , , , TaskBarHeight, ahk_class Shell_TrayWnd
 
-;EVENT_SYSTEM_FOREGROUND := 0x3
- winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
-
 If (MonCount > 1) {
     currentMon := MWAGetMonitorMouseIsIn()
     previousMon := currentMon
 }
+
+; Install low-level keyboard hook
+OnMessage(0x00FF, "LL_KeyFilter") ; WM_INPUT
+
+; Register for Raw Input keyboard messages
+DllCall("RegisterRawInputDevices"
+    , "Ptr", Buffer := VarSetCapacity(raw, 24, 0)
+    , "UInt", 1
+    , "UInt", 24)
+
+NumPut(1, raw, 0, "UShort")      ; usUsagePage = 1 (Generic Desktop Controls)
+NumPut(6, raw, 2, "UShort")      ; usUsage     = 6 (Keyboard)
+NumPut(0, raw, 4, "UInt")        ; dwFlags     = 0
+NumPut(A_ScriptHwnd, raw, 8, "UPtr")
 
 SetTimer mouseTrack, 10
 SetTimer keyTrack, 5
@@ -438,7 +434,6 @@ Return
 
 Reload_label:
     StopRecursion := True
-    Suspend
     sleep, 1000
     Reload
 Return
@@ -528,54 +523,6 @@ DoNothing() {
     Return
 }
 
-ReAssignHotkeys() {
-    global keys, numbers
-
-    ; Letters (shifted and unshifted)
-    Loop Parse, keys
-    {
-        Hotkey, % "~" . A_LoopField, Marktime_Hoty_FixSlash, On
-        Hotkey, % "~+" . A_LoopField, Marktime_Hoty_FixSlash, On
-    }
-
-    ; Numbers
-    Loop Parse, numbers
-    {
-        Hotkey, % "~" . A_LoopField, Marktime_Hoty_FixSlash, On
-    }
-
-    ; Other specific hotkeys
-    Hotkey, Ctrl, DoNothing, Off
-    Hotkey, ., DoNothing, Off
-    Hotkey, ~., Marktime_Hoty, On
-}
-
-DeAssignHotkeys() {
-    global keys, numbers
-
-    ; Letters
-    Loop Parse, keys
-    {
-        Hotkey, % "~"  . A_LoopField, Off
-        Hotkey, % "~+" . A_LoopField, Off
-
-        ; Block typing
-        Hotkey, % A_LoopField, DoNothing, On
-        Hotkey, % "+" . A_LoopField, DoNothing, On
-    }
-
-    ; Numbers
-    Loop Parse, numbers
-    {
-        Hotkey, % "~" . A_LoopField, Off
-        Hotkey, % A_LoopField, DoNothing, On
-    }
-
-    ; Other specific keys
-    Hotkey, ~., Marktime_Hoty, Off
-    Hotkey, ., DoNothing, On
-    Hotkey, Ctrl, DoNothing, On
-}
 ; ==========================================================================================================================================
 ; ==========================================================================================================================================
 DetectWin11()
@@ -902,10 +849,14 @@ WaitForFadeInStop(hwnd) {
 }
 
 PreventRecur() {
-    Global StopRecursion, hWinEventHook
+    Global StopRecursion, hWinEventHook, hHook
     StopRecursion := True
     nCheck := DllCall( "UnhookWinEvent", Ptr,hWinEventHook )
-    DllCall( "CoUninitialize" )
+    if (ActWin)
+        DllCall( "CoUninitialize" )
+    if (hHook)
+        DllCall("UnhookWindowsHookEx", "Ptr", hHook)
+
 Return
 }
 
@@ -965,23 +916,45 @@ Return
     Send, {Enter}
 Return
 
-#If ((IsConsoleWindow() && IsMouseOnLeftSide()) || textBoxSelected) && !MouseIsOverTitleBar()
-$WheelUp::
-    StopRecursion := True
-    SetTimer, MbuttonTimer, Off
-    Send, {UP}
-    sleep, 125
-    SetTimer, MbuttonTimer, -1
-    StopRecursion := False
+^$WheelUp::
+    If ((IsConsoleWindow() || textBoxSelected) && !MouseIsOverTitleBar()) {
+        StopRecursion := True
+        SetTimer, MbuttonTimer, Off
+        Send, {UP}
+        sleep, 125
+        SetTimer, MbuttonTimer, -1
+        StopRecursion := False
+    }
+    Else {
+        Send, ^{WheelUp}
+    }
 Return
 
-$WheelDown::
-    StopRecursion := True
+^$WheelDown::
+    If ((IsConsoleWindow() || textBoxSelected) && !MouseIsOverTitleBar()) {
+        StopRecursion := True
+        SetTimer, MbuttonTimer, Off
+        Send, {DOWN}
+        sleep, 125
+        SetTimer, MbuttonTimer, -1
+        StopRecursion := False
+    }
+    Else {
+        Send, ^{wheelDown}
+    }
+Return
+
+MbuttonTimer:
+    MbuttonIsEnter := True
+    sleep, 1500
+    MbuttonIsEnter := False
+Return
+
+#If MbuttonIsEnter
+Mbutton::
+    Send, {Enter}
     SetTimer, MbuttonTimer, Off
-    Send, {DOWN}
-    sleep, 125
     SetTimer, MbuttonTimer, -1
-    StopRecursion := False
 Return
 #If
 
@@ -1157,19 +1130,6 @@ IsMouseOnLeftSide() {
     }
 }
 
-MbuttonTimer:
-    MbuttonIsEnter := True
-    sleep, 1500
-    MbuttonIsEnter := False
-Return
-
-#If MbuttonIsEnter
-Mbutton::
-    Send, {Enter}
-    SetTimer, MbuttonTimer, Off
-    SetTimer, MbuttonTimer, -1
-Return
-#If
 
 #If !MbuttonIsEnter && !MouseIsOverTaskbar()
 $MButton::
@@ -1754,25 +1714,9 @@ Return
 ^d::
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
+
     StopAutoFix := True
     SetTimer, keyTrack, Off
-    ; Send, {End}
-    ; sleep, 10
-    ; Send, +{Home}+{Home}+{Home}
-    ; sleep, 10
-    ; store := Clip()
-    ; tooltip, %store%
-    ; sleep, 10
-    ; Send, {End}
-    ; sleep, 10
-    ; Send, {Enter}
-    ; sleep, 10
-    ; Send, {Home}
-    ; Clip(store)
-    ; Hotstring("Reset")
-    ; StopAutoFix := False
-    ; SetTimer, keyTrack, On
-    ; sleep, 500
 
     ; If there’s no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
     if (A_CaretX = "")
@@ -3476,7 +3420,7 @@ Return
 
     ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (timeDiff < DoubleClickTime/2)
+        && (timeDiff < floor(DoubleClickTime/2))
         && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
         && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
 
@@ -3562,7 +3506,8 @@ Return
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
             && (InStr(_winCtrlD, "SysTreeView32", True))
-            && (timeDiff < DoubleClickTime/2)
+        && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
+        && (timeDiff < floor(DoubleClickTime/2))
             && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
@@ -3768,7 +3713,7 @@ Return
 Return
 
 LaunchWinFind:
-    If (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < 200)
+    If (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < (DoubleClickTime/2))
     {
         StopRecursion   := True
         SetTimer, mouseTrack, off
@@ -4444,7 +4389,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             BlockInput, On
 
-            Send,  {Ctrl UP}
+            Send, {Ctrl UP}
             Send, ^{NumpadAdd}
             Send, {Ctrl UP}
             BlockInput, Off
@@ -5313,7 +5258,8 @@ keyTrack() {
     Global lastHotkeyTyped
     Global StopAutoFix
     Global TimeOfLastHotkeyTyped
-    static x_PriorPriorKey
+    Global blockKeys
+
     ListLines, Off
 
     FixMod("LShift", 0xA0), FixMod("RShift", 0xA1)
@@ -5329,34 +5275,17 @@ keyTrack() {
         ; You can read A_PriorKey at any point in the loop, and it will show the most recent key pressed up to that moment.
         ; tooltip, % "lastKey- " . A_PriorKey . " - " . A_TickCount-TimeOfLastHotkeyTyped
         If (   TimeOfLastHotkeyTyped
-            && ((A_TickCount-TimeOfLastHotkeyTyped) > 300)
-            && (A_PriorKey != "Enter" && A_PriorKey != "LButton" && A_PriorKey != "LControl" && x_PriorPriorKey != "LControl")
-            && (InStr(keys, x_PriorPriorKey, false) || InStr(numbers, x_PriorPriorKey, false) || x_PriorPriorKey == "Space" || x_PriorPriorKey == "CapsLock" || x_PriorPriorKey == "Backspace") ) {
-            ; tooltip, adjusting bc of %A_PriorKey%
+            && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
+            && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
+            && (InStr(keys, Substr(A_ThisHotkey,2) , false) || InStr(numbers, Substr(A_ThisHotkey,2) , false) || A_ThisHotkey == "~Space" || A_ThisHotkey == "CapsLock" || A_ThisHotkey == "~$Backspace") ) {
+
             TimeOfLastHotkeyTyped :=
             SetTimer, keyTrack,   Off
-            DeAssignHotkeys()
 
-            Critical, On
+            blockKeys := true
             Send, ^{NumpadAdd}
-            Critical, Off
+            blockKeys := false
 
-            If ((InStr(keys, lastHotkeyTyped, false) || InStr(numbers, lastHotkeyTyped, false) || lastHotkeyTyped == "Space" || lastHotkeyTyped == "CapsLock" || lastHotkeyTyped == "Backspace")
-                && lastHotkeyTyped != "" && A_PriorKey != "" && A_PriorKey != lastHotkeyTyped ) {
-                If (A_PriorKey == "Space")
-                    Send, {SPACE}
-                Else If (A_PriorKey == "CapsLock")
-                    Send, {DELETE}
-                Else If (A_PriorKey == "Backspace")
-                    Send, {Backspace}
-                Else
-                    Send, %A_PriorKey%
-
-                tooltip, sent %A_PriorKey%
-                lastHotkeyTyped := A_PriorKey
-            }
-
-            ReAssignHotkeys()
             SetTimer, keyTrack,   On
         }
         StopAutoFix := False
@@ -5366,9 +5295,6 @@ keyTrack() {
     }
     Else
         StopAutoFix := False
-
-    If (x_PriorPriorKey != A_PriorKey)
-        x_PriorPriorKey := A_PriorKey
 
     ListLines, On
 Return
