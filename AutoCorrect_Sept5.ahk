@@ -325,6 +325,18 @@ HotKey ~.,  Marktime_Hoty
 HotKey ~_,  Hoty
 HotKey ~-,  Hoty
 
+Loop Parse, keys
+{
+    Hotkey, % "~" . A_LoopField, Marktime_Hoty_FixSlash, On
+    Hotkey, % "~+" . A_LoopField, Marktime_Hoty_FixSlash, On
+}
+
+; Numbers
+Loop Parse, numbers
+{
+    Hotkey, % "~" . A_LoopField, Marktime_Hoty_FixSlash, On
+}
+
 Send #^{Left}
 sleep, 50
 Send #^{Left}
@@ -2133,12 +2145,14 @@ $Esc::
 
         If IsAltTabWindow(escHwndID) {
             WinActivate, ahk_id %escHwndID%
+            WinGet, pp, ProcessPath , ahk_id %escHwndID%
             Hotkey, x, DoNothing, On
             ; GoSub, DrawRect
             GoSub, DrawMasks
+            WindowTitleID := DrawWindowTitlePopup("Close?", pp, False, escHwndID)
 
             loop {
-                tooltip Close `"%escTitle%`" ? ;"
+                ; tooltip Close `"%escTitle%`" ? ;"
                 sleep, 1
                 If !GetKeyState("Esc","P")
                     break
@@ -2146,6 +2160,7 @@ $Esc::
                     Tooltip, Canceled!
                     ; ClearRect()
                     ClearMasks()
+                    GoSub, FadeOutWindowTitle
                     CancelClose := True
                     sleep, 1500
                     Tooltip,
@@ -2159,10 +2174,11 @@ $Esc::
                 Winclose, ahk_id %escHwndID%
 
                 loop 10 {
-                    tooltip, Waiting for `"%escTitle%`" to close... ; "
+                    ; tooltip, Waiting for `"%escTitle%`" to close... ; "
                     If !WinExist("ahk_id " . escHwndID) {
                         ; ClearRect(escHwndID)
                         ClearMasks(escHwndID)
+                        GoSub, FadeOutWindowTitle
                         ActivateTopMostWindow()
                         break
                     }
@@ -2190,6 +2206,7 @@ $Esc::
                         If !WinExist("ahk_id " . escHwndID) {
                             ; ClearRect(escHwndID)
                             ClearMasks(escHwndID)
+                            GoSub, FadeOutWindowTitle
                             ActivateTopMostWindow()
                             break
                         }
@@ -2378,6 +2395,7 @@ Altup:
     Global startHighlight
     Global hitTAB
     Global LclickSelected
+    Global blockKeys
 
     cycling        := False
     If !hitTAB {
@@ -2392,26 +2410,26 @@ Altup:
     }
     Else {
         Critical, On
-        BlockKeyboard(True)
         WinGet, actWndID, ID, A
         If (LclickSelected && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
             If (startHighlight) {
                 BlockInput, On
-                GoSub, FadeInWin1
+                GoSub, SortAllWins
                 BlockInput, Off
             }
         }
         Else {
             If (GetKeyState("x","P") || actWndID == ValidWindows[1] || GroupedWindows.length() <= 1) {
+                ; canceled!
                 If (GetKeyState("x","P")) {
                     BlockInput, On
                     GoSub, ResetWins
                     BlockInput, Off
                 }
-            }
+            } ; this condition is attempting to account for the user starting with alt+tab then switching to alt+`
             Else If (startHighlight && (GroupedWindows.length() > 2)  && actWndID != ValidWindows[1]) {
                 BlockInput, On
-                GoSub, FadeInWin2
+                GoSub, SortGroupedWins ; currently, GroupedWindows == ValidWindows for alt+tab but not for alt+`
                 BlockInput, Off
             }
         }
@@ -2423,14 +2441,11 @@ Altup:
     startHighlight := False
     hitTAB         := False
     LclickSelected := False
-    BlockKeyboard(False)
     Critical, Off
-    ; ClearRect()
-    ; tooltip,
 Return
 
 ;============================================================================================================================
-FadeInWin1:
+SortAllWins:
     Critical, On
 
     WinSet, AlwaysOnTop, Off, ahk_id %_winIdD%
@@ -2514,7 +2529,7 @@ FadeInWin1:
     Critical, Off
 Return
 
-FadeInWin2:
+SortGroupedWins:
     Critical, On
     WinSet, AlwaysOnTop, Off ,% "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
@@ -2609,13 +2624,14 @@ If !hitTAB {
     SetTimer, mouseTrack, Off
     SetTimer, keyTrack,   Off
 
-    Cycle()
+    cc := Cycle()
 
-    Gui, GUI4Boarder: Hide
-    WinSet, Transparent, 255, ahk_id %black1Hwnd%
-    WinSet, Transparent, 255, ahk_id %black2Hwnd%
-    WinSet, Transparent, 255, ahk_id %black3Hwnd%
-    WinSet, Transparent, 255, ahk_id %black4Hwnd%
+    If (cc > 2) {
+        WinSet, Transparent, 255, ahk_id %black1Hwnd%
+        WinSet, Transparent, 255, ahk_id %black2Hwnd%
+        WinSet, Transparent, 255, ahk_id %black3Hwnd%
+        WinSet, Transparent, 255, ahk_id %black4Hwnd%
+    }
     GoSub, Altup
     ClearMasks()
 
@@ -2637,6 +2653,29 @@ Return
     WinGet, activeProcessName, ProcessName, A
     WinGetClass, activeClassName, A
 
+    WinGet, allWindows, List
+    loop % allWindows
+    {
+        hwndID := allWindows%A_Index%
+
+        If (MonCount > 1) {
+            currentMon := MWAGetMonitorMouseIsIn()
+            currentMonHasActWin := IsWindowOnCurrMon(hwndID, currentMon)
+        }
+        Else {
+            currentMonHasActWin := True
+        }
+
+        If (currentMonHasActWin) {
+            If (IsAltTabWindow(hwndID)) {
+                WinGet, state, MinMax, ahk_id %hwndID%
+                If (state > -1) {
+                    ValidWindows.push(hwndID)
+                }
+            }
+        }
+    }
+
     tempWinActID := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
 
     If !LclickSelected
@@ -2646,9 +2685,15 @@ Return
 
     WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
 
-    Gui, GUI4Boarder: Hide
-    If (cycleCount > 2)
-        GoSub, FadeInWin2
+    ; cycleCount is global here because above we return tempWinActID whereas cycle() returns the cycleCount itself
+    If (cycleCount > 2) {
+        WinSet, Transparent, 255, ahk_id %black1Hwnd%
+        WinSet, Transparent, 255, ahk_id %black2Hwnd%
+        WinSet, Transparent, 255, ahk_id %black3Hwnd%
+        WinSet, Transparent, 255, ahk_id %black4Hwnd%
+        GoSub, SortGroupedWins
+    }
+    ClearMasks()
 
     WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
     WinActivate, ahk_id %lastActWinID%
@@ -2755,7 +2800,6 @@ Return
 Cycle()
 {
     Global cycling
-    Global cycleCount
     Global ValidWindows
     Global GroupedWindows
     Global MonCount
@@ -2767,7 +2811,7 @@ Cycle()
 
     prev_exe :=
     prev_cl  :=
-
+    cycleCount := 1
     hitTAB := True
 
     If !cycling
@@ -2798,41 +2842,40 @@ Cycle()
                     ; WinGetClass, cl, ahk_id %hwndID%
                     If (state > -1) {
                         ValidWindows.push(hwndID)
-
                         ; If (prev_cl != cl || prev_exe != exe) {
-                            GroupedWindows.push(hwndID)
+                        GroupedWindows.push(hwndID)
 
-                            If (GroupedWindows.MaxIndex() == 2) {
-                                WinActivate, % "ahk_id " hwndID
-                                cycleCount := 2
-                                If (hwndID == actId) {
-                                    failedSwitch := True
-                                }
-                                Else {
-                                    Critical, Off
-                                    ; GoSub, DrawRect
-                                    GoSub, DrawMasks
-                                    If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
-                                        GroupedWindows := []
-                                        ValidWindows   := []
-                                        Critical, Off
-                                        Return
-                                    }
-                                }
+                        If (GroupedWindows.MaxIndex() == 2) {
+                            WinActivate, % "ahk_id " hwndID
+                            cycleCount := 2
+                            If (hwndID == actId) {
+                                failedSwitch := True
                             }
-                            If (GroupedWindows.MaxIndex() == 3 && failedSwitch) {
-                                WinActivate, % "ahk_id " hwndID
-                                cycleCount := 3
+                            Else {
                                 Critical, Off
                                 ; GoSub, DrawRect
                                 GoSub, DrawMasks
+                                If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
+                                    GroupedWindows := []
+                                    ValidWindows   := []
+                                    Critical, Off
+                                    Return 0
+                                }
                             }
-                            If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
-                                GroupedWindows := []
-                                ValidWindows   := []
-                                Critical, Off
-                                Return
-                            }
+                        }
+                        If (GroupedWindows.MaxIndex() == 3 && failedSwitch) {
+                            WinActivate, % "ahk_id " hwndID
+                            cycleCount := 3
+                            Critical, Off
+                            ; GoSub, DrawRect
+                            GoSub, DrawMasks
+                        }
+                        If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
+                            GroupedWindows := []
+                            ValidWindows   := []
+                            Critical, Off
+                            Return 0
+                        }
                         ; }
                         ; prev_exe := exe
                         ; prev_cl  := cl
@@ -2847,7 +2890,7 @@ Cycle()
         tooltip, % "Only " GroupedWindows.length() " Window to Show..."
         sleep, 1000
         tooltip,
-        Return
+        Return 1
     }
 
     KeyWait, Tab, U
@@ -2894,7 +2937,7 @@ Cycle()
             GoSub, FadeOutWindowTitle
         }
     }
-    Return
+    Return cycleCount
 }
 
 ClearRect(hwnd := "") {
@@ -3029,7 +3072,7 @@ ClearMasks(hwnd := "")
 {
     Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
     transVal   := 255
-    iterations := 10
+    iterations := 8
     Critical, On
     Loop, %iterations%
     {
@@ -4181,7 +4224,7 @@ IsModernExplorer_Win32Only(hWnd) {
 }
 
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
-    Global UIA, isWin11
+    Global UIA, isWin11, blockKeys
 
     TargetControl := ""
 
@@ -4387,18 +4430,17 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
 
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
-            BlockInput, On
-
+            blockKeys := True
             Send, {Ctrl UP}
             Send, ^{NumpadAdd}
             Send, {Ctrl UP}
-            BlockInput, Off
+
             ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
                 ; tooltip, sent to %TargetControl% with init at %initHoveredCtrlNN% - %prevPath% VS %currentPath%
 
             If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
                 sleep, 125
-                BlockInput, Off
+                blockKeys := False
                 loop, 200 {
                     If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd)
                         Return
@@ -4410,32 +4452,11 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                     sleep, 1
                 }
             }
-            BlockInput, Off
+            blockKeys := False
         }
         Critical,   Off
     }
 Return
-}
-
-; https://www.autohotkey.com/boards/viewtopic.php?style=2&t=113107
-check() {
-last := dir, dir := explorerGetPath()
- If WinActive("ahk_class CabinetWClass") && dir != last {
-  ControlGetFocus orig
-  tree := InStr(orig, "Tree")
-  Send % (tree ? "`t" : "") "^{NumpadAdd}" (tree ? "+{Tab}" : "")
- }
-}
-
-explorerGetPath(hwnd := 0) { ; https://www.autohotkey.com/boards/viewtopic.php?p=387113#p387113
- If hWnd
-  explorerHwnd := WinExist("ahk_class CabinetWClass ahk_id " . hwnd)
- Else (!explorerHwnd := WinActive("ahk_class CabinetWClass")) && explorerHwnd := WinExist("ahk_class CabinetWClass")
- If explorerHwnd
-  For window in ComObjCreate("Shell.Application").Windows
-   Try If (window && window.hwnd && window.hwnd==explorerHwnd)
-    Return window.Document.Folder.Self.Path
- Return False
 }
 
 #If MouseIsOverTitleBar()
@@ -5041,7 +5062,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     windowsToMinimize := []
     minimizedWindows  := []
-    ; finalWindowsListWithProcAndClass := []
     lastActWinID      := ""
     hitTAB            := False
     hitTilde          := True
@@ -5103,8 +5123,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     Critical, Off
 
-    GoSub, DrawRect
-    DrawWindowTitlePopup(actTitle, pp, True)
+    GoSub, DrawMasks
+    WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
 
     KeyWait, ``, U T1
 
@@ -5132,8 +5152,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             WinGetTitle, actTitle, ahk_id %hwndId%
             WinGet, pp, ProcessPath , ahk_id %hwndId%
 
-            GoSub, DrawRect
-            DrawWindowTitlePopup(actTitle, pp, True)
+            GoSub, DrawMasks
+            WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
 
             KeyWait, ``, U
             If !ErrorLevel
@@ -5180,34 +5200,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     If (cycleCount <= 0)
         cycleCount := GroupedWindows.MaxIndex()
 
-    ; If (cycleCount > 2) {
-        ; WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
-        ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-        ; WinSet, AlwaysOnTop, On,  ahk_id %Highlighter%
-
-        ; If (finalWindowsListWithProcAndClass.MaxIndex() >= 4 && finalWindowsListWithProcAndClass[4] != lastActWinID) {
-            ; WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[4]
-            ; If (isMin > -1)
-                ; WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[4]
-        ; }
-        ; If (finalWindowsListWithProcAndClass.MaxIndex() >= 3 && finalWindowsListWithProcAndClass[3] != lastActWinID) {
-            ; WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[3]
-            ; If (isMin > -1)
-                ; WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[3]
-        ; }
-        ; If (finalWindowsListWithProcAndClass.MaxIndex() >= 2 &&  finalWindowsListWithProcAndClass[2] != lastActWinID) {
-            ; WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[2]
-            ; If (isMin > -1)
-                ; WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[2]
-        ; }
-        ; If (finalWindowsListWithProcAndClass.MaxIndex() >= 1 && finalWindowsListWithProcAndClass[1] != lastActWinID) {
-            ; WinGet, isMin, MinMax, % "ahk_id " finalWindowsListWithProcAndClass[1]
-            ; If (isMin > -1)
-                ; WinActivate, % "ahk_id " finalWindowsListWithProcAndClass[1]
-        ; }
-    ; }
-    ; WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
-    ; WinActivate, ahk_id %lastActWinID%
     Return lastActWinID
 }
 
@@ -6686,8 +6678,11 @@ MouseIsOverTaskbarBlank() {
     }
 }
 
-DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
-   Gui, WindowTitle: Destroy
+DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, centerOnHwnd := "") {
+    Gui, WindowTitle: Destroy
+
+    If (!vtext)
+        Return
 
     If !InStr(vtext, " - ", False)
         showFullTitle := True
@@ -6707,19 +6702,29 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False) {
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
     Gui, WindowTitle: Font, s24  ; Set a large font size (32-point).
-    If InStr(pathToExe, "ApplicationFrameHost", False) {
-        Gui, WindowTitle: Add, Picture, xm-20 w48 h48 Icon3, %A_WinDir%\System32\SHELL32.dll
-    }
-    Else {
-        Gui, WindowTitle: Add, Picture, xm-20 w48 h48, %pathToExe%
+    If (pathToExe) {
+        If InStr(pathToExe, "ApplicationFrameHost", False) {
+            Gui, WindowTitle: Add, Picture, xm-20 w48 h48 Icon3, %A_WinDir%\System32\SHELL32.dll
+        }
+        Else {
+            Gui, WindowTitle: Add, Picture, xm-20 w48 h48, %pathToExe%
+        }
     }
     Gui, WindowTitle: Add, Text, xp+64 yp+8 cWhite, %vtext%  ; XX & YY serve to auto-size the window.
-
-    drawX := CoordXCenterScreen()
-    drawY := CoordYCenterScreen()
     Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
 
-    WinGetPos, , , w , h, ahk_id %WindowTitleID%
+    If (centerOnHwnd) {
+        WinGetPos, xc, yc, wc, hc, ahk_id %centerOnHwnd%
+        ; WinGetPosEx(centerOnHwnd, xc, yc, wc, hc, null, null)
+        drawX := round(xc+(wc/2))
+        drawY := round(yc+(hc/2))
+    }
+    Else {
+        drawX := CoordXCenterScreen()
+        drawY := CoordYCenterScreen()
+    }
+
+    WinGetPos,  ,  , w, h,  ahk_id %WindowTitleID%
     WinSet, Transparent, 1, ahk_id %WindowTitleID%
     WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
     WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
