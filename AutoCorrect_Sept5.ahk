@@ -142,7 +142,7 @@ Menu, Tray, Add, List Vars, listVars_label
 Menu, Tray, Add, List Lines, listLines_label
 Menu, Tray, Click, 1
 
-link := A_Startup "\AutoCorrect.lnk"
+link := A_Startup . "\AutoCorrect.lnk"
 runAtStartup := FileExist(link) ? 1 : 0
 If (runAtStartup)
     Menu, Tray, Check, Run at startup
@@ -724,9 +724,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 LbuttonEnabled := True
                 Return
             }
-
-            ;EVENT_SYSTEM_FOREGROUND := 0x3
-            ; static _ := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 
             Critical, On
             prevActiveWindows.push(hWnd)
@@ -3548,10 +3545,10 @@ Return
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-            && (InStr(_winCtrlD, "SysTreeView32", True))
+        && (InStr(_winCtrlD, "SysTreeView32", True))
         && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
         && (timeDiff < floor(DoubleClickTime/2))
-            && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
+        && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
 
         currentPath := ""
         loop 100 {
@@ -6536,6 +6533,7 @@ GetExplorerPath(hwnd:="") {
             ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
             If (dir == "" || !InStr(dir,"address",False))
                 ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+
             Return dir
         }
     }
