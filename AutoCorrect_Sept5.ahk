@@ -99,31 +99,31 @@ Global hHook
 Global blockKeys := false
 
 ; --- Config ---
-UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
-SnapRange    := 20     ; px: distance from edge to begin snapping
-BreakAway    := 60     ; px: while snapped, drag this far further TOWARD the outside to push past edge
-ReleaseAway  := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
+Global UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+Global SnapRange    := 20     ; px: distance from edge to begin snapping
+Global BreakAway    := 60     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+Global ReleaseAway  := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
-skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
+Global skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
 ; === Settings ===
-BlockClicks := true    ; true = block clicks outside active window, false = let clicks pass through
-Opacity     := 215     ; 255=opaque black; try 200 to "dim" instead of fully black
-Margin      := 0       ; expands the hole around the active window by this many pixels
+Global BlockClicks := true    ; true = block clicks outside active window, false = let clicks pass through
+Global Opacity     := 215     ; 255=opaque black; try 200 to "dim" instead of fully black
 
 ; === Globals ===
-blackoutOn := false
-
-black1Hwnd := ""
-black2Hwnd := ""
-black3Hwnd := ""
-black4Hwnd := ""
-firstDraw  := True
+Global black1Hwnd := ""
+Global black2Hwnd := ""
+Global black3Hwnd := ""
+Global black4Hwnd := ""
+Global hTop       := ""
+Global hLeft      := ""
+Global hRight     := ""
+Global hBottom    := ""
 
 Process, Priority,, High
 
-UIA := UIA_Interface() ; Initialize UIA interface
+Global UIA := UIA_Interface() ; Initialize UIA interface
 UIA.ConnectionTimeout := 6000
 
 Menu, Tray, Icon
@@ -152,14 +152,17 @@ Else
 ; Create 4 mask GUIs (top, left, right, bottom)
 CreateMaskGui(index, ByRef hWndOut) {
     Global BlockClicks, Opacity, black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+
     clickStyle := BlockClicks ? "" : "+E0x20"
     ; Build a variable name like "hWnd1", "hWnd2", etc.
-    hwndVarName := "black" index "Hwnd"
-    Gui, %index%: +AlwaysOnTop -Caption +ToolWindow %clickStyle% +Hwnd%hwndVarName%
-    Gui, %index%: Color, Black
-    WinSet, Transparent, %Opacity%, ahk_id %hwndVarName%
-    hWndOut := hwndVarName
-    Gui, %index%: Hide
+    if (index) {
+        hwndVarName := "black" . index . "Hwnd"
+        Gui, %index%: +AlwaysOnTop -Caption +ToolWindow %clickStyle% +Hwnd%hwndVarName%
+        Gui, %index%: Color, Black
+        WinSet, Transparent, %Opacity%, ahk_id %hwndVarName%
+        hWndOut := hwndVarName
+        Gui, %index%: Hide
+    }
 }
 
 CreateMaskGui(1, hTop)
@@ -644,34 +647,22 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             SendEvent, {Blind}{vkFF} ; send a dummy key (vkFF = undefined key)
         }
 
-        WinGet, vWinStyle, Style, % "ahk_id " hWnd
-        If (   vWinClass == "#32768"
-            || vWinClass == "Autohotkey"
-            || vWinClass == "AutohotkeyGUI"
-            || vWinClass == "SysShadow"
-            || vWinClass == "TaskListThumbnailWnd"
-            || vWinClass == "Windows.UI.Core.CoreWindow"
-            || vWinClass == "Progman"
-            || vWinClass == "WorkerW"
-            || vWinClass == "tooltips_class32"
-            || vWinClass == "DropDown"
-            || vWinClass == "Microsoft.UI.Content.PopupWindowSiteBridge"
-            || vWinClass == "OperationStatusWindow"
-            || vWinClass == ""
-            || vWinTitle == ""
-            || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
-            || !WinExist("ahk_id " hWnd)) {
-            If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
-                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-            }
-            Return
-        }
-
-        If (hWnd == WinExist("Run ahk_class #32770 ahk_exe explorer.exe")) {
+        If (vWinClass == "#32770" && vWinTitle == "Run") {
             WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
             If UIA_GetStartButtonCenter(sx, sy) {
                 x := sx - (rw/2) - 44 ; 44 is the width of a single taskbar button
                 WinMove, ahk_id %hWnd%,, x,
+            }
+        }
+        Else {
+            WinGet, vWinStyle, Style, % "ahk_id " hWnd
+            If (   IsOverException(hWnd)
+                || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
+                || !WinExist("ahk_id " hWnd)) {
+                If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
+                    WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                }
+                Return
             }
         }
 
@@ -878,27 +869,39 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy) {
             return false
 
         tb := UIA.ElementFromHandle(hTask)
+        if (tb) {
+            ; Try several robust queries (name is localized; AutomationId often stable)
+            startEl := tb.FindFirstBy("AutomationId=StartButton")
 
-        ; Try several robust queries (name is localized; AutomationId often stable)
-        startEl := tb.FindFirstBy("AutomationId=StartButton")
-        if !startEl
-        startEl := tb.FindFirstByNameAndType("Start", "Button")
-        if !startEl
-        startEl := tb.FindFirstByNameAndType("Start menu", "Button")
-        if !startEl
-            return false
+            if !startEl
+                startEl := tb.FindFirstByNameAndType("Start", "Button")
+            if !startEl
+                startEl := tb.FindFirstByNameAndType("Start menu", "Button")
+            if !startEl
+                return false
 
-        ; Get bounding rectangle and compute center
-        ; UIA_Interface exposes CurrentBoundingRectangle (object with x,y,w,h)
-        rect := startEl.CurrentBoundingRectangle
-        if (rect == "") {
-            ; Older versions may expose .BoundingRectangle or GetBoundingRectangle()
-            rect := startEl.BoundingRectangle ? startEl.BoundingRectangle : startEl.GetBoundingRectangle()
+            ; Get bounding rectangle and compute center
+            ; UIA_Interface exposes CurrentBoundingRectangle (object with x,y,w,h)
+            rect := startEl.CurrentBoundingRectangle
+            if (rect == "") {
+                ; Older versions may expose .BoundingRectangle or GetBoundingRectangle()
+                rect := startEl.BoundingRectangle ? startEl.BoundingRectangle : startEl.GetBoundingRectangle()
+            }
+        }
+        else {
+            tooltip, no taskbar found...
+            sleep, 1500
+            tooltip,
         }
 
-        sx := round(rect.l + (rect.r-rect.l)/2)
-        sy := round(rect.t + (rect.b-rect.t)/2)
-        return true
+        if (rect) {
+            sx := round(rect.l + (rect.r-rect.l)/2)
+            sy := round(rect.t + (rect.b-rect.t)/2)
+            return true
+        }
+        else
+            return false
+
     } catch e {
         return false
     }
@@ -2145,7 +2148,7 @@ $Esc::
             WinGet, pp, ProcessPath , ahk_id %escHwndID%
             Hotkey, x, DoNothing, On
             ; GoSub, DrawRect
-            GoSub, DrawMasks
+            DrawMasks(escHwndID)
             WindowTitleID := DrawWindowTitlePopup("Close?", pp, False, escHwndID)
 
             loop {
@@ -2851,7 +2854,7 @@ Cycle()
                             Else {
                                 Critical, Off
                                 ; GoSub, DrawRect
-                                GoSub, DrawMasks
+                                DrawMasks(hwndID)
                                 If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
                                     GroupedWindows := []
                                     ValidWindows   := []
@@ -2865,7 +2868,7 @@ Cycle()
                             cycleCount := 3
                             Critical, Off
                             ; GoSub, DrawRect
-                            GoSub, DrawMasks
+                            DrawMasks(hwndID)
                         }
                         If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
                             GroupedWindows := []
@@ -2892,7 +2895,6 @@ Cycle()
 
     KeyWait, Tab, U
     cycling := True
-    firstDraw := False
 
     If cycling {
         loop {
@@ -2917,8 +2919,9 @@ Cycle()
                     ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
                     WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                     WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
+                    gwHwnd := GroupedWindows[cycleCount]
                     ; GoSub, DrawRect
-                    GoSub, DrawMasks
+                    DrawMasks(gwHwnd, False)
                     WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                     WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
@@ -3095,30 +3098,39 @@ ClearMasks(hwnd := "")
 Return
 }
 
-DrawMasks:
-    WinGet, hA, ID, A
-    if (!hA)
-        return
-    if (hA = hTop || hA = hLeft || hA = hRight || hA = hBottom)
+DrawMasks(targetHwnd := "", firstDraw := True) {
+    Global hLeft, hTop, hRight, hBottom, Opacity, black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    Margin := 0 ; expands the hole around the active window by this many pixels
+
+    if !targetHwnd
+        WinGet, hA, ID, A
+    else
+        hA := targetHwnd
+
+    ; make sure that we're not trying to draw masks for the masks' windows hwnd themselves!
+    if ((!hA) || (hA == hTop || hA == hLeft || hA == hRight || hA == hBottom))
         return
 
     ; Get the monitor WORK AREA (excludes taskbar) for the active window's monitor
     if (!GetMonitorRectsForWindow(hA, mx, my, mw, mh, wx2, wy2, ww2, wh2))
         return
+
     wRight  := wx2 + ww2
     wBottom := wy2 + wh2
 
     ; Active window rect (expanded slightly)
     ; WinGetPos, wx, wy, ww, wh, ahk_id %hA%
     WinGetPosEx(hA, wx, wy, ww, wh)
-    if (wx = "")
+    if (wx == "")
         return
+
     wx -= Margin, wy -= Margin, ww += 2*Margin, wh += 2*Margin
     holeL := Max(wx2, wx)
     holeT := Max(wy2, wy)
     holeR := Min(wRight,  wx + ww)
     holeB := Min(wBottom, wy + wh)
 
+    Critical, On
     ; Mask only within the WORK AREA (taskbar region is untouched, so it's visible & clickable)
     ; TOP panel (across full work area width, above hole)
     DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
@@ -3130,14 +3142,13 @@ DrawMasks:
     DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB))
 
     If firstDraw {
-        transVal := ceil(Opacity/5)
         incrValue := 5
+        transVal := ceil(Opacity/incrValue)
     }
     Else {
-        transVal := Opacity
         incrValue := 1
+        transVal := Opacity
     }
-    Critical, On
     loop, %incrValue%
     {
         WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
@@ -3152,11 +3163,14 @@ DrawMasks:
         WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
         WinSet, AlwaysOnTop, On, ahk_id %black4Hwnd%
 
-        transVal += ceil(Opacity/5)
+        transVal += ceil(Opacity/incrValue)
         sleep, 3
     }
     Critical, Off
+
 Return
+}
+
 
 ; Finds the monitor + work area rect that contains the center of the given window.
 GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
@@ -5120,7 +5134,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     Critical, Off
 
-    GoSub, DrawMasks
+    gwHwndId := GroupedWindows[cycleCount]
+    DrawMasks(gwHwndId)
     WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
 
     KeyWait, ``, U T1
@@ -5129,8 +5144,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     If (cycleCount > numWindows) {
         cycleCount := 1
     }
-
-    hwndId := GroupedWindows[cycleCount]
+    gwHwndId := GroupedWindows[cycleCount]
 
     loop
     {
@@ -5140,16 +5154,16 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         KeyWait, ``, D T0.1
         If !ErrorLevel
         {
-            WinGet, mmState, MinMax, ahk_id %hwndId%
+            WinGet, mmState, MinMax, ahk_id %gwHwndId%
             If (MonCount > 1 && mmState == -1) {
-                windowsToMinimize.push(hwndId)
+                windowsToMinimize.push(gwHwndId)
             }
-            WinActivate, ahk_id %hwndId%
-            lastActWinID := hwndId
-            WinGetTitle, actTitle, ahk_id %hwndId%
-            WinGet, pp, ProcessPath , ahk_id %hwndId%
+            WinActivate, ahk_id %gwHwndId%
+            lastActWinID := gwHwndId
+            WinGetTitle, actTitle, ahk_id %gwHwndId%
+            WinGet, pp, ProcessPath , ahk_id %gwHwndId%
 
-            GoSub, DrawMasks
+            DrawMasks(gwHwndId, False)
             WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
 
             KeyWait, ``, U
@@ -5161,14 +5175,14 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                     cycleCount := 1
                 }
                 loop {
-                    hwndId := GroupedWindows[cycleCount]
-                    If !IsWindowOnCurrMon(hwndId, currentMon) {
+                    gwHwndId := GroupedWindows[cycleCount]
+                    If !IsWindowOnCurrMon(gwHwndId, currentMon) {
                         cycleCount++
                         If (cycleCount > numWindows)
                         {
                             cycleCount := 1
                         }
-                        hwndId := GroupedWindows[cycleCount]
+                        gwHwndId := GroupedWindows[cycleCount]
                     }
                     Else
                         break
@@ -7511,6 +7525,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::requiremts::requirement
+::requireement::requirement
+::termainl::terminal
 ::SO::So
 ::onesself::oneself
 ::violance::violence
