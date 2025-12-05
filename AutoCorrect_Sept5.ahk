@@ -6819,7 +6819,9 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
     strArray := []
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
 
-    Gui, WindowTitle: Destroy
+    If (WindowTitleHwnd && WinExist("ahk_id " . WindowTitleHwnd)) {
+        Gui, WindowTitle: Destroy
+    }
 
     If (!vtext)
         Return
