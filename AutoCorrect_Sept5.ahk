@@ -2710,7 +2710,7 @@ Return
 !x::
     tooltip, Canceled Operation!
     Gui, GUI4Boarder: Hide
-    Gui, WindowTitle: Destroy
+    Gui, WindowTitle: Hide
     GoSub, ResetWins
     sleep, 1000
     tooltip,
@@ -2794,7 +2794,7 @@ FadeOutWindowTitle:
     sleep, %delayTime%
     WinSet, Transparent, 25,  ahk_id %WindowTitleID%
     sleep, %delayTime%
-    Gui, WindowTitle: Destroy
+    Gui, WindowTitle: Hide
 Return
 
 Cycle()
@@ -3067,72 +3067,333 @@ DrawRect:
     Critical, Off
 Return
 
+; Switch "App" open windows based on the same process and class
+HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
+    Global MonCount, VD, Highlighter, hitTAB, hitTilde, WindowTitleID, GroupedWindows, cycleCount, LclickSelected
+
+    windowsToMinimize := []
+    minimizedWindows  := []
+    lastActWinID      := ""
+    hitTAB            := False
+    hitTilde          := True
+
+    ; SetTimer, UpdateValidWindows, -1
+    UpdateValidWindows()
+
+    currentMon := MWAGetMonitorMouseIsIn()
+    Critical, On
+    cycleCount := 2
+    WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
+
+    loop % windowsListWithSameProcessAndClass
+    {
+        hwndID := windowsListWithSameProcessAndClass%A_Index%
+        WinGetTitle, tit, ahk_id %hwndID%
+        WinGet, mmState, MinMax, ahk_id %hwndID%
+        If (MonCount > 1 && mmState > -1) {
+            currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+        }
+        Else If (mmState > -1) {
+            currentMonHasActWin := True
+        }
+
+        If (currentMonHasActWin && tit != ""  && mmState > -1) {
+            GroupedWindows.push(hwndID)
+        }
+        Else If (mmState == -1) {
+            minimizedWindows.push(hwndID)
+        }
+    }
+    ; add minimized windows to the end of the GroupedWindows array so they can be selected too but afterwards
+    loop % minimizedWindows.length()
+    {
+        minHwndID := minimizedWindows[A_Index]
+        GroupedWindows.push(minHwndID)
+    }
+
+    numWindows := GroupedWindows.length()
+
+    If (numWindows <= 1) {
+        loop 100 {
+            Tooltip, Only %numWindows% Window(s) found!
+            sleep, 10
+        }
+        Tooltip,
+        Return
+    }
+
+    ; WinActivate, % "ahk_id " GroupedWindows[1]
+    WinGet, mmState, MinMax, % "ahk_id " GroupedWindows[cycleCount]
+    If (MonCount > 1 && mmState == -1) {
+        windowsToMinimize.push(GroupedWindows[cycleCount])
+        lastActWinID := GroupedWindows[cycleCount]
+    }
+    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+    WinGetTitle, actTitle, % "ahk_id " GroupedWindows[cycleCount]
+    WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
+
+    Critical, Off
+
+    gwHwndId := GroupedWindows[cycleCount]
+    DrawMasks(gwHwndId)
+    WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
+
+    KeyWait, ``, U T1
+
+    cycleCount++
+    If (cycleCount > numWindows) {
+        cycleCount := 1
+    }
+    gwHwndId := GroupedWindows[cycleCount]
+
+    loop
+    {
+        If LclickSelected
+            break
+
+        KeyWait, ``, D T0.1
+        If !ErrorLevel
+        {
+            WinGet, mmState, MinMax, ahk_id %gwHwndId%
+            If (MonCount > 1 && mmState == -1) {
+                windowsToMinimize.push(gwHwndId)
+            }
+            WinActivate, ahk_id %gwHwndId%
+            lastActWinID := gwHwndId
+            WinGetTitle, actTitle, ahk_id %gwHwndId%
+            WinGet, pp, ProcessPath , ahk_id %gwHwndId%
+
+            DrawMasks(gwHwndId, False)
+            WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
+
+            KeyWait, ``, U
+            If !ErrorLevel
+            {
+                cycleCount++
+                If (cycleCount > numWindows)
+                {
+                    cycleCount := 1
+                }
+                loop {
+                    gwHwndId := GroupedWindows[cycleCount]
+                    If !IsWindowOnCurrMon(gwHwndId, currentMon) {
+                        cycleCount++
+                        If (cycleCount > numWindows)
+                        {
+                            cycleCount := 1
+                        }
+                        gwHwndId := GroupedWindows[cycleCount]
+                    }
+                    Else
+                        break
+                }
+            }
+        }
+    }
+    until (!GetKeyState("LAlt", "P"))
+    GoSub, FadeOutWindowTitle
+
+    loop % windowsToMinimize.length()
+    {
+        tempId := windowsToMinimize[A_Index]
+        If (tempId != lastActWinID) {
+            WinMinimize, ahk_id %tempId%
+            sleep, 100
+        }
+        Else {
+            If !IsWindowOnCurrMon(tempId, currentMon) {
+                WinActivate, ahk_id %tempId%
+                Send, #+{Left}
+            }
+        }
+    }
+    cycleCount := cycleCount - 1
+    If (cycleCount <= 0)
+        cycleCount := GroupedWindows.MaxIndex()
+
+    Return lastActWinID
+}
+
 ; ------------------  ChatGPT ------------------------------------------------------------------
+; DrawBlackBar(guiIndex, x, y, w, h) {
+    ; If (w <= 0 || h <= 0) {
+        ; Gui, %guiIndex%: Hide
+    ; } Else {
+        ; Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
+    ; }
+; }
+
+DrawBlackBar(guiIndex, x, y, w, h) {
+    ; Assume GUI already created and styled elsewhere.
+
+    If (w <= 0 || h <= 0) {
+        Gui, %guiIndex%: Hide
+        Return
+    }
+
+    ; Showing with new size/position is one atomic operation internally
+    Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
+}
+
 ClearMasks(hwnd := "")
 {
     Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+
     transVal   := 255
     iterations := 8
-    Critical, On
+    stepVal    := Floor(255 / iterations)
+
+    ; fade-out loop (non-critical)
     Loop, %iterations%
     {
-        currentVal := transVal - (floor(255/iterations))
+        transVal -= stepVal
+        currentVal := transVal
+
         WinSet, Transparent, %currentVal%, ahk_id %black1Hwnd%
         WinSet, Transparent, %currentVal%, ahk_id %black2Hwnd%
         WinSet, Transparent, %currentVal%, ahk_id %black3Hwnd%
         WinSet, Transparent, %currentVal%, ahk_id %black4Hwnd%
-        transVal := transVal - (floor(255/iterations))
 
+        ; Short sleep for visual smoothness; not in Critical
+        Sleep, 10
+
+        ; Now a tiny critical section to safely check/early-exit
+        Critical, On
         If (hwnd != "" && !WinExist("ahk_id " . hwnd)) {
             Loop, 4
                 Gui, %A_Index%: Hide
             Critical, Off
             Return
         }
-
-        sleep, 10
+        Critical, Off
     }
+
+    ; Final hide – we do want this to be atomic-ish
+    Critical, On
     Loop, 4
         Gui, %A_Index%: Hide
     Critical, Off
-Return
+
+    Return
 }
 
-DrawMasks(targetHwnd := "", firstDraw := True) {
-    Global hLeft, hTop, hRight, hBottom, Opacity, black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
-    Margin := 0 ; expands the hole around the active window by this many pixels
+; DrawMasks(targetHwnd := "", firstDraw := True) {
+    ; Global hLeft, hTop, hRight, hBottom, Opacity, black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    ; Margin := 0 ; expands the hole around the active window by this many pixels
 
-    if !targetHwnd
+    ; If !targetHwnd
+        ; WinGet, hA, ID, A
+    ; Else
+        ; hA := targetHwnd
+
+    ; ; make sure that we're not trying to draw masks for the masks' windows hwnd themselves!
+    ; If ((!hA) || (hA == hTop || hA == hLeft || hA == hRight || hA == hBottom))
+        ; Return
+
+    ; ; Get the monitor WORK AREA (excludes taskbar) for the active window's monitor
+    ; If (!GetMonitorRectsForWindow(hA, mx, my, mw, mh, wx2, wy2, ww2, wh2))
+        ; Return
+
+    ; wRight  := wx2 + ww2
+    ; wBottom := wy2 + wh2
+
+    ; ; Active window rect (expanded slightly)
+    ; ; WinGetPos, wx, wy, ww, wh, ahk_id %hA%
+    ; WinGetPosEx(hA, wx, wy, ww, wh)
+    ; If (wx == "")
+        ; Return
+
+    ; wx -= Margin, wy -= Margin, ww += 2*Margin, wh += 2*Margin
+    ; holeL := Max(wx2, wx)
+    ; holeT := Max(wy2, wy)
+    ; holeR := Min(wRight,  wx + ww)
+    ; holeB := Min(wBottom, wy + wh)
+
+    ; Critical, On
+    ; ; Mask only within the WORK AREA (taskbar region is untouched, so it's visible & clickable)
+    ; ; TOP panel (across full work area width, above hole)
+    ; DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
+    ; ; LEFT panel
+    ; DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT))
+    ; ; RIGHT panel
+    ; DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT))
+    ; ; BOTTOM panel
+    ; DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB))
+
+    ; If firstDraw {
+        ; incrValue := 5
+        ; transVal := ceil(Opacity/incrValue)
+    ; }
+    ; Else {
+        ; incrValue := 1
+        ; transVal := Opacity
+    ; }
+    ; loop, %incrValue%
+    ; {
+        ; WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
+        ; WinSet, AlwaysOnTop, On, ahk_id %black1Hwnd%
+
+        ; WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
+        ; WinSet, AlwaysOnTop, On, ahk_id %black2Hwnd%
+
+        ; WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
+        ; WinSet, AlwaysOnTop, On, ahk_id %black3Hwnd%
+
+        ; WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
+        ; WinSet, AlwaysOnTop, On, ahk_id %black4Hwnd%
+
+        ; transVal += ceil(Opacity/incrValue)
+        ; sleep, 2
+    ; }
+    ; Critical, Off
+
+; Return
+; }
+
+; Why this helps flicker:
+    ; All geometry & showing of the 4 bars happens back-to-back while uninterruptible:
+        ; No Sleep inside Critical.
+        ; No other thread can sneak in and change these GUIs mid-update.
+    ; The visual fade (the transparent WinSet calls) happens after the bars are in their final positions and already visible. So even If a timer/hotkey interrupts, it doesn’t cause a half-drawn layout—only an intermediate opacity.
+DrawMasks(targetHwnd := "", firstDraw := True) {
+    Global hLeft, hTop, hRight, hBottom, Opacity
+    Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+
+    Margin := 0  ; expands the hole around the active window by this many pixels
+
+    ; Resolve target window
+    If !targetHwnd
         WinGet, hA, ID, A
-    else
+    Else
         hA := targetHwnd
 
-    ; make sure that we're not trying to draw masks for the masks' windows hwnd themselves!
-    if ((!hA) || (hA == hTop || hA == hLeft || hA == hRight || hA == hBottom))
-        return
+    ; Don’t mask our own mask windows
+    If ((!hA) || (hA == hTop || hA == hLeft || hA == hRight || hA == hBottom))
+        Return
 
-    ; Get the monitor WORK AREA (excludes taskbar) for the active window's monitor
-    if (!GetMonitorRectsForWindow(hA, mx, my, mw, mh, wx2, wy2, ww2, wh2))
-        return
+    ; Get monitor WORK AREA for active window’s monitor
+    If (!GetMonitorRectsForWindow(hA, mx, my, mw, mh, wx2, wy2, ww2, wh2))
+        Return
 
     wRight  := wx2 + ww2
     wBottom := wy2 + wh2
 
-    ; Active window rect (expanded slightly)
-    ; WinGetPos, wx, wy, ww, wh, ahk_id %hA%
+    ; Active window rect (expanded)
     WinGetPosEx(hA, wx, wy, ww, wh)
-    if (wx == "")
-        return
+    If (wx = "")
+        Return
 
     wx -= Margin, wy -= Margin, ww += 2*Margin, wh += 2*Margin
+
     holeL := Max(wx2, wx)
     holeT := Max(wy2, wy)
     holeR := Min(wRight,  wx + ww)
     holeB := Min(wBottom, wy + wh)
 
+    ; --- CRITICAL SECTION: JUST THE GEOMETRY + SHOWS ---
     Critical, On
-    ; Mask only within the WORK AREA (taskbar region is untouched, so it's visible & clickable)
-    ; TOP panel (across full work area width, above hole)
+
+    ; TOP panel
     DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
     ; LEFT panel
     DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT))
@@ -3141,36 +3402,47 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     ; BOTTOM panel
     DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB))
 
-    If firstDraw {
-        incrValue := 5
-        transVal := ceil(Opacity/incrValue)
+    ; Make sure they’re on top exactly once per draw
+    WinSet, AlwaysOnTop, On, ahk_id %black1Hwnd%
+    WinSet, AlwaysOnTop, On, ahk_id %black2Hwnd%
+    WinSet, AlwaysOnTop, On, ahk_id %black3Hwnd%
+    WinSet, AlwaysOnTop, On, ahk_id %black4Hwnd%
+
+    Critical, Off
+    ; --- END CRITICAL SECTION ---
+
+    ; At this point all 4 bars are in place and visible.
+    ; Any animation is now cosmetic and won’t affect “tearing” of geometry.
+
+    ; --- FADE / OPACITY (non-critical) ---
+    If (firstDraw) {
+        incrValue   := 5
+        stepOpacity := Ceil(Opacity / incrValue)
+        transVal    := stepOpacity
+    } Else {
+        ; For subsequent moves, you can skip animation entirely If you want:
+        ; incrValue   := 1
+        ; stepOpacity := 0
+        ; transVal    := Opacity
+
+        incrValue   := 1
+        stepOpacity := 0
+        transVal    := Opacity
     }
-    Else {
-        incrValue := 1
-        transVal := Opacity
-    }
-    loop, %incrValue%
+
+    Loop, %incrValue%
     {
         WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
-        WinSet, AlwaysOnTop, On, ahk_id %black1Hwnd%
-
         WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
-        WinSet, AlwaysOnTop, On, ahk_id %black2Hwnd%
-
         WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
-        WinSet, AlwaysOnTop, On, ahk_id %black3Hwnd%
-
         WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
-        WinSet, AlwaysOnTop, On, ahk_id %black4Hwnd%
 
-        transVal += ceil(Opacity/incrValue)
-        sleep, 3
+        transVal += stepOpacity
+        Sleep, 2   ; purely visual – safe outside Critical
     }
-    Critical, Off
 
-Return
+    Return
 }
-
 
 ; Finds the monitor + work area rect that contains the center of the given window.
 GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
@@ -3194,14 +3466,6 @@ GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
         }
     }
     Return false
-}
-
-DrawBlackBar(guiIndex, x, y, w, h) {
-    If (w <= 0 || h <= 0) {
-        Gui, %guiIndex%: Hide
-    } else {
-        Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
-    }
 }
 
 Max(a,b) {
@@ -4605,7 +4869,6 @@ IsOverException(hWnd := "") {
         || cl == "TopLevelWindowForOverflowXamlIsland"
         || cl == "OperationStatusWindow"
         || cl == "NativeHWNDHost"
-        || cl == "Windows.UI.Core.CoreWindow"
         || cl == "Net UI Tool Window"
         || cl == "SDL_app"
         || cl == "DV2ControlHost"
@@ -5067,153 +5330,6 @@ Global MonCount
 Return
 }
 
-; Switch "App" open windows based on the same process and class
-HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    Global MonCount, VD, Highlighter, hitTAB, hitTilde, WindowTitleID, GroupedWindows, cycleCount, LclickSelected
-
-    windowsToMinimize := []
-    minimizedWindows  := []
-    lastActWinID      := ""
-    hitTAB            := False
-    hitTilde          := True
-
-    ; SetTimer, UpdateValidWindows, -1
-    UpdateValidWindows()
-
-    currentMon := MWAGetMonitorMouseIsIn()
-    Critical, On
-    cycleCount := 2
-    WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
-
-    loop % windowsListWithSameProcessAndClass
-    {
-        hwndID := windowsListWithSameProcessAndClass%A_Index%
-        WinGetTitle, tit, ahk_id %hwndID%
-        WinGet, mmState, MinMax, ahk_id %hwndID%
-        If (MonCount > 1 && mmState > -1) {
-            currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
-        }
-        Else If (mmState > -1) {
-            currentMonHasActWin := True
-        }
-
-        If (currentMonHasActWin && tit != ""  && mmState > -1) {
-            GroupedWindows.push(hwndID)
-        }
-        Else If (mmState == -1) {
-            minimizedWindows.push(hwndID)
-        }
-    }
-
-    loop % minimizedWindows.length()
-    {
-        minHwndID := minimizedWindows[A_Index]
-        GroupedWindows.push(minHwndID)
-    }
-
-    numWindows := GroupedWindows.length()
-
-    If (numWindows <= 1) {
-        loop 100 {
-            Tooltip, Only %numWindows% Window(s) found!
-            sleep, 10
-        }
-        Tooltip,
-        Return
-    }
-
-    WinActivate, % "ahk_id " GroupedWindows[1]
-    WinGet, mmState, MinMax, % "ahk_id " GroupedWindows[cycleCount]
-    If (MonCount > 1 && mmState == -1) {
-        windowsToMinimize.push(GroupedWindows[cycleCount])
-        lastActWinID := GroupedWindows[cycleCount]
-    }
-    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
-    WinGetTitle, actTitle, % "ahk_id " GroupedWindows[cycleCount]
-    WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
-
-    Critical, Off
-
-    gwHwndId := GroupedWindows[cycleCount]
-    DrawMasks(gwHwndId)
-    WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
-
-    KeyWait, ``, U T1
-
-    cycleCount++
-    If (cycleCount > numWindows) {
-        cycleCount := 1
-    }
-    gwHwndId := GroupedWindows[cycleCount]
-
-    loop
-    {
-        If LclickSelected
-            break
-
-        KeyWait, ``, D T0.1
-        If !ErrorLevel
-        {
-            WinGet, mmState, MinMax, ahk_id %gwHwndId%
-            If (MonCount > 1 && mmState == -1) {
-                windowsToMinimize.push(gwHwndId)
-            }
-            WinActivate, ahk_id %gwHwndId%
-            lastActWinID := gwHwndId
-            WinGetTitle, actTitle, ahk_id %gwHwndId%
-            WinGet, pp, ProcessPath , ahk_id %gwHwndId%
-
-            DrawMasks(gwHwndId, False)
-            WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
-
-            KeyWait, ``, U
-            If !ErrorLevel
-            {
-                cycleCount++
-                If (cycleCount > numWindows)
-                {
-                    cycleCount := 1
-                }
-                loop {
-                    gwHwndId := GroupedWindows[cycleCount]
-                    If !IsWindowOnCurrMon(gwHwndId, currentMon) {
-                        cycleCount++
-                        If (cycleCount > numWindows)
-                        {
-                            cycleCount := 1
-                        }
-                        gwHwndId := GroupedWindows[cycleCount]
-                    }
-                    Else
-                        break
-                }
-            }
-        }
-    }
-    until (!GetKeyState("LAlt", "P"))
-    GoSub, FadeOutWindowTitle
-
-    loop % windowsToMinimize.length()
-    {
-        tempId := windowsToMinimize[A_Index]
-        If (tempId != lastActWinID) {
-            WinMinimize, ahk_id %tempId%
-            sleep, 100
-        }
-        Else {
-            If !IsWindowOnCurrMon(tempId, currentMon) {
-                WinActivate, ahk_id %tempId%
-                Send, #+{Left}
-            }
-        }
-    }
-    cycleCount := cycleCount - 1
-    If (cycleCount <= 0)
-        cycleCount := GroupedWindows.MaxIndex()
-
-    Return lastActWinID
-}
-
 FrameShadow(HGui) {
     DllCall("dwmapi\DwmIsCompositionEnabled","IntP",_ISENABLED) ; Get If DWM Manager is Enabled
     If !_ISENABLED ; If DWM is not enabled, Make Basic Shadow
@@ -5265,9 +5381,15 @@ keyTrack() {
 
     ListLines, Off
 
-    FixMod("LShift", 0xA0), FixMod("RShift", 0xA1)
-    FixMod("LCtrl",  0xA2), FixMod("RCtrl",  0xA3)
-    FixMod("LAlt",   0xA4), FixMod("RAlt",   0xA5)
+    ; FixMod("LShift", 0xA0), FixMod("RShift", 0xA1)
+    ; FixMod("LCtrl",  0xA2), FixMod("RCtrl",  0xA3)
+    ; FixMod("LAlt",   0xA4), FixMod("RAlt",   0xA5)
+    If (!GetKeyState("Ctrl", "P") && GetKeyState("Ctrl"))
+        Send, {Ctrl UP}
+    If (!GetKeyState("Shift", "P") && GetKeyState("Shift"))
+        Send, {Shift UP}
+    If (!GetKeyState("Alt", "P") && GetKeyState("Alt"))
+        Send, {Alt UP}
 
     ControlGetFocus, currCtrl, A
     WinGetClass, currClass, A
@@ -5347,37 +5469,37 @@ mouseTrack() {
 
     lastX := x, lastY := y,
 
-    If WinActive("ahk_class ZPContentViewWndClass") {
-        WinGetPos, x, y, w, h, ahk_class ZPContentViewWndClass
-        If (w == currMonWidth && h == currMonHeight) {
-            Send, !{f}
-            sleep, 1000
-        }
-    }
+    ; If WinActive("ahk_class ZPContentViewWndClass") {
+        ; WinGetPos, x, y, w, h, ahk_class ZPContentViewWndClass
+        ; If (w == currMonWidth && h == currMonHeight) {
+            ; Send, !{f}
+            ; sleep, 1000
+        ; }
+    ; }
 
-    If (MonCount == 1
-        &&  x <= 3 && y <= 3
-        && !taskview
-        && !GetKeyState("Lbutton","P")
-        && !skipCheck)
-    {
-        Send {LWin down}{Tab down}{LWin up}{Tab up}
-        taskview := True
-        sleep 700
-    }
-    Else If (MonCount == 1) (
-        &&  x <= 3 && y <= 3
-        && !taskview
-        && GetKeyState("Lbutton","P"))
-    {
-        skipCheck := True
-    }
+    ; If (MonCount == 1
+        ; &&  x <= 3 && y <= 3
+        ; && !taskview
+        ; && !GetKeyState("Lbutton","P")
+        ; && !skipCheck)
+    ; {
+        ; Send {LWin down}{Tab down}{LWin up}{Tab up}
+        ; taskview := True
+        ; sleep 700
+    ; }
+    ; Else If (MonCount == 1) (
+        ; &&  x <= 3 && y <= 3
+        ; && !taskview
+        ; && GetKeyState("Lbutton","P"))
+    ; {
+        ; skipCheck := True
+    ; }
 
-    If (MonCount == 1 &&  x > 3 && y > 3 && x < A_ScreenWidth-3 && y < A_ScreenHeight-3)
-    {
-        taskview  := False
-        skipCheck := False
-    }
+    ; If (MonCount == 1 &&  x > 3 && y > 3 && x < A_ScreenWidth-3 && y < A_ScreenHeight-3)
+    ; {
+        ; taskview  := False
+        ; skipCheck := False
+    ; }
 
     If (MonCount > 1 && !GetKeyState("LButton","P")) {
         currentMon := MWAGetMonitorMouseIsIn(TaskBarHeight)
@@ -6691,6 +6813,12 @@ MouseIsOverTaskbarBlank() {
 }
 
 DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, centerOnHwnd := "") {
+    Global Opacity
+    static IsWindowTitleGuiInitialized := False
+    static WindowTitleID
+    strArray := []
+    CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
+
     Gui, WindowTitle: Destroy
 
     If (!vtext)
@@ -6707,10 +6835,9 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
     Else {
         strArray := StrSplit(vtext, "-")
         lastIdx  := strArray.MaxIndex()
-        vtext := trim(strArray[lastIdx])
+        vtext := Trim(strArray[lastIdx])
     }
 
-    CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
     Gui, WindowTitle: Font, s24  ; Set a large font size (32-point).
@@ -6727,7 +6854,6 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
 
     If (centerOnHwnd) {
         WinGetPos, xc, yc, wc, hc, ahk_id %centerOnHwnd%
-        ; WinGetPosEx(centerOnHwnd, xc, yc, wc, hc, null, null)
         drawX := round(xc+(wc/2))
         drawY := round(yc+(hc/2))
     }
@@ -6740,11 +6866,11 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
     WinSet, Transparent, 1, ahk_id %WindowTitleID%
     WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
     WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
-    WinSet, Transparent, 25, ahk_id %WindowTitleID%
-    sleep, 3
-    WinSet, Transparent, 125, ahk_id %WindowTitleID%
-    sleep, 3
-    WinSet, Transparent, 225, ahk_id %WindowTitleID%
+    ; WinSet, Transparent, 25, ahk_id %WindowTitleID%
+    ; sleep, 3
+    ; WinSet, Transparent, 125, ahk_id %WindowTitleID%
+    ; sleep, 3
+    WinSet, Transparent, %Opacity%, ahk_id %WindowTitleID%
     Return WindowTitleID
 }
 
