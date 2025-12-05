@@ -2710,7 +2710,7 @@ Return
 !x::
     tooltip, Canceled Operation!
     Gui, GUI4Boarder: Hide
-    Gui, WindowTitle: Hide
+    Gui, WindowTitle: Destroy
     GoSub, ResetWins
     sleep, 1000
     tooltip,
@@ -2794,7 +2794,7 @@ FadeOutWindowTitle:
     sleep, %delayTime%
     WinSet, Transparent, 25,  ahk_id %WindowTitleID%
     sleep, %delayTime%
-    Gui, WindowTitle: Hide
+    Gui, WindowTitle: Destroy
 Return
 
 Cycle()
