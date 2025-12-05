@@ -2149,7 +2149,7 @@ $Esc::
             Hotkey, x, DoNothing, On
             ; GoSub, DrawRect
             DrawMasks(escHwndID)
-            WindowTitleID := DrawWindowTitlePopup("Close?", pp, False, escHwndID)
+            DrawWindowTitlePopup("Close?", pp, False, escHwndID)
 
             loop {
                 ; tooltip Close `"%escTitle%`" ? ;"
@@ -2726,7 +2726,7 @@ Return
         WinGet, pp, ProcessPath , ahk_id %_winIdD%
 
         GoSub, DrawRect
-        WindowTitleID := DrawWindowTitlePopup(actTitle, pp)
+        DrawWindowTitlePopup(actTitle, pp)
         KeyWait, LAlt, U
         GoSub, FadeOutWindowTitle
         GoSub, Altup
@@ -2743,7 +2743,7 @@ Return
         lastActWinID := _winIdD
 
         GoSub, DrawRect
-        WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
+        DrawWindowTitlePopup(actTitle, pp, True)
         KeyWait, LAlt, U
         GoSub, FadeOutWindowTitle
         SetTimer, mouseTrack, On
@@ -2806,7 +2806,6 @@ Cycle()
     Global startHighlight
     Global hitTAB
     Global LclickSelected
-    Global WindowTitleID
     Global firstDraw
 
     prev_exe :=
@@ -2925,7 +2924,7 @@ Cycle()
                     WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                     WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
-                    WindowTitleID := DrawWindowTitlePopup(tits, pp)
+                    DrawWindowTitlePopup(tits, pp)
                     KeyWait, Tab, U
 
                     If (cycleCount > 2)
@@ -3069,7 +3068,7 @@ Return
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    Global MonCount, VD, Highlighter, hitTAB, hitTilde, WindowTitleID, GroupedWindows, cycleCount, LclickSelected
+    Global MonCount, VD, Highlighter, hitTAB, hitTilde, GroupedWindows, cycleCount, LclickSelected
 
     windowsToMinimize := []
     minimizedWindows  := []
@@ -3136,7 +3135,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     gwHwndId := GroupedWindows[cycleCount]
     DrawMasks(gwHwndId)
-    WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
+    DrawWindowTitlePopup(actTitle, pp, True)
 
     KeyWait, ``, U T1
 
@@ -3164,7 +3163,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             WinGet, pp, ProcessPath , ahk_id %gwHwndId%
 
             DrawMasks(gwHwndId, False)
-            WindowTitleID := DrawWindowTitlePopup(actTitle, pp, True)
+            DrawWindowTitlePopup(actTitle, pp, True)
 
             KeyWait, ``, U
             If !ErrorLevel
@@ -6814,8 +6813,8 @@ MouseIsOverTaskbarBlank() {
 
 DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, centerOnHwnd := "") {
     Global Opacity
+    Global WindowTitleID
     static IsWindowTitleGuiInitialized := False
-    static WindowTitleID
     strArray := []
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
 
