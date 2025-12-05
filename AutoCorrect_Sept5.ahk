@@ -861,7 +861,7 @@ Return
 }
 
 ; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
-UIA_GetStartButtonCenter(ByRef sx, ByRef sy) {
+UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
     Global UIA
     try {
         hTask := WinExist("ahk_class Shell_TrayWnd")
@@ -897,6 +897,7 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy) {
         if (rect) {
             sx := round(rect.l + (rect.r-rect.l)/2)
             sy := round(rect.t + (rect.b-rect.t)/2)
+            buttonWidth := rect.r-rect.l
             return true
         }
         else
@@ -3964,6 +3965,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
         ; VarSetCapacity(UIA, 0) ;// set capacity to zero
         UIA := UIA_Interface() ; Initialize UIA interface
         UIA.ConnectionTimeout := 6000
+        LbuttonEnabled := True
     }
     Return
 }
@@ -4508,17 +4510,14 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         lClassCheck := initTargetClass
 
     WinGet, quickCheckID, ID, A
-    If (quickCheckID != initTargetHwnd) {
+    If (quickCheckID != initTargetHwnd || IsOverException(quickCheckID)) {
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
         tooltip, failed quick check: %lClassCheck% - %quickCheckID% - %initTargetHwnd%
         Return
     }
     ; tooltip, here1
-    If (!GetKeyState("LShift","P" )
-        && lClassCheck != "WorkerW" && lClassCheck != "ProgMan"
-        && !InStr(lClassCheck, "Shell",False) && !InStr(lClassCheck, "TrayWnd",False)) {
-
+    If (!GetKeyState("LShift","P" )) {
         If (initFocusedCtrlNN == "") {
             ; ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
             MouseGetPos, , , , initFocusedCtrlNN
@@ -6653,10 +6652,10 @@ GetExplorerPath(hwnd:="") {
                 path := ""
                 try path := w.Document.Folder.Self.Path
 
-                If (path = "") {
+                If (path == "") {
                     ; Fallback for virtual folders: read breadcrumb text (brittle but works on Win10)
                     ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-                    If (dir = "" || !InStr(dir, "address", false))
+                    If (dir == "" || !InStr(dir, "address", false))
                         ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
                     Return dir
                 } Else {
