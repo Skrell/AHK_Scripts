@@ -4510,7 +4510,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         lClassCheck := initTargetClass
 
     WinGet, quickCheckID, ID, A
-    If (quickCheckID != initTargetHwnd || IsOverException(quickCheckID)) {
+    If (quickCheckID != initTargetHwnd) {
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
         tooltip, failed quick check: %lClassCheck% - %quickCheckID% - %initTargetHwnd%
@@ -4652,7 +4652,6 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
         Critical, On
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
-            If (prevPath != "" && currentPath != "" && prevPath != currentPath)
             WaitForExplorerLoad(initTargetHwnd, , True)
             tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             loop, 125 {
@@ -4870,6 +4869,8 @@ IsOverException(hWnd := "") {
         || cl == "Net UI Tool Window"
         || cl == "SDL_app"
         || cl == "DV2ControlHost"
+        || cl == "TfrmSafelyRemoveMenu"
+        || cl == "Qt6101QWindowIcon"
         || (InStr(vWinTitle, "VirtualBox",True))
         || inStr(cl, "TrayWnd", True))
         Return True
