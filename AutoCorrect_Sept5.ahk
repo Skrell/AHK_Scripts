@@ -372,6 +372,7 @@ NumPut(A_ScriptHwnd, raw, 8, "UPtr")
 
 SetTimer mouseTrack, 10
 SetTimer keyTrack, 5
+SetTimer FixModifiers, 200
 
 Return
 
@@ -649,8 +650,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
         If (vWinClass == "#32770" && vWinTitle == "Run") {
             WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
-            If UIA_GetStartButtonCenter(sx, sy) {
-                x := sx - (rw/2) - 44 ; 44 is the width of a single taskbar button
+            If UIA_GetStartButtonCenter(sx, sy, bw) {
+                x := sx - (rw/2) - bw ; 44 is the width of a single taskbar button
                 WinMove, ahk_id %hWnd%,, x,
             }
         }
@@ -671,6 +672,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
 
             KeyWait, Lbutton, U T10
+            WaitForFadeInStop(hWnd)
 
             WinGet, state, MinMax, ahk_id %hWnd%
             If (state > -1 && vWinTitle != "" && MonCount > 1) {
@@ -719,8 +721,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Critical, On
             prevActiveWindows.push(hWnd)
             Critical, Off
-
-            WaitForFadeInStop(hWnd)
 
             initFocusedCtrl := ""
             loop, 100 {
@@ -831,7 +831,7 @@ WaitForFadeInStop(hwnd) {
     sampleX := (sx + sw)/2
     sampleY := (sy + 13)
     CoordMode, Pixel, Screen
-    loop 200 {
+    loop 500 {
         PixelGetColor, HexColor%A_Index%, %sampleX%, %sampleY%, RGB
         If (A_Index >= 5) {
             If (HexColor%A_Index% == HexColorLast1 && HexColorLast1 == HexColorLast2 && HexColorLast2 == HexColorLast3 && HexColorLast3 == HexColorLast4 && HexColorLast4 == HexColorLast5)
@@ -980,13 +980,14 @@ WU_burstGap      := 250 ; ms: gap that defines a "new burst"
 WU_zoomInterval  := 100 ; ms: min time between zooms *within* a burst
 
 ~$WheelUp::
+    StopRecursion := True
     Critical, Off
     Sleep, -1
 
     Global WU_lastZoomTime, WU_lastWheelTime, WU_burstGap, WU_zoomInterval
     Global disableWheeldown  ; If you use these elsewhere
 
-    If (!MouseIsOverTitleBar() && !disableWheeldown) {
+    If (!MouseIsOverTitleBar() && !disableWheeldown && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
         WinGetClass, wdClass, ahk_id %wdID%
 
@@ -1026,6 +1027,11 @@ WU_zoomInterval  := 100 ; ms: min time between zooms *within* a burst
         }
         ; We still want normal scrolling here, so handled stays False
     }
+    Else If MouseIsOverTaskbarBlank() {
+        Send, #^{Left}
+        sleep, 1000
+    }
+    StopRecursion := False
 Return
 
 ; ===========================
@@ -1037,13 +1043,14 @@ WD_burstGap      := 250 ; ms: gap that defines a "new burst"
 WD_zoomInterval  := 100 ; ms: min time between zooms *within* a burst
 
 ~$WheelDown::
+    StopRecursion := True
     Critical, Off
     Sleep, -1
 
     Global WD_lastZoomTime, WD_lastWheelTime, WD_burstGap, WD_zoomInterval
     Global disableWheeldown, pauseWheel  ; If you use these elsewhere
 
-    If (!MouseIsOverTitleBar() && !disableWheeldown) {
+    If (!MouseIsOverTitleBar() && !disableWheeldown && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
         WinGetClass, wdClass, ahk_id %wdID%
 
@@ -1083,7 +1090,7 @@ WD_zoomInterval  := 100 ; ms: min time between zooms *within* a burst
         }
         ; We still want normal scrolling here, so handled stays False
     }
-    else If (MouseIsOverTitleBar() || disableWheeldown) {
+    Else If (MouseIsOverTitleBar() || disableWheeldown) {
         ; In this branch we swallow the wheel
         disableWheeldown := True
         MouseGetPos,,, wdID
@@ -1092,6 +1099,11 @@ WD_zoomInterval  := 100 ; ms: min time between zooms *within* a burst
         disableWheeldown := False
         Return
     }
+    Else If MouseIsOverTaskbarBlank() {
+        Send, #^{Right}
+        sleep, 1000
+    }
+    StopRecursion := False
 Return
 
 
@@ -3635,24 +3647,25 @@ Return
 #If
 
 #MaxThreadsPerHotkey 2
-#If (!VolumeHover() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbar())
-~LButton::
+#If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False)
+~$LButton::
+    SetTimer, SendCtrlAddLabel, Off
     tooltip,
     HotString("Reset")
     textBoxSelected := False
-    SetTimer, SendCtrlAddLabel, Off
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
 
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
     WinGetClass, wmClassD, ahk_id %_winIdD%
     Gui, GUI4Boarder: Hide
-    initTime := A_TickCount
 
-    If (!InStr(_winCtrlD, "SysTreeView32", True) && IsOverException()) {
+    If (wmClassD != "CabinetWClass" && wmClassD != "#32770" && !InStr(_winCtrlD, "SysListView32", True) && !InStr(_winCtrlD, "DirectUIHWND", True) && !InStr(_winCtrlD, "SysTreeView32", True))
         Return
-    }
+
+    SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
+
+    initTime := A_TickCount
 
     If (    A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < DoubleClickTime)
@@ -4773,26 +4786,13 @@ LWin & WheelDown::send {Volume_Down}
 !$WheelUp::send, {PgUp}
 !$WheelDown::send, {PgDn}
 
-#If VolumeHover() && !IsOverException()
+#If VolumeHover()
 $WheelUp::send {Volume_Up}
 $WheelDown::send {Volume_Down}
 #If
 
 
 #If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
-; $RButton::
-    ; StopRecursion := True
-
-    ; KeyWait, Rbutton, U T3
-
-    ; If GetKeyState("LShift") && !GetKeyState("LShift","P")
-        ; Send, +{Click, Right}
-    ; Else
-        ; Send,  {Click, Right}
-
-    ; StopRecursion := False
-; Return
-
 RButton & WheelUp::
     ; HotKey, Rbutton, DoNothing, On
     SetTimer, SendCtrlAddLabel, Off
@@ -4852,6 +4852,7 @@ IsOverException(hWnd := "") {
     If (   proc == "peazip.exe"
         || proc == "SndVol.exe"
         || (inStr("File Explorer", tit, True) && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
+        || MouseIsOverTaskbar()
         || cl == "#32768"
         || cl == "Autohotkey"
         || cl == "AutohotkeyGUI"
@@ -4871,8 +4872,7 @@ IsOverException(hWnd := "") {
         || cl == "DV2ControlHost"
         || cl == "TfrmSafelyRemoveMenu"
         || cl == "Qt6101QWindowIcon"
-        || (InStr(vWinTitle, "VirtualBox",True))
-        || inStr(cl, "TrayWnd", True))
+        || (InStr(tit, "VirtualBox",True)))
         Return True
     Else
         Return False
@@ -5370,6 +5370,13 @@ ForceKeyUpVK(vk) {
     Critical, Off
 }
 ; --------------------------------------------------------------------------------
+FixModifiers:
+    for _, v in ["Shift","Ctrl","Alt","LWin","RWin"] {
+        if GetKeyState(v, "P")    ; physical pressed?
+            Send, {%v% up}
+    }
+Return
+
 keyTrack() {
     Global keys
     Global numbers
@@ -5379,16 +5386,6 @@ keyTrack() {
     Global blockKeys
 
     ListLines, Off
-
-    ; FixMod("LShift", 0xA0), FixMod("RShift", 0xA1)
-    ; FixMod("LCtrl",  0xA2), FixMod("RCtrl",  0xA3)
-    ; FixMod("LAlt",   0xA4), FixMod("RAlt",   0xA5)
-    If (!GetKeyState("Ctrl", "P") && GetKeyState("Ctrl"))
-        Send, {Ctrl UP}
-    If (!GetKeyState("Shift", "P") && GetKeyState("Shift"))
-        Send, {Shift UP}
-    If (!GetKeyState("Alt", "P") && GetKeyState("Alt"))
-        Send, {Alt UP}
 
     ControlGetFocus, currCtrl, A
     WinGetClass, currClass, A
@@ -6631,7 +6628,7 @@ GetExplorerPath(hwnd:="") {
             Return expTitle
         }
     }
-    Else {
+    Else If (clCheck == "CabinetWClass") {
         activeTab := 0
         ControlGet, activeTab, Hwnd,, ShellTabWindowClass1, % "ahk_id " hwnd
 
@@ -9277,6 +9274,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it' snot::it's not
 ::itis::it is
 ::ititial::initial
+::and it's::and its
 ::it's appearance::its appearance
 ::it's color::its color
 ::it's data::its data
