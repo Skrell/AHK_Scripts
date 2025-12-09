@@ -95,7 +95,6 @@ Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
 Global ActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 ; Global winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
-Global hHook
 Global blockKeys := false
 
 ; --- Config ---
@@ -305,9 +304,6 @@ TooltipExpr =
     ExitApp
 )
 
-
-OnExit("PreventRecur")
-
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.
 ; Disabled by default to prevent unwanted corrections such as IfEqual->Ifequal.
@@ -356,19 +352,34 @@ If (MonCount > 1) {
     previousMon := currentMon
 }
 
-; Install low-level keyboard hook
-OnMessage(0x00FF, "LL_KeyFilter") ; WM_INPUT
+; Get module handle for this process (needed by SetWindowsHookEx for LL hooks)
+hMod := DllCall("GetModuleHandle", "Ptr", 0, "Ptr")
 
-; Register for Raw Input keyboard messages
-DllCall("RegisterRawInputDevices"
-    , "Ptr", Buffer := VarSetCapacity(raw, 24, 0)
-    , "UInt", 1
-    , "UInt", 24)
+; Low-level keyboard hook: WH_KEYBOARD_LL = 13
+kbdCallback := RegisterCallback("LL_KeyboardHook", "Fast")
+hHookKbd   := DllCall("SetWindowsHookEx"
+    , "Int", 13              ; WH_KEYBOARD_LL
+    , "Ptr", kbdCallback
+    , "Ptr", hMod
+    , "UInt", 0
+    , "Ptr")
 
-NumPut(1, raw, 0, "UShort")      ; usUsagePage = 1 (Generic Desktop Controls)
-NumPut(6, raw, 2, "UShort")      ; usUsage     = 6 (Keyboard)
-NumPut(0, raw, 4, "UInt")        ; dwFlags     = 0
-NumPut(A_ScriptHwnd, raw, 8, "UPtr")
+; Low-level mouse hook: WH_MOUSE_LL = 14
+mouseCallback := RegisterCallback("LL_MouseHook", "Fast")
+hHookMouse    := DllCall("SetWindowsHookEx"
+    , "Int", 14              ; WH_MOUSE_LL
+    , "Ptr", mouseCallback
+    , "Ptr", hMod
+    , "UInt", 0
+    , "Ptr")
+
+if (!hHookKbd || !hHookMouse)
+{
+    MsgBox, 16, Error, Failed to install low-level hooks.`nKeyboard: %hHookKbd%`nMouse: %hHookMouse%
+    ExitApp
+}
+
+OnExit, UnhookHooks
 
 SetTimer mouseTrack, 10
 SetTimer keyTrack, 5
@@ -380,28 +391,81 @@ Return
 ; -----------------------------------------------          START OF APPLICATION           --------------------------------------------------
 ; ==========================================================================================================================================
 ; ---- Low-level hardware key filter ----
-LL_KeyFilter(wParam, lParam)
+; --------------------------------------------------
+; Common filter logic for keyboard
+; --------------------------------------------------
+LL_KeyboardHook(nCode, wParam, lParam)
 {
-    global blockKeys
+    global blockKeys, hHookKbd
 
+    ; If we must pass the event through without processing
+    if (nCode < 0)
+        return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+
+    ; If not blocking, just pass through
     if (!blockKeys)
-        return  ; allow all keys normally
+        return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-    ; Get input type
-    if (NumGet(lParam + 0, 0, "UInt") != 1) ; 1 = keyboard
-        return
+    ; KBDLLHOOKSTRUCT:
+    ;   vkCode      (DWORD)  offset 0
+    ;   scanCode    (DWORD)  offset 4
+    ;   flags       (DWORD)  offset 8
+    ;   time        (DWORD)  offset 12
+    ;   dwExtraInfo (ULONG_PTR) offset 16
 
-    flags := NumGet(lParam + 0, 20, "UShort")
+    flags    := NumGet(lParam + 0, 8, "UInt")
+    injected := (flags & 0x10)  ; LLKHF_INJECTED
 
-    ; LLKHF_INJECTED = bit 4 (0x10)
-    injected := (flags & 0x10)
-
-    ; If injected, allow AHK SendInput to pass through
+    ; Allow injected keys (from Send/SendInput)
     if (injected)
-        return
+        return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
     ; Otherwise block physical key
-    return 1   ; swallow it completely
+    return 1  ; non-zero = swallow
+}
+
+; --------------------------------------------------
+; Common filter logic for mouse
+; --------------------------------------------------
+LL_MouseHook(nCode, wParam, lParam)
+{
+    global blockKeys, hHookMouse
+
+    if (nCode < 0)
+        return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+
+    if (!blockKeys)
+        return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+
+    ; wParam: mouse message:
+    ;   0x0201 WM_LBUTTONDOWN
+    ;   0x0202 WM_LBUTTONUP
+    ;   0x0204 WM_RBUTTONDOWN
+    ;   0x0205 WM_RBUTTONUP
+    ;   0x0207 WM_MBUTTONDOWN
+    ;   0x0208 WM_MBUTTONUP
+    ;   plus dbl-click messages, etc.
+    ;
+    ; MSLLHOOKSTRUCT:
+    ;   pt          (POINT)  offset 0 (8 bytes)
+    ;   mouseData   (DWORD)  offset 8
+    ;   flags       (DWORD)  offset 12
+    ;   time        (DWORD)  offset 16
+    ;   dwExtraInfo (ULONG_PTR) offset 20
+
+    ; Only block button messages (not move/wheel) based on wParam range:
+    if (wParam < 0x0201 || wParam > 0x0209)
+        return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+
+    flags    := NumGet(lParam + 0, 12, "UInt")
+    injected := (flags & 0x01)  ; LLMHF_INJECTED
+
+    ; Allow injected mouse clicks (from Click/SendInput)
+    if (injected)
+        return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+
+    ; Block physical mouse button event
+    return 1
 }
 
 OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
@@ -848,17 +912,18 @@ WaitForFadeInStop(hwnd) {
     Return
 }
 
-PreventRecur() {
-    Global StopRecursion, hWinEventHook, hHook
+; --------------------------------------------------
+; Unhook on exit
+; --------------------------------------------------
+UnhookHooks:
     StopRecursion := True
     nCheck := DllCall( "UnhookWinEvent", Ptr,hWinEventHook )
-    if (ActWin)
-        DllCall( "CoUninitialize" )
-    if (hHook)
-        DllCall("UnhookWindowsHookEx", "Ptr", hHook)
-
-Return
-}
+    if (hHookKbd)
+        DllCall("UnhookWindowsHookEx", "Ptr", hHookKbd)
+    if (hHookMouse)
+        DllCall("UnhookWindowsHookEx", "Ptr", hHookMouse)
+    ExitApp
+return
 
 ; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
 UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
