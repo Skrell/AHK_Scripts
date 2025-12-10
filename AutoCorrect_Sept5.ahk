@@ -314,21 +314,19 @@ TooltipExpr =
 ; The first line of code below is the set of letters, digits, and/or symbols
 ; that are eligible for this type of correction.  Customize if you wish:
 
-; ReAssignHotkeys()
-
-HotKey ~/,  Marktime_FixSlash
-HotKey ~',  Hoty ;'
-HotKey ~?,  Hoty
-HotKey ~!,  Hoty
-HotKey ~`,, Hoty
-HotKey ~.,  Marktime_Hoty
-HotKey ~_,  Hoty
-HotKey ~-,  Hoty
-Hotkey ~:,  MarkKeypressTime
+HotKey, ~/,  Marktime_FixSlash
+HotKey, ~',  Hoty ;'
+HotKey, ~?,  Hoty
+HotKey, ~!,  Hoty
+HotKey, ~`,, Hoty
+HotKey, ~.,  Marktime_Hoty
+HotKey, ~_,  Hoty
+HotKey, ~-,  Hoty
+Hotkey, ~:,  MarkKeypressTime
 
 Loop Parse, keys
 {
-    Hotkey, % "~" . A_LoopField, Marktime_Hoty_FixSlash, On
+    Hotkey, %  "~" . A_LoopField, Marktime_Hoty_FixSlash, On
     Hotkey, % "~+" . A_LoopField, Marktime_Hoty_FixSlash, On
 }
 
@@ -385,7 +383,7 @@ OnExit, UnhookHooks
 
 SetTimer mouseTrack, 10
 SetTimer keyTrack, 5
-SetTimer FixModifiers, 200
+SetTimer FixModifiers, 50
 
 Return
 
@@ -569,11 +567,11 @@ FixSlash:
     Else If !IsGoogleDocWindow() && (!StopAutoFix && IsThisHotKeyLetterKey())
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
-    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "~Space" && A_TimeSincePriorHotkey<999)) {
+    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
         Send, % "{BS}{BS}{?}{SPACE}"
         disableEnter := False
     }
-    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "Enter" && A_TimeSincePriorHotkey<999)) {
+    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$Enter" && A_TimeSincePriorHotkey<999)) {
         Send, % "{BS}{?}{ENTER}"
         disableEnter := False
     }
@@ -973,7 +971,7 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
     }
 }
 
-~^Enter::
+$~^Enter::
 DetectHiddenWindows, Off
 WinGet, myWindow, List
 Loop % myWindow
@@ -990,11 +988,11 @@ Loop % myWindow
 }
 Return
 
-!Mbutton::
+$!Mbutton::
     Send, {Enter}
 Return
 
-^$WheelUp::
+$^WheelUp::
     If ((IsConsoleWindow() || textBoxSelected) && !MouseIsOverTitleBar()) {
         StopRecursion := True
         SetTimer, MbuttonTimer, Off
@@ -1008,7 +1006,7 @@ Return
     }
 Return
 
-^$WheelDown::
+$^WheelDown::
     If ((IsConsoleWindow() || textBoxSelected) && !MouseIsOverTitleBar()) {
         StopRecursion := True
         SetTimer, MbuttonTimer, Off
@@ -1044,7 +1042,7 @@ WU_lastWheelTime := 0   ; last time any WheelDown happened
 WU_burstGap      := 250 ; ms: gap that defines a "new burst"
 WU_zoomInterval  := 100 ; ms: min time between zooms *within* a burst
 
-~$WheelUp::
+$~WheelUp::
     StopRecursion := True
     Critical, Off
     Sleep, -1
@@ -1107,7 +1105,7 @@ WD_lastWheelTime := 0   ; last time any WheelDown happened
 WD_burstGap      := 250 ; ms: gap that defines a "new burst"
 WD_zoomInterval  := 100 ; ms: min time between zooms *within* a burst
 
-~$WheelDown::
+$~WheelDown::
     StopRecursion := True
     Critical, Off
     Sleep, -1
@@ -1768,11 +1766,11 @@ UnclipCursor() {
     return DllCall("user32\ClipCursor", "ptr", 0) ? 1 : 0
 }
 
-^+Esc::
+$^+Esc::
     Run, C:\Program Files\SystemInformer\SystemInformer.exe
 Return
 
-CapsLock::
+$CapsLock::
     TimeOfLastHotkeyTyped := A_TickCount
     Send {Delete}
     lastHotkeyTyped := "CapsLock"
@@ -2064,30 +2062,38 @@ $!h::
 Return
 
 #If disableEnter
-Enter::
+$Enter::
     GoSub, FixSlash
     disableEnter := False
 Return
 #If
 
+; --- Volume control when holding Left Win ---
+#If GetKeyState("LWin", "P")   ; condition: while LWin is physically held
+
+$WheelUp::Send {Volume_Up}
+$WheelDown::Send {Volume_Down}
+
+#If   ; end of context-sensitive block
 ;=============== KILL WINDOWS SHORTCUT KEYS =============
-LWin & s::
-    Send ^+{PrintScreen}   ; Shift+PrintScreen → triggers Greenshot region capture
-return
-LWin::Return
+; Block bare Win keys
+*LWin::Return
 *RWin::Return
-LWin up::Return
+*LWin up::Return
 *RWin up::Return
-#d::Return
-#i::Return
-#x::Return
-#v::Return
-#space::Return
-#l::Return
+
+; Optionally block specific Windows shortcuts
+#d::Return      ; Block Win+D (Show desktop)
+#i::Return      ; Block Win+I (Settings)
+#x::Return      ; Block Win+X (Power user menu)
+#v::Return      ; Block Win+V (Clipboard history)
+#space::Return  ; Block Win+Space (input language switch)
+#+s::Return
+
 ; =========================================================
 
 #If !disableEnter && (WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770"))
-~Enter::
+$~Enter::
     ControlGetFocus, entCtrl, A
     WinGetClass, entCl, A
     WinGetTitle, entTi, A
@@ -2105,7 +2111,7 @@ LWin up::Return
     }
 Return
 
-~$F2::
+$~F2::
     LbuttonEnabled := False
     StopRecursion  := True
     SetTimer, mouseTrack, Off
@@ -2126,40 +2132,33 @@ Return
 Return
 #If
 
-#+s::Return
-
-~Space::
+$~Space::
     GoSub, Marktime_Hoty_FixSlash
-    lastHotkeyTyped := "Space"
+    lastHotkeyTyped := "~Space"
 Return
 
 ; duplicate hotkey in case shift is accidentally  held as a result of attempting to type a '?'
-~+Space::
+$~+Space::
     GoSub, Marktime_Hoty_FixSlash
-    lastHotkeyTyped := "Space"
+    lastHotkeyTyped := "~Space"
 Return
 
-~^Backspace::
+$~^Backspace::
     Hotstring("Reset")
 Return
 
-~$Backspace::
+$~Backspace::
     TimeOfLastHotkeyTyped := A_TickCount
-    lastHotkeyTyped := "Backspace"
+    lastHotkeyTyped := "~Backspace"
 Return
 
-~$Delete::
-    TimeOfLastHotkeyTyped := A_TickCount
-Return
-
-~$Left::
+$~Left::
     X_PriorPriorHotKey :=
 Return
 
-~$Right::
+$~Right::
     X_PriorPriorHotKey :=
 Return
-
 
 ; Ctl+Tab in chrome to goto recent
 prevChromeTab()
@@ -2237,7 +2236,7 @@ $Esc::
                 If GetKeyState("x","P") {
                     Tooltip, Canceled!
                     ; ClearRect()
-                    ClearMasks()
+                    ClearMasks("", Opacity)
                     GoSub, FadeOutWindowTitle
                     CancelClose := True
                     sleep, 1500
@@ -2255,7 +2254,7 @@ $Esc::
                     ; tooltip, Waiting for `"%escTitle%`" to close... ; "
                     If !WinExist("ahk_id " . escHwndID) {
                         ; ClearRect(escHwndID)
-                        ClearMasks(escHwndID)
+                        ClearMasks(escHwndID, Opacity)
                         GoSub, FadeOutWindowTitle
                         ActivateTopMostWindow()
                         break
@@ -2283,7 +2282,7 @@ $Esc::
                     loop 50 {
                         If !WinExist("ahk_id " . escHwndID) {
                             ; ClearRect(escHwndID)
-                            ClearMasks(escHwndID)
+                            ClearMasks(escHwndID, Opacity)
                             GoSub, FadeOutWindowTitle
                             ActivateTopMostWindow()
                             break
@@ -2980,13 +2979,13 @@ Cycle()
                 KeyWait, Tab, D  T0.1
                 If !ErrorLevel
                 {
-                    If !GetKeyState("Lshift","P") {
+                    If !GetKeyState("LShift","P") {
                         If (cycleCount == GroupedWindows.MaxIndex())
                             cycleCount := 1
                         Else
                             cycleCount += 1
                     }
-                    Else If GetKeyState("Lshift","P") {
+                    Else If GetKeyState("LShift","P") {
                         If (cycleCount == 1)
                             cycleCount := GroupedWindows.MaxIndex()
                         Else
@@ -3292,15 +3291,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 }
 
 ; ------------------  ChatGPT ------------------------------------------------------------------
-; DrawBlackBar(guiIndex, x, y, w, h) {
-    ; If (w <= 0 || h <= 0) {
-        ; Gui, %guiIndex%: Hide
-    ; } Else {
-        ; Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
-    ; }
-; }
-
 DrawBlackBar(guiIndex, x, y, w, h) {
+    Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
     ; Assume GUI already created and styled elsewhere.
 
     If (w <= 0 || h <= 0) {
@@ -3310,20 +3302,24 @@ DrawBlackBar(guiIndex, x, y, w, h) {
 
     ; Showing with new size/position is one atomic operation internally
     Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
+
+    ; Make sure they’re on top exactly once per draw
+    hwndVarName := "black" . guiIndex . "Hwnd"
+    WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
+    WinSet, Transparent,  1, ahk_id %hwndVarName%
 }
 
-ClearMasks(hwnd := "")
-{
+ClearMasks(monitorHwnd := "", initTransVal := 255) {
     Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
 
-    transVal   := 255
-    iterations := 8
-    stepVal    := Floor(255 / iterations)
+    iterations := 10
+    transVal   := initTransVal
+    opacityInterval := Floor(initTransVal / iterations)
 
     ; fade-out loop (non-critical)
     Loop, %iterations%
     {
-        transVal -= stepVal
+        transVal -= opacityInterval
         currentVal := transVal
 
         WinSet, Transparent, %currentVal%, ahk_id %black1Hwnd%
@@ -3336,13 +3332,19 @@ ClearMasks(hwnd := "")
 
         ; Now a tiny critical section to safely check/early-exit
         Critical, On
-        If (hwnd != "" && !WinExist("ahk_id " . hwnd)) {
+        If (monitorHwnd != "" && !WinExist("ahk_id " . monitorHwnd)) {
             Loop, 4
                 Gui, %A_Index%: Hide
             Critical, Off
             Return
         }
         Critical, Off
+
+        If (GetKeyState("LAlt", "P")) {
+            Loop, 4
+                Gui, %A_Index%: Hide
+            Return
+        }
     }
 
     ; Final hide – we do want this to be atomic-ish
@@ -3353,79 +3355,6 @@ ClearMasks(hwnd := "")
 
     Return
 }
-
-; DrawMasks(targetHwnd := "", firstDraw := True) {
-    ; Global hLeft, hTop, hRight, hBottom, Opacity, black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
-    ; Margin := 0 ; expands the hole around the active window by this many pixels
-
-    ; If !targetHwnd
-        ; WinGet, hA, ID, A
-    ; Else
-        ; hA := targetHwnd
-
-    ; ; make sure that we're not trying to draw masks for the masks' windows hwnd themselves!
-    ; If ((!hA) || (hA == hTop || hA == hLeft || hA == hRight || hA == hBottom))
-        ; Return
-
-    ; ; Get the monitor WORK AREA (excludes taskbar) for the active window's monitor
-    ; If (!GetMonitorRectsForWindow(hA, mx, my, mw, mh, wx2, wy2, ww2, wh2))
-        ; Return
-
-    ; wRight  := wx2 + ww2
-    ; wBottom := wy2 + wh2
-
-    ; ; Active window rect (expanded slightly)
-    ; ; WinGetPos, wx, wy, ww, wh, ahk_id %hA%
-    ; WinGetPosEx(hA, wx, wy, ww, wh)
-    ; If (wx == "")
-        ; Return
-
-    ; wx -= Margin, wy -= Margin, ww += 2*Margin, wh += 2*Margin
-    ; holeL := Max(wx2, wx)
-    ; holeT := Max(wy2, wy)
-    ; holeR := Min(wRight,  wx + ww)
-    ; holeB := Min(wBottom, wy + wh)
-
-    ; Critical, On
-    ; ; Mask only within the WORK AREA (taskbar region is untouched, so it's visible & clickable)
-    ; ; TOP panel (across full work area width, above hole)
-    ; DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
-    ; ; LEFT panel
-    ; DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT))
-    ; ; RIGHT panel
-    ; DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT))
-    ; ; BOTTOM panel
-    ; DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB))
-
-    ; If firstDraw {
-        ; incrValue := 5
-        ; transVal := ceil(Opacity/incrValue)
-    ; }
-    ; Else {
-        ; incrValue := 1
-        ; transVal := Opacity
-    ; }
-    ; loop, %incrValue%
-    ; {
-        ; WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
-        ; WinSet, AlwaysOnTop, On, ahk_id %black1Hwnd%
-
-        ; WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
-        ; WinSet, AlwaysOnTop, On, ahk_id %black2Hwnd%
-
-        ; WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
-        ; WinSet, AlwaysOnTop, On, ahk_id %black3Hwnd%
-
-        ; WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
-        ; WinSet, AlwaysOnTop, On, ahk_id %black4Hwnd%
-
-        ; transVal += ceil(Opacity/incrValue)
-        ; sleep, 2
-    ; }
-    ; Critical, Off
-
-; Return
-; }
 
 ; Why this helps flicker:
     ; All geometry & showing of the 4 bars happens back-to-back while uninterruptible:
@@ -3469,7 +3398,6 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     ; --- CRITICAL SECTION: JUST THE GEOMETRY + SHOWS ---
     Critical, On
-
     ; TOP panel
     DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
     ; LEFT panel
@@ -3478,13 +3406,6 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT))
     ; BOTTOM panel
     DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB))
-
-    ; Make sure they’re on top exactly once per draw
-    WinSet, AlwaysOnTop, On, ahk_id %black1Hwnd%
-    WinSet, AlwaysOnTop, On, ahk_id %black2Hwnd%
-    WinSet, AlwaysOnTop, On, ahk_id %black3Hwnd%
-    WinSet, AlwaysOnTop, On, ahk_id %black4Hwnd%
-
     Critical, Off
     ; --- END CRITICAL SECTION ---
 
@@ -3494,16 +3415,16 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     ; --- FADE / OPACITY (non-critical) ---
     If (firstDraw) {
         incrValue   := 5
-        stepOpacity := Ceil(Opacity / incrValue)
-        transVal    := stepOpacity
+        opacityInterval := Ceil(Opacity / incrValue)
+        transVal    := opacityInterval
     } Else {
         ; For subsequent moves, you can skip animation entirely If you want:
         ; incrValue   := 1
-        ; stepOpacity := 0
+        ; opacityInterval := 0
         ; transVal    := Opacity
 
         incrValue   := 1
-        stepOpacity := 0
+        opacityInterval := 0
         transVal    := Opacity
     }
 
@@ -3514,7 +3435,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
 
-        transVal += stepOpacity
+        transVal += opacityInterval
         Sleep, 2   ; purely visual – safe outside Critical
     }
 
@@ -3713,7 +3634,7 @@ Return
 
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False)
-~$LButton::
+$~LButton::
     SetTimer, SendCtrlAddLabel, Off
     tooltip,
     HotString("Reset")
@@ -4014,13 +3935,6 @@ FocusByClassNN(classNN, winTitle:="A", verify:=true) {
     return hCtl ? FocusHwndFast(hCtl, verify) : false
 }
 
-IsTabbedExplorer(targetHwndID) {
-    ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %targetHwndID%
-    ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %targetHwndID%
-    ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %targetHwndID%
-    Return (OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
-}
-
 WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
     Global UIA
     try {
@@ -4105,7 +4019,7 @@ UpdateInputBoxTitle:
 Return
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
-~$Ctrl::
+$~Ctrl::
     GoSub, LaunchWinFind
 Return
 
@@ -4573,8 +4487,12 @@ IsModernExplorer_Win32Only(hWnd) {
     if (cls != "CabinetWClass")
         return false   ; Not Explorer, or an unexpected host
 
-    ControlGet, OutputVar, Visible ,, Microsoft.UI.Content.DesktopChildSiteBridge1, ahk_id %hWnd%
-    return OutputVar
+    ControlGet, OutputVar,  Visible ,, Microsoft.UI.Content.DesktopChildSiteBridge1, ahk_id %hWnd%
+    ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %hWnd%
+    ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %hWnd%
+    ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %hWnd%
+
+    return (OutputVar || OutputVar4 || OutputVar6 || OutputVar8)
 }
 
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
@@ -4845,11 +4763,8 @@ Lbutton & Rbutton::
 Return
 #If
 
-LWin & WheelUp::send {Volume_Up}
-LWin & WheelDown::send {Volume_Down}
-
-!$WheelUp::send, {PgUp}
-!$WheelDown::send, {PgDn}
+$!WheelUp::send, {PgUp}
+$!WheelDown::send, {PgDn}
 
 #If VolumeHover()
 $WheelUp::send {Volume_Up}
@@ -5435,12 +5350,42 @@ ForceKeyUpVK(vk) {
     Critical, Off
 }
 ; --------------------------------------------------------------------------------
-FixModifiers:
-    for _, v in ["Shift","Ctrl","Alt","LWin","RWin"] {
-        if GetKeyState(v, "P")    ; physical pressed?
-            Send, {%v% up}
+FixModifiers() {
+    ; Keys we care about
+    static keys := ["Shift","Ctrl","Alt","LWin","RWin"]
+    ; Track how long each key has been "mismatched"
+    static stuckCount := {}
+
+    threshold := 6  ; 6 * 50ms = 300ms of mismatch before we try to unstick
+
+    for _, k in keys
+    {
+        ; Ensure a counter exists for this key
+        if (!stuckCount.HasKey(k))
+            stuckCount[k] := 0 ; This is where elements get added to stuck[]
+
+        phys := GetKeyState(k, "P")   ; physical state
+        logi := GetKeyState(k)        ; logical (effective) state
+
+        ; We only care about the "key is physically down but logically up" case
+        if (phys && !logi) {
+            stuckCount[k] += 1
+
+            if (stuckCount[k] >= threshold) {
+                ; Key has been mismatched long enough — try to unstick it
+                ; (sending an UP should clear the ghost press)
+                Critical, On
+                Send, {%k% UP}
+                stuckCount[k] := 0
+                Critical, Off
+            }
+        } else {
+            ; States match (or key logically down too) — reset counter
+            stuckCount[k] := 0
+        }
     }
 Return
+}
 
 keyTrack() {
     Global keys
@@ -5463,13 +5408,7 @@ keyTrack() {
         If (   TimeOfLastHotkeyTyped
             && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
             && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
-            && (InStr(keys, Substr(A_ThisHotkey,2) , false) 
-                || InStr(numbers, Substr(A_ThisHotkey,2) , false) 
-                || A_ThisHotkey == "~:" 
-                || A_ThisHotkey == "~/" 
-                || A_ThisHotkey == "~Space" 
-                || A_ThisHotkey == "CapsLock" 
-                || A_ThisHotkey == "~$Backspace") ) {
+            && (InStr(keys, Substr(A_ThisHotkey,2) , false) || InStr(numbers, Substr(A_ThisHotkey,2) , false) || A_ThisHotkey == "$~Space" || A_ThisHotkey == "$CapsLock" || A_ThisHotkey == "$~Backspace") ) {
 
             TimeOfLastHotkeyTyped :=
             SetTimer, keyTrack,   Off
