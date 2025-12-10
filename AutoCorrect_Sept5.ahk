@@ -95,6 +95,7 @@ Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
 Global ActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 ; Global winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
+; Turn key blocking ON/OFF
 Global blockKeys := false
 
 ; --- Config ---
@@ -315,7 +316,7 @@ TooltipExpr =
 
 ; ReAssignHotkeys()
 
-HotKey ~/,  FixSlash
+HotKey ~/,  Marktime_FixSlash
 HotKey ~',  Hoty ;'
 HotKey ~?,  Hoty
 HotKey ~!,  Hoty
@@ -323,6 +324,7 @@ HotKey ~`,, Hoty
 HotKey ~.,  Marktime_Hoty
 HotKey ~_,  Hoty
 HotKey ~-,  Hoty
+Hotkey ~:,  MarkKeypressTime
 
 Loop Parse, keys
 {
@@ -485,6 +487,11 @@ Return
 Marktime_Hoty_FixSlash:
     GoSub, MarkKeypressTime
     GoSub, Hoty
+    GoSub, FixSlash
+Return
+
+Marktime_FixSlash:
+    GoSub, MarkKeypressTime
     GoSub, FixSlash
 Return
 
@@ -746,13 +753,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     WinActivate, ahk_id %hWnd%
                     Send, #+{Left}
                 }
-            }
-
-            If (inStr("Home - File Explorer", vWinTitle, True) || inStr("This PC - File Explorer", vWinTitle, True) || inStr("Gallery - File Explorer", vWinTitle, True)) {
-                LbuttonEnabled := True
-                SetTimer, keyTrack,   On
-                SetTimer, mouseTrack, On
-                Return
             }
 
             If (vWinClass == "#32770") {
@@ -5463,7 +5463,13 @@ keyTrack() {
         If (   TimeOfLastHotkeyTyped
             && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
             && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
-            && (InStr(keys, Substr(A_ThisHotkey,2) , false) || InStr(numbers, Substr(A_ThisHotkey,2) , false) || A_ThisHotkey == "~Space" || A_ThisHotkey == "CapsLock" || A_ThisHotkey == "~$Backspace") ) {
+            && (InStr(keys, Substr(A_ThisHotkey,2) , false) 
+                || InStr(numbers, Substr(A_ThisHotkey,2) , false) 
+                || A_ThisHotkey == "~:" 
+                || A_ThisHotkey == "~/" 
+                || A_ThisHotkey == "~Space" 
+                || A_ThisHotkey == "CapsLock" 
+                || A_ThisHotkey == "~$Backspace") ) {
 
             TimeOfLastHotkeyTyped :=
             SetTimer, keyTrack,   Off
