@@ -232,11 +232,11 @@ Expr =
     #NoEnv
     #NoTrayIcon
     #KeyHistory 0
-    #Persistent
+    ; #Persistent ; already the default
     #WinActivateForce
-    ListLines Off
     SetBatchLines -1
-    DetectHiddenWindows, Off
+    ListLines Off
+    ; DetectHiddenWindows, Off ; already the default
 
     WinWait, ahk_class #32768,, 3
 
@@ -272,11 +272,11 @@ ExprAltUp =
     #NoEnv
     #NoTrayIcon
     #KeyHistory 0
-    #Persistent
+    ; #Persistent ; already the default
     #WinActivateForce
     SetBatchLines -1
     ListLines Off
-    DetectHiddenWindows, Off
+    ; DetectHiddenWindows, Off ; already the default
 
     #IfWinNotActive ahk_class #32770
     ~Alt Up::
@@ -293,9 +293,9 @@ TooltipExpr =
 (
     #NoEnv
     #NoTrayIcon
-    #SingleInstance, Off
-    #Persistent
     #KeyHistory 0
+    #SingleInstance, Off
+    ; #Persistent ; already the default
     SetBatchLines -1
     ListLines Off
 
@@ -988,9 +988,9 @@ Loop % myWindow
 }
 Return
 
-$!Mbutton::
-    Send, {Enter}
-Return
+; $!Mbutton::
+    ; Send, {Enter}
+; Return
 
 $^WheelUp::
     If ((IsConsoleWindow() || textBoxSelected) && !MouseIsOverTitleBar()) {
@@ -1081,11 +1081,11 @@ $~WheelUp::
                 ; Optional debug:
                 ; ToolTip % "Zoom at: " . now
                 ; SetTimer, ClearToolTip, -400
-                BlockInput, On
+                blockKeys := True
                 sleep, 100
                 Send, ^{NumpadAdd}
                 sleep, 100
-                BlockInput, Off
+                blockKeys := False
             }
         }
         ; We still want normal scrolling here, so handled stays False
@@ -1144,11 +1144,11 @@ $~WheelDown::
                 ; Optional debug:
                 ; ToolTip % "Zoom at: " . now
                 ; SetTimer, ClearToolTip, -400
-                BlockInput, On
+                blockKeys := True
                 sleep, 100
                 Send, ^{NumpadAdd}
                 sleep, 100
-                BlockInput, Off
+                blockKeys := False
             }
         }
         ; We still want normal scrolling here, so handled stays False
@@ -2784,7 +2784,7 @@ Return
 Return
 
 #If hitTAB
-!x::
+$!x::
     tooltip, Canceled Operation!
     Gui, GUI4Boarder: Hide
     Gui, WindowTitle: Destroy
@@ -2794,7 +2794,7 @@ Return
 Return
 #If
 
-!Lbutton::
+$!Lbutton::
     If hitTab {
         LclickSelected := True
         MouseGetPos, , , _winIdD,
@@ -3293,6 +3293,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 ; ------------------  ChatGPT ------------------------------------------------------------------
 DrawBlackBar(guiIndex, x, y, w, h) {
     Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    Global hTop, hLeft, hRight, hBottom
     ; Assume GUI already created and styled elsewhere.
 
     If (w <= 0 || h <= 0) {
@@ -3300,11 +3301,21 @@ DrawBlackBar(guiIndex, x, y, w, h) {
         Return
     }
 
+    hwndVarName := "black" . guiIndex . "Hwnd"
+    If !WinExist("ahk_id " . hwndVarName) {
+        If (guiIndex == 1)
+            CreateMaskGui(guiIndex, hTop)
+        Else if (guiIndex == 2)
+            CreateMaskGui(guiIndex, hLeft)
+        Else if (guiIndex == 2)
+            CreateMaskGui(guiIndex, hRight)
+        Else if (guiIndex == 2)
+            CreateMaskGui(guiIndex, hBottom)
+    }
     ; Showing with new size/position is one atomic operation internally
     Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
 
     ; Make sure they’re on top exactly once per draw
-    hwndVarName := "black" . guiIndex . "Hwnd"
     WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
     WinSet, Transparent,  1, ahk_id %hwndVarName%
 }
@@ -3414,18 +3425,18 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     ; --- FADE / OPACITY (non-critical) ---
     If (firstDraw) {
-        incrValue   := 5
-        opacityInterval := Ceil(Opacity / incrValue)
-        transVal    := opacityInterval
+        incrValue         := 5
+        opacityInterval   := Ceil(Opacity / incrValue)
+        transVal          := opacityInterval
     } Else {
         ; For subsequent moves, you can skip animation entirely If you want:
-        ; incrValue   := 1
+        ; incrValue       := 1
         ; opacityInterval := 0
-        ; transVal    := Opacity
+        ; transVal        := Opacity
 
-        incrValue   := 1
-        opacityInterval := 0
-        transVal    := Opacity
+        incrValue         := 1
+        opacityInterval   := 0
+        transVal          := Opacity
     }
 
     Loop, %incrValue%
@@ -3475,7 +3486,7 @@ Min(a,b) {
 ; -------------------------------------------------------------------------------------------
 
 #If MouseIsOverTaskbarBlank()
-~Lbutton::
+$~Lbutton::
     MouseGetPos, expX1, expY1,
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < DoubleClickTime)
@@ -3492,7 +3503,7 @@ Return
 #If
 
 #If MouseIsOverTaskbarWidgets()
-~^Lbutton::
+$~^Lbutton::
     StopRecursion := True
     SetTimer, mouseTrack, Off
 	SetTimer, keyTrack,   Off
@@ -3552,7 +3563,7 @@ Return
 #If
 
 #If MouseIsOverTitleBar()
-^LButton::
+$^LButton::
     Global currentMon, previousMon
     DetectHiddenWindows, Off
     StopRecursion := True
@@ -3684,7 +3695,7 @@ $~LButton::
             }
             ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
-                SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
+                SendCtrlAdd(_winIdD, prevPath, currentPath, wmClassD)
             }
 
             ; LbuttonEnabled     := True
@@ -4506,7 +4517,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         lClassCheck := initTargetClass
 
     WinGet, quickCheckID, ID, A
-    If (quickCheckID != initTargetHwnd) {
+    If (quickCheckID != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd)) {
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
         tooltip, failed quick check: %lClassCheck% - %quickCheckID% - %initTargetHwnd%
@@ -4524,7 +4535,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         ; tooltip, here2
-        If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd)
+        If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
 
         OutputVar1 := 0
@@ -4581,7 +4592,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         ; tooltip, here5
-        If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd)
+        If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
 
         If (TargetControl == "" && (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)) {
@@ -4639,7 +4650,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             ; tooltip, here7
         }
 
-        If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd)
+        If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
 
         WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
@@ -4656,7 +4667,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 If (testCtrlFocus == TargetControl)
                     break
                 sleep, 1
-                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd)
+                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
                     Return
             }
         }
@@ -4669,7 +4680,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 If (testCtrlFocus == TargetControl)
                     break
                 sleep, 1
-                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd)
+                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
                     Return
             }
         }
@@ -4686,13 +4697,13 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 sleep, 1
                 If (A_Index == 125)
                     TargetControl := "" ; then delete it
-                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd)
+                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
                     Return
             }
         }
         ; tooltip, here8
 
-        If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd)
+        If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
 
         tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
@@ -4774,17 +4785,15 @@ $WheelDown::send {Volume_Down}
 
 #If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
 RButton & WheelUp::
-    ; HotKey, Rbutton, DoNothing, On
     SetTimer, SendCtrlAddLabel, Off
     Send, ^{Home}
-    ; HotKey, Rbutton, DoNothing, Off
+    Send, {Home}
 Return
 
 RButton & WheelDown::
-    ; HotKey, Rbutton, DoNothing, On
     SetTimer, SendCtrlAddLabel, Off
     Send, ^{End}
-    ; HotKey, Rbutton, DoNothing, Off
+    Send, {End}
 Return
 
 $RButton::
@@ -5362,29 +5371,30 @@ FixModifiers() {
     {
         ; Ensure a counter exists for this key
         if (!stuckCount.HasKey(k))
-            stuckCount[k] := 0 ; This is where elements get added to stuck[]
+            stuckCount[k] := 0
 
-        phys := GetKeyState(k, "P")   ; physical state
-        logi := GetKeyState(k)        ; logical (effective) state
+        phys := GetKeyState(k, "P")   ; physical state: 1 = actually held
+        logi := GetKeyState(k)        ; logical (effective) state: 1 = considered down
 
-        ; We only care about the "key is physically down but logically up" case
-        if (phys && !logi) {
+        ; Classic "stuck modifier": physically UP, logically DOWN
+        if (!phys && logi) {
             stuckCount[k] += 1
 
             if (stuckCount[k] >= threshold) {
-                ; Key has been mismatched long enough — try to unstick it
-                ; (sending an UP should clear the ghost press)
                 Critical, On
-                Send, {%k% UP}
+                SetTimer keyTrack,   Off
+                SetTimer mouseTrack, Off
+                Send, {%k% UP}      ; try to clear ghost press
                 stuckCount[k] := 0
+                SetTimer keyTrack,   On
+                SetTimer mouseTrack, On
                 Critical, Off
             }
         } else {
-            ; States match (or key logically down too) — reset counter
+            ; States match or key is legitimately held — reset counter
             stuckCount[k] := 0
         }
     }
-Return
 }
 
 keyTrack() {
@@ -5581,11 +5591,20 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
                 Return True
             }
             Else If (ErrorLevel != 12) {
-                pt := UIA.ElementFromPoint(xPos, yPos, False)
-                If ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50033 && pt.CurrentClassName == "FrameGrabHandle")) {
-                    Return True
-                }
-                Else {
+                try {
+                    pt := UIA.ElementFromPoint(xPos, yPos, False)
+                    If ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50033 && pt.CurrentClassName == "FrameGrabHandle")) {
+                        Return True
+                    }
+                    Else {
+                        Return False
+                    }
+                } catch e {
+                    tooltip, UIA TIMED OUT!!!!
+                    UIA :=  ;// set to a different value
+                    ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                    UIA := UIA_Interface() ; Initialize UIA interface
+                    UIA.ConnectionTimeout := 6000
                     Return False
                 }
             }
@@ -9285,6 +9304,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::itis::it is
 ::ititial::initial
 ::and it's::and its
+::to it's::to its
 ::it's appearance::its appearance
 ::it's color::its color
 ::it's data::its data
@@ -11077,6 +11097,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::osemthing::something
 ::Stya::Stay
 ::udnersatnding::understanding
+::undertsands::understands
 ::transceviers::transceivers
 ::shceudled::scheduled
 ::doucmentaotin::documentation
