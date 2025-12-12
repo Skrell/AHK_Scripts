@@ -191,13 +191,12 @@ Loop, %MonCount%
     }
 }
 
-Tooltip, Total Number of Monitors is %MonCount% with Primary being %MonNum% with edges: %G_DisplayLeftEdge% - %G_DisplayRightEdge%
-sleep 3000
-Tooltip, % "Current Mon is " GetCurrentMonitorIndex() " and Win11 is " isWin11
-sleep 2000
-; Tooltip, Path to ahk %A_AhkPath%
-; sleep 2000
-Tooltip,
+line1 := "Total Number of Monitors is " MonCount " with Primary being " MonNum
+        . " and edges: " G_DisplayLeftEdge " - " G_DisplayRightEdge
+line2 := "Current Mon is " GetCurrentMonitorIndex() " and Win11 is " isWin11
+Tooltip, % line1 "`n" line2
+Sleep 5000
+Tooltip
 
 Gui, ShadowFrFull: New
 Gui, ShadowFrFull: +HwndIGUIF
@@ -746,7 +745,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             WinGet, state, MinMax, ahk_id %hWnd%
             If (state > -1 && vWinTitle != "" && MonCount > 1) {
                 currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnCurrMon(hWnd, currentMon)
+                currentMonHasActWin := IsWindowOnMonNum(hWnd, currentMon)
                 If !currentMonHasActWin {
                     WinActivate, ahk_id %hWnd%
                     Send, #+{Left}
@@ -988,10 +987,6 @@ Loop % myWindow
 }
 Return
 
-; $!Mbutton::
-    ; Send, {Enter}
-; Return
-
 $^WheelUp::
     If ((IsConsoleWindow() || textBoxSelected) && !MouseIsOverTitleBar()) {
         StopRecursion := True
@@ -1220,7 +1215,7 @@ IsMouseOnLeftSide() {
 
 
 #If !MbuttonIsEnter && !MouseIsOverTaskbar()
-$MButton::
+$*MButton::
     Global DraggingWindow
 
     StopRecursion := True
@@ -1285,7 +1280,7 @@ $MButton::
     bottomWinEdge := wy0 + wh
 
     ; msgbox, % leftWinEdge "," rightWinEdge "-" topWinEdge "," bottomWinEdge ":" offsetX " & " offsetY
-
+    startMon := MWAGetMonitorMouseIsIn()
     GetMonitorRectForMouse(mx0, my0, UseWorkArea, monL, monT, monR, monB)
     If ((leftWinEdge - monL) <= SnapRange && (leftWinEdge - monL) >= 0) {
         snapState := "left"
@@ -1648,6 +1643,8 @@ $MButton::
     Critical, Off
 
     rlsTime := A_TickCount
+    stopMon := MWAGetMonitorMouseIsIn()
+
     If (rlsTime - initTime < floor(DoubleClickTime/2)
         && MouseIsOverTitleBar(mx, my)
         && (abs(checkClickMx - mx0) <= 5)
@@ -1668,6 +1665,42 @@ $MButton::
         WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
 
     WinSet, Transparent, Off, ahk_id %hWnd%
+
+   If (GetKeyState("Ctrl","P") && startMon != stopMon && MonCount > 1) { ; mouse dragged window
+        WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+        WinGet, targetProcess, ProcessName, ahk_id %hWnd%
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %cls%
+            ; Get monitor rectangles for start/stop monitors
+        SysGet, startMonInfo, Monitor, %startMon%
+        SysGet, stopMonInfo,  Monitor, %stopMon%
+
+        dx := stopMonInfoLeft - startMonInfoLeft
+        dy := stopMonInfoTop  - startMonInfoTop
+        ; Optional: avoid weird re-entrancy from hotkey → disable other threads
+        Critical, On
+        SetWinDelay, -1
+
+        Loop %windowsFromProc% {
+            thisId := windowsFromProc%A_Index%
+
+            ; Skip windows that aren't on the start monitor
+            if !IsWindowOnMonNum(thisId, startMon)
+                continue
+
+            ; Get current position/size
+            WinGetPos, wx, wy, ww, wh, ahk_id %thisId%
+
+            ; Compute new coordinates on target monitor
+            newX := wx + dx
+            newY := wy + dy
+
+            ; Move the window directly instead of using Win+Shift+Arrow
+            WinMove, ahk_id %thisId%, , newX, newY
+        }
+
+        Critical, Off
+        previousMon := stopMon
+    }
 
     StopRecursion := False
     SetTimer, keyTrack, On
@@ -2490,24 +2523,24 @@ Altup:
         WinGet, actWndID, ID, A
         If (LclickSelected && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
             If (startHighlight) {
-                BlockInput, On
+                blockKeys := True
                 GoSub, SortAllWins
-                BlockInput, Off
+                blockKeys := False
             }
         }
         Else {
             If (GetKeyState("x","P") || actWndID == ValidWindows[1] || GroupedWindows.length() <= 1) {
                 ; canceled!
                 If (GetKeyState("x","P")) {
-                    BlockInput, On
+                    blockKeys := True
                     GoSub, ResetWins
-                    BlockInput, Off
+                    blockKeys := False
                 }
             } ; this condition is attempting to account for the user starting with alt+tab then switching to alt+`
             Else If (startHighlight && (GroupedWindows.length() > 2)  && actWndID != ValidWindows[1]) {
-                BlockInput, On
+                blockKeys := True
                 GoSub, SortGroupedWins ; currently, GroupedWindows == ValidWindows for alt+tab but not for alt+`
-                BlockInput, Off
+                blockKeys := False
             }
         }
     }
@@ -2737,7 +2770,7 @@ Return
 
         If (MonCount > 1) {
             currentMon := MWAGetMonitorMouseIsIn()
-            currentMonHasActWin := IsWindowOnCurrMon(hwndID, currentMon)
+            currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
         }
         Else {
             currentMonHasActWin := True
@@ -2905,7 +2938,7 @@ Cycle()
 
             If (MonCount > 1) {
                 currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnCurrMon(hwndID, currentMon)
+                currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
             }
             Else {
                 currentMonHasActWin := True
@@ -3167,7 +3200,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         WinGetTitle, tit, ahk_id %hwndID%
         WinGet, mmState, MinMax, ahk_id %hwndID%
         If (MonCount > 1 && mmState > -1) {
-            currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+            currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
         }
         Else If (mmState > -1) {
             currentMonHasActWin := True
@@ -3252,7 +3285,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                 }
                 loop {
                     gwHwndId := GroupedWindows[cycleCount]
-                    If !IsWindowOnCurrMon(gwHwndId, currentMon) {
+                    If !IsWindowOnMonNum(gwHwndId, currentMon) {
                         cycleCount++
                         If (cycleCount > numWindows)
                         {
@@ -3277,7 +3310,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             sleep, 100
         }
         Else {
-            If !IsWindowOnCurrMon(tempId, currentMon) {
+            If !IsWindowOnMonNum(tempId, currentMon) {
                 WinActivate, ahk_id %tempId%
                 Send, #+{Left}
             }
@@ -3485,6 +3518,110 @@ Min(a,b) {
 }
 ; -------------------------------------------------------------------------------------------
 
+#If MouseIsOverTaskbarWidgets()
+$~^Lbutton::
+    Global MonCount
+    StopRecursion := True
+    SetTimer, mouseTrack, Off
+	SetTimer, keyTrack,   Off
+
+    DetectHiddenWindows, Off
+    SysGet, MonCount, MonitorCount
+
+    KeyWait, Lbutton, U T3
+
+    sleep, 125
+    targetID := FindTopMostWindow()
+    WinGetClass, targetClass, ahk_id %targetID%
+
+    If (targetClass != "Windows.UI.Core.CoreWindow" && targetClass != "TaskListThumbnailWnd" && targetClass != "XamlExplorerHostIslandWindow") {
+        WinGet, targetProcess, ProcessName, ahk_id %targetID%
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc
+        {
+            hwndID := windowsFromProc%A_Index%
+            WinGet, isMin, MinMax, ahk_id %hwndId%
+            If (isMin == -1) {
+                WinRestore, ahk_id %hwndId%
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+                    If !currentMonHasActWin
+                        WinMinimize, ahk_id %hwndId%
+                }
+            }
+            Else If (isMin == 0) {
+                If (MonCount > 1) {
+                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+                    If currentMonHasActWin
+                        WinActivate, ahk_id %hwndId%
+                }
+                Else {
+                    WinActivate, ahk_id %hwndId%
+                }
+            }
+        }
+    }
+    WinActivate, ahk_id %targetID%
+    StopRecursion := False
+    SetTimer, mouseTrack, On
+    SetTimer, keyTrack,   On
+Return
+#If
+
+#If MouseIsOverTitleBar()
+$^LButton::
+    Global currentMon, previousMon, DoubleClickTime, MonCount
+    DetectHiddenWindows, Off
+    StopRecursion := True
+    SetTimer, mouseTrack, Off
+
+    MouseGetPos, mx1, my1, actID,
+    If !((A_TimeSincePriorHotkey < DoubleClickTime) && (A_PriorHotKey == A_ThisHotKey)) {
+        Send, {Lbutton DOWN}
+        startMon := MWAGetMonitorMouseIsIn()
+    }
+
+    KeyWait, Lbutton, U T5
+
+    MouseGetPos, mx2, my2, ,
+    If !((A_TimeSincePriorHotkey < DoubleClickTime) && (A_PriorHotKey == A_ThisHotKey))
+        Send, {Lbutton UP}
+
+    If (   (A_TimeSincePriorHotkey < DoubleClickTime)
+        && (A_PriorHotKey == A_ThisHotKey)
+        && (abs(mx2-mx1) < 15 && abs(my2-my1) < 15)) {
+
+        WinSet, AlwaysOnTop, On, ahk_id %actID%
+        WinGet, targetProcess, ProcessName, ahk_id %actID%
+        WinGetClass, targetClass, ahk_id %actID%
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc
+        {
+            hwndID := windowsFromProc%A_Index%
+            WinGet, isMin, MinMax, ahk_id %hwndId%
+            If (isMin == 0) {
+                If (MonCount > 1) {
+                    currentMonHasActWin := IsWindowOnMonNum(hwndId, startMon)
+                    If (currentMonHasActWin)
+                        WinActivate, ahk_id %hwndId%
+                }
+                Else {
+                    WinActivate, ahk_id %hwndId%
+                }
+            }
+        }
+        WinActivate, ahk_id %actID%
+        WinSet, AlwaysOnTop, Off, ahk_id %actID%
+        WinActivate, ahk_id %actID%
+    }
+
+    StopRecursion := False
+    SetTimer, mouseTrack, On
+Return
+#If
+
 #If MouseIsOverTaskbarBlank()
 $~Lbutton::
     MouseGetPos, expX1, expY1,
@@ -3502,149 +3639,8 @@ $~Lbutton::
 Return
 #If
 
-#If MouseIsOverTaskbarWidgets()
-$~^Lbutton::
-    StopRecursion := True
-    SetTimer, mouseTrack, Off
-	SetTimer, keyTrack,   Off
-
-    DetectHiddenWindows, Off
-    SysGet, MonCount, MonitorCount
-
-    KeyWait, Lbutton, U T3
-
-    sleep, 125
-    WinGet, winList, List,
-    loop % winList
-    {
-        hwndID := winList%A_Index%
-        If IsAltTabWindow(hwndId) {
-            WinGet, targetID, ID, ahk_id %hwndID%
-            break
-        }
-    }
-    WinGetClass, targetClass, ahk_id %targetID%
-
-    If (targetClass != "Windows.UI.Core.CoreWindow" && targetClass != "TaskListThumbnailWnd") {
-        WinGet, targetProcess, ProcessName, ahk_id %targetID%
-        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-        loop % windowsFromProc
-        {
-            hwndID := windowsFromProc%A_Index%
-            WinGet, isMin, MinMax, ahk_id %hwndId%
-            If (isMin == -1) {
-                WinRestore, ahk_id %hwndId%
-                If (MonCount > 1) {
-                    currentMon := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
-                    If !currentMonHasActWin
-                        WinMinimize, ahk_id %hwndId%
-                }
-            }
-            Else If (isMin == 0) {
-                If (MonCount > 1) {
-                    currentMon := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
-                    If currentMonHasActWin
-                        WinActivate, ahk_id %hwndId%
-                }
-                Else {
-                    WinActivate, ahk_id %hwndId%
-                }
-            }
-        }
-    }
-    WinActivate, ahk_id %targetID%
-
-    StopRecursion := False
-    SetTimer, mouseTrack, On
-    SetTimer, keyTrack,   On
-Return
-#If
-
-#If MouseIsOverTitleBar()
-$^LButton::
-    Global currentMon, previousMon
-    DetectHiddenWindows, Off
-    StopRecursion := True
-    SetTimer, mouseTrack, Off
-
-    Critical, On
-    MouseGetPos, mx1, my1, actID,
-    Send, {Lbutton DOWN}
-
-    KeyWait, Lbutton, U T5
-
-    MouseGetPos, mx2, my2, ,
-    Send, {Lbutton UP}
-    Critical, Off
-
-    If (MonCount > 1)
-        currentMon := MWAGetMonitorMouseIsIn()
-
-    If (abs(mx2-mx1) < 15 && abs(my2-my1) < 15) {
-        WinSet, AlwaysOnTop, On, ahk_id %actID%
-        WinGet, targetProcess, ProcessName, ahk_id %actID%
-        WinGetClass, targetClass, ahk_id %actID%
-        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-        loop % windowsFromProc
-        {
-            hwndID := windowsFromProc%A_Index%
-            WinGet, isMin, MinMax, ahk_id %hwndId%
-            If (isMin == 0) {
-                If (MonCount > 1) {
-                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
-                    If currentMonHasActWin
-                        ; WinSet, AlwaysOnTop, On, ahk_id %hwndId%
-                        ; WinSet, AlwaysOnTop, Off, ahk_id %hwndId%
-                        WinActivate, ahk_id %hwndId%
-                }
-                Else {
-                    ; WinSet, AlwaysOnTop, On, ahk_id %hwndId%
-                    ; WinSet, AlwaysOnTop, Off, ahk_id %hwndId%
-                    WinActivate, ahk_id %hwndId%
-                }
-            }
-        }
-        WinActivate, ahk_id %actID%
-        WinSet, AlwaysOnTop, Off, ahk_id %actID%
-        WinActivate, ahk_id %actID%
-    }
-    Else {
-        WinSet, AlwaysOnTop, On, ahk_id %actID%
-        WinGet, targetProcess, ProcessName, ahk_id %actID%
-        WinGetClass, targetClass, ahk_id %actID%
-        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-        loop % windowsFromProc
-        {
-            hwndID := windowsFromProc%A_Index%
-            WinGet, isMin, MinMax, ahk_id %hwndId%
-            If (isMin == 0) {
-                If (MonCount > 1) {
-                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
-                    If !currentMonHasActWin {
-                        WinActivate, ahk_id %hwndId%
-                        Send, #+{Left}
-                    }
-                }
-                Else {
-                    break
-                }
-            }
-        }
-        WinActivate, ahk_id %actID%
-        WinSet, AlwaysOnTop, Off, ahk_id %actID%
-        WinActivate, ahk_id %actID%
-        previousMon := currentMon
-    }
-
-    StopRecursion := False
-    SetTimer, mouseTrack, On
-Return
-#If
-
 #MaxThreadsPerHotkey 2
-#If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False)
+#If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
 $~LButton::
     SetTimer, SendCtrlAddLabel, Off
     tooltip,
@@ -4305,7 +4301,7 @@ ActivateWindow:
     sleep, 125
     WinGet, hwndId, ID, A
     currentMon := MWAGetMonitorMouseIsIn()
-    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
     If !currentMonHasActWin {
         Send, #+{Left}
         sleep, 150
@@ -4710,9 +4706,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             blockKeys := True
-            Send, {Ctrl UP}
+            Send, {LCtrl UP}
             Send, ^{NumpadAdd}
-            Send, {Ctrl UP}
+            ; Send, {Ctrl UP}
 
             ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
                 ; tooltip, sent to %TargetControl% with init at %initHoveredCtrlNN% - %prevPath% VS %currentPath%
@@ -5015,7 +5011,7 @@ GetCurrentMonitorIndex(){
             Return A_Index
         }
     }
-    Return 1
+    Return 0
 }
 
 CoordXCenterScreen()
@@ -5305,7 +5301,7 @@ Global MonCount
         If (IsAltTabWindow(hwndID)) {
             WinGet, state, MinMax, ahk_id %hwndID%
             If (MonCount > 1 && state > -1) {
-                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
             }
             Else If (state > -1) {
                 currentMonHasActWin := True
@@ -5334,21 +5330,26 @@ FrameShadow(HGui) {
 }
 
 ; --------------------   ChatGPT -------------------------------------------------
-FixMod(name, vk) {
+FixMod(vk) {
     if (A_IsSending)  ; skip if script is sending keys
         return
     ; If Windows thinks it's down (logical) but physically it's not, force an Up
-    if ( GetKeyState(name) && !GetKeyState(name, "P") )  ; logical down, physical up
-        ForceKeyUpVK(vk)
+    ForceKeyUpVK(vk)
 }
 ; Mouse buttons (optional)
-; FixKey("RButton", "RButton Up")
-FixKey(name, upSpec) {
-    if ( GetKeyState(name) && !GetKeyState(name, "P") ) {
-        Critical, On
-        SendInput, {%upSpec%}
-        Critical, Off
-    }
+; ForceMouseUp("L")  ; release left button
+; ForceMouseUp("R")  ; release right button
+; ForceMouseUp("M")  ; release middle button
+ForceMouseUp(btn) {
+    static DOWN := { "L":0x0002, "R":0x0008, "M":0x0020 }
+    static UP   := { "L":0x0004, "R":0x0010, "M":0x0040 }
+
+    ; Send only UP event (even if DOWN wasn't detected)
+    flags := UP[btn]
+
+    Critical, On
+    DllCall("mouse_event", "UInt", flags, "UInt", 0, "UInt", 0, "UInt", 0, "UPtr", 0)
+    Critical, Off
 }
 ; Use a low-level key-up in case Send fails
 ForceKeyUpVK(vk) {
@@ -5362,6 +5363,24 @@ ForceKeyUpVK(vk) {
 FixModifiers() {
     ; Keys we care about
     static keys := ["Shift","Ctrl","Alt","LWin","RWin"]
+    static vkMap := {}
+    static vkMapVariant := {}
+
+    vkMap["Shift"] := 0x10
+    vkMap["Ctrl"]  := 0x11
+    vkMap["Alt"]   := 0x12
+    vkMap["LWin"]  := 0x5B
+    vkMap["RWin"]  := 0x5C
+
+    vkMapVariant["LShift"] := 0xA0
+    vkMapVariant["RShift"] := 0xA1
+    vkMapVariant["LCtrl"]  := 0xA2
+    vkMapVariant["RCtrl"]  := 0xA3
+    vkMapVariant["LAlt"]   := 0xA4
+    vkMapVariant["RAlt"]   := 0xA5
+    vkMapVariant["LWin"]   := 0x5B
+    vkMapVariant["RWin"]   := 0x5C
+
     ; Track how long each key has been "mismatched"
     static stuckCount := {}
 
@@ -5385,6 +5404,8 @@ FixModifiers() {
                 SetTimer keyTrack,   Off
                 SetTimer mouseTrack, Off
                 Send, {%k% UP}      ; try to clear ghost press
+                vk := vkMap[k]
+                FixMod(vk)
                 stuckCount[k] := 0
                 SetTimer keyTrack,   On
                 SetTimer mouseTrack, On
@@ -5527,7 +5548,7 @@ mouseTrack() {
                 hwnd_id := allWindows%A_Index%
                 WinGet, isMin, MinMax, ahk_id %hwnd_id%
                 WinGet, whatProc, ProcessName, ahk_id %hwnd_id%
-                currentMonHasActWin := IsWindowOnCurrMon(hwnd_id, currentMon)
+                currentMonHasActWin := IsWindowOnMonNum(hwnd_id, currentMon)
 
                 If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
                     WinActivate, ahk_id %hwnd_id%
@@ -5568,6 +5589,9 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
 
+    If !IsAltTabWindow(WindowUnderMouseID)
+        Return False
+
     WinGet, isMax, MinMax, ahk_id %WindowUnderMouseID%
 
     titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
@@ -5583,43 +5607,70 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
         && (mClass != "Net UI Tool Window")) {
 
         ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME% : %SM_CXSIZE% - %SM_CYSIZE%
-
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
-        If (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-widthOfCaptions)) {
-            SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, % "ahk_id " WindowUnderMouseID
-            If ((yPos > y) && (yPos < (y+titlebarHeight)) && (ErrorLevel == 2)) {
+        If ((yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-widthOfCaptions))) {
+            ; tooltip, Final decision: trust WM_NCHITTEST
+            If (IsPointOnCaption(xPos, yPos, WindowUnderMouseID))
                 Return True
-            }
-            Else If (ErrorLevel != 12) {
+            Else If (mClass != "Chrome_WidgetWin_1") {
                 try {
                     pt := UIA.ElementFromPoint(xPos, yPos, False)
-                    If ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50033 && pt.CurrentClassName == "FrameGrabHandle")) {
+                    tooltip, % pt.CurrentControlType
+                    If (pt && ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50026) || (pt.CurrentControlType == 50033)))
                         Return True
-                    }
-                    Else {
+                    Else
                         Return False
-                    }
                 } catch e {
                     tooltip, UIA TIMED OUT!!!!
                     UIA :=  ;// set to a different value
                     ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                     UIA := UIA_Interface() ; Initialize UIA interface
                     UIA.ConnectionTimeout := 6000
-                    Return False
                 }
             }
-            Else
-                Return True
+            Return True
         }
-        Else
-            Return False
     }
-    Else
-        Return False
+
+    Return False
+}
+
+IsPointOnCaption(x := "", y := "", hwnd := "") {
+    CoordMode, Mouse, Screen
+
+    ; Get mouse position / window if not provided
+    if (x = "" || y = "" || hwnd = "") {
+        MouseGetPos, x, y, hwnd
+        if !hwnd
+            return False
+    }
+
+    ; Always hit-test against the top-level window (Chrome needs this)
+    hwnd := DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr")  ; GA_ROOT = 2
+    if !hwnd
+        return False
+
+    ; Pack screen coords into LPARAM (low word = x, high word = y)
+    ; signed 16-bit is fine for normal monitor layouts
+    x16 := x & 0xFFFF
+    y16 := y & 0xFFFF
+    lParam := x16 | (y16 << 16)
+
+    WM_NCHITTEST := 0x84
+    hit := DllCall("SendMessage"
+        , "ptr",  hwnd
+        , "uint", WM_NCHITTEST
+        , "ptr",  0
+        , "ptr",  lParam
+        , "int")
+
+    ; HTCAPTION = 2 → draggable caption area
+    ; This naturally excludes tabs, which are usually HTCLIENT.
+    return (hit = 2)
 }
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
-IsWindowOnCurrMon(thisWindowHwnd, currentMonNum := 0) {
+IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
     X := Y := W := H := 0
     WinGet, state, MinMax, ahk_id %thisWindowHwnd%
 
@@ -5639,17 +5690,17 @@ IsWindowOnCurrMon(thisWindowHwnd, currentMonNum := 0) {
     Loop %monCount% {
         Critical, On
         ;Get Monitor working area
-        If (A_Index == currentMonNum) {
+        If (A_Index == targetMonNum) {
             SysGet, workArea, Monitor, % A_Index
 
-            ; tooltip, % currentMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom
+            ; tooltip, % targetMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom
 
             ;Check If the focus window in on the current monitor index
-            ; If ((A_Index == currentMonNum) && (X >= (workAreaLeft-buffer) && X <= workAreaRight) && (X+W <= (abs(workAreaRight-workAreaLeft) + 2*buffer)) && (Y >= (workAreaTop-buffer) && Y < (workAreaBottom-buffer))) {
+            ; If ((A_Index == targetMonNum) && (X >= (workAreaLeft-buffer) && X <= workAreaRight) && (X+W <= (abs(workAreaRight-workAreaLeft) + 2*buffer)) && (Y >= (workAreaTop-buffer) && Y < (workAreaBottom-buffer))) {
             ; https://math.stackexchange.com/questions/2449221/calculating-percentage-of-overlap-between-two-rectangles
-            If ((A_Index == currentMonNum) && ((max(X, workAreaLeft) - min(X+W,workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom)))/(W*H) > 0.50 ) {
+            If ((A_Index == targetMonNum) && ((max(X, workAreaLeft) - min(X+W,workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom)))/(W*H) > 0.50 ) {
 
-                ; tooltip, % currentMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom " -- " "True"
+                ; tooltip, % targetMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom " -- " "True"
                 Critical, Off
                 Return True
             }
@@ -5733,7 +5784,7 @@ ShellMessage( wParam, lParam )
             ; tooltip, %classStr% - %currentMonHasActWin%
             If (state > -1) {
                 currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
                 If !currentMonHasActWin {
                     WinActivate, ahk_id %ID%
                     Send, #+{Left}
@@ -6335,7 +6386,7 @@ FindTopMostWindow() {
             If (mmState > -1) {
                 If (MonCount > 1) {
                     currentMon := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
                 }
                 Else {
                     currentMonHasActWin := True
@@ -6367,7 +6418,7 @@ FindSecondMostWindow(ref_hwndID := "") {
             If (mmState > -1) {
                 If (MonCount > 1) {
                     currentMon := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := IsWindowOnCurrMon(hwndId, currentMon)
+                    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
                 }
                 Else {
                     currentMonHasActWin := True
@@ -6812,7 +6863,7 @@ MouseIsOverTaskbarWidgets() {
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
 
-    Return (mClass == "TaskListThumbnailWnd" || mClass == "Windows.UI.Core.CoreWindow")
+    Return (mClass == "TaskListThumbnailWnd" || mClass == "Windows.UI.Core.CoreWindow" || mClass == "XamlExplorerHostIslandWindow")
 }
 
 MouseIsOverTaskbarBlank() {
