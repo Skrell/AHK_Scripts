@@ -12,6 +12,7 @@
 #InstallKeybdHook
 #UseHook
 #include %A_ScriptDir%\UIAutomation-main\Lib\UIA_Interface.ahk
+; #include %A_ScriptDir%\Acc.ahk
 #HotString EndChars ()[]{}:;,.?!`n `t
 #MaxhotKeysPerInterval 500
 #KeyHistory 25
@@ -124,7 +125,8 @@ Global hBottom    := ""
 Process, Priority,, High
 
 Global UIA := UIA_Interface() ; Initialize UIA interface
-UIA.ConnectionTimeout := 6000
+UIA.TransactionTimeout := 2000
+UIA.ConnectionTimeout  := 20000
 
 Menu, Tray, Icon
 Menu, Tray, NoStandard
@@ -382,7 +384,7 @@ OnExit, UnhookHooks
 
 SetTimer mouseTrack, 10
 SetTimer keyTrack, 5
-SetTimer FixModifiers, 50
+; SetTimer FixModifiers, 50
 
 Return
 
@@ -731,6 +733,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                     WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 }
+                tooltip, nope %vWinClass%
                 Return
             }
         }
@@ -756,7 +759,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
             }
             Else If (vWinClass != "#32770" && WinExist("ahk_class #32770")) {
-                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
                 WinSet, AlwaysOnTop, Off, ahk_class #32770
                 WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
             }
@@ -2550,6 +2553,7 @@ Altup:
     GroupedWindows := []
     startHighlight := False
     hitTAB         := False
+    hitTilde       := False
     LclickSelected := False
     Critical, Off
 Return
@@ -2828,6 +2832,7 @@ Return
 #If
 
 $!Lbutton::
+    ; tooltip, %hitTab% - %hitTilde%
     If hitTab {
         LclickSelected := True
         MouseGetPos, , , _winIdD,
@@ -2837,7 +2842,7 @@ $!Lbutton::
 
         GoSub, DrawRect
         DrawWindowTitlePopup(actTitle, pp)
-        KeyWait, LAlt, U
+        KeyWait, LAlt, U T3
         GoSub, FadeOutWindowTitle
         GoSub, Altup
         SetTimer, mouseTrack, On
@@ -2854,8 +2859,9 @@ $!Lbutton::
 
         GoSub, DrawRect
         DrawWindowTitlePopup(actTitle, pp, True)
-        KeyWait, LAlt, U
+        KeyWait, LAlt, U T3
         GoSub, FadeOutWindowTitle
+        GoSub, Altup
         SetTimer, mouseTrack, On
         SetTimer, keyTrack,   On
     }
@@ -3511,10 +3517,10 @@ GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
 }
 
 Max(a,b) {
-    Return a > b ? a : b
+    Return (a > b) ? a : b
 }
 Min(a,b) {
-    Return a < b ? a : b
+    Return (a < b) ? a : b
 }
 ; -------------------------------------------------------------------------------------------
 
@@ -3622,6 +3628,7 @@ $^LButton::
 Return
 #If
 
+
 #If MouseIsOverTaskbarBlank()
 $~Lbutton::
     MouseGetPos, expX1, expY1,
@@ -3638,6 +3645,178 @@ $~Lbutton::
     MouseGetPos, expX2, expY2,
 Return
 #If
+
+
+; ----------------------- EXAMPLE USAGE ----------------------------
+; clickType := ExplorerHitTestType()
+    ; ; --- Handle double-click on BLANK SPACE ---
+    ; if (clickType = "blank") {
+        ; if (A_PriorHotkey = "~LButton" && A_TimeSincePriorHotkey < 300) {
+            ; ; >>> YOUR DOUBLE-CLICK-BLANK ACTION HERE <<<
+            ; Tooltip, Double-click on blank space
+; ------------------------------------------------------------------
+ExplorerHitTestType() {
+    /*
+        Returns one of:
+            "blank"         - blank space in file list
+            "item"          - file/folder item
+            "columnHeader"  - column header in Details view
+            "navTreeItem"   - left navigation tree item
+            "breadcrumb"    - breadcrumb / address bar segment (heuristic)
+            "other"         - anything else, or not Explorer
+    */
+
+    static ROLE_SYSTEM_LIST        := 0x21
+    static ROLE_SYSTEM_LISTITEM    := 0x22
+    static ROLE_SYSTEM_OUTLINEITEM := 0x24
+    static ROLE_SYSTEM_COLUMNHEADER:= 0x19
+    static ROLE_SYSTEM_TOOLBAR     := 0x16
+    static ROLE_SYSTEM_PUSHBUTTON  := 0x2B
+    static ROLE_SYSTEM_LINK        := 0x1E
+    static ROLE_SYSTEM_SEPARATOR   := 0x0C
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, x, y, winHwnd
+    if (!winHwnd)
+        return "other"
+
+    WinGetClass, cls, ahk_id %winHwnd%
+    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
+        return "other"
+
+    ; Get MSAA object under cursor
+    acc := Acc_ObjectFromPoint(x, y)
+    if !IsObject(acc)
+        return "other"
+
+    ; Collect this object + its parents up to a small depth
+    objs := []
+    roles := []
+    cur := acc
+
+    loop, 8 {
+        if !IsObject(cur)
+            break
+        r := Explorer__GetRoleNum(cur)
+        objs.Push(cur)
+        roles.Push(r)
+        try cur := cur.accParent
+        catch
+        {
+            cur := ""
+            break
+        }
+    }
+
+    if (roles.Length() = 0)
+        return "other"
+
+    startRole := roles[1]
+
+    hasOutlineItem := false
+    hasToolbar     := false
+
+    for i, r in roles {
+        if (r = ROLE_SYSTEM_OUTLINEITEM)
+            hasOutlineItem := true
+        else if (r = ROLE_SYSTEM_TOOLBAR)
+            hasToolbar := true
+    }
+
+    ; --- Left navigation tree (anywhere within OUTLINEITEM subtree) ---
+    if (hasOutlineItem)
+        return "navTreeItem"
+
+    ; --- Direct checks on the object under cursor ---
+    if (startRole = ROLE_SYSTEM_LIST)
+        return "blank"
+
+    if (startRole = ROLE_SYSTEM_LISTITEM)
+        return "item"
+
+    if (startRole = ROLE_SYSTEM_COLUMNHEADER)
+        return "columnHeader"
+
+    ; --- Breadcrumb / address bar (heuristic) ---
+    ; Typically a PUSHBUTTON / LINK / SEPARATOR on a toolbar above the list.
+    if (hasToolbar
+        && (startRole = ROLE_SYSTEM_PUSHBUTTON
+         || startRole = ROLE_SYSTEM_LINK
+         || startRole = ROLE_SYSTEM_SEPARATOR))
+    {
+        return "breadcrumb"
+    }
+
+    return "other"
+}
+; ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Explorer__GetRoleNum(accObj) {
+    ; Safely get numeric MSAA role
+    role := ""
+    try role := accObj.accRole(0)
+    catch
+        return 0
+
+    ; Sometimes Acc.ahk may return a string; handle that as a fallback
+    if role is Integer
+        return role
+
+    ; String fallback, normalized
+    r := Trim(role)
+    StringLower, r, r
+
+    if (r = "list")
+        return 0x21
+    if (r = "list item" || r = "listitem")
+        return 0x22
+    if (r = "outline item" || r = "outlineitem")
+        return 0x24
+    if (r = "columnheader" || r = "column header")
+        return 0x19
+    if (r = "toolbar")
+        return 0x16
+    if (r = "push button" || r = "pushbutton")
+        return 0x2B
+    if (r = "link")
+        return 0x1E
+    if (r = "separator")
+        return 0x0C
+
+    return 0
+}
+; ------------------------------------------------------------------
+IsExplorerBlankSpaceClick() {
+    ; Returns true if the mouse is on "blank space" in
+    ; a Windows Explorer / file-dialog folder view.
+
+    static ROLE_SYSTEM_LIST := 0x21  ; MSAA role: "List"
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, x, y, winHwnd
+    if (!winHwnd)
+        return false
+
+    ; Only care about Explorer + common dialogs
+    WinGetClass, cls, ahk_id %winHwnd%
+    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
+        return false
+
+    ; Use Acc library: object under the cursor
+    ; Acc_ObjectFromPoint is provided by Acc.ahk for v1
+    acc := Acc_ObjectFromPoint(x, y)
+    if !IsObject(acc)
+        return false
+
+    ; In Explorer's folder view:
+    ; - blank area → role = LIST
+    ; - item      → role = LISTITEM, etc.
+    roleNum := ""
+    try roleNum := acc.accRole(0)
+    catch
+        return false
+
+    return (roleNum == ROLE_SYSTEM_LIST)
+}
 
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
@@ -3657,16 +3836,15 @@ $~LButton::
 
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
-
+    ; tooltip, % "is it blank? " IsExplorerBlankSpaceClick()
     initTime := A_TickCount
 
     If (    A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < DoubleClickTime)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (_winCtrlD == "SysListView321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")) {
-        tooltip, double clicked
-        ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %_winCtrlD%
-        If ((LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
+
+        If (isBlankSpaceExplorer || isBlankSpaceNonExplorer) {
             If (_winCtrlD == "SysListView321") {
                 Send, {Backspace}
                 SetTimer, RunDynaExprTimeout, -1
@@ -3681,7 +3859,7 @@ $~LButton::
         ; LbuttonEnabled     := False
 
         If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
-            tooltip, getting path
+            ; tooltip, getting path
             currentPath    := ""
             loop 100 {
                 currentPath := GetExplorerPath(_winIdD)
@@ -3689,6 +3867,7 @@ $~LButton::
                     break
                 sleep, 1
             }
+            ; tooltip, path found
             ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                 SendCtrlAdd(_winIdD, prevPath, currentPath, wmClassD)
@@ -3700,7 +3879,7 @@ $~LButton::
             Return
         }
         Else {
-            tooltip, sending
+            tooltip, sending to non-explorer
 
             SendCtrlAdd(_winIdD,,,wmClassD)
             SetTimer, keyTrack, On
@@ -3719,20 +3898,23 @@ $~LButton::
                 break
             sleep, 1
         }
+        isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
     }
-
-    LBD_HexColor1 := 0x000000
-    LBD_HexColor2 := 0x000000
-    LBD_HexColor3 := 0x000000
-    CoordMode, Pixel, Screen
-    lbX1 -= 3
-    lbY1 -= 3
-    loop 3 {
-        PixelGetColor, LBD_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
-        lbX1 += 1
-        lbY1 += 1
+    Else {
+        LBD_HexColor1 := 0x000000
+        LBD_HexColor2 := 0x000000
+        LBD_HexColor3 := 0x000000
+        CoordMode, Pixel, Screen
+        lbX1 -= 2
+        lbY1 -= 2
+        loop 5 {
+            PixelGetColor, LBD_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
+            lbX1 += 1
+            lbY1 += 1
+        }
+        CoordMode, Mouse, Screen
+        isBlankSpaceNonExplorer := (LBD_HexColor1 == 0xFFFFFF && LBD_HexColor2 == 0xFFFFFF && LBD_HexColor3  == 0xFFFFFF)
     }
-    CoordMode, Mouse, Screen
 
     KeyWait, LButton, U T5
 
@@ -3741,18 +3923,17 @@ $~LButton::
     rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
 
-
     ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < floor(DoubleClickTime/2))
         && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
-        && (LBD_HexColor1 == 0xFFFFFF) && (LBD_HexColor2 == 0xFFFFFF) && (LBD_HexColor3  == 0xFFFFFF)) {
+        &&  isBlankSpaceExplorer ) {
 
         SetTimer, SendCtrlAddLabel, -125
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (InStr(_winCtrlD,"SysHeader32",True)  || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
-        && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3 != 0xFFFFFF)) {
+        && (isBlankSpaceExplorer || isBlankSpaceNonExplorer)) {
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
@@ -3778,11 +3959,12 @@ $~LButton::
                 Return
             }
         } catch e {
-            tooltip, UIA TIMED OUT!!!!
+            tooltip, 1: UIA TIMED OUT!!!!
             UIA :=  ;// set to a different value
             ; VarSetCapacity(UIA, 0) ;// set capacity to zero
             UIA := UIA_Interface() ; Initialize UIA interface
-            UIA.ConnectionTimeout := 6000
+            UIA.TransactionTimeout := 2000
+            UIA.ConnectionTimeout  := 20000
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
@@ -3799,11 +3981,12 @@ $~LButton::
                 Return
                 }
         } catch e {
-            tooltip, UIA TIMED OUT!!!!
+            tooltip, 2: UIA TIMED OUT!!!!
             UIA :=  ;// set to a different value
             ; VarSetCapacity(UIA, 0) ;// set capacity to zero
             UIA := UIA_Interface() ; Initialize UIA interface
-            UIA.ConnectionTimeout := 6000
+            UIA.TransactionTimeout := 2000
+            UIA.ConnectionTimeout  := 20000
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
             Return
@@ -3832,7 +4015,7 @@ $~LButton::
         && (InStr(_winCtrlD, "SysTreeView32", True))
         && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
         && (timeDiff < floor(DoubleClickTime/2))
-        && (LBD_HexColor1 != 0xFFFFFF) && (LBD_HexColor2 != 0xFFFFFF) && (LBD_HexColor3  != 0xFFFFFF)) {
+        && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
 
         currentPath := ""
         loop 100 {
@@ -3843,25 +4026,27 @@ $~LButton::
         }
         SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD, _winCtrlD)
     }
-    Else If (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25) {
-        try {
-            pt := UIA.ElementFromPoint(lbX1,lbY1,False)
-            mElPos := pt.CurrentBoundingRectangle
-            ; RangeTip(mElPos.l, mElPos.t, mElPos.r-mElPos.l, mElPos.b-mElPos.t, "Blue", 4)
-            If (abs(mElPos.t - mElPos.b) <= 40 ) {
-                ; tooltip, % pt.CurrentControlType "-" abs(mElPos.t - mElPos.b)
-                textBoxSelected := (pt.CurrentControlType == 50004)
-            }
-            Else
-                textBoxSelected := False
-        } catch e {
-                tooltip, UIA TIMED OUT!!!!
-                UIA :=  ;// set to a different value
-                ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                UIA := UIA_Interface() ; Initialize UIA interface
-                UIA.ConnectionTimeout := 6000
-        }
-    }
+    ; Else If (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25) {
+        ; try {
+            ; pt := UIA.ElementFromPoint(lbX1,lbY1,False)
+            ; If (pt)
+                ; mElPos := pt.CurrentBoundingRectangle
+            ; ; RangeTip(mElPos.l, mElPos.t, mElPos.r-mElPos.l, mElPos.b-mElPos.t, "Blue", 4)
+            ; If (mElPos && abs(mElPos.t - mElPos.b) <= 40 ) {
+                ; ; tooltip, % pt.CurrentControlType "-" abs(mElPos.t - mElPos.b)
+                ; textBoxSelected := (pt.CurrentControlType == 50004)
+            ; }
+            ; Else
+                ; textBoxSelected := False
+        ; } catch e {
+                ; tooltip, 3: UIA TIMED OUT!!!!
+                ; UIA :=  ;// set to a different value
+                ; ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                ; UIA := UIA_Interface() ; Initialize UIA interface
+                ; UIA.TransactionTimeout := 2000
+                ; UIA.ConnectionTimeout  := 20000
+        ; }
+    ; }
 
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
@@ -3959,11 +4144,12 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
             }
         }
     } catch e {
-        tooltip, UIA TIMED OUT!!!!
+        tooltip, 4: UIA TIMED OUT!!!!
         UIA :=  ;// set to a different value
         ; VarSetCapacity(UIA, 0) ;// set capacity to zero
         UIA := UIA_Interface() ; Initialize UIA interface
-        UIA.ConnectionTimeout := 6000
+        UIA.TransactionTimeout := 2000
+        UIA.ConnectionTimeout  := 20000
         LbuttonEnabled := True
     }
     Return
@@ -4031,7 +4217,7 @@ $~Ctrl::
 Return
 
 LaunchWinFind:
-    If (A_PriorHotkey = "~$Ctrl" && A_TimeSincePriorHotkey < (DoubleClickTime/2))
+    If (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (DoubleClickTime/2))
     {
         StopRecursion   := True
         SetTimer, mouseTrack, off
@@ -4211,80 +4397,6 @@ ActivateWindow:
         fulltitle := Trim(fulltitle)
     }
 
-    ; cdt := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
-    ; desknum := VD.getDesktopNumOfWindow(fulltitle)
-    ; If (desknum < cdt)
-    ; {
-        ; WinGet, vState, MinMax, %fulltitle%
-        ; WinGet, vID, ID, %fulltitle%
-        ; WinGetPos, vwx,vwy,vww,, %fulltitle%
-        ; WinSet, Transparent, 0, %fulltitle%
-        ; ; VD.MoveWindowToCurrentDesktop(fulltitle)
-        ; DllCall(MoveWindowToDesktopNumberProc, "Ptr", vID, "Int", cdt, "Int")
-
-        ; If (vState > -1) {
-            ; ; WinRestore , %fulltitle%
-            ; WinActivate, %fulltitle%
-            ; offscreenX := -1*vww
-
-            ; WinMove, %fulltitle%,, %offscreenX%, , , ,
-
-            ; WinSet, Transparent, 255, %fulltitle%
-            ; loopCount := (vwx+abs(offscreenX))/100
-
-            ; loop, %loopCount%
-            ; {
-                ; offscreenX := offscreenX + 100
-                ; WinMove, %fulltitle%,, offscreenX, , , ,
-                ; sleep 1
-            ; }
-            ; WinMove, %fulltitle%,, vwx, , , ,
-        ; }
-        ; Else {
-            ; sleep 500
-            ; WinMinimize, %fulltitle%
-            ; WinSet, Transparent, 255, %fulltitle%
-            ; ; WinRestore , %fulltitle%
-            ; WinActivate, %fulltitle%
-        ; }
-    ; }
-    ; Else If (desknum > cdt)
-    ; {
-        ; WinGet, vState, MinMax, %fulltitle%
-        ; WinGet, vID, ID, %fulltitle%
-        ; WinGetPos, vwx,vwy,vww,, %fulltitle%
-        ; WinSet, Transparent, 0, %fulltitle%
-        ; ; VD.MoveWindowToCurrentDesktop(fulltitle)
-        ; DllCall(MoveWindowToDesktopNumberProc, "Ptr", vID, "Int", cdt, "Int")
-
-        ; If (vState > -1) {
-            ; ; WinRestore , %fulltitle%
-            ; WinActivate, %fulltitle%
-            ; offscreenX := A_ScreenWidth
-
-            ; WinMove, %fulltitle%,, %offscreenX%, , , ,
-
-            ; WinSet, Transparent, 255, %fulltitle%
-            ; loopCount := (A_ScreenWidth-vwx)/100
-            ; ; tooltip, %loopCount%
-            ; loop, %loopCount%
-            ; {
-                ; offscreenX := offscreenX - 100
-                ; WinMove, %fulltitle%,, offscreenX, , , ,
-                ; sleep 1
-            ; }
-            ; WinMove, %fulltitle%,, vwx, , , ,
-        ; }
-        ; Else {
-            ; sleep 500
-            ; WinMinimize, %fulltitle%
-            ; WinSet, Transparent, 255, %fulltitle%
-            ; ; WinRestore , %fulltitle%
-            ; WinActivate, %fulltitle%
-        ; }
-    ; }
-    ; Else
-    ; {
     If (fulltitle == "Calculator") {
         ; https://www.autohotkey.com/boards/viewtopic.php?t=43997
         WinGet, CalcIDs, List, Calculator
@@ -4299,13 +4411,13 @@ ActivateWindow:
 
     ; tooltip, activating %fulltitle%
     sleep, 125
-    WinGet, hwndId, ID, A
-    currentMon := MWAGetMonitorMouseIsIn()
-    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
-    If !currentMonHasActWin {
-        Send, #+{Left}
-        sleep, 150
-     }
+    ; WinGet, hwndId, ID, A
+    ; currentMon := MWAGetMonitorMouseIsIn()
+    ; currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+    ; If !currentMonHasActWin {
+        ; Send, #+{Left}
+        ; sleep, 150
+     ; }
     GoSub, DrawRect
     sleep, 200
     ClearRect()
@@ -4656,7 +4768,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         Critical, On
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             WaitForExplorerLoad(initTargetHwnd, , True)
-            tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             loop, 125 {
                 ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
                 ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
@@ -4669,7 +4781,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
         Else If (TargetControl == "DirectUIHWND2" && lClassCheck == "#32770") {
             WaitForExplorerLoad(initTargetHwnd, True)
-            tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             loop, 125 {
                 ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
                 ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
@@ -4684,7 +4796,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             WaitForExplorerLoad(initTargetHwnd)
         }
         Else {
-            tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             loop, 125 {
                 ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
                 ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
@@ -4702,7 +4814,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
 
-        tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
+        ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
 
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             blockKeys := True
@@ -4886,7 +4998,7 @@ IsEmptySpace() {
 AccObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
    static VT_DISPATCH := 9, F_OWNVALUE := 1, h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
 
-   (x = "" || y = "") ? DllCall("GetCursorPos", "Int64P", pt) : pt := x & 0xFFFFFFFF | y << 32
+   (x == "" || y == "") ? DllCall("GetCursorPos", "Int64P", pt) : pt := x & 0xFFFFFFFF | y << 32
    VarSetCapacity(varChild, 8 + 2*A_PtrSize, 0)
    If DllCall("oleacc\AccessibleObjectFromPoint", "Int64", pt, "PtrP", pAcc, "Ptr", &varChild) = 0
       Return ComObject(VT_DISPATCH, pAcc, F_OWNVALUE), _idChild_ := NumGet(varChild, 8, "UInt")
@@ -5612,20 +5724,26 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
             ; tooltip, Final decision: trust WM_NCHITTEST
             If (IsPointOnCaption(xPos, yPos, WindowUnderMouseID))
                 Return True
-            Else If (mClass != "Chrome_WidgetWin_1") {
+            ; Else If (mClass != "Chrome_WidgetWin_1") {
+            Else  {
                 try {
                     pt := UIA.ElementFromPoint(xPos, yPos, False)
                     tooltip, % pt.CurrentControlType
-                    If (pt && ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50026) || (pt.CurrentControlType == 50033)))
+                    If (pt && mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName == "FrameGrabHandle")
+                        Return True
+                    Else If (pt && mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName != "FrameGrabHandle")
+                        Return False
+                    Else If (pt && ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50026) || (pt.CurrentControlType == 50033)))
                         Return True
                     Else
                         Return False
                 } catch e {
-                    tooltip, UIA TIMED OUT!!!!
+                    tooltip, 5: UIA TIMED OUT!!!!
                     UIA :=  ;// set to a different value
                     ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                     UIA := UIA_Interface() ; Initialize UIA interface
-                    UIA.ConnectionTimeout := 6000
+                    UIA.TransactionTimeout := 2000
+                    UIA.ConnectionTimeout  := 20000
                 }
             }
             Return True
@@ -5735,99 +5853,12 @@ MWAGetMonitorMouseIsIn(buffer := 0) ; we didn't actually need the "Monitor = 0"
     Return ActiveMon
 }
 
-
 join( strArray )
 {
   s := ""
   for i,v in strArray
     s .= ", " . v
   Return substr(s, 3)
-}
-
-ShellMessage( wParam, lParam )
-{
-    Global nil, lastWinMinHwndId, PrevActiveWindows, VD, MonCount, lastHwnd, prevWParam1, prevWParam2, prevWParam3, prevWParam4
-
-    ; tooltip, %wParam% %prevWParam1% %prevWParam2% %prevWParam3% %prevWParam4%
-    If (wParam = 1) ;  HSHELL_WINDOWCREATED := 1
-    {
-        ID := lParam
-        ; loop 10 {
-            ; sleep 100
-            ; WinGetPos, x, y, w, h, ahk_id %ID%
-            ; If (x == x2 && y == y2 && w == w2 && h == h2)
-                ; break
-            ; x2 := x
-            ; y2 := y
-            ; w2 := w
-            ; h2 := h
-        ; }
-        ; sleep, 300
-        WinGetTitle, title, ahk_id %ID%
-        WinGet, procStr, ProcessName, ahk_id %ID%
-        WinGet, hwndID, ID, ahk_id %ID%
-        WinGetClass, classStr, ahk_id %ID%
-
-        WinWaitActive, ahk_id %ID%, , 3
-        ; tooltip, %classStr%
-        If (classStr == "OperationStatusWindow" || classStr == "#32770") {
-            sleep 100
-            WinSet, AlwaysOnTop, On, ahk_class %classStr%
-        }
-
-        If (IsAltTabWindow(hwndID) || (procStr == "OUTLOOK.EXE" && classStr == "#32770")) {
-            If (MonCount == 1) {
-                Return
-            }
-
-            WinGet, state, MinMax, ahk_id %ID%
-            ; tooltip, %classStr% - %currentMonHasActWin%
-            If (state > -1) {
-                currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
-                If !currentMonHasActWin {
-                    WinActivate, ahk_id %ID%
-                    Send, #+{Left}
-                }
-            }
-        }
-    }
-}
-
-ShellMsg( wParam, lParam )
-{
-    Global nil, lastWinMinHwndId, PrevActiveWindows, VD, MonCount, lastHwnd, prevWParam1, prevWParam2, prevWParam3
-
-    If (wParam = 5)  ;HSHELL_GETMINRECT
-    {
-         hwnd := NumGet( lParam+0 )
-         WinGet, status, MinMax, ahk_id %hwnd%
-         WinGetClass, cl, ahk_id %hwnd%
-         If (status == -1)
-         {
-             lastWinMinHwndId := Format("0x{1:x}",hwnd)
-             ; tooltip, minimized %lastWinMinHwndId%
-             ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd% ; 0x80 is WS_EX_TOOLWINDOW
-             ; sleep 50
-             ; WinSet, ExStyle, ^0x80,  ahk_id %hwnd%
-             ;https://www.autohotkey.com/boards/viewtopic.php?t=59047
-             ; WinGet oldxs, ExStyle, ahk_id %hwnd%
-             ; newxs := (oldxs & ~0x40000) | 0x80
-             ; If (newxs != oldxs)
-             ; {
-                ; WinSet ExStyle, % newxs, ahk_id %hwnd%
-                ; WinSet ExStyle, % oldxs, ahk_id %hwnd%
-             ; }
-         }
-    }
-     ; If (wParam=2) ;  HSHELL_WINDOWDESTROYED := 2
-     ; {
-         ; ID:=lParam
-         ; If (nil == ID)
-         ; {
-             ; MsgBox, %ID% closed.
-         ; }
-     ; }
 }
 
 MoveAndFadeWindow(Hwnd, initPosx, toRight := True, fadeInOut := "out") {
@@ -6987,25 +7018,29 @@ GetNameOfIconUnderMouse() {
    Return Name
 }
 
+;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
 ; https://github.com/Drugoy/Autohotkey-scripts-.ahk/blob/master/Libraries/Acc.ahk
 
 Acc_Init() {
-	Static h
-	If Not h
-		h:=DllCall("LoadLibrary","Str","oleacc","Ptr")
+    Static h
+    If Not h
+        h:=DllCall("LoadLibrary","Str","oleacc","Ptr")
 }
 Acc_ObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
-	Acc_Init()
-	If	DllCall("oleacc\AccessibleObjectFromPoint", "Int64", x==""||y==""?0*DllCall("GetCursorPos","Int64*",pt)+pt:x&0xFFFFFFFF|y<<32, "Ptr*", pacc, "Ptr", VarSetCapacity(varChild,8+2*A_PtrSize,0)*0+&varChild)=0
-	Return ComObjEnwrap(9,pacc,1), _idChild_:=NumGet(varChild,8,"UInt")
+    Acc_Init()
+    If  DllCall("oleacc\AccessibleObjectFromPoint", "Int64", x==""||y==""?0*DllCall("GetCursorPos","Int64*",pt)+pt:x&0xFFFFFFFF|y<<32, "Ptr*", pacc, "Ptr", VarSetCapacity(varChild,8+2*A_PtrSize,0)*0+&varChild)=0
+        Return ComObjEnwrap(9,pacc,1), _idChild_:=NumGet(varChild,8,"UInt")
 }
 Acc_Parent(Acc) {
-	try parent:=Acc.accParent
-	Return parent?Acc_Query(parent):
+    try parent:=Acc.accParent
+    return parent ? Acc_Query(parent) : ""
 }
 Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=81731&p=509530#509530
-	try Return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
+    try Return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
 }
+
+;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
 ;
@@ -7057,7 +7092,6 @@ Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=817
 ;   Common Misspellings - the main list
 ;   Ambiguous entries - commented out
 ;------------------------------------------------------------------------------
-
 ;------------------------------------------------------------------------------
 ; Settings
 ;------------------------------------------------------------------------------
@@ -9364,6 +9398,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's egg::its egg
 ::it's failure::its failure
 ::it's function::its function
+::it's functionality::its functionality
 ::it's fur::its fur
 ::it's habitat::its habitat
 ::it's impact::its impact
@@ -9408,6 +9443,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's young::its young
 ::its a::it's a
 ::its an::it's an
+::its apparently::it's apparently
 ::its the::it's the
 ::itwas::it was
 ::its any::it's any
