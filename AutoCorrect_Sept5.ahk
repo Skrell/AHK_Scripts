@@ -733,7 +733,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                     WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 }
-                tooltip, nope %vWinClass%
                 Return
             }
         }
@@ -741,6 +740,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         LbuttonEnabled := False
 
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
+            Critical, On
+            prevActiveWindows.push(hWnd)
+            Critical, Off
 
             KeyWait, Lbutton, U T10
             WaitForFadeInStop(hWnd)
@@ -772,6 +774,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                         break
                     sleep, 2
                 }
+                Send, {LCtrl UP}
+                Send, {LShift UP}
+                Send, {. UP}
                 Send, {Backspace}
             }
 
@@ -781,10 +786,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 LbuttonEnabled := True
                 Return
             }
-
-            Critical, On
-            prevActiveWindows.push(hWnd)
-            Critical, Off
 
             initFocusedCtrl := ""
             loop, 100 {
@@ -836,7 +837,7 @@ WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll 
 
     UIA   := UIA_Interface()
     root  := UIA.ElementFromHandle(hwnd)
-    if !root
+    if !IsObject(root)
         return 0
 
     start := A_TickCount
@@ -934,21 +935,21 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
             return false
 
         tb := UIA.ElementFromHandle(hTask)
-        if (tb) {
+        if (IsObject(tb)) {
             ; Try several robust queries (name is localized; AutomationId often stable)
             startEl := tb.FindFirstBy("AutomationId=StartButton")
 
-            if !startEl
+            if !IsObject(startEl)
                 startEl := tb.FindFirstByNameAndType("Start", "Button")
-            if !startEl
+            if !IsObject(startEl)
                 startEl := tb.FindFirstByNameAndType("Start menu", "Button")
-            if !startEl
+            if !IsObject(startEl)
                 return false
 
             ; Get bounding rectangle and compute center
             ; UIA_Interface exposes CurrentBoundingRectangle (object with x,y,w,h)
             rect := startEl.CurrentBoundingRectangle
-            if (rect == "") {
+            if (!IsObject(rect) && rect == "") {
                 ; Older versions may expose .BoundingRectangle or GetBoundingRectangle()
                 rect := startEl.BoundingRectangle ? startEl.BoundingRectangle : startEl.GetBoundingRectangle()
             }
@@ -959,7 +960,7 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
             tooltip,
         }
 
-        if (rect) {
+        if (IsObject(rect)) {
             sx := round(rect.l + (rect.r-rect.l)/2)
             sy := round(rect.t + (rect.b-rect.t)/2)
             buttonWidth := rect.r-rect.l
@@ -1228,6 +1229,8 @@ $*MButton::
     Hotkey, Mbutton & Rbutton, DoNothing, On
 
     MouseGetPos, mx0, my0, hWnd, ctrl, 2
+
+    isOverTitleBar        := MouseIsOverTitleBar(mx0, my0)
     checkClickMx          := mx0
     checkClickMy          := my0
     wx0                   := 0
@@ -1649,7 +1652,7 @@ $*MButton::
     stopMon := MWAGetMonitorMouseIsIn()
 
     If (rlsTime - initTime < floor(DoubleClickTime/2)
-        && MouseIsOverTitleBar(mx, my)
+        && isOverTitleBar
         && (abs(checkClickMx - mx0) <= 5)
         && (abs(checkClickMy - my0) <= 5)) {
 
@@ -3818,6 +3821,130 @@ IsExplorerBlankSpaceClick() {
     return (roleNum == ROLE_SYSTEM_LIST)
 }
 
+; =========================================
+; Smart IsCaretInEdit – AHK v1.1+
+;   useUIA  = try UIA (UIA_Interface.ahk) if available
+;   useMSAA = try MSAA (Acc.ahk) if available
+; =========================================
+
+IsCaretInEdit(useUIA := true, useMSAA := true) {
+    WinGet, hWnd, ID, A
+    if !hWnd
+        return false
+
+    ; ================================
+    ; 1) Classic Win32 detection
+    ; ================================
+    ControlGetFocus, ctrl, ahk_id %hWnd%
+    if (ctrl != "") {
+        ControlGet, hCtrl, Hwnd,, %ctrl%, ahk_id %hWnd%
+        if (hCtrl) {
+            WinGetClass, cls, ahk_id %hCtrl%
+
+            ; Classic edit controls
+            if (cls = "Edit"
+             || cls = "RichEdit20A"
+             || cls = "RichEdit20W"
+             || cls = "RICHEDIT50W")
+                return true
+        }
+    }
+
+    ; ================================
+    ; 2) UIA detection (if enabled)
+    ; ================================
+    if (useUIA && UIA_IsFocusedEditable())
+        return true
+
+    ; ================================
+    ; 3) MSAA fallback (if enabled)
+    ; ================================
+    if (useMSAA && MSAA_IsFocusedEditable())
+        return true
+
+    return false
+}
+
+UIA_IsFocusedEditable() {
+    Global UIA
+
+    try {
+        if !IsObject(UIA)
+            return false    ; or instantiate here if desired
+
+        focus := UIA.GetFocusedElement()
+        if !IsObject(focus)
+            return false
+
+        ct := focus.CurrentControlType  ; 50004 = Edit
+
+        ; Direct Edit control type -> editable
+        if (ct = 50004)
+            return true
+
+        ; More generic: if it supports ValuePattern and is not read-only
+        vp := ""
+        try vp := focus.GetCurrentPatternAs("Value")
+        catch
+            vp := ""
+
+        if (IsObject(vp)) {
+            isRO := ""
+            try isRO := vp.CurrentIsReadOnly
+            catch
+                isRO := ""
+
+            ; If property exists and is false → editable
+            if (isRO = false)
+                return true
+
+            ; If IsReadOnly missing but ValuePattern exists at all,
+            ; we still *suspect* it’s editable.
+            if (isRO = "")
+                return true
+        }
+    } catch e {
+        return false
+    }
+
+    return false
+}
+
+MSAA_IsFocusedEditable() {
+    ; Needs Acc.ahk (Acc_Role, etc.)
+    if !IsFunc("Acc_Role")
+        return false
+
+    acc := Acc_Focus()
+    if !acc
+        return false
+
+    role := ""
+    try role := acc.accRole(0)
+    catch
+        role := ""
+
+    ; Numeric ROLE_SYSTEM_TEXT
+    if (role = 42)
+        return true
+
+    ; String role via Acc_Role()
+    roleStr := ""
+    try roleStr := Acc_Role(acc)
+    catch
+        roleStr := ""
+
+    if (roleStr != "") {
+        StringLower, roleLower, roleStr   ; v1-style lowercase
+        if (InStr(roleLower, "edit")
+         || InStr(roleLower, "editable")
+         || InStr(roleLower, "text"))
+            return true
+    }
+
+    return false
+}
+
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
 $~LButton::
@@ -3892,13 +4019,13 @@ $~LButton::
 
     prevPath := ""
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
+        isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
         loop 100 {
             prevPath := GetExplorerPath(_winIdD)
             If (prevPath != "")
                 break
             sleep, 1
         }
-        isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
     }
     Else {
         LBD_HexColor1 := 0x000000
@@ -3937,6 +4064,11 @@ $~LButton::
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
+            If !IsObject(pt) {
+                SetTimer, keyTrack, On
+                SetTimer, mouseTrack, On
+                Return
+            }
 
             If (pt.CurrentControlType == 50031) {
                 If (wmClassD == "#32770" || _winCtrlD == "DirectUIHWND3")
@@ -3974,6 +4106,11 @@ $~LButton::
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
+            If !IsObject(pt) {
+                SetTimer, keyTrack, On
+                SetTimer, mouseTrack, On
+                Return
+            }
             ; tooltip, % pt.CurrentControlType "-" pt.CurrentName "-" pt.CurrentLocalizedControlType
             If (pt.CurrentControlType == 50000
                 && !inStr(pt.CurrentName, "Back", True) && !inStr(pt.CurrentName, "Forward", True) && !inStr(pt.CurrentName, "Up", True) && !inStr(pt.CurrentName, "Refresh", True)) {
@@ -4026,27 +4163,6 @@ $~LButton::
         }
         SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD, _winCtrlD)
     }
-    ; Else If (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25) {
-        ; try {
-            ; pt := UIA.ElementFromPoint(lbX1,lbY1,False)
-            ; If (pt)
-                ; mElPos := pt.CurrentBoundingRectangle
-            ; ; RangeTip(mElPos.l, mElPos.t, mElPos.r-mElPos.l, mElPos.b-mElPos.t, "Blue", 4)
-            ; If (mElPos && abs(mElPos.t - mElPos.b) <= 40 ) {
-                ; ; tooltip, % pt.CurrentControlType "-" abs(mElPos.t - mElPos.b)
-                ; textBoxSelected := (pt.CurrentControlType == 50004)
-            ; }
-            ; Else
-                ; textBoxSelected := False
-        ; } catch e {
-                ; tooltip, 3: UIA TIMED OUT!!!!
-                ; UIA :=  ;// set to a different value
-                ; ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                ; UIA := UIA_Interface() ; Initialize UIA interface
-                ; UIA.TransactionTimeout := 2000
-                ; UIA.ConnectionTimeout  := 20000
-        ; }
-    ; }
 
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
@@ -4975,35 +5091,6 @@ IsOverException(hWnd := "") {
         Return False
 }
 
-IsEmptySpace() {
-    static ROLE_SYSTEM_LIST := 0x21
-    If MouseIsOverTitleBar() {
-        ; tooltip, yes!
-        Return
-    }
-
-    If WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770") || WinActive("ahk_class #32768") {
-        CoordMode, Mouse
-        MouseGetPos, X, Y, mID, mCtrlNN
-
-        If (mCtrlNN == "SysListView321" || mCtrlNN == "DirectUIHWND2" || mCtrlNN == "DirectUIHWND3") {
-            AccObj := AccObjectFromPoint(idChild, X, Y)
-            Return (AccObj.accRole(0) == ROLE_SYSTEM_LIST)
-        }
-        Else
-            Return False
-    }
-}
-
-AccObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
-   static VT_DISPATCH := 9, F_OWNVALUE := 1, h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
-
-   (x == "" || y == "") ? DllCall("GetCursorPos", "Int64P", pt) : pt := x & 0xFFFFFFFF | y << 32
-   VarSetCapacity(varChild, 8 + 2*A_PtrSize, 0)
-   If DllCall("oleacc\AccessibleObjectFromPoint", "Int64", pt, "PtrP", pAcc, "Ptr", &varChild) = 0
-      Return ComObject(VT_DISPATCH, pAcc, F_OWNVALUE), _idChild_ := NumGet(varChild, 8, "UInt")
-}
-
 ;-----------------------------------------------------------------
 ; Check whether the target window is activation target
 ;-----------------------------------------------------------------
@@ -5679,21 +5766,9 @@ mouseTrack() {
 
 MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
     Global UIA
-    SysGet, SM_CXBORDER, 5
-    SysGet, SM_CYBORDER, 6
-    SysGet, SM_CXFIXEDFRAME, 7
-    SysGet, SM_CYFIXEDFRAME, 8
-    SysGet, SM_CXMIN, 28
-    SysGet, SM_CYMIN, 29
-    SysGet, SM_CXSIZE, 30
-    SysGet, SM_CYSIZE , 31
-    SysGet, SM_CXSIZEFRAME, 32
-    SysGet, SM_CYSIZEFRAME , 33
 
-    If ignoreCaptions
-        widthOfCaptions := SM_CXBORDER+(45*3)
-    Else
-        widthOfCaptions := 0
+    if !( GetKeyState("Wheeldown","P") || GetKeyState("Wheelup","P") || GetKeyState("LButton","P") || GetKeyState("RButton","P") || GetKeyState("MButton","P") )
+        return False
 
     CoordMode, Mouse, Screen
     If (xPos != "" && yPos != "")
@@ -5701,14 +5776,8 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID
 
-    If !IsAltTabWindow(WindowUnderMouseID)
+    If (!IsAltTabWindow(WindowUnderMouseID))
         Return False
-
-    WinGet, isMax, MinMax, ahk_id %WindowUnderMouseID%
-
-    titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
-    If (isMax == 1)
-        titlebarHeight := SM_CYSIZE
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     If (   !MouseIsOverTaskbar()
@@ -5718,22 +5787,45 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
         && (mClass != "#32768")
         && (mClass != "Net UI Tool Window")) {
 
+        SysGet, SM_CXBORDER, 5
+        SysGet, SM_CYBORDER, 6
+        SysGet, SM_CXFIXEDFRAME, 7
+        SysGet, SM_CYFIXEDFRAME, 8
+        SysGet, SM_CXMIN, 28
+        SysGet, SM_CYMIN, 29
+        SysGet, SM_CXSIZE, 30
+        SysGet, SM_CYSIZE , 31
+        SysGet, SM_CXSIZEFRAME, 32
+        SysGet, SM_CYSIZEFRAME , 33
+
+        If ignoreCaptions
+            widthOfCaptions := SM_CXBORDER+(45*3)
+        Else
+            widthOfCaptions := 0
+
+        WinGet, isMax, MinMax, ahk_id %WindowUnderMouseID%
+        titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
+
+        If (isMax == 1)
+            titlebarHeight := SM_CYSIZE
         ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME% : %SM_CXSIZE% - %SM_CYSIZE%
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
         If ((yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-widthOfCaptions))) {
             ; tooltip, Final decision: trust WM_NCHITTEST
-            If (IsPointOnCaption(xPos, yPos, WindowUnderMouseID))
+            If (IsPointOnCaption(xPos, yPos, WindowUnderMouseID) || mClass == "CabinetWClass")
                 Return True
-            ; Else If (mClass != "Chrome_WidgetWin_1") {
             Else  {
                 try {
                     pt := UIA.ElementFromPoint(xPos, yPos, False)
-                    tooltip, % pt.CurrentControlType
-                    If (pt && mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName == "FrameGrabHandle")
-                        Return True
-                    Else If (pt && mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName != "FrameGrabHandle")
+                    If !IsObject(pt) {
                         Return False
-                    Else If (pt && ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50026) || (pt.CurrentControlType == 50033)))
+                    }
+                    tooltip, % pt.CurrentControlType
+                    If (mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName == "FrameGrabHandle")
+                        Return True
+                    Else If (mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName != "FrameGrabHandle")
+                        Return False
+                    Else If ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50026) || (pt.CurrentControlType == 50033))
                         Return True
                     Else
                         Return False
@@ -5784,7 +5876,7 @@ IsPointOnCaption(x := "", y := "", hwnd := "") {
 
     ; HTCAPTION = 2 → draggable caption area
     ; This naturally excludes tabs, which are usually HTCLIENT.
-    return (hit = 2)
+    return (hit == 2)
 }
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
@@ -6107,28 +6199,30 @@ __TryGetSelectionViaUIA() {
             throw Exception("no UIA")
         UIA := UIA_Interface()
         el  := UIA.GetFocusedElement()
+        If !IsObject(el)
+            Return ""
 
         ; If Text pattern is available, get selection range(s)
         if el.PatternAvailable("Text") {
             selRanges := el.TextPattern.GetSelection()
             if (selRanges.Length() = 0) {
-                return ""   ; definitely no selection
+                Return ""   ; definitely no selection
             } else {
                 ; Combine selection ranges (usually one)
                 out := ""
                 for k, r in selRanges
                     out .= r.GetText(0)  ; 0 = all text in range
-                return out
+                Return out
             }
         }
         ; If Value pattern is available but no selection, treat as none
         if el.PatternAvailable("Value") {
             ; Value pattern doesn’t give selection; assume none
-            return ""
+            Return ""
         }
-        return ""  ; default: assume none if we can talk to UIA but no selection info
+        Return ""  ; default: assume none if we can talk to UIA but no selection info
     } catch e {
-        return "__UIA_UNAVAILABLE__"
+        Return "__UIA_UNAVAILABLE__"
     }
 }
 
@@ -6882,7 +6976,7 @@ MouseIsOverTaskbarButtonGroup() {
     If (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId != "TrayNotifyWnd1") {
         pt := UIA.ElementFromPoint(x,y,False)
         ; tooltip, % "val is " pt.CurrentControlType
-        Return (pt.CurrentControlType == 50000)
+        Return (IsObject(pt) && pt.CurrentControlType == 50000)
     }
     Else
         Return False
@@ -6899,6 +6993,10 @@ MouseIsOverTaskbarWidgets() {
 
 MouseIsOverTaskbarBlank() {
     Global UIA
+
+    if !( GetKeyState("Wheeldown","P") || GetKeyState("Wheelup","P") || GetKeyState("LButton","P") || GetKeyState("RButton","P") || GetKeyState("MButton","P") )
+        return False
+
     MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
     WinGetClass, cl, ahk_id %WindowUnderMouseID%
     try {
@@ -6909,7 +7007,7 @@ MouseIsOverTaskbarBlank() {
             Else {
                 pt := UIA.ElementFromPoint(x,y,False)
                 ; tooltip, % "val is " pt.CurrentControlType
-                Return (pt.CurrentControlType == 50033)
+                Return (IsObject(pt) && pt.CurrentControlType == 50033)
             }
         }
         Else
@@ -7039,7 +7137,53 @@ Acc_Parent(Acc) {
 Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=81731&p=509530#509530
     try Return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
 }
+; Written by jethrow
+Acc_Role(Acc, ChildId=0) {
+	try return ComObjType(Acc,"Name")="IAccessible"?Acc_GetRoleText(Acc.accRole(ChildId)):"invalid object"
+}
+Acc_GetRoleText(nRole)
+{
+	nSize := DllCall("oleacc\GetRoleText", "Uint", nRole, "Ptr", 0, "Uint", 0)
+	VarSetCapacity(sRole, (A_IsUnicode?2:1)*nSize)
+	DllCall("oleacc\GetRoleText", "Uint", nRole, "str", sRole, "Uint", nSize+1)
+	Return	sRole
+}
+Acc_Focus() {
+    static OBJID_CARET  := 0xFFFFFFF8
+    static OBJID_CLIENT := 0xFFFFFFFC
 
+    WinGet, hWnd, ID, A
+    if !hWnd
+        return ""
+
+    ; Try CARET object first
+    if (Acc_FromWindow(hWnd, OBJID_CARET, acc))
+        return acc
+
+    ; Fallback: CLIENT object
+    if (Acc_FromWindow(hWnd, OBJID_CLIENT, acc))
+        return acc
+
+    return ""
+}
+
+Acc_FromWindow(hWnd, objID, ByRef acc) {
+    VarSetCapacity(iid, 16, 0)
+    DllCall("ole32\CLSIDFromString"
+        , "wstr", "{618736E0-3C3D-11CF-810C-00AA00389B71}"
+        , "ptr", &iid)
+
+    if (DllCall("oleacc\AccessibleObjectFromWindow"
+        , "ptr", hWnd
+        , "uint", objID
+        , "ptr", &iid
+        , "ptr*", pacc) = 0)
+    {
+        acc := ComObjEnwrap(9, pacc, 1)
+        return true
+    }
+    return false
+}
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
@@ -9412,6 +9556,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's nest::its nest
 ::it's network::its network
 ::it's operation::its operation
+::it's object::its object
 ::it's origin::its origin
 ::it's output::its output
 ::it's own::its own
@@ -10962,6 +11107,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Anything below this point was added to the script by the user via the Win+H hotkey.
 ;------------------------------------------------------------------------------
+::releasses::releases
 ::ahven't::haven't
 ::ahvent::haven't
 ::arent'::aren't
