@@ -3789,9 +3789,6 @@ Explorer__GetRoleNum(accObj) {
 }
 ; ------------------------------------------------------------------
 IsExplorerBlankSpaceClick() {
-    ; Returns true if the mouse is on "blank space" in
-    ; a Windows Explorer / file-dialog folder view.
-
     static ROLE_SYSTEM_LIST := 0x21  ; MSAA role: "List"
 
     CoordMode, Mouse, Screen
@@ -3804,21 +3801,50 @@ IsExplorerBlankSpaceClick() {
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
         return false
 
-    ; Use Acc library: object under the cursor
-    ; Acc_ObjectFromPoint is provided by Acc.ahk for v1
+    ; MSAA: object under cursor
     acc := Acc_ObjectFromPoint(x, y)
     if !IsObject(acc)
         return false
 
-    ; In Explorer's folder view:
-    ; - blank area → role = LIST
-    ; - item      → role = LISTITEM, etc.
     roleNum := ""
     try roleNum := acc.accRole(0)
     catch
         return false
 
-    return (roleNum == ROLE_SYSTEM_LIST)
+    ; We only consider clicks where MSAA says we're on the LIST background
+    if (roleNum != ROLE_SYSTEM_LIST)
+        return false
+
+    ; ------------------------------------------------------------
+    ; Exclude the column header row (Details view) using geometry
+    ; ------------------------------------------------------------
+    if IsFunc("Acc_Location") {
+        ; Get the LIST's bounding rect in screen coords
+        listX := listY := listW := listH := ""
+        Acc_Location(acc, listX, listY, listW, listH)
+
+        if (listX != "" && listY != "" && listH != "") {
+            ; Approximate header height in a DPI-aware way.
+            ; Tune baseHeaderPx if needed.
+            baseHeaderPx := 24       ; good starting point for 100% DPI
+            dpi           := A_ScreenDPI ? A_ScreenDPI : 96
+            headerHeight  := Round(baseHeaderPx * dpi / 96.0)
+
+            ; If the mouse is inside the LIST rect but within the top header band,
+            ; treat it as header click -> NOT "blank space".
+            if (x >= listX && x < listX + listW
+             && y >= listY && y < listY + headerHeight) {
+                return false
+            }
+        }
+    }
+
+    ; If we got this far:
+    ; - We're in Explorer / common dialog
+    ; - MSAA role is LIST
+    ; - We're not in the approximate header band
+    ; => Treat it as a blank-space click in the folder view.
+    return true
 }
 
 ; =========================================
@@ -4051,16 +4077,17 @@ $~LButton::
     timeDiff := rlsTime - initTime
 
     ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
+
     If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < floor(DoubleClickTime/2))
-        && (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
-        &&  isBlankSpaceExplorer ) {
+        && (InStr(_winCtrlU,"SysListView32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
+        && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
 
         SetTimer, SendCtrlAddLabel, -125
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (InStr(_winCtrlD,"SysHeader32",True)  || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
-        && (isBlankSpaceExplorer || isBlankSpaceNonExplorer)) {
+        && (timeDiff < floor(DoubleClickTime/2))
+        && (InStr(_winCtrlU,"SysHeader32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
 
         try {
             pt := UIA.ElementFromPoint(lbX2,lbY2,False)
@@ -4071,13 +4098,23 @@ $~LButton::
             }
 
             If (pt.CurrentControlType == 50031) {
-                If (wmClassD == "#32770" || _winCtrlD == "DirectUIHWND3")
-                    ControlFocus, %_winCtrlD%, ahk_id %_winIdU%
+                If (wmClassD == "#32770" || _winCtrlU == "DirectUIHWND3")
+                    ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
+
+                If (IsModernExplorerActive(_winIdU)) {
+                    loop 50 {
+                        FocusByClassNN(_winCtrlU)
+                        sleep, 1
+                        ControlGetFocus, testFocus, ahk_id %_winIdU%
+                        if (InStr(testFocus, "DirectUIHWND", false))
+                            break
+                    }
+                }
 
                 Send, ^{NumpadAdd}
                 Return
             } ; this specific combination is needed for the "Name" column ONLY
-            Else If (pt.CurrentControlType == 50033 && (_winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")) {
+            Else If (pt.CurrentControlType == 50033 && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
 
                 Send, ^{NumpadAdd}
                 Return
@@ -4101,7 +4138,7 @@ $~LButton::
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
-        && (_winCtrlD == "UpBand1" || InStr(_winCtrlD,"ToolbarWindow32", True) || _winCtrlD == "Microsoft.UI.Content.DesktopChildSiteBridge1")
+        && (_winCtrlU == "UpBand1" || InStr(_winCtrlU,"ToolbarWindow32", True) || _winCtrlU == "Microsoft.UI.Content.DesktopChildSiteBridge1")
         && (timeDiff < (DoubleClickTime/2))) {
 
         try {
@@ -4140,7 +4177,7 @@ $~LButton::
 
             currentPath := ""
             loop 100 {
-                currentPath := GetExplorerPath(_winIdD)
+                currentPath := GetExplorerPath(_winIdU)
                 If (currentPath != "" && currentPath != prevPath)
                     break
                 sleep, 1
@@ -4149,19 +4186,19 @@ $~LButton::
         }
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (InStr(_winCtrlD, "SysTreeView32", True))
+        && (InStr(_winCtrlU, "SysTreeView32", True))
         && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
         && (timeDiff < floor(DoubleClickTime/2))
         && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
 
         currentPath := ""
         loop 100 {
-            currentPath := GetExplorerPath(_winIdD)
+            currentPath := GetExplorerPath(_winIdU)
             If (currentPath != "" && currentPath != prevPath)
                 break
             sleep, 1
         }
-        SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD, _winCtrlD)
+        SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD, _winCtrlU)
     }
 
     SetTimer, keyTrack, On
@@ -4685,50 +4722,109 @@ GetWindowRectEx(hWnd, ByRef L, ByRef T, ByRef R, ByRef B) {
     return true
 }
 
-; → Returns the inner drawable area of a window in client coordinates.
-; What it measures
-; The client area only — the part where content is drawn.
-; (No title bar, borders, or menu bar.)
-; Always starts at (0, 0) for the window’s coordinate space.
-; Returns only the width (right) and height (bottom), since left=top=0.
-GetClientRectEx(hWnd, ByRef W, ByRef H) {
-    VarSetCapacity(RECT, 16, 0)
-    ok := DllCall("GetClientRect", "ptr", hWnd, "ptr", &RECT, "int")
-    if (!ok)
+IsModernExplorerActive(hWnd := "") {
+    ; Returns true if the active window is a modern Win11 File Explorer window
+
+    ; 1) Get active window
+    ; WinGet, hWnd, ID, A
+    ; if !hWnd
+        ; return false
+
+    ; ; 2) Class must be Explorer frame
+    ; WinGetClass, cls, ahk_id %hWnd%
+    ; if (cls != "CabinetWClass")
+        ; return false
+
+    ; ; 3) Process must be explorer.exe
+    ; WinGet, proc, ProcessName, ahk_id %hWnd%
+    ; if (proc != "explorer.exe")
+        ; return false
+
+    ; ; 4) OS must be Windows 11 (build >= 22000)
+    ; ;    Use 64-bit view for the key if you're running 32-bit AHK on 64-bit Windows
+    ; SetRegView, 64
+    ; RegRead, build, HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion, CurrentBuildNumber
+    ; SetRegView, 32  ; restore default
+
+    ; ; If we couldn't read the build for some reason, be conservative:
+    ; if (ErrorLevel)
+        ; return false
+
+    ; if ((build + 0) < 22000)  ; pre-Win11
+        ; return false
+
+    ; return true
+
+    global UIA, isWin11
+
+    if !isWin11
         return false
-    ; client rect is (0,0)-(right,bottom)
-    W := NumGet(RECT, 8,  "Int")
-    H := NumGet(RECT, 12, "Int")
-    return true
-}
 
-; If you need the client area in screen coordinates, combine both:
-; VarSetCapacity(pt, 8, 0)
-; DllCall("ClientToScreen", "ptr", hWnd, "ptr", &pt)
-; X := NumGet(pt, 0, "Int")
-; Y := NumGet(pt, 4, "Int")
+    ; 1) Get target window (active if none passed)
+    if !hWnd {
+        WinGet, hWnd, ID, A
+        if !hWnd
+            return false
+    }
 
-; GetClientRectEx(hWnd, W, H)
-; ; Now (X,Y) = top-left on screen, (W,H) = size of client area
-
-; Returns True if active Explorer is the modern/tabbed Win11 Explorer,
-; based on presence of known XAML/WinUI host child windows.
-IsModernExplorer_Win32Only(hWnd) {
-    WinGet, exe, ProcessName, ahk_id %hWnd%
-    if (exe != "explorer.exe")
-        return false
-
+    ; 2) Must be Explorer frame, backed by explorer.exe
     WinGetClass, cls, ahk_id %hWnd%
     if (cls != "CabinetWClass")
-        return false   ; Not Explorer, or an unexpected host
+        return false
 
-    ControlGet, OutputVar,  Visible ,, Microsoft.UI.Content.DesktopChildSiteBridge1, ahk_id %hWnd%
-    ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %hWnd%
-    ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %hWnd%
-    ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %hWnd%
+    WinGet, proc, ProcessName, ahk_id %hWnd%
+    if (proc != "explorer.exe")
+        return false
 
-    return (OutputVar || OutputVar4 || OutputVar6 || OutputVar8)
+    ; 3) Ensure UIA is initialized
+    if !IsObject(UIA) {
+        try {
+            UIA := UIA_Interface()
+            UIA.TransactionTimeout := 2000
+            UIA.ConnectionTimeout  := 20000
+        } catch e {
+            return false
+        }
+    }
+
+    ; 4) Get UIA root for this Explorer window
+    root := ""
+    try
+        root := UIA.ElementFromHandle(hWnd)
+    catch
+        root := ""
+
+    if !IsObject(root)
+        return false
+
+    ; 5) Look for the WinUI/XAML host:
+    ;    ClassName = Microsoft.UI.Content.DesktopChildSiteBridge
+    bridge := ""
+    try
+        bridge := root.FindFirstBy("ClassName=InputSiteWindowClass")
+    catch
+        bridge := ""
+
+    if !IsObject(bridge)
+        return false
+
+    ; 6) Check its FrameworkId – should be XAML / WinUI on modern Explorer
+    fw := ""
+    try
+        fw := bridge.FrameworkId
+    catch
+        fw := ""
+
+    ; Normalize to lower for comparison
+    if (fw != "") {
+        StringLower, fwLower, fw
+        if (fwLower == "xaml" || fwLower == "winui")
+            return true
+    }
+
+    return false
 }
+
 
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
     Global UIA, isWin11, blockKeys
@@ -4839,18 +4935,15 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                         OutHeight2 := B - T
                         OutWidth2  := R - L
                     }
-                    ;Else If (GetClientRectEx(hCtl, CW, CH)) {
-                        ; OutHeight2 := CH
-                    ; }
                 }
                 Else {
                     ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
                 }
 
-                If !IsModernExplorer_Win32Only(initTargetHwnd)
+                If !IsModernExplorerActive(initTargetHwnd)
                     ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
 
-                If ((!isWin11 || !IsModernExplorer_Win32Only(initTargetHwnd)) && lClassCheck == "CabinetWClass")
+                If ((!isWin11 || !IsModernExplorerActive(initTargetHwnd)) && lClassCheck == "CabinetWClass")
                     TargetControl := "DirectUIHWND3"
                 Else If (OutHeight2 > OutHeight3)
                     TargetControl := "DirectUIHWND2"
@@ -5805,15 +5898,18 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
 
         WinGet, isMax, MinMax, ahk_id %WindowUnderMouseID%
         titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
-
         If (isMax == 1)
             titlebarHeight := SM_CYSIZE
         ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME% : %SM_CXSIZE% - %SM_CYSIZE%
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+
         If ((yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-widthOfCaptions))) {
             ; tooltip, Final decision: trust WM_NCHITTEST
-            If (IsPointOnCaption(xPos, yPos, WindowUnderMouseID) || mClass == "CabinetWClass")
+            hitVal := IsPointOnCaption(xPos, yPos, WindowUnderMouseID)
+            If ((hitVal == 2) || mClass == "CabinetWClass")
                 Return True
+            Else If (hitVal == 12 || hitVal == 13 || hitVal == 14)
+                Return False
             Else  {
                 try {
                     pt := UIA.ElementFromPoint(xPos, yPos, False)
@@ -5874,9 +5970,19 @@ IsPointOnCaption(x := "", y := "", hwnd := "") {
         , "ptr",  lParam
         , "int")
 
-    ; HTCAPTION = 2 → draggable caption area
-    ; This naturally excludes tabs, which are usually HTCLIENT.
-    return (hit == 2)
+    if (hit != "" && hit > 0)
+        return hit
+    else
+        return 0
+
+    ; ; Exclude top resize edge regardless of DPI
+    ; if (hit == 12        ; HTTOP
+     ; || hit == 13        ; HTTOPLEFT
+     ; || hit == 14)       ; HTTOPRIGHT
+        ; return False
+
+    ; ; Only accept true caption area
+    ; return (hit == 2)    ; HTCAPTION
 }
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
@@ -7129,6 +7235,32 @@ Acc_ObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
     Acc_Init()
     If  DllCall("oleacc\AccessibleObjectFromPoint", "Int64", x==""||y==""?0*DllCall("GetCursorPos","Int64*",pt)+pt:x&0xFFFFFFFF|y<<32, "Ptr*", pacc, "Ptr", VarSetCapacity(varChild,8+2*A_PtrSize,0)*0+&varChild)=0
         Return ComObjEnwrap(9,pacc,1), _idChild_:=NumGet(varChild,8,"UInt")
+}
+Acc_Location(acc, ByRef x, ByRef y, ByRef w, ByRef h) {
+    ; Retrieves bounding rectangle of an MSAA object.
+    ; acc must be an IAccessible COM object.
+
+    try {
+        VarSetCapacity(left,   4, 0)
+        VarSetCapacity(top,    4, 0)
+        VarSetCapacity(width,  4, 0)
+        VarSetCapacity(height, 4, 0)
+
+        ; acc.accLocation(&left, &top, &width, &height, childId)
+        ; childId = 0 means "self"
+        acc.accLocation(&left, &top, &width, &height, 0)
+
+        x := NumGet(left,   0, "Int")
+        y := NumGet(top,    0, "Int")
+        w := NumGet(width,  0, "Int")
+        h := NumGet(height, 0, "Int")
+        return true
+    }
+    catch
+    {
+        x := y := w := h := ""
+        return false
+    }
 }
 Acc_Parent(Acc) {
     try parent:=Acc.accParent
