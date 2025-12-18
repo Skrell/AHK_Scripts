@@ -3880,15 +3880,15 @@ Explorer__GetRoleNum(ByRef accObj := "") {
     ; ROLE_SYSTEM_LINK          0x1E    Hyperlink-like UI elements
     if (r == "list")
         return 0x21
-    if (r == "list item" || r = "listitem")
+    if (r == "list item" || r == "listitem")
         return 0x22
-    if (r == "outline item" || r = "outlineitem")
+    if (r == "outline item" || r == "outlineitem")
         return 0x24
-    if (r == "columnheader" || r = "column header")
+    if (r == "columnheader" || r == "column header")
         return 0x19
     if (r == "toolbar")
         return 0x16
-    if (r == "push button" || r = "pushbutton")
+    if (r == "push button" || r == "pushbutton")
         return 0x2B
     if (r == "link")
         return 0x1E
@@ -5459,7 +5459,7 @@ IsOverException(hWnd := "") {
 
     If (   proc == "peazip.exe"
         || proc == "SndVol.exe"
-        || (inStr("File Explorer", tit, True) && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
+        || ((cl == "CabinetWClass" || cl == "#32770") && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
         || MouseIsOverTaskbar()
         || cl == "#32768"
         || cl == "Autohotkey"
@@ -6005,7 +6005,13 @@ keyTrack() {
         If (   TimeOfLastHotkeyTyped
             && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
             && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
-            && (InStr(keys, Substr(A_ThisHotkey,2) , false) || InStr(numbers, Substr(A_ThisHotkey,2) , false) || A_ThisHotkey == "$~Space" || A_ThisHotkey == "$CapsLock" || A_ThisHotkey == "$~Backspace") ) {
+            && (InStr(keys, Substr(A_ThisHotkey,2) , false) 
+                || InStr(numbers, Substr(A_ThisHotkey,2) , false) 
+                || A_ThisHotkey == "~:" 
+                || A_ThisHotkey == "~/" 
+                || A_ThisHotkey == "$~Space" 
+                || A_ThisHotkey == "$CapsLock" 
+                || A_ThisHotkey == "$~Backspace") ) {
 
             TimeOfLastHotkeyTyped :=
             SetTimer, keyTrack,   Off
@@ -7856,6 +7862,7 @@ SetTitleMatchMode, 2
 ::bin::
 ::bmp::
 ::c::
+::cc::
 ::cab::
 ::cda::
 ::cer::
@@ -7864,6 +7871,7 @@ SetTitleMatchMode, 2
 ::cgi::
 ::cgi::
 ::cgi::
+::class::
 ::com::
 ::com::
 ::cpl::
@@ -7970,6 +7978,7 @@ SetTitleMatchMode, 2
 ::vcd::
 ::vcf::
 ::vob::
+::wad::
 ::wav::
 ::webm::
 ::webp::
