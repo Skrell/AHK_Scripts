@@ -94,7 +94,7 @@ Global isWin11                             := DetectWin11()
 Global TaskBarHeight                       := 0
 Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
-Global ActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+Global hActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 ; Global winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
 ; Turn key blocking ON/OFF
 Global blockKeys := false
@@ -251,19 +251,19 @@ Expr =
     ; Input, SingleKey, L1, {Lbutton}{ESC}{ENTER}, *
     Return
 
-    ~ENTER::
+    $~ENTER::
         ExitApp
     Return
 
-    ~ESC::
+    $~ESC::
         ExitApp
     Return
 
-    ~*LBUTTON::
+    $~*LBUTTON::
         ExitApp
     Return
 
-    SPACE::
+    $SPACE::
         SendInput, {DOWN}
     Return
 )
@@ -384,7 +384,6 @@ OnExit, UnhookHooks
 
 SetTimer mouseTrack, 10
 SetTimer keyTrack, 5
-; SetTimer FixModifiers, 50
 
 Return
 
@@ -611,6 +610,82 @@ DoNothing() {
 
 ; ==========================================================================================================================================
 ; ==========================================================================================================================================
+WhichButton(vPosX, vPosY, hWnd) {
+
+    errorFound := False
+
+    ;get role number
+    ; vRole := "", try vRole := oAcc.accRole(vChildID)
+    ;get role text method 1
+    ; vRoleText1 := Acc_Role(oAcc, vChildID)
+    ;get role text method 2 (using role number from earlier)
+    ; vRoleText2 := (vRole = "") ? "" : Acc_GetRoleText(vRole)
+    vName := "",
+
+    try {
+        oAcc := Acc_ObjectFromPoint(vChildID)
+        If oAcc
+            vName := oAcc.accName(vChildID)
+    }
+    catch e {
+        tooltip, error thrown
+        errorFound := True
+    }
+
+    If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
+        SendMessage, 0x84, 0, (vPosX & 0xFFFF) | (vPosY & 0xFFFF)<<16,, ahk_id %hWnd%, , , , 500
+        If (ErrorLevel == 8)
+            vName := "minimize"
+        Else If (ErrorLevel == 9)
+            vName := "maximize"
+        Else If (ErrorLevel == 20)
+            vName := "close"
+        ; msgbox, 1 - %vName%
+    }
+
+    isAltTab := JEE_WinHasAltTabIcon(hWnd)
+    If (isAltTab && vName == "") { ; || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false)))) {
+        wx := wy := ww := wh := 0
+        SysGet, SM_CXBORDER, 5
+        SysGet, SM_CYBORDER, 6
+        SysGet, SM_CXFIXEDFRAME, 7
+        SysGet, SM_CYFIXEDFRAME, 8
+        SysGet, SM_CXMIN, 28
+        SysGet, SM_CYMIN, 29
+        SysGet, SM_CXSIZE, 30
+        SysGet, SM_CYSIZE , 31
+        SysGet, SM_CXSIZEFRAME, 32
+        SysGet, SM_CYSIZEFRAME , 33
+
+        titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
+
+        WinGetPosEx(hWnd, wx, wy, ww, wh)
+
+        If      ((vPosY > wy) && (vPosY < (wy+titlebarHeight)) && (vPosX > (wx+ww-SM_CXBORDER-(45*3)) && (vPosX < (wx+ww-SM_CXBORDER-(45*2)))))
+            vName := "minimize"
+        Else If ((vPosY > wy) && (vPosY < (wy+titlebarHeight)) && (vPosX > (wx+ww-SM_CXBORDER-(45*2)) && (vPosX < (wx+ww-SM_CXBORDER-(45*1)))))
+            vName := "maximize"
+        Else If ((vPosY > wy) && (vPosY < (wy+titlebarHeight)) && (vPosX > (wx+ww-SM_CXBORDER-(45*1)) && (vPosX < (wx+ww-SM_CXBORDER-(45*0)))))
+            vName := "close"
+        ; msgbox, 2 - %vName% - %wx% %wy% %ww% %wh%
+    }
+
+    ; vValue := "", try vValue := oAcc.accValue(vChildID)
+    oAcc := ""
+
+    vOutput := ""
+    ; vOutput := "role: " vRole "`r`n"
+    ; if (vRoleText1 == vRoleText2)
+        ; vOutput .= "role text: " vRoleText1 "`r`n"
+    ; else
+    ; vOutput .= "role text (1): " vRoleText1 "`r`n" "role text (2): " vRoleText2 "`r`n"
+    If !errorFound
+        vOutput .= "name: " vName ; "`r`n"
+    Else
+        vOutput .= "error: " vName ; "`r`n"
+    Return vOutput
+}
+
 DetectWin11()
 {
     ; Get version via WMI to capture the build number
@@ -626,13 +701,13 @@ DetectWin11()
         }
     } catch e {
         MsgBox, Failed to query OS version.`nError: %e%
-        Return False
+        return False
     }
 
-    If (SubStr(version, 1, 4) = "10.0" && buildNumber >= 22000)
-        Return True
-    Else
-        Return False
+    if (SubStr(version, 1, 4) = "10.0" && buildNumber >= 22000)
+        return True
+    else
+        return False
 }
 
 ; Choose the monitor containing the mouse. If none contains it (rare with odd layouts),
@@ -696,6 +771,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
     Global prevActiveWindows
     Global StopRecursion
+    Global blockKeys
 
     If !StopRecursion && !hitTab {
 
@@ -713,9 +789,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
 
         If (proc == "Everything.exe") {
+            blockKeys := True
             Send, {Ctrl UP}
             Send, {Space UP}
             SendEvent, {Blind}{vkFF} ; send a dummy key (vkFF = undefined key)
+            blockKeys := False
         }
 
         If (vWinClass == "#32770" && vWinTitle == "Run") {
@@ -918,7 +996,11 @@ WaitForFadeInStop(hwnd) {
 ; --------------------------------------------------
 UnhookHooks:
     StopRecursion := True
-    nCheck := DllCall( "UnhookWinEvent", Ptr,hWinEventHook )
+    SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
+
+    if (hActWin)
+        DllCall( "UnhookWinEvent", "Ptr", hActWin)
     if (hHookKbd)
         DllCall("UnhookWindowsHookEx", "Ptr", hHookKbd)
     if (hHookMouse)
@@ -975,20 +1057,21 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
 }
 
 $~^Enter::
-DetectHiddenWindows, Off
-WinGet, myWindow, List
-Loop % myWindow
-{
-    ControlGet, myOkay, Hwnd,, OK, % "ahk_id " myWindow%A_Index%
-    If (myOkay) {
-        ControlClick,, ahk_id %myOkay%,,,2
-        hwndID := "ahk_id " myWindow%A_Index%
-        sleep, 400
-        If WinExist(hwndID)
-            Send, !{o}
-        break
+    DetectHiddenWindows, Off
+    WinGet, myWindow, List
+    Loop % myWindow
+    {
+        ControlGet, myOkay, Hwnd,, OK, % "ahk_id " myWindow%A_Index%
+        If (myOkay) {
+            ControlClick,, ahk_id %myOkay%,,,2
+            hwndID := "ahk_id " myWindow%A_Index%
+            sleep, 400
+            If WinExist(hwndID)
+                Send, !{o}
+            break
+        }
     }
-}
+    FixModifiers()
 Return
 
 $^WheelUp::
@@ -1061,6 +1144,7 @@ $~WheelUp::
           || wuCtrl == "DirectUIHWND2"
           || wuCtrl == "DirectUIHWND3"))
         {
+            Critical, On
             now := A_TickCount
 
             ; --- Burst detection ---
@@ -1081,11 +1165,14 @@ $~WheelUp::
                 ; ToolTip % "Zoom at: " . now
                 ; SetTimer, ClearToolTip, -400
                 blockKeys := True
+                Send, {Ctrl UP}
                 sleep, 100
                 Send, ^{NumpadAdd}
                 sleep, 100
+                Send, {Ctrl UP}
                 blockKeys := False
             }
+            Critical, Off
         }
         ; We still want normal scrolling here, so handled stays False
     }
@@ -1124,6 +1211,7 @@ $~WheelDown::
           || wuCtrl == "DirectUIHWND2"
           || wuCtrl == "DirectUIHWND3"))
         {
+            Critical, On
             now := A_TickCount
 
             ; --- Burst detection ---
@@ -1144,11 +1232,14 @@ $~WheelDown::
                 ; ToolTip % "Zoom at: " . now
                 ; SetTimer, ClearToolTip, -400
                 blockKeys := True
+                Send, {Ctrl UP}
                 sleep, 100
                 Send, ^{NumpadAdd}
                 sleep, 100
+                Send, {Ctrl UP}
                 blockKeys := False
             }
+            Critical, Off
         }
         ; We still want normal scrolling here, so handled stays False
     }
@@ -1836,6 +1927,7 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     SetTimer, keyTrack, On
+    FixModifiers()
 Return
 
 ^d::
@@ -1885,6 +1977,7 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     SetTimer, keyTrack, On
+    FixModifiers()
 Return
 #If
 
@@ -1933,6 +2026,7 @@ Return
         store := """" . store . """" . " "
     Clip(store)
     Critical, Off
+    FixModifiers()
 Return
 
 !+[::
@@ -1947,6 +2041,7 @@ Return
         store := "{" . store . "} "
     Clip(store)
     Critical, Off
+    FixModifiers()
 Return
 
 !+]::
@@ -1961,6 +2056,7 @@ Return
         store := "{" . store . "} "
     Clip(store)
     Critical, Off
+    FixModifiers()
 Return
 
 !+<::
@@ -1975,6 +2071,7 @@ Return
         store := "<" . store . "> "
     Clip(store)
     Critical, Off
+    FixModifiers()
 Return
 
 !+>::
@@ -1989,6 +2086,7 @@ Return
         store := "<" . store . "> "
     Clip(store)
     Critical, Off
+    FixModifiers()
 Return
 
 !+(::
@@ -2003,6 +2101,7 @@ Return
         store := "(" . store . ") "
     Clip(store)
     Critical, Off
+    FixModifiers()
 Return
 
 !+)::
@@ -2017,6 +2116,7 @@ Return
         store := "(" . store . ") "
     Clip(store)
     Critical, Off
+    FixModifiers()
 Return
 
 !+b::
@@ -2031,6 +2131,7 @@ Return
         store := "\b" . store . "\b "
     Clip(store)
     Critical, Off
+    FixModifiers()
 Return
 
 !+5::
@@ -2045,6 +2146,7 @@ Return
         store := "%" . store . "% "
     Clip(store)
     Critical, Off
+    FixModifiers()
 Return
 
 $!Space::
@@ -2368,6 +2470,7 @@ Return
     total := GetDesktopCount()
     tooltip, class is %cl% of %total% desktops
     DetectHiddenWindows, Off
+    FixModifiers()
 Return
 
 !1::
@@ -2378,6 +2481,7 @@ Return
     StopRecursion := False
     SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
+    FixModifiers()
 Return
 
 SwitchToVD1:
@@ -2409,6 +2513,7 @@ Return
     StopRecursion := False
     SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
+    FixModifiers()
 Return
 
 SwitchToVD2:
@@ -2442,6 +2547,7 @@ Return
     StopRecursion := False
     SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
+    FixModifiers()
 Return
 
 SwitchToVD3:
@@ -2475,6 +2581,7 @@ Return
     StopRecursion := False
     SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
+    FixModifiers()
 Return
 
 SwitchToVD4:
@@ -2507,47 +2614,38 @@ Altup:
     Global cycleCount
     Global ValidWindows
     Global GroupedWindows
-    Global MonCount
     Global startHighlight
     Global hitTAB
+    Global hitTilde
     Global LclickSelected
     Global blockKeys
 
+    Critical, On
     cycling        := False
-    If !hitTAB {
-        Critical, On
-        cycleCount     := 1
-        ValidWindows   := []
-        GroupedWindows := []
-        startHighlight := False
-        LclickSelected := False
-        Critical, Off
-        Return
+    hitTAB         := False
+    hitTilde       := False
+
+    WinGet, actWndID, ID, A
+    If (LclickSelected && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
+        If (startHighlight) {
+            blockKeys := True
+            GoSub, SortAllWins
+            blockKeys := False
+        }
     }
     Else {
-        Critical, On
-        WinGet, actWndID, ID, A
-        If (LclickSelected && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
-            If (startHighlight) {
+        If (GetKeyState("x","P") || actWndID == ValidWindows[1] || GroupedWindows.length() <= 1) {
+            ; canceled!
+            If (GetKeyState("x","P")) {
                 blockKeys := True
-                GoSub, SortAllWins
+                GoSub, ResetWins
                 blockKeys := False
             }
-        }
-        Else {
-            If (GetKeyState("x","P") || actWndID == ValidWindows[1] || GroupedWindows.length() <= 1) {
-                ; canceled!
-                If (GetKeyState("x","P")) {
-                    blockKeys := True
-                    GoSub, ResetWins
-                    blockKeys := False
-                }
-            } ; this condition is attempting to account for the user starting with alt+tab then switching to alt+`
-            Else If (startHighlight && (GroupedWindows.length() > 2)  && actWndID != ValidWindows[1]) {
-                blockKeys := True
-                GoSub, SortGroupedWins ; currently, GroupedWindows == ValidWindows for alt+tab but not for alt+`
-                blockKeys := False
-            }
+        } ; this condition is attempting to account for the user starting with alt+tab then switching to alt+`
+        Else If (startHighlight && (GroupedWindows.length() > 2)  && actWndID != ValidWindows[1]) {
+            blockKeys := True
+            GoSub, SortGroupedWins ; currently, GroupedWindows == ValidWindows for alt+tab but not for alt+`
+            blockKeys := False
         }
     }
 
@@ -2555,8 +2653,6 @@ Altup:
     ValidWindows   := []
     GroupedWindows := []
     startHighlight := False
-    hitTAB         := False
-    hitTilde       := False
     LclickSelected := False
     Critical, Off
 Return
@@ -2740,7 +2836,7 @@ If !hitTAB {
     StopRecursion  := True
     SetTimer, mouseTrack, Off
     SetTimer, keyTrack,   Off
-
+    hitTAB := True
     cc := Cycle()
 
     If (cc > 2) {
@@ -2756,6 +2852,7 @@ If !hitTAB {
     SetTimer, keyTrack,   On
     StopRecursion := False
 }
+FixModifiers()
 Return
 
 !`::
@@ -2831,11 +2928,12 @@ $!x::
     GoSub, ResetWins
     sleep, 1000
     tooltip,
+    FixModifiers()
 Return
 #If
 
 $!Lbutton::
-    ; tooltip, %hitTab% - %hitTilde%
+    Critical
     If hitTab {
         LclickSelected := True
         MouseGetPos, , , _winIdD,
@@ -2845,7 +2943,7 @@ $!Lbutton::
 
         GoSub, DrawRect
         DrawWindowTitlePopup(actTitle, pp)
-        KeyWait, LAlt, U T3
+        KeyWait, LAlt, U T0.3
         GoSub, FadeOutWindowTitle
         GoSub, Altup
         SetTimer, mouseTrack, On
@@ -2862,18 +2960,19 @@ $!Lbutton::
 
         GoSub, DrawRect
         DrawWindowTitlePopup(actTitle, pp, True)
-        KeyWait, LAlt, U T3
+        KeyWait, LAlt, U T0.3
         GoSub, FadeOutWindowTitle
         GoSub, Altup
         SetTimer, mouseTrack, On
         SetTimer, keyTrack,   On
     }
     Else If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550)) {
-        Send, {Alt UP}
         Send, {Click, left}
         Send, {ENTER}
         sleep, 275
+        FixModifiers()
     }
+    KeyWait, LAlt, U T0.3
 Return
 
 RunDynaExpr:
@@ -2923,14 +3022,12 @@ Cycle()
     Global GroupedWindows
     Global MonCount
     Global startHighlight
-    Global hitTAB
     Global LclickSelected
     Global firstDraw
 
     prev_exe :=
     prev_cl  :=
     cycleCount := 1
-    hitTAB := True
 
     If !cycling
     {
@@ -3571,6 +3668,7 @@ $~^Lbutton::
                 }
             }
         }
+        FixModifiers()
     }
     WinActivate, ahk_id %targetID%
     StopRecursion := False
@@ -3624,6 +3722,7 @@ $^LButton::
         WinActivate, ahk_id %actID%
         WinSet, AlwaysOnTop, Off, ahk_id %actID%
         WinActivate, ahk_id %actID%
+        FixModifiers()
     }
 
     StopRecursion := False
@@ -3648,7 +3747,6 @@ $~Lbutton::
     MouseGetPos, expX2, expY2,
 Return
 #If
-
 
 ; ----------------------- EXAMPLE USAGE ----------------------------
 ; clickType := ExplorerHitTestType()
@@ -3753,7 +3851,12 @@ ExplorerHitTestType() {
     return "other"
 }
 ; ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-Explorer__GetRoleNum(accObj) {
+Explorer__GetRoleNum(ByRef accObj := "") {
+    if (accObj == "")
+        accObj := Acc_ObjectFromPoint()
+
+    if !accObj
+        return
     ; Safely get numeric MSAA role
     role := ""
     try role := accObj.accRole(0)
@@ -3768,26 +3871,204 @@ Explorer__GetRoleNum(accObj) {
     r := Trim(role)
     StringLower, r, r
 
-    if (r = "list")
+    ; Role Constant             Hex     Meaning
+    ; ROLE_SYSTEM_LIST          0x21    The container list
+    ; ROLE_SYSTEM_LISTITEM      0x22    A file/folder in Explorer
+    ; ROLE_SYSTEM_OUTLINEITEM   0x24    Tree-view style item
+    ; ROLE_SYSTEM_COLUMNHEADER  0x19    Column header: Name, Date Modified, Type, etc.
+    ; ROLE_SYSTEM_PUSHBUTTON    0x2B    Buttons
+    ; ROLE_SYSTEM_LINK          0x1E    Hyperlink-like UI elements
+    if (r == "list")
         return 0x21
-    if (r = "list item" || r = "listitem")
+    if (r == "list item" || r = "listitem")
         return 0x22
-    if (r = "outline item" || r = "outlineitem")
+    if (r == "outline item" || r = "outlineitem")
         return 0x24
-    if (r = "columnheader" || r = "column header")
+    if (r == "columnheader" || r = "column header")
         return 0x19
-    if (r = "toolbar")
+    if (r == "toolbar")
         return 0x16
-    if (r = "push button" || r = "pushbutton")
+    if (r == "push button" || r = "pushbutton")
         return 0x2B
-    if (r = "link")
+    if (r == "link")
         return 0x1E
-    if (r = "separator")
+    if (r == "separator")
         return 0x0C
+    ; In Explorer, distinguishing between:
+    ; List (0x21)         ← blank area
+    ; ListItem (0x22)     ← real file/folder
+    ; ColumnHeader (0x19) ← click on a sort header
 
+    ; Explorer’s modern implementation sometimes reports:
+        ; ROLE_SYSTEM_OUTLINE (0x3E) for the whole file-view region
+        ; ROLE_SYSTEM_OUTLINEITEM (0x24) for individual files/folders
+        ; Instead of using classic LIST (0x21) / LISTITEM (0x22)
+    ; This happens frequently in:
+        ; Windows 11’s XAML Explorer
+        ; WebView-backed folder views
+        ; File dialogs using UIA → MSAA proxying
     return 0
 }
 ; ------------------------------------------------------------------
+IsExplorerHeaderClick() {
+    static ROLE_SYSTEM_OUTLINE := 0x3E  ; 62
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, mx, my, winHwnd
+    if (!winHwnd)
+        return false
+
+    ; Only Explorer + common dialogs
+    WinGetClass, cls, ahk_id %winHwnd%
+    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
+        return false
+
+    ; Object directly under the mouse
+    acc := Acc_ObjectFromPoint()   ; <== no coords, same as your debug
+    if !IsObject(acc)
+        return false
+
+    role := ""
+    try role := acc.accRole(0)
+    catch
+        return false
+
+    ; On your system, header band gives role 62 (OUTLINE)
+    return (role == ROLE_SYSTEM_OUTLINE)
+}
+
+; Returns true if the mouse is over a file/folder item in an Explorer file view
+IsExplorerItemClick() {
+    static ROLE_SYSTEM_LISTITEM    := 0x22  ; 34
+    static ROLE_SYSTEM_OUTLINEITEM := 0x24  ; 36
+    static ROLE_SYSTEM_LIST        := 0x21  ; 33
+    static ROLE_SYSTEM_OUTLINE     := 0x3E  ; 62
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, mx, my, winHwnd
+    if (!winHwnd)
+        return false
+
+    ; Only standard Explorer windows / file dialogs
+    WinGetClass, cls, ahk_id %winHwnd%
+    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
+        return false
+
+    acc := Acc_ObjectFromPoint(mx, my)
+    if !IsObject(acc)
+        return false
+
+    ; --- step 1: climb to the nearest LISTITEM / OUTLINEITEM ---
+    item := ""
+    cur  := acc
+
+    Loop 15  ; don’t walk forever
+    {
+        if !IsObject(cur)
+            break
+
+        role := ""
+        try role := cur.accRole(0)
+        catch
+            break
+
+        ; normalize numeric-strings like "34"
+        if !(role is Integer) && (role is Number)
+            role += 0
+
+        ; string variants from Acc.ahk / proxies
+        if !(role is Integer) {
+            r := role
+            StringLower, r, r
+            r := Trim(r)
+            if (r = "list item" || r = "listitem")
+                role := ROLE_SYSTEM_LISTITEM
+            else if (r = "outline item" || r = "outlineitem")
+                role := ROLE_SYSTEM_OUTLINEITEM
+        }
+
+        if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM) {
+            item := cur
+            break
+        }
+
+        ; go up one level
+        parent := ""
+        try parent := cur.accParent
+        cur := parent
+    }
+
+    if !IsObject(item)
+        return false   ; nothing in this chain looks like a file/folder item
+
+    ; --- optional: verify it really belongs to the file view (list/outline) ---
+    cur := item
+    viewFound := false
+
+    Loop 10 {
+        parent := ""
+        try parent := cur.accParent
+        if !IsObject(parent)
+            break
+
+        role := ""
+        try role := parent.accRole(0)
+        catch
+            break
+
+        if !(role is Integer) && (role is Number)
+            role += 0
+
+        if !(role is Integer) {
+            r := role
+            StringLower, r, r
+            r := Trim(r)
+            if (r = "list")
+                role := ROLE_SYSTEM_LIST
+            else if (r = "outline")
+                role := ROLE_SYSTEM_OUTLINE
+        }
+
+        if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE) {
+            viewFound := true
+            break
+        }
+        cur := parent
+    }
+
+    ; If you don’t care about verifying the view, you can just `return true` here.
+    return viewFound
+}
+
+DebugRolesUnderMouse() {
+    CoordMode, Mouse, Screen
+    MouseGetPos, mx, my
+    acc := Acc_ObjectFromPoint(mx, my)
+    if !IsObject(acc) {
+        MsgBox, No acc object
+        return
+    }
+
+    out := ""
+    cur := acc
+    Loop 20 {
+        if !IsObject(cur)
+            break
+
+        role := ""
+        try role := cur.accRole(0)
+        catch
+            break
+
+        out .= "Level " . A_Index . ": " . role . "`n"
+
+        parent := ""
+        try parent := cur.accParent
+        cur := parent
+    }
+    MsgBox, %out%
+}
+
 IsExplorerBlankSpaceClick() {
     static ROLE_SYSTEM_LIST := 0x21  ; MSAA role: "List"
 
@@ -3852,7 +4133,6 @@ IsExplorerBlankSpaceClick() {
 ;   useUIA  = try UIA (UIA_Interface.ahk) if available
 ;   useMSAA = try MSAA (Acc.ahk) if available
 ; =========================================
-
 IsCaretInEdit(useUIA := true, useMSAA := true) {
     WinGet, hWnd, ID, A
     if !hWnd
@@ -3971,6 +4251,16 @@ MSAA_IsFocusedEditable() {
     return false
 }
 
+ControlFocusEx(hWnd := "", ctrlNN := "") {
+    ; Get the listview handle
+    ControlGet, hLV, Hwnd,, %ctrlNN%, ahk_id %hWnd%
+    if (hLV) {
+        ; Force keyboard focus to the listview
+        DllCall("SetFocus", "ptr", hLV)
+    }
+    Return
+}
+
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
 $~LButton::
@@ -3984,7 +4274,12 @@ $~LButton::
     WinGetClass, wmClassD, ahk_id %_winIdD%
     Gui, GUI4Boarder: Hide
 
-    If (wmClassD != "CabinetWClass" && wmClassD != "#32770" && !InStr(_winCtrlD, "SysListView32", True) && !InStr(_winCtrlD, "DirectUIHWND", True) && !InStr(_winCtrlD, "SysTreeView32", True))
+    If (   wmClassD != "CabinetWClass"
+        && wmClassD != "#32770"
+        && !InStr(_winCtrlD, "SysListView32", True)
+        && !InStr(_winCtrlD, "DirectUIHWND", True)
+        && !InStr(_winCtrlD, "SysTreeView32", True)
+        && !InStr(_winCtrlD, "SysHeader32", True))
         Return
 
     SetTimer, keyTrack, Off
@@ -3996,7 +4291,7 @@ $~LButton::
         && (A_TimeSincePriorHotkey < DoubleClickTime)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (_winCtrlD == "SysListView321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")) {
-
+        ; tooltip, %isBlankSpaceExplorer% - %isBlankSpaceNonExplorer%
         If (isBlankSpaceExplorer || isBlankSpaceNonExplorer) {
             If (_winCtrlD == "SysListView321") {
                 Send, {Backspace}
@@ -4043,6 +4338,8 @@ $~LButton::
         }
     }
 
+    isBlankSpaceExplorer := False
+    isBlankSpaceNonExplorer := False
     prevPath := ""
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
         isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
@@ -4087,21 +4384,25 @@ $~LButton::
     }
     Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (timeDiff < floor(DoubleClickTime/2))
-        && (InStr(_winCtrlU,"SysHeader32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
+        && (InStr(_winCtrlU,"SysHeader32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
+        && !IsExplorerItemClick()) {
 
         try {
-            pt := UIA.ElementFromPoint(lbX2,lbY2,False)
-            If !IsObject(pt) {
-                SetTimer, keyTrack, On
-                SetTimer, mouseTrack, On
-                Return
+            isExplorerHeader := IsExplorerHeaderClick()
+            If (!isExplorerHeader) {
+                pt := UIA.ElementFromPoint(lbX2,lbY2,False)
+                If (!IsObject(pt) || pt.CurrentControlType > 50035 || pt.CurrentControlType < 50031) {
+                    SetTimer, keyTrack, On
+                    SetTimer, mouseTrack, On
+                    Return
+                }
+                ; tooltip, % pt.CurrentControlType
             }
 
-            If (pt.CurrentControlType == 50031) {
+            If (isExplorerHeader || pt.CurrentControlType == 50031) {
                 If (wmClassD == "#32770" || _winCtrlU == "DirectUIHWND3")
                     ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
-
-                If (IsModernExplorerActive(_winIdU)) {
+                Else If (IsModernExplorerActive(_winIdU)) {
                     loop 50 {
                         FocusByClassNN(_winCtrlU)
                         sleep, 1
@@ -4114,14 +4415,14 @@ $~LButton::
                 Send, ^{NumpadAdd}
                 Return
             } ; this specific combination is needed for the "Name" column ONLY
-            Else If (pt.CurrentControlType == 50033 && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
+            Else If ((isExplorerHeader || pt.CurrentControlType == 50033) && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
 
                 Send, ^{NumpadAdd}
                 Return
             }
-            Else If (pt.CurrentControlType == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
-                ControlFocus, SysListView321, ahk_id %_winIdU%
-                If !isWin11
+            Else If (isExplorerHeader || pt.CurrentControlType == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
+                ControlFocusEx(_winIdU, "SysListView321")
+                if !isWin11
                     Send, {F5}
 
                 Send, ^{NumpadAdd}
@@ -4840,7 +5141,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     If (quickCheckID != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd)) {
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
-        tooltip, failed quick check: %lClassCheck% - %quickCheckID% - %initTargetHwnd%
+        ; tooltip, failed quick check: %lClassCheck% - %quickCheckID% - %initTargetHwnd%
         Return
     }
     ; tooltip, here1
@@ -5019,6 +5320,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         ; tooltip, here8
+        Critical,   Off
 
         If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
@@ -5027,7 +5329,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             blockKeys := True
-            Send, {LCtrl UP}
+            ; Send, {LCtrl UP}
             Send, ^{NumpadAdd}
             ; Send, {Ctrl UP}
 
@@ -5038,7 +5340,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 sleep, 125
                 blockKeys := False
                 loop, 200 {
-                    If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd)
+                    If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd)
                         Return
 
                     ControlFocus , %initFocusedCtrlNN%, ahk_id %initTargetHwnd%
@@ -5049,8 +5351,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 }
             }
             blockKeys := False
+            FixModifiers()
         }
-        Critical,   Off
     }
 Return
 }
@@ -5653,59 +5955,31 @@ ForceKeyUpVK(vk) {
 }
 ; --------------------------------------------------------------------------------
 FixModifiers() {
-    ; Keys we care about
-    static keys := ["Shift","Ctrl","Alt","LWin","RWin"]
+    static keys := ["LShift","RShift","LCtrl","RCtrl","LAlt","RAlt","LWin","RWin"]
     static vkMap := {}
-    static vkMapVariant := {}
 
-    vkMap["Shift"] := 0x10
-    vkMap["Ctrl"]  := 0x11
-    vkMap["Alt"]   := 0x12
-    vkMap["LWin"]  := 0x5B
-    vkMap["RWin"]  := 0x5C
-
-    vkMapVariant["LShift"] := 0xA0
-    vkMapVariant["RShift"] := 0xA1
-    vkMapVariant["LCtrl"]  := 0xA2
-    vkMapVariant["RCtrl"]  := 0xA3
-    vkMapVariant["LAlt"]   := 0xA4
-    vkMapVariant["RAlt"]   := 0xA5
-    vkMapVariant["LWin"]   := 0x5B
-    vkMapVariant["RWin"]   := 0x5C
-
-    ; Track how long each key has been "mismatched"
-    static stuckCount := {}
-
-    threshold := 6  ; 6 * 50ms = 300ms of mismatch before we try to unstick
+    vkMap["LShift"] := 0xA0
+    vkMap["RShift"] := 0xA1
+    vkMap["LCtrl"]  := 0xA2
+    vkMap["RCtrl"]  := 0xA3
+    vkMap["LAlt"]   := 0xA4
+    vkMap["RAlt"]   := 0xA5
+    vkMap["LWin"]   := 0x5B
+    vkMap["RWin"]   := 0x5C
 
     for _, k in keys
     {
-        ; Ensure a counter exists for this key
-        if (!stuckCount.HasKey(k))
-            stuckCount[k] := 0
+        phys := GetKeyState(k, "P")   ; physical
+        logi := GetKeyState(k)        ; logical
 
-        phys := GetKeyState(k, "P")   ; physical state: 1 = actually held
-        logi := GetKeyState(k)        ; logical (effective) state: 1 = considered down
-
-        ; Classic "stuck modifier": physically UP, logically DOWN
+        ; If logically down but not physically held, treat as ghost and clear it
         if (!phys && logi) {
-            stuckCount[k] += 1
-
-            if (stuckCount[k] >= threshold) {
+            vk := vkMap[k]
+            if (vk) {
                 Critical, On
-                SetTimer keyTrack,   Off
-                SetTimer mouseTrack, Off
-                Send, {%k% UP}      ; try to clear ghost press
-                vk := vkMap[k]
-                FixMod(vk)
-                stuckCount[k] := 0
-                SetTimer keyTrack,   On
-                SetTimer mouseTrack, On
+                ForceKeyUpVK(vk)
                 Critical, Off
             }
-        } else {
-            ; States match or key is legitimately held — reset counter
-            stuckCount[k] := 0
         }
     }
 }
