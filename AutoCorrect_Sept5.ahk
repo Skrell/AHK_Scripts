@@ -626,13 +626,13 @@ DetectWin11()
         }
     } catch e {
         MsgBox, Failed to query OS version.`nError: %e%
-        return False
+        Return False
     }
 
-    if (SubStr(version, 1, 4) = "10.0" && buildNumber >= 22000)
-        return True
-    else
-        return False
+    If (SubStr(version, 1, 4) = "10.0" && buildNumber >= 22000)
+        Return True
+    Else
+        Return False
 }
 
 ; Choose the monitor containing the mouse. If none contains it (rare with odd layouts),
@@ -3532,7 +3532,7 @@ $~^Lbutton::
     Global MonCount
     StopRecursion := True
     SetTimer, mouseTrack, Off
-	SetTimer, keyTrack,   Off
+    SetTimer, keyTrack,   Off
 
     DetectHiddenWindows, Off
     SysGet, MonCount, MonitorCount
@@ -5348,27 +5348,27 @@ ProcessIsElevated(vPID)
 ; Exclude: child/owned/tool windows, non-activating windows, disabled/invisible windows, and some known host processes.
 JEE_WinHasAltTabIcon(hWnd)
 {
-	local
-	If !(DllCall("user32\GetDesktopWindow", "Ptr") = DllCall("user32\GetAncestor", "Ptr",hWnd, "UInt",1, "Ptr")) ;GA_PARENT := 1
-	;|| DllCall("user32\GetWindow", "Ptr",hWnd, "UInt",4, "Ptr") ;GW_OWNER := 4 ;affects taskbar but not alt-tab
-		Return 0
+    local
+    If !(DllCall("user32\GetDesktopWindow", "Ptr") = DllCall("user32\GetAncestor", "Ptr",hWnd, "UInt",1, "Ptr")) ;GA_PARENT := 1
+    ;|| DllCall("user32\GetWindow", "Ptr",hWnd, "UInt",4, "Ptr") ;GW_OWNER := 4 ;affects taskbar but not alt-tab
+        Return 0
 
     WinGet, vWinProc, ProcessName, % "ahk_id " hWnd
     If inStr(vWinProc, "InputHost.exe") || inStr(vWinProc, "App.exe")
         Return 0
 
-	WinGet, vWinStyle, Style, % "ahk_id " hWnd
-	If !vWinStyle
-	|| !(vWinStyle & 0x10000000) ;WS_VISIBLE := 0x10000000
-	|| (vWinStyle & 0x8000000) ;WS_DISABLED := 0x8000000 ;affects alt-tab but not taskbar
-		Return 0
-	WinGet, vWinExStyle, ExStyle, % "ahk_id " hWnd
-	If (vWinExStyle & 0x40000) ;WS_EX_APPWINDOW := 0x40000
-		Return 1
-	If (vWinExStyle & 0x80) ;WS_EX_TOOLWINDOW := 0x80
-	|| (vWinExStyle & 0x8000000) ;WS_EX_NOACTIVATE := 0x8000000 ;affects alt-tab but not taskbar
-		Return 0
-	Return 1
+    WinGet, vWinStyle, Style, % "ahk_id " hWnd
+    If !vWinStyle
+    || !(vWinStyle & 0x10000000) ;WS_VISIBLE := 0x10000000
+    || (vWinStyle & 0x8000000) ;WS_DISABLED := 0x8000000 ;affects alt-tab but not taskbar
+        Return 0
+    WinGet, vWinExStyle, ExStyle, % "ahk_id " hWnd
+    If (vWinExStyle & 0x40000) ;WS_EX_APPWINDOW := 0x40000
+        Return 1
+    If (vWinExStyle & 0x80) ;WS_EX_TOOLWINDOW := 0x80
+    || (vWinExStyle & 0x8000000) ;WS_EX_NOACTIVATE := 0x8000000 ;affects alt-tab but not taskbar
+        Return 0
+    Return 1
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
@@ -5581,8 +5581,8 @@ findDesktopWindowIsOn(hwnd)
 *****************************
 */
 UpdateValidWindows() {
-Global ValidWindows
-Global MonCount
+    Global ValidWindows
+    Global MonCount
 
     currentMon := MWAGetMonitorMouseIsIn()
     WinGet, allWindows, List
@@ -7231,7 +7231,7 @@ Acc_Init() {
     If Not h
         h:=DllCall("LoadLibrary","Str","oleacc","Ptr")
 }
-Acc_ObjectFromPoint(ByRef _idChild_ = "", x = "", y = "") {
+Acc_ObjectFromPoint(ByRef _idChild_ := "", x := "", y := "") {
     Acc_Init()
     If  DllCall("oleacc\AccessibleObjectFromPoint", "Int64", x==""||y==""?0*DllCall("GetCursorPos","Int64*",pt)+pt:x&0xFFFFFFFF|y<<32, "Ptr*", pacc, "Ptr", VarSetCapacity(varChild,8+2*A_PtrSize,0)*0+&varChild)=0
         Return ComObjEnwrap(9,pacc,1), _idChild_:=NumGet(varChild,8,"UInt")
@@ -7271,14 +7271,14 @@ Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=817
 }
 ; Written by jethrow
 Acc_Role(Acc, ChildId=0) {
-	try return ComObjType(Acc,"Name")="IAccessible"?Acc_GetRoleText(Acc.accRole(ChildId)):"invalid object"
+    try Return ComObjType(Acc,"Name")="IAccessible"?Acc_GetRoleText(Acc.accRole(ChildId)):"invalid object"
 }
 Acc_GetRoleText(nRole)
 {
-	nSize := DllCall("oleacc\GetRoleText", "Uint", nRole, "Ptr", 0, "Uint", 0)
-	VarSetCapacity(sRole, (A_IsUnicode?2:1)*nSize)
-	DllCall("oleacc\GetRoleText", "Uint", nRole, "str", sRole, "Uint", nSize+1)
-	Return	sRole
+    nSize := DllCall("oleacc\GetRoleText", "Uint", nRole, "Ptr", 0, "Uint", 0)
+    VarSetCapacity(sRole, (A_IsUnicode?2:1)*nSize)
+    DllCall("oleacc\GetRoleText", "Uint", nRole, "str", sRole, "Uint", nSize+1)
+    Return  sRole
 }
 Acc_Focus() {
     static OBJID_CARET  := 0xFFFFFFF8
