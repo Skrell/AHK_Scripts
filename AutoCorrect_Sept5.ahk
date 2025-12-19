@@ -19,19 +19,19 @@
 
 ; #include %A_ScriptDir%\_VD.ahk
 ; DLL
-hVirtualDesktopAccessor := DllCall("LoadLibrary", "Str", A_ScriptDir . "\VirtualDesktopAccessor.dll", "Ptr")
+hVirtualDesktopAccessor             := DllCall("LoadLibrary", "Str", A_ScriptDir . "\VirtualDesktopAccessor.dll", "Ptr")
 
-GetDesktopCountProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetDesktopCount", "Ptr")
-GoToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GoToDesktopNumber", "Ptr")
-GetCurrentDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetCurrentDesktopNumber", "Ptr")
+GetDesktopCountProc                 := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetDesktopCount", "Ptr")
+GoToDesktopNumberProc               := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GoToDesktopNumber", "Ptr")
+GetCurrentDesktopNumberProc         := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetCurrentDesktopNumber", "Ptr")
 IsWindowOnCurrentVirtualDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsWindowOnCurrentVirtualDesktop", "Ptr")
-IsWindowOnDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsWindowOnDesktopNumber", "Ptr")
-MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "MoveWindowToDesktopNumber", "Ptr")
-IsPinnedWindowProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsPinnedWindow", "Ptr")
-GetDesktopNameProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetDesktopName", "Ptr")
-SetDesktopNameProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "SetDesktopName", "Ptr")
-CreateDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "CreateDesktop", "Ptr")
-RemoveDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "RemoveDesktop", "Ptr")
+IsWindowOnDesktopNumberProc         := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsWindowOnDesktopNumber", "Ptr")
+MoveWindowToDesktopNumberProc       := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "MoveWindowToDesktopNumber", "Ptr")
+IsPinnedWindowProc                  := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsPinnedWindow", "Ptr")
+GetDesktopNameProc                  := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetDesktopName", "Ptr")
+SetDesktopNameProc                  := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "SetDesktopName", "Ptr")
+CreateDesktopProc                   := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "CreateDesktop", "Ptr")
+RemoveDesktopProc                   := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "RemoveDesktop", "Ptr")
 
 SendMode, Input ; It injects the whole keystroke atomically, reducing the window where logical/physical can disagree
 
@@ -91,6 +91,7 @@ Global keys                                := "abcdefghijklmnopqrstuvwxyz"
 Global numbers                             := "0123456789"
 Global DoubleClickTime                     := DllCall("GetDoubleClickTime")
 Global isWin11                             := DetectWin11()
+Global isModernExplorerInReg               := IsExplorerModern()
 Global TaskBarHeight                       := 0
 Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
@@ -175,28 +176,55 @@ CreateMaskGui(4, hBottom)
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
 SysGet, MonCount, MonitorCount
-Sysget, totalDesktopWidth, 78
-Sysget, totalDesktopHeight, 79
 
-Loop, %MonCount%
-{
-    SysGet, MonitorName, MonitorName, %A_Index%
-    SysGet, Monitor, Monitor, %A_Index%
-    SysGet, MonitorWorkArea, MonitorWorkArea, %A_Index%
-    ;MsgBox, Monitor:`t#%A_Index%`nName:`t%MonitorName%`nLeft:`t%MonitorLeft% (%MonitorWorkAreaLeft% work)`nTop:`t%MonitorTop% (%MonitorWorkAreaTop% work)`nRight:`t%MonitorRight% (%MonitorWorkAreaRight% work)`nBottom:`t%MonitorBottom% (%MonitorWorkAreaBottom% work)
-    If (MonitorWorkAreaLeft < 0) {
-        Global G_DisplayLeftEdge := A_ScreenWidth-totalDesktopWidth
-    }
-    Else {
-        Global G_DisplayRightEdge := A_ScreenWidth
-        Global G_DisplayLeftEdge  := 0
+; leftArrow  := "←"
+; rightArrow := "→"
+; upArrow    := "↑"
+; downArrow  := "↓"
+leftArrow  := Chr(0x2190)  ; ←
+rightArrow := Chr(0x2192)  ; →
+upArrow    := Chr(0x2191)  ; ↑
+downArrow  := Chr(0x2193)  ; ↓
+
+GetDesktopEdges(ByRef leftEdge, ByRef topEdge, ByRef rightEdge, ByRef bottomEdge) {
+    SysGet, monCount, MonitorCount
+
+    leftEdge  := ""
+    topEdge   := ""
+    rightEdge := ""
+    bottomEdge:= ""
+
+    Loop, %monCount% {
+        ; "mon" is the prefix; SysGet will set monLeft, monTop, monRight, monBottom
+        SysGet, mon, Monitor, %A_Index%
+
+        if (A_Index = 1) {
+            leftEdge   := monLeft
+            topEdge    := monTop
+            rightEdge  := monRight
+            bottomEdge := monBottom
+        } else {
+            if (monLeft < leftEdge)
+                leftEdge := monLeft
+            if (monTop < topEdge)
+                topEdge := monTop
+            if (monRight > rightEdge)
+                rightEdge := monRight
+            if (monBottom > bottomEdge)
+                bottomEdge := monBottom
+        }
     }
 }
 
+GetDesktopEdges(G_DisplayLeftEdge, G_DisplayTopEdge, G_DisplayRightEdge, G_DisplayBottomEdge)
+
 line1 := "Total Number of Monitors is " MonCount " with Primary being " MonNum
-        . " and edges: " G_DisplayLeftEdge " - " G_DisplayRightEdge
-line2 := "Current Mon is " GetCurrentMonitorIndex() " and Win11 is " isWin11
-Tooltip, % line1 "`n" line2
+line1a := "Desktop edges: " leftArrow . "(" . G_DisplayLeftEdge . "," . G_DisplayRightEdge . ")" . rightArrow
+line1b := "Desktop edges: " upArrow . "(" . G_DisplayTopEdge . "," . G_DisplayBottomEdge . ")" . downArrow
+line2 := "Current Mon is " GetCurrentMonitorIndex()
+line3 := "Win11 is " isWin11
+line4 := "Modern Explorer is " isModernExplorerInReg
+Tooltip, % line1 "`n" line1a "`n" line1b "`n" line2 "`n" line3 "`n" line4
 Sleep 5000
 Tooltip
 
@@ -3954,7 +3982,10 @@ IsExplorerItemClick() {
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
         return false
 
+    ; NOTE: depending on your Acc.ahk, you might want Acc_ObjectFromPoint() or Acc_ObjectFromPoint(, mx, my).
+    ; If your version expects (x,y) directly, this is fine:
     acc := Acc_ObjectFromPoint(mx, my)
+    ; If it expects ByRef child,x,y, the safer call is: acc := Acc_ObjectFromPoint(, mx, my)
     if !IsObject(acc)
         return false
 
@@ -3962,8 +3993,7 @@ IsExplorerItemClick() {
     item := ""
     cur  := acc
 
-    Loop 15  ; don’t walk forever
-    {
+    Loop 15 {  ; don’t walk forever
         if !IsObject(cur)
             break
 
@@ -3973,11 +4003,10 @@ IsExplorerItemClick() {
             break
 
         ; normalize numeric-strings like "34"
-        if !(role is Integer) && (role is Number)
+        if role is number
             role += 0
-
-        ; string variants from Acc.ahk / proxies
-        if !(role is Integer) {
+        else {
+            ; string variants from Acc.ahk / proxies
             r := role
             StringLower, r, r
             r := Trim(r)
@@ -4016,10 +4045,9 @@ IsExplorerItemClick() {
         catch
             break
 
-        if !(role is Integer) && (role is Number)
+        if role is number
             role += 0
-
-        if !(role is Integer) {
+        else {
             r := role
             StringLower, r, r
             r := Trim(r)
@@ -4033,10 +4061,11 @@ IsExplorerItemClick() {
             viewFound := true
             break
         }
+
         cur := parent
     }
 
-    ; If you don’t care about verifying the view, you can just `return true` here.
+    ; If you don’t care about verifying the view, you could just `return true` once item is found.
     return viewFound
 }
 
@@ -4070,7 +4099,7 @@ DebugRolesUnderMouse() {
 }
 
 IsExplorerBlankSpaceClick() {
-    static ROLE_SYSTEM_LIST := 0x21  ; MSAA role: "List"
+    static ROLE_SYSTEM_LIST := 0x21  ; 33, MSAA role: "List"
 
     CoordMode, Mouse, Screen
     MouseGetPos, x, y, winHwnd
@@ -4083,30 +4112,41 @@ IsExplorerBlankSpaceClick() {
         return false
 
     ; MSAA: object under cursor
+    ; If your Acc.ahk uses ByRef child,x,y, prefer Acc_ObjectFromPoint(, x, y)
     acc := Acc_ObjectFromPoint(x, y)
     if !IsObject(acc)
         return false
 
-    roleNum := ""
-    try roleNum := acc.accRole(0)
+    role := ""
+    try role := acc.accRole(0)
     catch
         return false
 
+    ; Normalize role: number OR string ("list")
+    if role is number
+        role += 0
+    else {
+        r := role
+        StringLower, r, r
+        r := Trim(r)
+        if (r = "list")
+            role := ROLE_SYSTEM_LIST
+    }
+
     ; We only consider clicks where MSAA says we're on the LIST background
-    if (roleNum != ROLE_SYSTEM_LIST)
+    if (role != ROLE_SYSTEM_LIST)
         return false
 
     ; ------------------------------------------------------------
     ; Exclude the column header row (Details view) using geometry
     ; ------------------------------------------------------------
-    if IsFunc("Acc_Location") {
+    if (IsFunc("Acc_Location")) {
         ; Get the LIST's bounding rect in screen coords
         listX := listY := listW := listH := ""
         Acc_Location(acc, listX, listY, listW, listH)
 
         if (listX != "" && listY != "" && listH != "") {
             ; Approximate header height in a DPI-aware way.
-            ; Tune baseHeaderPx if needed.
             baseHeaderPx := 24       ; good starting point for 100% DPI
             dpi           := A_ScreenDPI ? A_ScreenDPI : 96
             headerHeight  := Round(baseHeaderPx * dpi / 96.0)
@@ -4114,19 +4154,19 @@ IsExplorerBlankSpaceClick() {
             ; If the mouse is inside the LIST rect but within the top header band,
             ; treat it as header click -> NOT "blank space".
             if (x >= listX && x < listX + listW
-             && y >= listY && y < listY + headerHeight) {
+             && y >= listY && y < listY + headerHeight)
                 return false
-            }
         }
     }
 
     ; If we got this far:
     ; - We're in Explorer / common dialog
-    ; - MSAA role is LIST
+    ; - Role is LIST
     ; - We're not in the approximate header band
-    ; => Treat it as a blank-space click in the folder view.
+    ; => Treat as a blank-space click in the folder view.
     return true
 }
+
 
 ; =========================================
 ; Smart IsCaretInEdit – AHK v1.1+
@@ -4252,13 +4292,25 @@ MSAA_IsFocusedEditable() {
 }
 
 ControlFocusEx(hWnd := "", ctrlNN := "") {
-    ; Get the listview handle
-    ControlGet, hLV, Hwnd,, %ctrlNN%, ahk_id %hWnd%
-    if (hLV) {
-        ; Force keyboard focus to the listview
-        DllCall("SetFocus", "ptr", hLV)
+    if (hWnd = "")
+        return false
+
+    ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hWnd%
+
+    if (!hCtl)
+        return false
+
+    ; Determine thread ownership
+    tidTarget := DllCall("GetWindowThreadProcessId","ptr", hCtl, "uint*", 0, "uint")
+    tidAHK    := DllCall("GetCurrentThreadId", "uint")
+    if (tidTarget == tidAHK) {
+        ; Same thread: fastest path
+        DllCall("SetFocus", "ptr", hCtl)
+        return (DllCall("GetFocus","ptr") = hCtl)
+    } else {
+        ; Cross-thread: use robust routine
+        return FocusHwndFast(hCtl, true)
     }
-    Return
 }
 
 #MaxThreadsPerHotkey 2
@@ -4304,7 +4356,7 @@ $~LButton::
         }
 
         KeyWait, Lbutton, U T3
-        ; LbuttonEnabled     := False
+        LbuttonEnabled     := False
 
         If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
             ; tooltip, getting path
@@ -4321,19 +4373,18 @@ $~LButton::
                 SendCtrlAdd(_winIdD, prevPath, currentPath, wmClassD)
             }
 
-            ; LbuttonEnabled     := True
+            LbuttonEnabled     := True
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
             Return
         }
         Else {
-            tooltip, sending to non-explorer
-
+            ; tooltip, sending to non-explorer
             SendCtrlAdd(_winIdD,,,wmClassD)
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
             sleep, 250
-            ; LbuttonEnabled     := True
+            LbuttonEnabled     := True
             Return
         }
     }
@@ -4373,108 +4424,140 @@ $~LButton::
     rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
 
-    ; tooltip, %timeDiff% ms - %_winCtrlD% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
+    ; tooltip, %timeDiff% ms - %wmClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
+    ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick() "-" IsModernExplorerActive(_winIdU)
+    If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)) {
 
-    If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (timeDiff < floor(DoubleClickTime/2))
-        && (InStr(_winCtrlU,"SysListView32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
-        && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
+        If (   (InStr(_winCtrlU,"SysListView32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
+            && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
 
-        SetTimer, SendCtrlAddLabel, -125
-    }
-    Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (timeDiff < floor(DoubleClickTime/2))
-        && (InStr(_winCtrlU,"SysHeader32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
-        && !IsExplorerItemClick()) {
+            SetTimer, SendCtrlAddLabel, -125
+        }
+        Else If ((InStr(_winCtrlU,"SysHeader32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
+            &&   !IsExplorerItemClick()) {
 
-        try {
             isExplorerHeader := IsExplorerHeaderClick()
-            If (!isExplorerHeader) {
+
+            ; wm := wmClassD
+            ; ctrl := _winCtrlU
+            ; winid := _winIdU
+            ; is11 := isWin11 ? "1" : "0"
+            ; iex := IsExplorerModern() ? "1" : "0"
+            ; ima := IsModernExplorerActive(winid) ? "1" : "0"
+            ; ih := isExplorerHeader ? "1" : "0"
+            ; ptType := IsObject(pt) ? pt.CurrentControlType : "none"
+
+            ; tooltipText := "wmClassD=[" . wm . "] len=" . StrLen(wm) . "`n"
+                        ; . "_winCtrlU=[" . ctrl . "] len=" . StrLen(ctrl) . "`n"
+                        ; . "_winIdU=" . winid . "`n"
+                        ; . "isWin11=" . is11 . " IsExplorerModern()=" . iex . " IsModernExplorerActive()=" . ima . "`n"
+                        ; . "IsExplorerHeaderClick()=" . ih . "`n"
+                        ; . "pt.CurrentControlType=" . ptType
+            ; Tooltip %tooltipText%
+
+            try {
+                If (!isExplorerHeader) {
+                    pt := UIA.ElementFromPoint(lbX2,lbY2,False)
+                    If (!IsObject(pt) || pt.CurrentControlType > 50035 || pt.CurrentControlType < 50031) {
+                        SetTimer, keyTrack, On
+                        SetTimer, mouseTrack, On
+                        Return
+                    }
+                }
+
+                If (isExplorerHeader || pt.CurrentControlType == 50031) {
+                    If (wmClassD == "#32770" || _winCtrlU == "DirectUIHWND3") {
+                        ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
+                    }
+                    Else If (wmClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
+                        loop 50 {
+                            if (ControlFocusEx(_winIdU, _winCtrlU))
+                                break
+                            sleep, 1
+                            ; ControlGetFocus, testFocus, ahk_id %_winIdU%
+                            ; if (InStr(testFocus, "DirectUIHWND", false))
+                                ; break
+                        }
+                    }
+
+                    Send, ^{NumpadAdd}
+                    Return
+                } ; this specific combination is needed for the "Name" column ONLY
+                Else If ((isExplorerHeader || pt.CurrentControlType == 50033) && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
+
+                    Send, ^{NumpadAdd}
+                    Return
+                }
+                Else If (isExplorerHeader || pt.CurrentControlType == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
+                    ControlFocusEx(_winIdU, "SysListView321")
+                    if !isWin11
+                        Send, {F5}
+
+                    Send, ^{NumpadAdd}
+                    Return
+                }
+            } catch e {
+                tooltip, 1: UIA TIMED OUT!!!!
+                MsgBox % "Exception caught:`n" . "Message: " e.Message "`n" . "What: " e.What "`n" . "File: " e.File "`n" . "Line: " e.Line "`n" . "Extra: " e.Extra
+                UIA :=  ;// set to a different value
+                ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                UIA := UIA_Interface() ; Initialize UIA interface
+                UIA.TransactionTimeout := 2000
+                UIA.ConnectionTimeout  := 20000
+            }
+        }
+        Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
+            && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
+            && (_winCtrlU == "UpBand1" || InStr(_winCtrlU,"ToolbarWindow32", True) || _winCtrlU == "Microsoft.UI.Content.DesktopChildSiteBridge1")
+            && (timeDiff < (DoubleClickTime/2))) {
+
+            try {
                 pt := UIA.ElementFromPoint(lbX2,lbY2,False)
-                If (!IsObject(pt) || pt.CurrentControlType > 50035 || pt.CurrentControlType < 50031) {
+                If !IsObject(pt) {
                     SetTimer, keyTrack, On
                     SetTimer, mouseTrack, On
                     Return
                 }
-                ; tooltip, % pt.CurrentControlType
-            }
+                ; tooltip, % pt.CurrentControlType "-" pt.CurrentName "-" pt.CurrentLocalizedControlType
+                If (pt.CurrentControlType == 50000
+                    && !inStr(pt.CurrentName, "Back", True) && !inStr(pt.CurrentName, "Forward", True) && !inStr(pt.CurrentName, "Up", True) && !inStr(pt.CurrentName, "Refresh", True)) {
 
-            If (isExplorerHeader || pt.CurrentControlType == 50031) {
-                If (wmClassD == "#32770" || _winCtrlU == "DirectUIHWND3")
-                    ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
-                Else If (IsModernExplorerActive(_winIdU)) {
-                    loop 50 {
-                        FocusByClassNN(_winCtrlU)
-                        sleep, 1
-                        ControlGetFocus, testFocus, ahk_id %_winIdU%
-                        if (InStr(testFocus, "DirectUIHWND", false))
-                            break
+                    Return
                     }
-                }
-
-                Send, ^{NumpadAdd}
-                Return
-            } ; this specific combination is needed for the "Name" column ONLY
-            Else If ((isExplorerHeader || pt.CurrentControlType == 50033) && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
-
-                Send, ^{NumpadAdd}
-                Return
-            }
-            Else If (isExplorerHeader || pt.CurrentControlType == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
-                ControlFocusEx(_winIdU, "SysListView321")
-                if !isWin11
-                    Send, {F5}
-
-                Send, ^{NumpadAdd}
-                Return
-            }
-        } catch e {
-            tooltip, 1: UIA TIMED OUT!!!!
-            UIA :=  ;// set to a different value
-            ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-            UIA := UIA_Interface() ; Initialize UIA interface
-            UIA.TransactionTimeout := 2000
-            UIA.ConnectionTimeout  := 20000
-        }
-    }
-    Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
-        && (_winCtrlU == "UpBand1" || InStr(_winCtrlU,"ToolbarWindow32", True) || _winCtrlU == "Microsoft.UI.Content.DesktopChildSiteBridge1")
-        && (timeDiff < (DoubleClickTime/2))) {
-
-        try {
-            pt := UIA.ElementFromPoint(lbX2,lbY2,False)
-            If !IsObject(pt) {
+            } catch e {
+                tooltip, 2: UIA TIMED OUT!!!!
+                UIA :=  ;// set to a different value
+                ; VarSetCapacity(UIA, 0) ;// set capacity to zero
+                UIA := UIA_Interface() ; Initialize UIA interface
+                UIA.TransactionTimeout := 2000
+                UIA.ConnectionTimeout  := 20000
                 SetTimer, keyTrack, On
                 SetTimer, mouseTrack, On
                 Return
             }
-            ; tooltip, % pt.CurrentControlType "-" pt.CurrentName "-" pt.CurrentLocalizedControlType
-            If (pt.CurrentControlType == 50000
-                && !inStr(pt.CurrentName, "Back", True) && !inStr(pt.CurrentName, "Forward", True) && !inStr(pt.CurrentName, "Up", True) && !inStr(pt.CurrentName, "Refresh", True)) {
 
-                Return
+            If inStr(pt.CurrentName, "Refresh", True) {
+                SendCtrlAdd(_winIdU, , , wmClassD)
+            }
+            Else If (  (pt.CurrentControlType == 50000) ; handles explorer based buttons
+                    || (pt.CurrentControlType == 50011) ; handles #32770 breadcrumb bar
+                    || (pt.CurrentControlType == 50020) ; handles normal explorer breadcrumb bar
+                    || (pt.CurrentControlType == 50031 && !inStr(pt.CurrentName, "Open", True)) ; handles #32770 breadcrumb bar
+                    || (pt.CurrentControlType == 50031 && !inStr(pt.CurrentLocalizedControlType, "split", True))) { ; handles normal explorer breadcrumb bar
+
+                currentPath := ""
+                loop 100 {
+                    currentPath := GetExplorerPath(_winIdU)
+                    If (currentPath != "" && currentPath != prevPath)
+                        break
+                    sleep, 1
                 }
-        } catch e {
-            tooltip, 2: UIA TIMED OUT!!!!
-            UIA :=  ;// set to a different value
-            ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-            UIA := UIA_Interface() ; Initialize UIA interface
-            UIA.TransactionTimeout := 2000
-            UIA.ConnectionTimeout  := 20000
-            SetTimer, keyTrack, On
-            SetTimer, mouseTrack, On
-            Return
+                SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
+            }
         }
-
-        If inStr(pt.CurrentName, "Refresh", True) {
-            SendCtrlAdd(_winIdU, , , wmClassD)
-        }
-        Else If (  (pt.CurrentControlType == 50000) ; handles explorer based buttons
-                || (pt.CurrentControlType == 50011) ; handles #32770 breadcrumb bar
-                || (pt.CurrentControlType == 50020) ; handles normal explorer breadcrumb bar
-                || (pt.CurrentControlType == 50031 && !inStr(pt.CurrentName, "Open", True)) ; handles #32770 breadcrumb bar
-                || (pt.CurrentControlType == 50031 && !inStr(pt.CurrentLocalizedControlType, "split", True))) { ; handles normal explorer breadcrumb bar
+        Else If (InStr(_winCtrlU, "SysTreeView32", True)
+            && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
+            && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
 
             currentPath := ""
             loop 100 {
@@ -4483,23 +4566,8 @@ $~LButton::
                     break
                 sleep, 1
             }
-            SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
+            SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD, _winCtrlU)
         }
-    }
-    Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (InStr(_winCtrlU, "SysTreeView32", True))
-        && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
-        && (timeDiff < floor(DoubleClickTime/2))
-        && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
-
-        currentPath := ""
-        loop 100 {
-            currentPath := GetExplorerPath(_winIdU)
-            If (currentPath != "" && currentPath != prevPath)
-                break
-            sleep, 1
-        }
-        SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD, _winCtrlU)
     }
 
     SetTimer, keyTrack, On
@@ -4576,11 +4644,6 @@ FocusHwndFast(hwndTarget, verify := true) {
     return success
 }
 
-FocusByClassNN(classNN, winTitle:="A", verify:=true) {
-    ControlGet, hCtl, Hwnd,, %classNN%, %winTitle%
-    return hCtl ? FocusHwndFast(hCtl, verify) : false
-}
-
 WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
     Global UIA
     try {
@@ -4590,7 +4653,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
         If !isCabinetWClass10 && !skipFocus {
             loop 50 {
                 ; shellEl.setFocus()
-                FocusByClassNN("DirectUIHWND2")
+                ControlFocusEx(targetHwndID,"DirectUIHWND2")
                 sleep, 1
                 ControlGetFocus, testFocus, ahk_id %targetHwndID%
                 if (InStr(testFocus, "DirectUIHWND", false))
@@ -5023,39 +5086,49 @@ GetWindowRectEx(hWnd, ByRef L, ByRef T, ByRef R, ByRef B) {
     return true
 }
 
+; Returns true if subkey (like "Software\Classes\CLSID\{...}\InProcServer32") exists under HKCU
+KeyExistsInHKCU(subkey) {
+    ; constants
+    HKEY_CURRENT_USER := 0x80000001
+    KEY_READ := 0x20019
+
+    ; try to open the subkey (Unicode)
+    hKey := 0
+    ret := DllCall("Advapi32\RegOpenKeyExW", "Ptr", HKEY_CURRENT_USER, "WStr", subkey, "UInt", 0, "UInt", KEY_READ, "PtrP", hKey)
+
+    if (ret == 0) { ; ERROR_SUCCESS
+        ; close handle and return true
+        DllCall("Advapi32\RegCloseKey", "Ptr", hKey)
+        return true
+    }
+    return false
+}
+; IsExplorerModern() -> returns true if modern (Windows 11) Explorer UI is active,
+;                      false if classic (Windows 10) Explorer UI is active.
+HasWin10ExplorerOverride() {
+    win10ExplorerGUIDs := ["{2aa9162e-c906-4dd9-ad0b-3d24a8eef5a0}", "{6480100b-5a83-4d1e-9f69-8ae5a88e9a33}"]
+    base := "Software\Classes\CLSID\"
+    for _, guid in win10ExplorerGUIDs {
+        subkey := base . guid . "\InProcServer32"
+        if (KeyExistsInHKCU(subkey))
+            return true
+    }
+    return false
+}
+IsExplorerModern() {
+    return !HasWin10ExplorerOverride()
+}
+
+
+; -----------------------
+; Example usage:
+; -----------------------
+; if (IsExplorerModern())
+;     MsgBox % "Explorer appears to be MODERN (Windows 11)."
+; else
+;     MsgB
+
 IsModernExplorerActive(hWnd := "") {
-    ; Returns true if the active window is a modern Win11 File Explorer window
-
-    ; 1) Get active window
-    ; WinGet, hWnd, ID, A
-    ; if !hWnd
-        ; return false
-
-    ; ; 2) Class must be Explorer frame
-    ; WinGetClass, cls, ahk_id %hWnd%
-    ; if (cls != "CabinetWClass")
-        ; return false
-
-    ; ; 3) Process must be explorer.exe
-    ; WinGet, proc, ProcessName, ahk_id %hWnd%
-    ; if (proc != "explorer.exe")
-        ; return false
-
-    ; ; 4) OS must be Windows 11 (build >= 22000)
-    ; ;    Use 64-bit view for the key if you're running 32-bit AHK on 64-bit Windows
-    ; SetRegView, 64
-    ; RegRead, build, HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion, CurrentBuildNumber
-    ; SetRegView, 32  ; restore default
-
-    ; ; If we couldn't read the build for some reason, be conservative:
-    ; if (ErrorLevel)
-        ; return false
-
-    ; if ((build + 0) < 22000)  ; pre-Win11
-        ; return false
-
-    ; return true
-
     global UIA, isWin11
 
     if !isWin11
@@ -5126,11 +5199,16 @@ IsModernExplorerActive(hWnd := "") {
     return false
 }
 
-
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
     Global UIA, isWin11, blockKeys
 
     TargetControl := ""
+    OutputVar1    := 0
+    OutputVar2    := 0
+    OutputVar3    := 0
+    OutputVar4    := 0
+    OutputVar6    := 0
+    OutputVar8    := 0
 
     If (initTargetClass == "")
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
@@ -5159,20 +5237,31 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
 
-        OutputVar1 := 0
-        OutputVar2 := 0
-        OutputVar3 := 0
-        OutputVar4 := 0
-        OutputVar6 := 0
-        OutputVar8 := 0
-        ; tooltip, here3
-        If (!InStr(initFocusedCtrlNN,   "SysListView32", True)
-                && initFocusedCtrlNN != "DirectUIHWND2"
-                && initFocusedCtrlNN != "DirectUIHWND3"
-                && initFocusedCtrlNN != "DirectUIHWND4"
-                && initFocusedCtrlNN != "DirectUIHWND6"
-                && initFocusedCtrlNN != "DirectUIHWND8" ) {
-
+        If (InStr(initFocusedCtrlNN,  "SysListView32", True)) {
+            OutputVar1 := 1
+            TargetControl := initFocusedCtrlNN
+        }
+        Else If (initFocusedCtrlNN == "DirectUIHWND4") {
+            OutputVar4 := 1
+            TargetControl := initFocusedCtrlNN
+        }
+        Else If (initFocusedCtrlNN == "DirectUIHWND6") {
+            OutputVar6 := 1
+            TargetControl := initFocusedCtrlNN
+        }
+        Else If (initFocusedCtrlNN == "DirectUIHWND8") {
+            OutputVar8 := 1
+            TargetControl := initFocusedCtrlNN
+        }
+        Else If (initFocusedCtrlNN == "DirectUIHWND2") {
+            OutputVar2 := 1
+            TargetControl := initFocusedCtrlNN
+        }
+        Else If (initFocusedCtrlNN == "DirectUIHWND3") {
+            OutputVar3 := 1
+            TargetControl := initFocusedCtrlNN
+        }
+        Else {
             loop 100 {
                 ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %initTargetHwnd%
                 ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %initTargetHwnd%
@@ -5184,34 +5273,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                     break
                 sleep, 1
             }
-            ; tooltip, here4
         }
-        Else {
-            If (InStr(initFocusedCtrlNN,  "SysListView32",True)) {
-                OutputVar1 := 1
-                TargetControl := initFocusedCtrlNN
-            }
-            Else If (initFocusedCtrlNN == "DirectUIHWND4") {
-                OutputVar4 := 1
-                TargetControl := "DirectUIHWND4"
-            }
-            Else If (initFocusedCtrlNN == "DirectUIHWND6") {
-                OutputVar6 := 1
-                TargetControl := "DirectUIHWND6"
-            }
-            Else If (initFocusedCtrlNN == "DirectUIHWND8") {
-                OutputVar8 := 1
-                TargetControl := "DirectUIHWND8"
-            }
-            Else If (initFocusedCtrlNN == "DirectUIHWND2") {
-                OutputVar2 := 1
-                TargetControl := "DirectUIHWND2"
-            }
-            Else If (initFocusedCtrlNN == "DirectUIHWND3") {
-                OutputVar3 := 1
-                TargetControl := "DirectUIHWND3"
-            }
-        }
+
         ; tooltip, here5
         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
@@ -5241,10 +5304,12 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                     ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
                 }
 
-                If !IsModernExplorerActive(initTargetHwnd)
+                ; If !IsModernExplorerActive(initTargetHwnd)
+                If (lClassCheck == "CabinetWClass" && !isModernExplorerInReg)
                     ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
 
-                If ((!isWin11 || !IsModernExplorerActive(initTargetHwnd)) && lClassCheck == "CabinetWClass")
+                ; If (lClassCheck == "CabinetWClass" && (!isWin11 || !IsModernExplorerActive(initTargetHwnd)))
+                If (lClassCheck == "CabinetWClass" && (!isWin11 || !isModernExplorerInReg))
                     TargetControl := "DirectUIHWND3"
                 Else If (OutHeight2 > OutHeight3)
                     TargetControl := "DirectUIHWND2"
@@ -5459,7 +5524,7 @@ IsOverException(hWnd := "") {
 
     If (   proc == "peazip.exe"
         || proc == "SndVol.exe"
-        || ((cl == "CabinetWClass" || cl == "#32770") && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
+        || (inStr("File Explorer", tit, True) && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
         || MouseIsOverTaskbar()
         || cl == "#32768"
         || cl == "Autohotkey"
@@ -6005,12 +6070,12 @@ keyTrack() {
         If (   TimeOfLastHotkeyTyped
             && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
             && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
-            && (InStr(keys, Substr(A_ThisHotkey,2) , false) 
-                || InStr(numbers, Substr(A_ThisHotkey,2) , false) 
-                || A_ThisHotkey == "~:" 
-                || A_ThisHotkey == "~/" 
-                || A_ThisHotkey == "$~Space" 
-                || A_ThisHotkey == "$CapsLock" 
+            && (InStr(keys, Substr(A_ThisHotkey,2) , false)
+                || InStr(numbers, Substr(A_ThisHotkey,2) , false)
+                || A_ThisHotkey == "~:"
+                || A_ThisHotkey == "~/"
+                || A_ThisHotkey == "$~Space"
+                || A_ThisHotkey == "$CapsLock"
                 || A_ThisHotkey == "$~Backspace") ) {
 
             TimeOfLastHotkeyTyped :=
