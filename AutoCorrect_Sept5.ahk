@@ -4098,73 +4098,175 @@ DebugRolesUnderMouse() {
     MsgBox, %out%
 }
 
+; IsExplorerBlankSpaceClick() {
+    ; static ROLE_SYSTEM_LIST := 0x21  ; 33, MSAA role: "List"
+
+    ; CoordMode, Mouse, Screen
+    ; MouseGetPos, x, y, winHwnd
+    ; if (!winHwnd)
+        ; return false
+
+    ; ; Only care about Explorer + common dialogs
+    ; WinGetClass, cls, ahk_id %winHwnd%
+    ; if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
+        ; return false
+
+    ; ; MSAA: object under cursor
+    ; ; If your Acc.ahk uses ByRef child,x,y, prefer Acc_ObjectFromPoint(, x, y)
+    ; acc := Acc_ObjectFromPoint(x, y)
+    ; if !IsObject(acc)
+        ; return false
+
+    ; role := ""
+    ; try role := acc.accRole(0)
+    ; catch
+        ; return false
+
+    ; ; Normalize role: number OR string ("list")
+    ; if role is number
+        ; role += 0
+    ; else {
+        ; r := role
+        ; StringLower, r, r
+        ; r := Trim(r)
+        ; if (r = "list")
+            ; role := ROLE_SYSTEM_LIST
+    ; }
+
+    ; ; We only consider clicks where MSAA says we're on the LIST background
+    ; if (role != ROLE_SYSTEM_LIST)
+        ; return false
+
+    ; ; ------------------------------------------------------------
+    ; ; Exclude the column header row (Details view) using geometry
+    ; ; ------------------------------------------------------------
+    ; if (IsFunc("Acc_Location")) {
+        ; ; Get the LIST's bounding rect in screen coords
+        ; listX := listY := listW := listH := ""
+        ; Acc_Location(acc, listX, listY, listW, listH)
+
+        ; if (listX != "" && listY != "" && listH != "") {
+            ; ; Approximate header height in a DPI-aware way.
+            ; baseHeaderPx := 24       ; good starting point for 100% DPI
+            ; dpi           := A_ScreenDPI ? A_ScreenDPI : 96
+            ; headerHeight  := Round(baseHeaderPx * dpi / 96.0)
+
+            ; ; If the mouse is inside the LIST rect but within the top header band,
+            ; ; treat it as header click -> NOT "blank space".
+            ; if (x >= listX && x < listX + listW
+             ; && y >= listY && y < listY + headerHeight)
+                ; return false
+        ; }
+    ; }
+
+    ; ; If we got this far:
+    ; ; - We're in Explorer / common dialog
+    ; ; - Role is LIST
+    ; ; - We're not in the approximate header band
+    ; ; => Treat as a blank-space click in the folder view.
+    ; return true
+; }
 IsExplorerBlankSpaceClick() {
-    static ROLE_SYSTEM_LIST := 0x21  ; 33, MSAA role: "List"
+    static ROLE_SYSTEM_LIST        := 0x21  ; 33
+    static ROLE_SYSTEM_OUTLINE     := 0x3E  ; 62
+    static ROLE_SYSTEM_LISTITEM    := 0x22  ; 34
+    static ROLE_SYSTEM_OUTLINEITEM := 0x24  ; 36
 
     CoordMode, Mouse, Screen
     MouseGetPos, x, y, winHwnd
     if (!winHwnd)
         return false
 
-    ; Only care about Explorer + common dialogs
+    ; Only Explorer + common dialogs
     WinGetClass, cls, ahk_id %winHwnd%
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
         return false
 
     ; MSAA: object under cursor
-    ; If your Acc.ahk uses ByRef child,x,y, prefer Acc_ObjectFromPoint(, x, y)
+    ; If your Acc.ahk uses ByRef child,x,y, you may need: acc := Acc_ObjectFromPoint(, x, y)
     acc := Acc_ObjectFromPoint(x, y)
     if !IsObject(acc)
         return false
 
-    role := ""
-    try role := acc.accRole(0)
-    catch
-        return false
-
-    ; Normalize role: number OR string ("list")
-    if role is number
-        role += 0
-    else {
-        r := role
-        StringLower, r, r
-        r := Trim(r)
-        if (r = "list")
-            role := ROLE_SYSTEM_LIST
-    }
-
-    ; We only consider clicks where MSAA says we're on the LIST background
-    if (role != ROLE_SYSTEM_LIST)
+    ; If you treat header clicks separately, you can short‑circuit here:
+    ; (This calls your IsExplorerHeaderClick that checks for ROLE_SYSTEM_OUTLINE)
+    if (IsExplorerHeaderClick())
         return false
 
     ; ------------------------------------------------------------
-    ; Exclude the column header row (Details view) using geometry
+    ; Step 1: Is this click on an item (file/folder/group header)?
     ; ------------------------------------------------------------
-    if (IsFunc("Acc_Location")) {
-        ; Get the LIST's bounding rect in screen coords
-        listX := listY := listW := listH := ""
-        Acc_Location(acc, listX, listY, listW, listH)
+    cur := acc
+    Loop 15 {
+        if !IsObject(cur)
+            break
 
-        if (listX != "" && listY != "" && listH != "") {
-            ; Approximate header height in a DPI-aware way.
-            baseHeaderPx := 24       ; good starting point for 100% DPI
-            dpi           := A_ScreenDPI ? A_ScreenDPI : 96
-            headerHeight  := Round(baseHeaderPx * dpi / 96.0)
+        role := ""
+        try role := cur.accRole(0)
+        catch
+            break
 
-            ; If the mouse is inside the LIST rect but within the top header band,
-            ; treat it as header click -> NOT "blank space".
-            if (x >= listX && x < listX + listW
-             && y >= listY && y < listY + headerHeight)
-                return false
+        ; Normalize numeric role
+        if role is number
+            role += 0
+        else {
+            ; Normalize common string variants
+            r := role
+            StringLower, r, r
+            r := Trim(r)
+            if (r = "list item" || r = "listitem")
+                role := ROLE_SYSTEM_LISTITEM
+            else if (r = "outline item" || r = "outlineitem")
+                role := ROLE_SYSTEM_OUTLINEITEM
         }
+
+        ; Any LISTITEM / OUTLINEITEM on the way up = item / group header → not blank
+        if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
+            return false
+
+        parent := ""
+        try parent := cur.accParent
+        cur := parent
     }
 
-    ; If we got this far:
-    ; - We're in Explorer / common dialog
-    ; - Role is LIST
-    ; - We're not in the approximate header band
-    ; => Treat as a blank-space click in the folder view.
-    return true
+    ; ------------------------------------------------------------
+    ; Step 2: Are we inside a LIST / OUTLINE at all?
+    ;         If yes → blank space within the view.
+    ; ------------------------------------------------------------
+    cur := acc
+    Loop 15 {
+        if !IsObject(cur)
+            break
+
+        role := ""
+        try role := cur.accRole(0)
+        catch
+            break
+
+        if role is number
+            role += 0
+        else {
+            r := role
+            StringLower, r, r
+            r := Trim(r)
+            if (r = "list")
+                role := ROLE_SYSTEM_LIST
+            else if (r = "outline")
+                role := ROLE_SYSTEM_OUTLINE
+        }
+
+        if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE) {
+            ; We're in the file view, and we already ruled out items above → blank
+            return true
+        }
+
+        parent := ""
+        try parent := cur.accParent
+        cur := parent
+    }
+
+    ; No list/outline ancestor: not part of the file view
+    return false
 }
 
 
