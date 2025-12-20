@@ -580,7 +580,7 @@ Return
 ; -----------------------------------------------          TYPING MANIUPLATION           --------------------------------------------------
 ; ==========================================================================================================================================
 Hoty:
-    CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey<999) ? CapCount+1 : 1 ; note that CapCount is ALWAYS at least 1
+    CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey < 999) ? CapCount+1 : 1 ; note that CapCount is ALWAYS at least 1
     If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
         Send % "{Left}{BS}" . SubStr(A_PriorHotKey,3,1) . "{Right}"
         CapCount := 1
@@ -703,9 +703,9 @@ WhichButton(vPosX, vPosY, hWnd) {
 
     vOutput := ""
     ; vOutput := "role: " vRole "`r`n"
-    ; if (vRoleText1 == vRoleText2)
+    ; If (vRoleText1 == vRoleText2)
         ; vOutput .= "role text: " vRoleText1 "`r`n"
-    ; else
+    ; Else
     ; vOutput .= "role text (1): " vRoleText1 "`r`n" "role text (2): " vRoleText2 "`r`n"
     If !errorFound
         vOutput .= "name: " vName ; "`r`n"
@@ -729,13 +729,13 @@ DetectWin11()
         }
     } catch e {
         MsgBox, Failed to query OS version.`nError: %e%
-        return False
+        Return False
     }
 
-    if (SubStr(version, 1, 4) = "10.0" && buildNumber >= 22000)
-        return True
-    else
-        return False
+    If (SubStr(version, 1, 4) = "10.0" && buildNumber >= 22000)
+        Return True
+    Else
+        Return False
 }
 
 ; Choose the monitor containing the mouse. If none contains it (rare with odd layouts),
@@ -1969,7 +1969,7 @@ Return
     if (A_CaretX = "")
     {
         Send ^+d
-        return
+        Return
     }
     Send, {Ctrl Up}
     ; Your environment hooks
@@ -2011,7 +2011,7 @@ Return
 
 ControlExist(ctrl, winTitle := "", winText := "") {
     ControlGet, hCtl, Hwnd,, %ctrl%, %winTitle%, %winText%
-    return !!hCtl
+    Return !!hCtl
 }
 
 !a::
@@ -2042,7 +2042,7 @@ Return
     StopAutoFix := False
 Return
 
-!+'::
+!+':: ;'
     Critical, On
     store := Clip()
     len := StrLen(store)
@@ -5496,9 +5496,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             blockKeys := True
-            ; Send, {LCtrl UP}
+            Send, {LCtrl UP}
             Send, ^{NumpadAdd}
-            ; Send, {Ctrl UP}
+            Send, {LCtrl UP}
 
             ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
                 ; tooltip, sent to %TargetControl% with init at %initHoveredCtrlNN% - %prevPath% VS %currentPath%
@@ -5547,7 +5547,7 @@ Return
 #If
 
 IsAlwaysOnTop(hwndID) {
-    WinGet, ExStyle, ExStyle, ahk_id %hwndId%
+    WinGet, ExStyle, ExStyle, ahk_id %hwndId% ; 0x8 is WS_EX_LAYERED.
     If (ExStyle & 0x8)
         Return True
     Else
@@ -5626,7 +5626,7 @@ IsOverException(hWnd := "") {
 
     If (   proc == "peazip.exe"
         || proc == "SndVol.exe"
-        || (inStr("File Explorer", tit, True) && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
+        || ((inStr("File Explorer", tit, True) || proc == "explorer.exe") && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
         || MouseIsOverTaskbar()
         || cl == "#32768"
         || cl == "Autohotkey"
@@ -6689,7 +6689,7 @@ CopySelection() {
         if (sel != "__UIA_UNAVAILABLE__") {
             ; UIA worked: either actual text or ""
             Critical, Off
-            return sel
+            Return sel
         }
         ; else: UIA not available → fall through to clipboard path
     }
@@ -6740,7 +6740,7 @@ CopySelection() {
     Clipboard := ClipBak
     VarSetCapacity(ClipBak, 0)
     Critical, Off
-    return sel
+    Return sel
 }
 
 ; --- UIA helper: returns selected text quickly in Chrome if possible.
@@ -6817,7 +6817,7 @@ __RestoreClipboard_AfterPaste:
     global __ClipBakForPaste
     Clipboard := __ClipBakForPaste
     VarSetCapacity(__ClipBakForPaste, 0)
-return
+Return
 
 
 ; Clip() - Send and Retrieve Text Using the Clipboard
@@ -6877,7 +6877,7 @@ Clip(Text := "", Reselect := "", Restore := "")
             Clipboard := BackUpClip
         BackUpClip := "", LastClip := "", Stored := ""
         SetTimer, ClipRestore, Off
-        return
+        Return
     } else {
         if !Stored {
             Stored := True
@@ -10174,6 +10174,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its the::it's the
 ::itwas::it was
 ::its any::it's any
+::its available::it's available
 ::its beautiful::it's beautiful
 ::its been::it's been
 ::its broken::it's broken
@@ -11992,6 +11993,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::youa re::you are
 ::asychronously::asynchronously
 ::depdenency::dependency
+::incredably::incredibly
 ;------------------------------------------------------------------------------
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
