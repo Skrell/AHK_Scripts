@@ -1850,6 +1850,7 @@ WaitForStableWindow(hwnd, delay := 30, timeout := 1000) {
             return false
     }
 }
+
 ; =========================
 ; ConfineMouseToCurrentMonitorArea(area, x, y, w, h)
 ; =========================
@@ -3939,29 +3940,31 @@ Explorer__GetRoleNum(ByRef accObj := "") {
 }
 ; ------------------------------------------------------------------
 IsExplorerHeaderClick() {
-    static ROLE_SYSTEM_OUTLINE := 0x3E  ; 62
+    static ROLE_SYSTEM_OUTLINE := 0x3E
 
     CoordMode, Mouse, Screen
-    MouseGetPos, mx, my, winHwnd
+    MouseGetPos, mx, my, winHwnd, ctrlNN
     if (!winHwnd)
         return false
 
-    ; Only Explorer + common dialogs
     WinGetClass, cls, ahk_id %winHwnd%
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
         return false
 
-    ; Object directly under the mouse
-    acc := Acc_ObjectFromPoint()   ; <== no coords, same as your debug
+    ; optional accuracy filter
+    ; if !(ctrlNN ~= "i)^DirectUIHWND\d+$")
+    ;     return false
+
+    try acc := Acc_ObjectFromPoint(idChild, mx, my)  ; <-- key change
+    catch
+        return false
     if !IsObject(acc)
         return false
 
-    role := ""
     try role := acc.accRole(0)
     catch
         return false
 
-    ; On your system, header band gives role 62 (OUTLINE)
     return (role == ROLE_SYSTEM_OUTLINE)
 }
 
@@ -4538,36 +4541,46 @@ $~LButton::
         Else If ((InStr(_winCtrlU,"SysHeader32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
             &&   !IsExplorerItemClick()) {
 
-            isExplorerHeader := IsExplorerHeaderClick()
-
-            ; wm := wmClassD
-            ; ctrl := _winCtrlU
-            ; winid := _winIdU
-            ; is11 := isWin11 ? "1" : "0"
-            ; iex := IsExplorerModern() ? "1" : "0"
-            ; ima := IsModernExplorerActive(winid) ? "1" : "0"
-            ; ih := isExplorerHeader ? "1" : "0"
-            ; ptType := IsObject(pt) ? pt.CurrentControlType : "none"
-
-            ; tooltipText := "wmClassD=[" . wm . "] len=" . StrLen(wm) . "`n"
-                        ; . "_winCtrlU=[" . ctrl . "] len=" . StrLen(ctrl) . "`n"
-                        ; . "_winIdU=" . winid . "`n"
-                        ; . "isWin11=" . is11 . " IsExplorerModern()=" . iex . " IsModernExplorerActive()=" . ima . "`n"
-                        ; . "IsExplorerHeaderClick()=" . ih . "`n"
-                        ; . "pt.CurrentControlType=" . ptType
-            ; Tooltip %tooltipText%
-
             try {
+                isExplorerHeader := IsExplorerHeaderClick()
                 If (!isExplorerHeader) {
                     pt := UIA.ElementFromPoint(lbX2,lbY2,False)
-                    If (!IsObject(pt) || pt.CurrentControlType > 50035 || pt.CurrentControlType < 50031) {
-                        SetTimer, keyTrack, On
-                        SetTimer, mouseTrack, On
+                    ctype := SafeUIA_GetControlType(pt, "")
+                    If (ctype = "")  ; UIA failed / element not available
+                        Return
+                    If (!IsObject(pt) || ctype > 50035 || ctype < 50031) {
                         Return
                     }
                 }
+                
+                ; wm := wmClassD
+                ; ctrl := _winCtrlU
+                ; winid := _winIdU
+                ; is11 := isWin11 ? "1" : "0"
+                ; iex := isModernExplorerInReg ? "1" : "0"
+                ; ima := IsModernExplorerActive(winid) ? "1" : "0"
+                ; ih := isExplorerHeader ? "1" : "0"
+                ; ptType := IsObject(pt) ? pt.CurrentControlType : "none"
 
-                If (isExplorerHeader || pt.CurrentControlType == 50031) {
+                ; tooltipText := "wmClassD=[" . wm . "] len=" . StrLen(wm) . "`n"
+                            ; . "_winCtrlU=[" . ctrl . "] len=" . StrLen(ctrl) . "`n"
+                            ; . "_winIdU=" . winid . "`n"
+                            ; . "isWin11=" . is11 . "`n"
+                            ; . " isModernExplorerInReg=" . iex . "`n"
+                            ; . " IsModernExplorerActive()=" . ima . "`n"
+                            ; . "isExplorerHeader=" . ih . "`n"
+                            ; . "pt.CurrentControlType=" . ptType
+                ; tooltip, %tooltipText%
+
+                If (pt.CurrentControlType == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
+                    ; ControlFocusEx(_winIdU, "SysListView321")
+                    if !isWin11
+                        Send, {F5}
+
+                    Send, ^{NumpadAdd}
+                    Return
+                }
+                Else If (isExplorerHeader || pt.CurrentControlType == 50031) {
                     If (wmClassD == "#32770" || _winCtrlU == "DirectUIHWND3") {
                         ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
                     }
@@ -4585,22 +4598,24 @@ $~LButton::
                     Send, ^{NumpadAdd}
                     Return
                 } ; this specific combination is needed for the "Name" column ONLY
-                Else If ((isExplorerHeader || pt.CurrentControlType == 50033) && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
-
-                    Send, ^{NumpadAdd}
-                    Return
-                }
-                Else If (isExplorerHeader || pt.CurrentControlType == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
-                    ControlFocusEx(_winIdU, "SysListView321")
-                    if !isWin11
-                        Send, {F5}
+                Else If ((pt.CurrentControlType == 50033) && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
 
                     Send, ^{NumpadAdd}
                     Return
                 }
             } catch e {
-                tooltip, 1: UIA TIMED OUT!!!!
-                MsgBox % "Exception caught:`n" . "Message: " e.Message "`n" . "What: " e.What "`n" . "File: " e.File "`n" . "Line: " e.Line "`n" . "Extra: " e.Extra
+                ; tooltip, 1: UIA TIMED OUT!!!!
+                ListLines
+                MsgBox % "Exception caught:`n"
+                    . "Message: " e.Message "`n"
+                    . "What: " e.What "`n"
+                    . "File: " e.File "`n"
+                    . "Line: " e.Line "`n"
+                    . "Extra: " e.Extra "`n`n"
+                    . "A_LastError: " A_LastError "`n"
+                    . "ErrorLevel: " ErrorLevel
+                Pause
+
                 UIA :=  ;// set to a different value
                 ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                 UIA := UIA_Interface() ; Initialize UIA interface
@@ -4608,10 +4623,8 @@ $~LButton::
                 UIA.ConnectionTimeout  := 20000
             }
         }
-        Else If ((abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-            && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
-            && (_winCtrlU == "UpBand1" || InStr(_winCtrlU,"ToolbarWindow32", True) || _winCtrlU == "Microsoft.UI.Content.DesktopChildSiteBridge1")
-            && (timeDiff < (DoubleClickTime/2))) {
+        Else If ((wmClassD == "CabinetWClass" || wmClassD == "#32770")
+            && (_winCtrlU == "UpBand1" || InStr(_winCtrlU,"ToolbarWindow32", True) || _winCtrlU == "Microsoft.UI.Content.DesktopChildSiteBridge1")) {
 
             try {
                 pt := UIA.ElementFromPoint(lbX2,lbY2,False)
@@ -5321,7 +5334,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     If (quickCheckID != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd)) {
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
-        ; tooltip, failed quick check: %lClassCheck% - %quickCheckID% - %initTargetHwnd%
+        toolTip % "failed quick check: " lClassCheck
+                . " - " Format("0x{:X}", quickCheckID+0)
+                . " - " Format("0x{:X}", initTargetHwnd+0)
         Return
     }
     ; tooltip, here1
@@ -5407,7 +5422,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 }
 
                 ; If !IsModernExplorerActive(initTargetHwnd)
-                If (lClassCheck == "CabinetWClass" && !isModernExplorerInReg)
+                If (!isModernExplorerInReg)
                     ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
 
                 ; If (lClassCheck == "CabinetWClass" && (!isWin11 || !IsModernExplorerActive(initTargetHwnd)))
@@ -5627,7 +5642,7 @@ IsOverException(hWnd := "") {
     If (   proc == "peazip.exe"
         || proc == "SndVol.exe"
         || ((inStr("File Explorer", tit, True) || proc == "explorer.exe") && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
-        || MouseIsOverTaskbar()
+        || (inStr("InstallShield", tit, True))
         || cl == "#32768"
         || cl == "Autohotkey"
         || cl == "AutohotkeyGUI"
@@ -6661,6 +6676,7 @@ DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
     }
 }
 
+;https://www.autohotkey.com/boards/search.php?author_id=139004&sr=posts&sid=13343c88f1a3953143867b71b22fdafc
 HasVal(haystack, needle) {
     If !(IsObject(haystack)) || (haystack.Length() = 0)
         Return 0
@@ -7674,14 +7690,35 @@ GetNameOfIconUnderMouse() {
 ; https://github.com/Drugoy/Autohotkey-scripts-.ahk/blob/master/Libraries/Acc.ahk
 
 Acc_Init() {
-    Static h
-    If Not h
-        h:=DllCall("LoadLibrary","Str","oleacc","Ptr")
+    static h
+    if (!h)
+        h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
 }
 Acc_ObjectFromPoint(ByRef _idChild_ := "", x := "", y := "") {
     Acc_Init()
-    If  DllCall("oleacc\AccessibleObjectFromPoint", "Int64", x==""||y==""?0*DllCall("GetCursorPos","Int64*",pt)+pt:x&0xFFFFFFFF|y<<32, "Ptr*", pacc, "Ptr", VarSetCapacity(varChild,8+2*A_PtrSize,0)*0+&varChild)=0
-        Return ComObjEnwrap(9,pacc,1), _idChild_:=NumGet(varChild,8,"UInt")
+
+    VarSetCapacity(varChild, 8 + 2*A_PtrSize, 0)
+
+    if (x = "" || y = "") {
+        DllCall("GetCursorPos", "Int64*", pt64)
+        pt := pt64
+    } else {
+        pt := (x & 0xFFFFFFFF) | ((y & 0xFFFFFFFF) << 32)
+    }
+
+    hr := DllCall("oleacc\AccessibleObjectFromPoint"
+        , "Int64", pt
+        , "Ptr*", pacc
+        , "Ptr",  &varChild)
+
+    if (hr != 0 || !pacc)
+        return
+
+    _idChild_ := NumGet(varChild, 8, "UInt")
+
+    try return ComObjEnwrap(9, pacc, 1)
+    catch
+        return
 }
 Acc_Location(acc, ByRef x, ByRef y, ByRef w, ByRef h) {
     ; Retrieves bounding rectangle of an MSAA object.
@@ -7763,6 +7800,13 @@ Acc_FromWindow(hWnd, objID, ByRef acc) {
     }
     return false
 }
+
+SafeUIA_GetControlType(el, default:="") {
+    try return el.CurrentControlType
+    catch e
+        return default
+}
+
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 ; CHANGELOG:
