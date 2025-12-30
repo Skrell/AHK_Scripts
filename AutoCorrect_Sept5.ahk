@@ -4101,74 +4101,6 @@ DebugRolesUnderMouse() {
     MsgBox, %out%
 }
 
-; IsExplorerBlankSpaceClick() {
-    ; static ROLE_SYSTEM_LIST := 0x21  ; 33, MSAA role: "List"
-
-    ; CoordMode, Mouse, Screen
-    ; MouseGetPos, x, y, winHwnd
-    ; if (!winHwnd)
-        ; return false
-
-    ; ; Only care about Explorer + common dialogs
-    ; WinGetClass, cls, ahk_id %winHwnd%
-    ; if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
-        ; return false
-
-    ; ; MSAA: object under cursor
-    ; ; If your Acc.ahk uses ByRef child,x,y, prefer Acc_ObjectFromPoint(, x, y)
-    ; acc := Acc_ObjectFromPoint(x, y)
-    ; if !IsObject(acc)
-        ; return false
-
-    ; role := ""
-    ; try role := acc.accRole(0)
-    ; catch
-        ; return false
-
-    ; ; Normalize role: number OR string ("list")
-    ; if role is number
-        ; role += 0
-    ; else {
-        ; r := role
-        ; StringLower, r, r
-        ; r := Trim(r)
-        ; if (r = "list")
-            ; role := ROLE_SYSTEM_LIST
-    ; }
-
-    ; ; We only consider clicks where MSAA says we're on the LIST background
-    ; if (role != ROLE_SYSTEM_LIST)
-        ; return false
-
-    ; ; ------------------------------------------------------------
-    ; ; Exclude the column header row (Details view) using geometry
-    ; ; ------------------------------------------------------------
-    ; if (IsFunc("Acc_Location")) {
-        ; ; Get the LIST's bounding rect in screen coords
-        ; listX := listY := listW := listH := ""
-        ; Acc_Location(acc, listX, listY, listW, listH)
-
-        ; if (listX != "" && listY != "" && listH != "") {
-            ; ; Approximate header height in a DPI-aware way.
-            ; baseHeaderPx := 24       ; good starting point for 100% DPI
-            ; dpi           := A_ScreenDPI ? A_ScreenDPI : 96
-            ; headerHeight  := Round(baseHeaderPx * dpi / 96.0)
-
-            ; ; If the mouse is inside the LIST rect but within the top header band,
-            ; ; treat it as header click -> NOT "blank space".
-            ; if (x >= listX && x < listX + listW
-             ; && y >= listY && y < listY + headerHeight)
-                ; return false
-        ; }
-    ; }
-
-    ; ; If we got this far:
-    ; ; - We're in Explorer / common dialog
-    ; ; - Role is LIST
-    ; ; - We're not in the approximate header band
-    ; ; => Treat as a blank-space click in the folder view.
-    ; return true
-; }
 IsExplorerBlankSpaceClick() {
     static ROLE_SYSTEM_LIST        := 0x21  ; 33
     static ROLE_SYSTEM_OUTLINE     := 0x3E  ; 62
@@ -4541,16 +4473,30 @@ $~LButton::
         Else If ((InStr(_winCtrlU,"SysHeader32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
             &&   !IsExplorerItemClick()) {
 
+            ListLines, Off
+            ListLines, On        ; clears history and starts fresh
+            isExplorerHeader := IsExplorerHeaderClick()
+            
             try {
-                isExplorerHeader := IsExplorerHeaderClick()
-                If (!isExplorerHeader) {
-                    pt := UIA.ElementFromPoint(lbX2,lbY2,False)
-                    ctype := SafeUIA_GetControlType(pt, "")
-                    If (ctype = "")  ; UIA failed / element not available
-                        Return
-                    If (!IsObject(pt) || ctype > 50035 || ctype < 50031) {
-                        Return
-                    }
+                ; Get UIA element
+                pt := UIA.ElementFromPoint(lbX2, lbY2, False)
+
+                ; Cache risky UIA properties ONCE
+                ctype := SafeUIA_GetControlType(pt, "")
+                if (ctype == "")
+                    return
+
+                ; Optional if used later
+                cname := SafeUIA_GetName(pt, "")
+
+                ; === ORIGINAL LOGIC, SAFELY REWRITTEN ===
+
+                ; was: if (!isExplorerHeader)
+                if (!isExplorerHeader)
+                {
+                    ; was: if (pt.CurrentControlType > 50035 || pt.CurrentControlType < 50031)
+                    if (ctype > 50035 || ctype < 50031)
+                        return
                 }
                 
                 ; wm := wmClassD
@@ -4571,8 +4517,8 @@ $~LButton::
                             ; . "isExplorerHeader=" . ih . "`n"
                             ; . "pt.CurrentControlType=" . ptType
                 ; tooltip, %tooltipText%
-
-                If (pt.CurrentControlType == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
+                ; tooltip, line3
+                If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
                     ; ControlFocusEx(_winIdU, "SysListView321")
                     if !isWin11
                         Send, {F5}
@@ -4580,7 +4526,8 @@ $~LButton::
                     Send, ^{NumpadAdd}
                     Return
                 }
-                Else If (isExplorerHeader || pt.CurrentControlType == 50031) {
+                Else If (isExplorerHeader || ctype  == 50031) {
+                    ; tooltip, % "line4 - " pt.CurrentControlType 
                     If (wmClassD == "#32770" || _winCtrlU == "DirectUIHWND3") {
                         ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
                     }
@@ -4598,7 +4545,7 @@ $~LButton::
                     Send, ^{NumpadAdd}
                     Return
                 } ; this specific combination is needed for the "Name" column ONLY
-                Else If ((pt.CurrentControlType == 50033) && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
+                Else If ((ctype  == 50033) && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
 
                     Send, ^{NumpadAdd}
                     Return
@@ -4641,6 +4588,7 @@ $~LButton::
                     }
             } catch e {
                 tooltip, 2: UIA TIMED OUT!!!!
+                MsgBox % "Exception caught:`n" . "Message: " e.Message "`n" . "What: " e.What "`n" . "File: " e.File "`n" . "Line: " e.Line "`n" . "Extra: " e.Extra
                 UIA :=  ;// set to a different value
                 ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                 UIA := UIA_Interface() ; Initialize UIA interface
@@ -5218,6 +5166,7 @@ KeyExistsInHKCU(subkey) {
     }
     return false
 }
+
 ; IsExplorerModern() -> returns true if modern (Windows 11) Explorer UI is active,
 ;                      false if classic (Windows 10) Explorer UI is active.
 HasWin10ExplorerOverride() {
@@ -5233,7 +5182,6 @@ HasWin10ExplorerOverride() {
 IsExplorerModern() {
     return !HasWin10ExplorerOverride()
 }
-
 
 ; -----------------------
 ; Example usage:
@@ -6378,7 +6326,7 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
                     If !IsObject(pt) {
                         Return False
                     }
-                    tooltip, % pt.CurrentControlType
+                    ; tooltip, % pt.CurrentControlType
                     If (mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName == "FrameGrabHandle")
                         Return True
                     Else If (mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName != "FrameGrabHandle")
@@ -6389,6 +6337,7 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
                         Return False
                 } catch e {
                     tooltip, 5: UIA TIMED OUT!!!!
+                    MsgBox % "Exception caught:`n" . "Message: " e.Message "`n" . "What: " e.What "`n" . "File: " e.File "`n" . "Line: " e.Line "`n" . "Extra: " e.Extra
                     UIA :=  ;// set to a different value
                     ; VarSetCapacity(UIA, 0) ;// set capacity to zero
                     UIA := UIA_Interface() ; Initialize UIA interface
@@ -7801,11 +7750,24 @@ Acc_FromWindow(hWnd, objID, ByRef acc) {
     return false
 }
 
-SafeUIA_GetControlType(el, default:="") {
-    try return el.CurrentControlType
-    catch e
+SafeUIA_GetControlType(el, default := "") {
+    try {
+        return el.CurrentControlType
+    } catch e {
         return default
+    }
 }
+
+SafeUIA_GetName(el, default := "") {
+    if !IsObject(el)
+        return default
+    try {
+        return el.CurrentName
+    } catch e {
+        return default
+    }
+}
+
 
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
