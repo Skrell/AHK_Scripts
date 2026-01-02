@@ -19,19 +19,19 @@
 
 ; #include %A_ScriptDir%\_VD.ahk
 ; DLL
-hVirtualDesktopAccessor             := DllCall("LoadLibrary", "Str", A_ScriptDir . "\VirtualDesktopAccessor.dll", "Ptr")
-
-GetDesktopCountProc                 := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetDesktopCount", "Ptr")
-GoToDesktopNumberProc               := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GoToDesktopNumber", "Ptr")
-GetCurrentDesktopNumberProc         := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetCurrentDesktopNumber", "Ptr")
-IsWindowOnCurrentVirtualDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsWindowOnCurrentVirtualDesktop", "Ptr")
-IsWindowOnDesktopNumberProc         := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsWindowOnDesktopNumber", "Ptr")
-MoveWindowToDesktopNumberProc       := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "MoveWindowToDesktopNumber", "Ptr")
-IsPinnedWindowProc                  := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "IsPinnedWindow", "Ptr")
-GetDesktopNameProc                  := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetDesktopName", "Ptr")
-SetDesktopNameProc                  := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "SetDesktopName", "Ptr")
-CreateDesktopProc                   := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "CreateDesktop", "Ptr")
-RemoveDesktopProc                   := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "RemoveDesktop", "Ptr")
+Global VDA_DllName := "VirtualDesktopAccessor_Win11.dll"
+Global hVirtualDesktopAccessor             := 0
+Global GetDesktopCountProc                 := 0
+Global GoToDesktopNumberProc               := 0
+Global GetCurrentDesktopNumberProc         := 0
+Global IsWindowOnCurrentVirtualDesktopProc := 0
+Global IsWindowOnDesktopNumberProc         := 0
+Global MoveWindowToDesktopNumberProc       := 0
+Global IsPinnedWindowProc                  := 0
+Global GetDesktopNameProc                  := 0
+Global SetDesktopNameProc                  := 0
+Global CreateDesktopProc                   := 0
+Global RemoveDesktopProc                   := 0
 
 SendMode, Input ; It injects the whole keystroke atomically, reducing the window where logical/physical can disagree
 
@@ -418,6 +418,68 @@ Return
 ; ==========================================================================================================================================
 ; -----------------------------------------------          START OF APPLICATION           --------------------------------------------------
 ; ==========================================================================================================================================
+InitVDA() {
+    global VDA_DllName, hVirtualDesktopAccessor
+    global GetDesktopCountProc, GoToDesktopNumberProc, GetCurrentDesktopNumberProc
+    global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
+    global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
+    global CreateDesktopProc, RemoveDesktopProc
+
+    ; If we already resolved at least the "core" proc, assume init done.
+    ; (Change this to a stricter check if you prefer.)
+    if (IsWindowOnCurrentVirtualDesktopProc)
+        return true
+
+    dllPath := A_ScriptDir . "\" . VDA_DllName
+
+    ; Optional safety: ensure file exists
+    if !FileExist(dllPath) {
+        ; MsgBox % "VDA DLL missing:`n" dllPath
+        return false
+    }
+
+    ; Load DLL (once)
+    if (!hVirtualDesktopAccessor) {
+        hVirtualDesktopAccessor := DllCall("LoadLibrary", "Str", dllPath, "Ptr")
+        if (!hVirtualDesktopAccessor) {
+            ; MsgBox % "LoadLibrary failed:`n" dllPath "`nA_LastError=" A_LastError
+            return false
+        }
+    }
+
+    ; Helper to resolve exports
+    _gp(name) {
+        global hVirtualDesktopAccessor
+        return DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", name, "Ptr")
+    }
+
+    ; Resolve all requested exports
+    GetDesktopCountProc                 := _gp("GetDesktopCount")
+    GoToDesktopNumberProc               := _gp("GoToDesktopNumber")
+    GetCurrentDesktopNumberProc         := _gp("GetCurrentDesktopNumber")
+    IsWindowOnCurrentVirtualDesktopProc := _gp("IsWindowOnCurrentVirtualDesktop")
+    IsWindowOnDesktopNumberProc         := _gp("IsWindowOnDesktopNumber")
+    MoveWindowToDesktopNumberProc       := _gp("MoveWindowToDesktopNumber")
+    IsPinnedWindowProc                  := _gp("IsPinnedWindow")
+    GetDesktopNameProc                  := _gp("GetDesktopName")
+    SetDesktopNameProc                  := _gp("SetDesktopName")
+    CreateDesktopProc                   := _gp("CreateDesktop")
+    RemoveDesktopProc                   := _gp("RemoveDesktop")
+
+    ; Return true only if the key procs exist.
+    ; (You can tighten/loosen this depending on what you require.)
+    return !!(GetDesktopCountProc
+           && GoToDesktopNumberProc
+           && GetCurrentDesktopNumberProc
+           && IsWindowOnCurrentVirtualDesktopProc
+           && IsWindowOnDesktopNumberProc
+           && MoveWindowToDesktopNumberProc
+           && IsPinnedWindowProc
+           && GetDesktopNameProc
+           && SetDesktopNameProc
+           && CreateDesktopProc
+           && RemoveDesktopProc)
+}
 ; ---- Low-level hardware key filter ----
 ; --------------------------------------------------
 ; Common filter logic for keyboard
@@ -2514,23 +2576,23 @@ Return
 Return
 
 SwitchToVD1:
-    CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    CurrentDesktop := GetCurrentDesktopNumber() + 1
     testDesktop := CurrentDesktop
     while (CurrentDesktop < 1) {
         Send #^{Right}
         while (CurrentDesktop == testDesktop) {
             sleep, 100
-            testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            testDesktop := GetCurrentDesktopNumber() + 1
         }
-        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        CurrentDesktop := GetCurrentDesktopNumber() + 1
     }
     while (CurrentDesktop > 1) {
         Send #^{Left}
         while (CurrentDesktop == testDesktop) {
             sleep, 100
-            testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            testDesktop := GetCurrentDesktopNumber() + 1
         }
-        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        CurrentDesktop := GetCurrentDesktopNumber() + 1
     }
 Return
 
@@ -2547,23 +2609,23 @@ Return
 
 SwitchToVD2:
     If  (GetDesktopCount() >= 2) {
-        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        CurrentDesktop := GetCurrentDesktopNumber() + 1
         testDesktop := CurrentDesktop
         while (CurrentDesktop < 2) {
             Send #^{Right}
             while (CurrentDesktop == testDesktop) {
                 sleep, 100
-                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+                testDesktop := GetCurrentDesktopNumber() + 1
             }
-            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            CurrentDesktop := GetCurrentDesktopNumber() + 1
         }
         while (CurrentDesktop > 2) {
             Send #^{Left}
             while (CurrentDesktop == testDesktop) {
                 sleep, 100
-                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+                testDesktop := GetCurrentDesktopNumber() + 1
             }
-            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            CurrentDesktop := GetCurrentDesktopNumber() + 1
         }
     }
 Return
@@ -2581,23 +2643,23 @@ Return
 
 SwitchToVD3:
     If  (GetDesktopCount() >= 3) {
-        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        CurrentDesktop := GetCurrentDesktopNumber() + 1
         testDesktop := CurrentDesktop
         while (CurrentDesktop < 3) {
             Send #^{Right}
             while (CurrentDesktop == testDesktop) {
                 sleep, 100
-                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+                testDesktop := GetCurrentDesktopNumber() + 1
             }
-            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            CurrentDesktop := GetCurrentDesktopNumber() + 1
         }
         while (CurrentDesktop > 3) {
             Send #^{Left}
             while (CurrentDesktop == testDesktop) {
                 sleep, 100
-                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+                testDesktop := GetCurrentDesktopNumber() + 1
             }
-            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            CurrentDesktop := GetCurrentDesktopNumber() + 1
         }
     }
 Return
@@ -2615,23 +2677,23 @@ Return
 
 SwitchToVD4:
     If  (GetDesktopCount() >= 4) {
-        CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+        CurrentDesktop := GetCurrentDesktopNumber() + 1
         testDesktop := CurrentDesktop
         while (CurrentDesktop < 4) {
             Send #^{Right}
             while (CurrentDesktop == testDesktop) {
                 sleep, 100
-                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+                testDesktop := GetCurrentDesktopNumber() + 1
             }
-            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            CurrentDesktop := GetCurrentDesktopNumber() + 1
         }
         while (CurrentDesktop > 4) {
             Send #^{Left}
             while (CurrentDesktop == testDesktop) {
                 sleep, 100
-                testDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+                testDesktop := GetCurrentDesktopNumber() + 1
             }
-            CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+            CurrentDesktop := GetCurrentDesktopNumber() + 1
         }
     }
 Return
@@ -5017,7 +5079,7 @@ SwitchDesktop:
 
     MouseGetPos, , , movehWndId
     WinActivate, ahk_id %movehWndId%
-    CurrentDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    CurrentDesktop := GetCurrentDesktopNumber() + 1
     Menu, vdeskMenu, Add
     Menu, vdeskMenu, DeleteAll
     loop % getTotalDesktops()
@@ -5066,7 +5128,7 @@ SendWindow:
 
     DetectHiddenWindows, On
 
-    InitialDesktop := DllCall(GetCurrentDesktopNumberProc, "Int") + 1
+    InitialDesktop := GetCurrentDesktopNumber() + 1
 
     If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move and Go to Desktop 1")
         targetDesktop := 1
@@ -5911,73 +5973,133 @@ realHwnd(hwnd)
 ; -----------------------------------------------------------------------
 ; https://github.com/Ciantic/VirtualDesktopAccessor/blob/rust/example.ahk
 ; -----------------------------------------------------------------------
-MoveCurrentWindowToDesktop(num) {
-    global MoveWindowToDesktopNumberProc
-    correctDesktopNumber := num-1
-    WinGet, activeHwnd, ID, A
-    Return DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", correctDesktopNumber, "Int")
-}
-
-IsWindowOnCurrentVirtualDesktop(hwnd)
-{
-   Global IsWindowOnCurrentVirtualDesktopProc
-   Return DllCall(IsWindowOnCurrentVirtualDesktopProc, "Ptr", hwnd, "Int")
-}
-
 GetDesktopCount() {
     global GetDesktopCountProc
-    count := DllCall(GetDesktopCountProc, "Int")
-    Return count
-}
-
-MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
-    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
-    WinGet, activeHwnd, ID, A
-    DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", desktopNumber, "Int")
-    DllCall(GoToDesktopNumberProc, "Int", desktopNumber)
-}
-
-GoToPrevDesktop() {
-    global GetCurrentDesktopNumberProc, GoToDesktopNumberProc
-    current := DllCall(GetCurrentDesktopNumberProc, "Int")
-    last_desktop := GetDesktopCount() - 1
-    ; If current desktop is 0, go to last desktop
-    If (current = 0) {
-        MoveOrGotoDesktopNumber(last_desktop)
-    } Else {
-        MoveOrGotoDesktopNumber(current - 1)
-    }
-    Return
-}
-
-GoToNextDesktop() {
-    global GetCurrentDesktopNumberProc
-    current := DllCall(GetCurrentDesktopNumberProc, "Int")
-    last_desktop := GetDesktopCount() - 1
-    ; If current desktop is last, go to first desktop
-    If (current = last_desktop) {
-        MoveOrGotoDesktopNumber(0)
-    } Else {
-        MoveOrGotoDesktopNumber(current + 1)
-    }
-    Return
+    if (!InitVDA() || !GetDesktopCountProc)
+        return 1
+    return DllCall(GetDesktopCountProc, "Int")
 }
 
 GoToDesktopNumber(num) {
     global GoToDesktopNumberProc
-    correctDesktopNumber := num-1
-    DllCall(GoToDesktopNumberProc, "Int", correctDesktopNumber, "Int")
-    Return
+    if (!InitVDA() || !GoToDesktopNumberProc)
+        return false
+
+    ; Caller passes 1-based. DLL expects 0-based.
+    correctDesktopNumber := num - 1
+    if (correctDesktopNumber < 0)
+        correctDesktopNumber := 0
+
+    return DllCall(GoToDesktopNumberProc, "Int", correctDesktopNumber, "Int")
+}
+
+GetCurrentDesktopNumber() {
+    global GetCurrentDesktopNumberProc
+    if (!InitVDA() || !GetCurrentDesktopNumberProc)
+        return 1
+    return GetCurrentDesktopNumber()
+}
+
+GoToPrevDesktop() {
+    global GetCurrentDesktopNumberProc
+    if (!InitVDA() || !GetCurrentDesktopNumberProc)
+        return false
+
+    current := GetCurrentDesktopNumber() ; typically 0-based
+    last_desktop := GetDesktopCount() - 1                  ; 0-based max index
+
+    if (last_desktop < 0)
+        last_desktop := 0
+
+    ; If current desktop is 0, go to last desktop
+    if (current = 0) {
+        MoveOrGotoDesktopNumber(last_desktop)
+    } else {
+        MoveOrGotoDesktopNumber(current - 1)
+    }
+    return true
+}
+
+GoToNextDesktop() {
+    global GetCurrentDesktopNumberProc
+    if (!InitVDA() || !GetCurrentDesktopNumberProc)
+        return false
+
+    current := GetCurrentDesktopNumber() ; typically 0-based
+    last_desktop := GetDesktopCount() - 1                  ; 0-based max index
+
+    if (last_desktop < 0)
+        last_desktop := 0
+
+    ; If current desktop is last, go to first desktop
+    if (current = last_desktop) {
+        MoveOrGotoDesktopNumber(0)
+    } else {
+        MoveOrGotoDesktopNumber(current + 1)
+    }
+    return true
+}
+
+IsWindowOnCurrentVirtualDesktop(hwnd) {
+    global IsWindowOnCurrentVirtualDesktopProc
+    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
+    if (!InitVDA() || !IsWindowOnCurrentVirtualDesktopProc)
+        return true
+    return DllCall(IsWindowOnCurrentVirtualDesktopProc, "Ptr", hwnd, "Int")
+}
+
+MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
+    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
+    if (!InitVDA() || !MoveWindowToDesktopNumberProc || !GoToDesktopNumberProc)
+        return false
+
+    ; This function historically appears to be 0-based already in your usage.
+    ; (You pass it from GoToPrev/Next via MoveOrGotoDesktopNumber.)
+    WinGet, activeHwnd, ID, A
+    DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", desktopNumber, "Int")
+    return DllCall(GoToDesktopNumberProc, "Int", desktopNumber, "Int")
+}
+
+MoveCurrentWindowToDesktop(num) {
+    global MoveWindowToDesktopNumberProc
+    if (!InitVDA() || !MoveWindowToDesktopNumberProc)
+        return false
+
+    ; Caller passes 1-based. DLL expects 0-based.
+    correctDesktopNumber := num - 1
+    if (correctDesktopNumber < 0)
+        correctDesktopNumber := 0
+
+    WinGet, activeHwnd, ID, A
+    return DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", correctDesktopNumber, "Int")
 }
 
 MoveOrGotoDesktopNumber(num) {
-    ; If user is holding down Mouse left button, move the current window also
-    If (GetKeyState("LButton")) {
-        MoveCurrentWindowToDesktop(num)
-    } Else {
-        GoToDesktopNumber(num)
+    ; NOTE: In your original code this "num" is used as 0-based
+    ; from GoToPrevDesktop/GoToNextDesktop, and also passed into
+    ; MoveCurrentWindowToDesktop() / GoToDesktopNumber() which treat
+    ; num as 1-based. That mismatch can cause off-by-one behavior.
+    ;
+    ; To keep this a *drop-in* replacement, we preserve your original behavior:
+    ; - When called from prev/next (0-based), we should stay 0-based.
+    ; - Therefore, route to 0-based functions (MoveCurrentWindowToDesktopAndSwitch / proc calls)
+    ;   rather than the 1-based wrappers.
+    ;
+    ; If you WANT MoveOrGotoDesktopNumber to be 1-based, tell me and I’ll normalize it.
+
+    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
+    if (!InitVDA() || !GoToDesktopNumberProc)
+        return false
+
+    if (GetKeyState("LButton")) {
+        if (!MoveWindowToDesktopNumberProc)
+            return false
+        WinGet, activeHwnd, ID, A
+        DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", num, "Int")
+        return DllCall(GoToDesktopNumberProc, "Int", num, "Int")
+    } else {
+        return DllCall(GoToDesktopNumberProc, "Int", num, "Int")
     }
-    Return
 }
 
 getForemostWindowIdOnDesktop(n)
