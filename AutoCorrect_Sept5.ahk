@@ -20,6 +20,7 @@
 ; #include %A_ScriptDir%\_VD.ahk
 ; DLL
 Global VDA_DllName := "VirtualDesktopAccessor_Win11.dll"
+Global dllPath := A_ScriptDir . "\" . VDA_DllName
 Global hVirtualDesktopAccessor             := 0
 Global GetDesktopCountProc                 := 0
 Global GoToDesktopNumberProc               := 0
@@ -425,7 +426,7 @@ _gp(name) {
 }
 
 InitVDA() {
-    global VDA_DllName, hVirtualDesktopAccessor
+    global VDA_DllName, hVirtualDesktopAccessor, dllPath
     global GetDesktopCountProc, GoToDesktopNumberProc, GetCurrentDesktopNumberProc
     global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
     global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
@@ -435,8 +436,6 @@ InitVDA() {
     ; (Change this to a stricter check if you prefer.)
     if (IsWindowOnCurrentVirtualDesktopProc)
         return true
-
-    dllPath := A_ScriptDir . "\" . VDA_DllName
 
     ; Optional safety: ensure file exists
     if !FileExist(dllPath) {
@@ -4010,6 +4009,7 @@ Explorer__GetRoleNum(ByRef accObj := "") {
 ; ------------------------------------------------------------------
 IsExplorerHeaderClick_Local() {
     static ROLE_SYSTEM_OUTLINE := 0x3E
+    static maxHops := 6
 
     CoordMode, Mouse, Screen
     MouseGetPos, mx, my, winHwnd, ctrlNN
@@ -4020,49 +4020,45 @@ IsExplorerHeaderClick_Local() {
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
         return false
 
-    ; Strongly recommended cheap gate (optional)
-    ; if !(ctrlNN ~= "i)^DirectUIHWND\d+$")
-    ;     return false
-
-    ; Get HWND of the control under the mouse
     ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %winHwnd%
     if (!hCtl)
         return false
 
-    ; Convert mouse point: screen -> client coords for THAT control
     VarSetCapacity(pt, 8, 0)
     NumPut(mx, pt, 0, "Int"), NumPut(my, pt, 4, "Int")
     if !DllCall("ScreenToClient", "ptr", hCtl, "ptr", &pt)
         return false
     cx := NumGet(pt, 0, "Int"), cy := NumGet(pt, 4, "Int")
 
-    ; Localized root accessible for the control
-    accRoot := Acc_ObjectFromWindow(hCtl)  ; localized, cheaper than desktop-wide point
+    accRoot := Acc_ObjectFromWindow(hCtl)
     if !IsObject(accRoot)
         return false
 
-    ; Hit test inside the control
     hit := accRoot.accHitTest(cx, cy)
 
-    ; accHitTest returns either:
-    ;   - an IAccessible object, OR
-    ;   - a child-id (integer) for accRoot
     if (IsObject(hit)) {
-        ; We got a child object directly
-        try role := hit.accRole(0)
-        catch
-            return false
+        acc := hit
+        Loop, %maxHops% {
+            try role := acc.accRole(0)
+            catch break
+            if (role == ROLE_SYSTEM_OUTLINE)
+                return true
+            try acc := acc.accParent
+            catch break
+            if !IsObject(acc)
+                break
+        }
+        return false
     } else if (hit != "") {
-        ; We got a child-id within accRoot
+        ; child-id path (no parent-walk unless you resolve to an object)
         childId := hit
         try role := accRoot.accRole(childId)
         catch
             return false
-    } else {
-        return false
+        return (role == ROLE_SYSTEM_OUTLINE)
     }
 
-    return (role == ROLE_SYSTEM_OUTLINE)
+    return false
 }
 
 IsExplorerHeaderClick() {
@@ -4611,8 +4607,12 @@ $~LButton::
             && !IsExplorerItemClick()) {
 
             If (!InStr(_winCtrlU,"SysHeader32",True)) {
-                If (wmClassD == "32770")
+                If (wmClassD == "#32770") {
                     isExplorerHeader := IsExplorerHeaderClick_Local()
+                    ; pt := UIA.ElementFromPoint(lbX2, lbY2, False)
+                    ; ctype := SafeUIA_GetControlType(pt, "")
+                    ; tooltip, UIA control is %ctype%
+                }
                 Else
                     isExplorerHeader := IsExplorerHeaderClick()
             }
