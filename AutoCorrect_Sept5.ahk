@@ -656,11 +656,11 @@ FixSlash:
     Else If !IsGoogleDocWindow() && (!StopAutoFix && IsThisHotKeyLetterKey())
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
-    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
+    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
         Send, % "{BS}{BS}{?}{SPACE}"
         disableEnter := False
     }
-    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && inStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$Enter" && A_TimeSincePriorHotkey<999)) {
+    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$Enter" && A_TimeSincePriorHotkey<999)) {
         Send, % "{BS}{?}{ENTER}"
         disableEnter := False
     }
@@ -678,19 +678,19 @@ IsThisHotKeyLetterKey() {
 }
 IsPriorHotKeyCapital() {
     Global keys
-    Return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,1,1)!="!" && SubStr(A_PriorHotKey,2,1)="+" && inStr(keys, Substr(A_PriorHotkey,3,1), False))
+    Return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,1,1)!="!" && SubStr(A_PriorHotKey,2,1)="+" && InStr(keys, Substr(A_PriorHotkey,3,1), False))
 }
 IsPriorHotKeyLowerCase() {
     Global keys
-    Return (StrLen(A_PriorHotkey) == 2 && inStr(keys, Substr(A_PriorHotkey,2,1), False))
+    Return (StrLen(A_PriorHotkey) == 2 && InStr(keys, Substr(A_PriorHotkey,2,1), False))
 }
 IsThisHotKeyCapital() {
     Global keys
-    Return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,1,1)!="!" && SubStr(A_ThisHotKey,2,1)="+" && inStr(keys, Substr(A_ThisHotKey,3,1), False))
+    Return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,1,1)!="!" && SubStr(A_ThisHotKey,2,1)="+" && InStr(keys, Substr(A_ThisHotKey,3,1), False))
 }
 IsThisHotKeyLowerCase() {
     Global keys
-    Return (StrLen(A_ThisHotKey) == 2 && inStr(keys, Substr(A_ThisHotKey,2,1), False))
+    Return (StrLen(A_ThisHotKey) == 2 && InStr(keys, Substr(A_ThisHotKey,2,1), False))
 }
 
 DoNothing() {
@@ -4562,7 +4562,7 @@ $~LButton::
 
     prevPath := ""
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
-        If (InStr(_winCtrlU,"SysListView32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
+        If (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
             isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
         loop 100 {
             prevPath := GetExplorerPath(_winIdD)
@@ -4594,8 +4594,8 @@ $~LButton::
     rlsTime  := A_TickCount
     timeDiff := rlsTime - initTime
 
-    ; tooltip, %timeDiff% ms - %wmClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
     ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick() "-" IsModernExplorerActive(_winIdU)
+    ; tooltip, %timeDiff% ms - %wmClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
     If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)) {
 
         If (   (InStr(_winCtrlU,"SysListView32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
@@ -4609,9 +4609,6 @@ $~LButton::
             If (!InStr(_winCtrlU,"SysHeader32",True)) {
                 If (wmClassD == "#32770") {
                     isExplorerHeader := IsExplorerHeaderClick_Local()
-                    ; pt := UIA.ElementFromPoint(lbX2, lbY2, False)
-                    ; ctype := SafeUIA_GetControlType(pt, "")
-                    ; tooltip, UIA control is %ctype%
                 }
                 Else
                     isExplorerHeader := IsExplorerHeaderClick()
@@ -4623,17 +4620,19 @@ $~LButton::
             ListLines, Off
             ListLines, On        ; clears history and starts fresh
 
-            try {
-                if (!isExplorerHeader) {
+            ; try {
+                If (!isExplorerHeader) {
                     ; Get UIA element
-                    pt := UIA.ElementFromPoint(lbX2, lbY2, False)
-
+                    pt := SafeUIA_ElementFromPoint(lbX2, lbY2)
+                    ctype := SafeUIA_GetControlType(pt)
                     ; Optional if used later
                     ; cname := SafeUIA_GetName(pt, "")
                     ; Cache risky UIA properties ONCE
-                    ctype := SafeUIA_GetControlType(pt, "")
-                    if (ctype == "" || ctype > 50035 || ctype < 50031)
-                        return
+                    If (ctype == "" || ctype > 50035 || ctype < 50031) {
+                        SetTimer, keyTrack,   On
+                        SetTimer, mouseTrack, On
+                        Return
+                    }
                 }
 
                 ; wm := wmClassD
@@ -4649,12 +4648,12 @@ $~LButton::
                             ; . "_winCtrlU=[" . ctrl . "] len=" . StrLen(ctrl) . "`n"
                             ; . "_winIdU=" . winid . "`n"
                             ; . "isWin11=" . is11 . "`n"
-                            ; . " isModernExplorerInReg=" . iex . "`n"
-                            ; . " IsModernExplorerActive()=" . ima . "`n"
+                            ; . "isModernExplorerInReg=" . iex . "`n"
+                            ; . "IsModernExplorerActive()=" . ima . "`n"
                             ; . "isExplorerHeader=" . ih . "`n"
                             ; . "pt.CurrentControlType=" . ptType
                 ; tooltip, %tooltipText%
-                ; tooltip, line3
+
                 If (isExplorerHeader || ctype  == 50031) {
                     ; tooltip, % "line4 - " pt.CurrentControlType
                     If (wmClassD == "#32770" || _winCtrlU == "DirectUIHWND3") {
@@ -4664,7 +4663,7 @@ $~LButton::
                     }
                     Else If (wmClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
                         loop 50 {
-                            if (ControlFocusEx(_winIdU, _winCtrlU))
+                            If (ControlFocusEx(_winIdU, _winCtrlU))
                                 break
                             sleep, 1
                             ; ControlGetFocus, testFocus, ahk_id %_winIdU%
@@ -4676,7 +4675,7 @@ $~LButton::
                     }
                     Else If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
                         ; ControlFocusEx(_winIdU, "SysListView321")
-                        if !isWin11
+                        If !isWin11
                             Send, {F5}
 
                         Send, ^{NumpadAdd}
@@ -4688,63 +4687,65 @@ $~LButton::
                         Return
                     }
                 }
-            } catch e {
-                ; tooltip, 1: UIA TIMED OUT!!!!
-                ListLines
-                MsgBox % "Exception caught:`n"
-                    . "Message: " e.Message "`n"
-                    . "What: " e.What "`n"
-                    . "File: " e.File "`n"
-                    . "Line: " e.Line "`n"
-                    . "Extra: " e.Extra "`n`n"
-                    . "A_LastError: " A_LastError "`n"
-                    . "ErrorLevel: " ErrorLevel
-                Pause
-
-                UIA :=  ;// set to a different value
-                ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                UIA := UIA_Interface() ; Initialize UIA interface
-                UIA.TransactionTimeout := 2000
-                UIA.ConnectionTimeout  := 20000
-            }
+            ; } catch e {
+                ; ; tooltip, 1: UIA TIMED OUT!!!!
+                ; ListLines
+                ; MsgBox % "Exception caught:`n"
+                    ; . "Message: " e.Message "`n"
+                    ; . "What: " e.What "`n"
+                    ; . "File: " e.File "`n"
+                    ; . "Line: " e.Line "`n"
+                    ; . "Extra: " e.Extra "`n`n"
+                    ; . "A_LastError: " A_LastError "`n"
+                    ; . "ErrorLevel: " ErrorLevel
+                ; Pause
+            ; }
         }
         Else If ((wmClassD == "CabinetWClass" || wmClassD == "#32770")
             && (_winCtrlU == "UpBand1" || InStr(_winCtrlU,"ToolbarWindow32", True) || _winCtrlU == "Microsoft.UI.Content.DesktopChildSiteBridge1")) {
 
-            try {
-                pt := UIA.ElementFromPoint(lbX2,lbY2,False)
-                If !IsObject(pt) {
-                    SetTimer, keyTrack, On
+            ; try {
+                pt     := SafeUIA_ElementFromPoint(lbX2,lbY2)
+                ctype  := SafeUIA_GetControlType(pt)
+                cname  := SafeUIA_GetName(pt)
+                cltype := SafeUIA_GetLocalizedControlType(pt)
+
+                If (ctype == "") {
+
+                    SetTimer, keyTrack,   On
                     SetTimer, mouseTrack, On
                     Return
                 }
                 ; tooltip, % pt.CurrentControlType "-" pt.CurrentName "-" pt.CurrentLocalizedControlType
-                If (pt.CurrentControlType == 50000
-                    && !inStr(pt.CurrentName, "Back", True) && !inStr(pt.CurrentName, "Forward", True) && !inStr(pt.CurrentName, "Up", True) && !inStr(pt.CurrentName, "Refresh", True)) {
+                If (ctype == 50000
+                    && !InStr(cname, "Back", True) && !InStr(cname, "Forward", True) && !InStr(cname, "Up", True) && !InStr(cname, "Refresh", True)) {
 
+                    SetTimer, keyTrack,   On
+                    SetTimer, mouseTrack, On
                     Return
-                    }
-            } catch e {
-                tooltip, 2: UIA TIMED OUT!!!!
-                MsgBox % "Exception caught:`n" . "Message: " e.Message "`n" . "What: " e.What "`n" . "File: " e.File "`n" . "Line: " e.Line "`n" . "Extra: " e.Extra
-                UIA :=  ;// set to a different value
-                ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                UIA := UIA_Interface() ; Initialize UIA interface
-                UIA.TransactionTimeout := 2000
-                UIA.ConnectionTimeout  := 20000
-                SetTimer, keyTrack, On
-                SetTimer, mouseTrack, On
-                Return
-            }
+                }
+            ; } catch e {
+                ; tooltip, 2: UIA TIMED OUT!!!!
+                ; ListLines
+                ; MsgBox % "Exception caught:`n"
+                    ; . "Message: " e.Message "`n"
+                    ; . "What: " e.What "`n"
+                    ; . "File: " e.File "`n"
+                    ; . "Line: " e.Line "`n"
+                    ; . "Extra: " e.Extra "`n`n"
+                    ; . "A_LastError: " A_LastError "`n"
+                    ; . "ErrorLevel: " ErrorLevel
+                ; Pause
+            ; }
 
-            If inStr(pt.CurrentName, "Refresh", True) {
+            If InStr(cname, "Refresh", True) {
                 SendCtrlAdd(_winIdU, , , wmClassD)
             }
-            Else If (  (pt.CurrentControlType == 50000) ; handles explorer based buttons
-                    || (pt.CurrentControlType == 50011) ; handles #32770 breadcrumb bar
-                    || (pt.CurrentControlType == 50020) ; handles normal explorer breadcrumb bar
-                    || (pt.CurrentControlType == 50031 && !inStr(pt.CurrentName, "Open", True)) ; handles #32770 breadcrumb bar
-                    || (pt.CurrentControlType == 50031 && !inStr(pt.CurrentLocalizedControlType, "split", True))) { ; handles normal explorer breadcrumb bar
+            Else If (  (ctype == 50000) ; handles explorer based buttons
+                    || (ctype == 50011) ; handles #32770 breadcrumb bar
+                    || (ctype == 50020) ; handles normal explorer breadcrumb bar
+                    || (ctype == 50031 && !InStr(cname,  "Open",  True)) ; handles #32770 breadcrumb bar
+                    || (ctype == 50031 && !InStr(cltype, "split", True))) { ; handles normal explorer breadcrumb bar
 
                 currentPath := ""
                 loop 100 {
@@ -4771,10 +4772,11 @@ $~LButton::
         }
     }
 
-    SetTimer, keyTrack, On
+    SetTimer, keyTrack,   On
     SetTimer, mouseTrack, On
 Return
 #If
+
 
 ; FocusHwndFast(hwnd)
 ; - Activates the top-level window, brings it to foreground safely, and sets keyboard focus to 'hwnd'.
@@ -5727,8 +5729,8 @@ IsOverException(hWnd := "") {
 
     If (   proc == "peazip.exe"
         || proc == "SndVol.exe"
-        || ((inStr("File Explorer", tit, True) || proc == "explorer.exe") && (inStr("Home", tit, True) || inStr("This PC", tit, True) || inStr("Gallery", tit, True)))
-        || (inStr("InstallShield", tit, True))
+        || ((InStr("File Explorer", tit, True) || proc == "explorer.exe") && (InStr("Home", tit, True) || InStr("This PC", tit, True) || InStr("Gallery", tit, True)))
+        || (InStr("InstallShield", tit, True))
         || cl == "#32768"
         || cl == "Autohotkey"
         || cl == "AutohotkeyGUI"
@@ -5924,7 +5926,7 @@ JEE_WinHasAltTabIcon(hWnd)
         Return 0
 
     WinGet, vWinProc, ProcessName, % "ahk_id " hWnd
-    If inStr(vWinProc, "InputHost.exe") || inStr(vWinProc, "App.exe")
+    If InStr(vWinProc, "InputHost.exe") || InStr(vWinProc, "App.exe")
         Return 0
 
     WinGet, vWinStyle, Style, % "ahk_id " hWnd
@@ -6511,29 +6513,33 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
             Else If (hitVal == 12 || hitVal == 13 || hitVal == 14)
                 Return False
             Else  {
-                try {
-                    pt := UIA.ElementFromPoint(xPos, yPos, False)
-                    If !IsObject(pt) {
-                        Return False
-                    }
+                ; try {
+                    pt := SafeUIA_ElementFromPoint(xPos, yPos)
+                    ctype := SafeUIA_GetControlType(pt)
+                    ccname := SafeUIA_GetClassName(pt)
+
                     ; tooltip, % pt.CurrentControlType
-                    If (mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName == "FrameGrabHandle")
+                    If (mClass == "Chrome_WidgetWin_1" && ctype == 50033 && ccname == "FrameGrabHandle")
                         Return True
-                    Else If (mClass == "Chrome_WidgetWin_1" && pt.CurrentControlType == 50033 && pt.CurrentClassName != "FrameGrabHandle")
+                    Else If (mClass == "Chrome_WidgetWin_1" && ctype == 50033 && ccname != "FrameGrabHandle")
                         Return False
-                    Else If ((pt.CurrentControlType == 50037) || (pt.CurrentControlType == 50026) || (pt.CurrentControlType == 50033))
+                    Else If ((ctype == 50037) || (ctype == 50026) || (ctype == 50033))
                         Return True
                     Else
                         Return False
-                } catch e {
-                    tooltip, 5: UIA TIMED OUT!!!!
-                    MsgBox % "Exception caught:`n" . "Message: " e.Message "`n" . "What: " e.What "`n" . "File: " e.File "`n" . "Line: " e.Line "`n" . "Extra: " e.Extra
-                    UIA :=  ;// set to a different value
-                    ; VarSetCapacity(UIA, 0) ;// set capacity to zero
-                    UIA := UIA_Interface() ; Initialize UIA interface
-                    UIA.TransactionTimeout := 2000
-                    UIA.ConnectionTimeout  := 20000
-                }
+                ; } catch e {
+                    ; tooltip, 5: UIA TIMED OUT!!!!
+                    ; ListLines
+                    ; MsgBox % "Exception caught:`n"
+                    ; . "Message: " e.Message "`n"
+                    ; . "What: " e.What "`n"
+                    ; . "File: " e.File "`n"
+                    ; . "Line: " e.Line "`n"
+                    ; . "Extra: " e.Extra "`n`n"
+                    ; . "A_LastError: " A_LastError "`n"
+                    ; . "ErrorLevel: " ErrorLevel
+                    ; Pause
+                ; }
             }
             Return True
         }
@@ -7521,15 +7527,15 @@ GetExplorerPath(hwnd:="") {
     Else If (clCheck == "CabinetWClass" && !isWin11) {
         WinGetTitle, expTitle, ahk_id %hwnd%
 
-        If (   inStr(expTitle, "This PC"    , True)
-            || inStr(expTitle, "Home"       , True)
-            || inStr(expTitle, "Downloads"  , True)
-            || inStr(expTitle, "Recycle Bin", True)
-            || inStr(expTitle, "Pictures"   , True)
-            || inStr(expTitle, "Videos"     , True)
-            || inStr(expTitle, "Documents"  , True)
-            || inStr(expTitle, "Music"      , True)
-            || inStr(expTitle, "Desktop"    , True) )
+        If (   InStr(expTitle, "This PC"    , True)
+            || InStr(expTitle, "Home"       , True)
+            || InStr(expTitle, "Downloads"  , True)
+            || InStr(expTitle, "Recycle Bin", True)
+            || InStr(expTitle, "Pictures"   , True)
+            || InStr(expTitle, "Videos"     , True)
+            || InStr(expTitle, "Documents"  , True)
+            || InStr(expTitle, "Music"      , True)
+            || InStr(expTitle, "Desktop"    , True) )
             Return  expTitle
         Else {
             loop 100
@@ -7682,9 +7688,10 @@ MouseIsOverTaskbarButtonGroup() {
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     If (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId != "TrayNotifyWnd1") {
-        pt := UIA.ElementFromPoint(x,y,False)
+        pt := SafeUIA_ElementFromPoint(x,y)
+        ctype := SafeUIA_GetControlType(pt)
         ; tooltip, % "val is " pt.CurrentControlType
-        Return (IsObject(pt) && pt.CurrentControlType == 50000)
+        Return (ctype == 50000)
     }
     Else
         Return False
@@ -7713,9 +7720,10 @@ MouseIsOverTaskbarBlank() {
                 Return False
             }
             Else {
-                pt := UIA.ElementFromPoint(x,y,False)
+                pt := SafeUIA_ElementFromPoint(x,y)
+                ctype := SafeUIA_GetControlType(pt)
                 ; tooltip, % "val is " pt.CurrentControlType
-                Return (IsObject(pt) && pt.CurrentControlType == 50033)
+                Return (ctype == 50033)
             }
         }
         Else
@@ -7963,9 +7971,34 @@ Acc_FromWindow(hWnd, objID, ByRef acc) {
     return false
 }
 
+SafeUIA_ElementFromPoint(x, y, default := "") {
+    Global UIA
+    try {
+        return UIA.ElementFromPoint(x, y, False)
+    } catch {
+        UIA :=  ;// set to a different value
+        UIA := UIA_Interface() ; Initialize UIA interface
+        UIA.TransactionTimeout := 2000
+        UIA.ConnectionTimeout  := 20000
+        return default
+    }
+}
+
 SafeUIA_GetControlType(el, default := "") {
+    if !IsObject(el)
+        return default
     try {
         return el.CurrentControlType
+    } catch e {
+        return default
+    }
+}
+
+SafeUIA_GetLocalizedControlType(el, default := "") {
+    if !IsObject(el)
+        return default
+    try {
+        return el.CurrentLocalizedControlType
     } catch e {
         return default
     }
@@ -7976,6 +8009,16 @@ SafeUIA_GetName(el, default := "") {
         return default
     try {
         return el.CurrentName
+    } catch e {
+        return default
+    }
+}
+
+SafeUIA_GetClassName(el, default := "") {
+    if !IsObject(el)
+        return default
+    try {
+        return el.CurrentClassName
     } catch e {
         return default
     }
