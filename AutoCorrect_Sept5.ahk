@@ -20,7 +20,7 @@
 ; #include %A_ScriptDir%\_VD.ahk
 ; DLL
 Global VDA_DllName := "VirtualDesktopAccessor_Win11.dll"
-Global dllPath := A_ScriptDir . "\" . VDA_DllName
+Global dllPath := A_ScriptDir . "\" . VDA_DllName  ; destination: next to EXE/script
 Global hVirtualDesktopAccessor             := 0
 Global GetDesktopCountProc                 := 0
 Global GoToDesktopNumberProc               := 0
@@ -421,16 +421,16 @@ Return
 ; ==========================================================================================================================================
 ; Helper to resolve exports
 _gp(name) {
-    global hVirtualDesktopAccessor
+    Global hVirtualDesktopAccessor
     return DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", name, "Ptr")
 }
 
 InitVDA() {
-    global VDA_DllName, hVirtualDesktopAccessor, dllPath
-    global GetDesktopCountProc, GoToDesktopNumberProc, GetCurrentDesktopNumberProc
-    global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
-    global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
-    global CreateDesktopProc, RemoveDesktopProc
+    Global VDA_DllName, hVirtualDesktopAccessor, dllPath
+    Global GetDesktopCountProc, GoToDesktopNumberProc, GetCurrentDesktopNumberProc
+    Global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
+    Global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
+    Global CreateDesktopProc, RemoveDesktopProc
 
     ; If we already resolved at least the "core" proc, assume init done.
     ; (Change this to a stricter check if you prefer.)
@@ -1103,7 +1103,7 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
     try {
         hTask := WinExist("ahk_class Shell_TrayWnd")
         if !hTask
-            return false
+            return False
 
         tb := UIA.ElementFromHandle(hTask)
         if (IsObject(tb)) {
@@ -1115,7 +1115,7 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
             if !IsObject(startEl)
                 startEl := tb.FindFirstByNameAndType("Start menu", "Button")
             if !IsObject(startEl)
-                return false
+                return False
 
             ; Get bounding rectangle and compute center
             ; UIA_Interface exposes CurrentBoundingRectangle (object with x,y,w,h)
@@ -1138,10 +1138,10 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
             return true
         }
         else
-            return false
+            return False
 
     } catch e {
-        return false
+        return False
     }
 }
 
@@ -3911,8 +3911,8 @@ ExplorerHitTestType() {
 
     startRole := roles[1]
 
-    hasOutlineItem := false
-    hasToolbar     := false
+    hasOutlineItem := False
+    hasToolbar     := False
 
     for i, r in roles {
         if (r = ROLE_SYSTEM_OUTLINEITEM)
@@ -4068,7 +4068,7 @@ IsExplorerHeaderClick() {
     CoordMode, Mouse, Screen
     MouseGetPos, mx, my, winHwnd, ctrlNN
     if (!winHwnd)
-        return false
+        return False
 
     if (winHwnd != lastWin) {
         WinGetClass, cls, ahk_id %winHwnd%
@@ -4079,20 +4079,20 @@ IsExplorerHeaderClick() {
     }
 
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
-        return false
+        return False
 
     ; optional accuracy filter
     ; if !(ctrlNN ~= "i)^DirectUIHWND\d+$")
-    ;     return false
+    ;     return False
 
     acc := Acc_ObjectFromPoint(idChild, mx, my)  ; <-- key change
 
     if !IsObject(acc)
-        return false
+        return False
 
     try role := acc.accRole(0)
     catch
-        return false
+        return False
 
     return (role == ROLE_SYSTEM_OUTLINE)
 }
@@ -4107,19 +4107,19 @@ IsExplorerItemClick() {
     CoordMode, Mouse, Screen
     MouseGetPos, mx, my, winHwnd
     if (!winHwnd)
-        return false
+        return False
 
     ; Only standard Explorer windows / file dialogs
     WinGetClass, cls, ahk_id %winHwnd%
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
-        return false
+        return False
 
     ; NOTE: depending on your Acc.ahk, you might want Acc_ObjectFromPoint() or Acc_ObjectFromPoint(, mx, my).
     ; If your version expects (x,y) directly, this is fine:
     acc := Acc_ObjectFromPoint(mx, my)
     ; If it expects ByRef child,x,y, the safer call is: acc := Acc_ObjectFromPoint(, mx, my)
     if !IsObject(acc)
-        return false
+        return False
 
     ; --- step 1: climb to the nearest LISTITEM / OUTLINEITEM ---
     item := ""
@@ -4160,11 +4160,11 @@ IsExplorerItemClick() {
     }
 
     if !IsObject(item)
-        return false   ; nothing in this chain looks like a file/folder item
+        return False   ; nothing in this chain looks like a file/folder item
 
     ; --- optional: verify it really belongs to the file view (list/outline) ---
     cur := item
-    viewFound := false
+    viewFound := False
 
     Loop 10 {
         parent := ""
@@ -4239,23 +4239,23 @@ IsExplorerBlankSpaceClick() {
     CoordMode, Mouse, Screen
     MouseGetPos, x, y, winHwnd
     if (!winHwnd)
-        return false
+        return False
 
     ; Only Explorer + common dialogs
     WinGetClass, cls, ahk_id %winHwnd%
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
-        return false
+        return False
 
     ; MSAA: object under cursor
     ; If your Acc.ahk uses ByRef child,x,y, you may need: acc := Acc_ObjectFromPoint(, x, y)
     acc := Acc_ObjectFromPoint(x, y)
     if !IsObject(acc)
-        return false
+        return False
 
     ; If you treat header clicks separately, you can short‑circuit here:
     ; (This calls your IsExplorerHeaderClick that checks for ROLE_SYSTEM_OUTLINE)
     if (IsExplorerHeaderClick())
-        return false
+        return False
 
     ; ------------------------------------------------------------
     ; Step 1: Is this click on an item (file/folder/group header)?
@@ -4286,7 +4286,7 @@ IsExplorerBlankSpaceClick() {
 
         ; Any LISTITEM / OUTLINEITEM on the way up = item / group header → not blank
         if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
-            return false
+            return False
 
         parent := ""
         try parent := cur.accParent
@@ -4330,7 +4330,7 @@ IsExplorerBlankSpaceClick() {
     }
 
     ; No list/outline ancestor: not part of the file view
-    return false
+    return False
 }
 
 
@@ -4459,12 +4459,12 @@ MSAA_IsFocusedEditable() {
 
 ControlFocusEx(hWnd := "", ctrlNN := "") {
     if (hWnd = "")
-        return false
+        return False
 
     ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hWnd%
 
     if (!hCtl)
-        return false
+        return False
 
     ; Determine thread ownership
     tidTarget := DllCall("GetWindowThreadProcessId","ptr", hCtl, "uint*", 0, "uint")
@@ -4657,7 +4657,14 @@ $~LButton::
                 If (isExplorerHeader || ctype  == 50031) {
                     ; tooltip, % "line4 - " pt.CurrentControlType
                     If (wmClassD == "#32770" || _winCtrlU == "DirectUIHWND3") {
-                        ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
+                        loop 50
+                        {
+                            sleep, 1
+                            ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
+                            ControlGetFocus, testCtrlFocus, ahk_id %_winIdU%
+                            If (testCtrlFocus == _winCtrlU)
+                                break
+                        }
                         Send, ^{NumpadAdd}
                         Return
                     }
@@ -4777,14 +4784,13 @@ $~LButton::
 Return
 #If
 
-
 ; FocusHwndFast(hwnd)
 ; - Activates the top-level window, brings it to foreground safely, and sets keyboard focus to 'hwnd'.
 ; - Pure Win32, avoids UIA. Works only for HWND-backed controls.
 ; Fast, reliable focus with minimal overhead
 FocusHwndFast(hwndTarget, verify := true) {
     if !DllCall("IsWindow", "ptr", hwndTarget)
-        return false
+        return False
 
     ; Quick success path: already focused
     if (DllCall("GetFocus", "ptr") = hwndTarget)
@@ -4806,8 +4812,8 @@ FocusHwndFast(hwndTarget, verify := true) {
 
     ; Another quick path: if the top window is already foreground,
     ; no need to attach to the foreground thread—just ensure active+focus.
-    attachedToFG  := false
-    attachedToTW  := false
+    attachedToFG  := False
+    attachedToTW  := False
     if (hFG != hwndTop) {
         ; Only attach to FG if it's a different thread than us (AHK)
         if (tidFG != tidAHK) {
@@ -4859,12 +4865,13 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
                 ControlFocusEx(targetHwndID,"DirectUIHWND2")
                 sleep, 1
                 ControlGetFocus, testFocus, ahk_id %targetHwndID%
-                if (InStr(testFocus, "DirectUIHWND", false))
+                if (InStr(testFocus, "DirectUIHWND", False))
                     break
             }
         }
     } catch e {
         tooltip, 4: UIA TIMED OUT!!!!
+        MsgBox % "Exception caught:`n" . "Message: " e.Message "`n" . "What: " e.What "`n" . "File: " e.File "`n" . "Line: " e.Line "`n" . "Extra: " e.Extra
         UIA :=  ;// set to a different value
         ; VarSetCapacity(UIA, 0) ;// set capacity to zero
         UIA := UIA_Interface() ; Initialize UIA interface
@@ -4876,7 +4883,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
 }
 
 SendCtrlAddLabel:
-    SendCtrlAdd(_winIdU, prevPath, currentPath, _winCtrlD)
+    SendCtrlAdd(_winIdU, , , _winCtrlU)
 Return
 
 RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2) ; from the FindText library, credit goes to feiyue
@@ -5332,7 +5339,7 @@ IsExplorerModern() {
 ;     MsgB
 
 IsModernExplorerActive(hWnd := "") {
-    global UIA, isWin11
+    Global UIA, isWin11
 
     if !isWin11
         return false
@@ -5430,10 +5437,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     ; tooltip, here1
     If (!GetKeyState("LShift","P" )) {
         If (initFocusedCtrlNN == "") {
-            ; ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
-            MouseGetPos, , , , initFocusedCtrlNN ;if there was no initFocusedCtrlNN specified, simply assume ctrlNN under mouse
+            MouseGetPos, , , , initFocusedCtrlNN
             while (initFocusedCtrlNN == "ShellTabWindowClass1") {
-                ; ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
                 MouseGetPos, , , , initFocusedCtrlNN
                 sleep, 1
             }
@@ -5717,6 +5722,7 @@ VolumeHover() {
         Return False
 }
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 IsOverException(hWnd := "") {
     If (hWnd == "")
         MouseGetPos, , , hwndID
@@ -5750,7 +5756,7 @@ IsOverException(hWnd := "") {
         || cl == "DV2ControlHost"
         || cl == "TfrmSafelyRemoveMenu"
         || cl == "Qt6101QWindowIcon"
-        || (InStr(tit, "VirtualBox",True)))
+        || (cl != "#32770" && cl != "CabinetWClass" && InStr(tit, "VirtualBox",True)))
         Return True
     Else
         Return False
@@ -5983,12 +5989,15 @@ IsAltTabWindow(hWnd) {
     WinGet, exStyles, ExStyle, ahk_id %hWnd%
     If (exStyles & WS_EX_APPWINDOW)
     {
-       If DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
+       If DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr") {
           Return False
-       If (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwnd)
+       }
+       If (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwnd) {
           Return True
-       Else
+       }
+       Else {
           Return False
+       }
     }
     If (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE) or (exStyles & WS_EX_DLGMODALFRAME)
        Return False
@@ -6052,14 +6061,14 @@ realHwnd(hwnd)
 ; https://github.com/Ciantic/VirtualDesktopAccessor/blob/rust/example.ahk
 ; -----------------------------------------------------------------------
 GetDesktopCount() {
-    global GetDesktopCountProc
+    Global GetDesktopCountProc
     if (!InitVDA() || !GetDesktopCountProc)
         return 1
     return DllCall(GetDesktopCountProc, "Int")
 }
 
 GoToDesktopNumber(num) {
-    global GoToDesktopNumberProc
+    Global GoToDesktopNumberProc
     if (!InitVDA() || !GoToDesktopNumberProc)
         return false
 
@@ -6072,14 +6081,14 @@ GoToDesktopNumber(num) {
 }
 
 GetCurrentDesktopNumber() {
-    global GetCurrentDesktopNumberProc
+    Global GetCurrentDesktopNumberProc
     if (!InitVDA() || !GetCurrentDesktopNumberProc)
         return 1
     return DllCall(GetCurrentDesktopNumberProc, "Int")
 }
 
 GoToPrevDesktop() {
-    global GetCurrentDesktopNumberProc
+    Global GetCurrentDesktopNumberProc
     if (!InitVDA() || !GetCurrentDesktopNumberProc)
         return false
 
@@ -6099,7 +6108,7 @@ GoToPrevDesktop() {
 }
 
 GoToNextDesktop() {
-    global GetCurrentDesktopNumberProc
+    Global GetCurrentDesktopNumberProc
     if (!InitVDA() || !GetCurrentDesktopNumberProc)
         return false
 
@@ -6119,7 +6128,7 @@ GoToNextDesktop() {
 }
 
 IsWindowOnCurrentVirtualDesktop(hwnd) {
-    global IsWindowOnCurrentVirtualDesktopProc
+    Global IsWindowOnCurrentVirtualDesktopProc
     ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
     if (!InitVDA() || !IsWindowOnCurrentVirtualDesktopProc)
         return true
@@ -6127,7 +6136,7 @@ IsWindowOnCurrentVirtualDesktop(hwnd) {
 }
 
 MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
-    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
+    Global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
     if (!InitVDA() || !MoveWindowToDesktopNumberProc || !GoToDesktopNumberProc)
         return false
 
@@ -6139,7 +6148,7 @@ MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
 }
 
 MoveCurrentWindowToDesktop(num) {
-    global MoveWindowToDesktopNumberProc
+    Global MoveWindowToDesktopNumberProc
     if (!InitVDA() || !MoveWindowToDesktopNumberProc)
         return false
 
@@ -6165,7 +6174,7 @@ MoveOrGotoDesktopNumber(num) {
     ;
     ; If you WANT MoveOrGotoDesktopNumber to be 1-based, tell me and I’ll normalize it.
 
-    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
+    Global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
     if (!InitVDA() || !GoToDesktopNumberProc)
         return false
 
@@ -7101,7 +7110,7 @@ getTotalDesktops()
 
 getCurrentDesktop()
 {
-    global CurrentDesktop
+    Global CurrentDesktop
     mapDesktopsFromRegistry()
     ;    MsgBox %CurrentDesktop%
     ;    SetTimer, %CurrentDesktop%, Off  ; i.e. the timer turns itself off here.
@@ -7122,7 +7131,7 @@ getCurrentDesktop()
 ;
 mapDesktopsFromRegistry()
 {
-    global CurrentDesktop, DesktopCount
+    Global CurrentDesktop, DesktopCount
 
     ; Get the current desktop UUID. Length should be 32 always, but there's no guarantee this couldn't change in a later Windows release so we check.
     IdLength := 32
@@ -7572,7 +7581,7 @@ GetExplorerPath(hwnd:="") {
                 If (path == "") {
                     ; Fallback for virtual folders: read breadcrumb text (brittle but works on Win10)
                     ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-                    If (dir == "" || !InStr(dir, "address", false))
+                    If (dir == "" || !InStr(dir, "address", False))
                         ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
                     Return dir
                 } Else {
