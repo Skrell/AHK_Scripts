@@ -1334,7 +1334,7 @@ $~WheelDown::
         }
         ; We still want normal scrolling here, so handled stays False
     }
-    Else If (MouseIsOverTitleBar() || disableWheeldown) {
+    Else If (MouseIsOverTitleBar() && !disableWheeldown) {
         ; In this branch we swallow the wheel
         disableWheeldown := True
         MouseGetPos,,, wdID
