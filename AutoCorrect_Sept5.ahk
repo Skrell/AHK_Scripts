@@ -15,6 +15,7 @@
 ; #include %A_ScriptDir%\Acc.ahk
 #HotString EndChars ()[]{}:;,.?!`n `t
 #MaxhotKeysPerInterval 500
+#MaxThreadsPerHotkey 10
 #KeyHistory 25
 
 ; #include %A_ScriptDir%\_VD.ahk
@@ -526,6 +527,11 @@ LL_MouseHook(nCode, wParam, lParam)
     if (!blockKeys)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
+    ; MSLLHOOKSTRUCT:
+    ; flags offset 12
+    flags    := NumGet(lParam + 0, 12, "UInt")
+    injected := (flags & 0x01)  ; LLMHF_INJECTED
+
     ; wParam: mouse message:
     ;   0x0201 WM_LBUTTONDOWN
     ;   0x0202 WM_LBUTTONUP
@@ -542,20 +548,22 @@ LL_MouseHook(nCode, wParam, lParam)
     ;   time        (DWORD)  offset 16
     ;   dwExtraInfo (ULONG_PTR) offset 20
 
-    ; Only block button messages (not move/wheel) based on wParam range:
-    if (wParam < 0x0201 || wParam > 0x0209)
-        return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
-
-    flags    := NumGet(lParam + 0, 12, "UInt")
-    injected := (flags & 0x01)  ; LLMHF_INJECTED
-
-    ; Allow injected mouse clicks (from Click/SendInput)
+    ; Allow injected mouse events (SendInput/Click)
     if (injected)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-    ; Block physical mouse button event
-    return 1
+    ; Block wheel messages too
+    if (wParam = 0x020A || wParam = 0x020E)  ; WM_MOUSEWHEEL / WM_MOUSEHWHEEL
+        return 1
+
+    ; Block physical mouse button messages
+    if (wParam >= 0x0201 && wParam <= 0x0209)
+        return 1
+
+    ; Otherwise pass through (move, etc.)
+    return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 }
+
 
 OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
     ; tooltip, pop!
@@ -641,7 +649,7 @@ Return
 ; -----------------------------------------------          TYPING MANIUPLATION           --------------------------------------------------
 ; ==========================================================================================================================================
 Hoty:
-    CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey < 999) ? CapCount+1 : 1 ; note that CapCount is ALWAYS at least 1
+    CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey < 999) ? CapCount + 1 : 1 ; note that CapCount is ALWAYS at least 1
     If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
         Send % "{Left}{BS}" . SubStr(A_PriorHotKey,3,1) . "{Right}"
         CapCount := 1
@@ -1211,7 +1219,7 @@ Return
 WU_lastZoomTime  := 0   ; last time we sent ^{NumpadAdd}
 WU_lastWheelTime := 0   ; last time any WheelDown happened
 WU_burstGap      := 250 ; ms: gap that defines a "new burst"
-WU_zoomInterval  := 100 ; ms: min time between zooms *within* a burst
+WU_zoomInterval  := 200 ; ms: min time between zooms *within* a burst
 
 $~WheelUp::
     StopRecursion := True
@@ -1233,7 +1241,6 @@ $~WheelUp::
           || wuCtrl == "DirectUIHWND2"
           || wuCtrl == "DirectUIHWND3"))
         {
-            Critical, On
             now := A_TickCount
 
             ; --- Burst detection ---
@@ -1249,19 +1256,17 @@ $~WheelUp::
             ; First in burst (WU_lastZoomTime=0) -> zoom immediately.
             ; In a burst -> zoom only If >= WU_zoomInterval has passed.
             If (WU_lastZoomTime = 0 || now - WU_lastZoomTime >= WU_zoomInterval) {
+                Critical, On
                 WU_lastZoomTime := now
                 ; Optional debug:
                 ; ToolTip % "Zoom at: " . now
                 ; SetTimer, ClearToolTip, -400
                 blockKeys := True
-                Send, {Ctrl UP}
-                sleep, 100
                 Send, ^{NumpadAdd}
-                sleep, 100
-                Send, {Ctrl UP}
                 blockKeys := False
+                Critical, Off
+                FixModifiers()
             }
-            Critical, Off
         }
         ; We still want normal scrolling here, so handled stays False
     }
@@ -1278,7 +1283,7 @@ Return
 WD_lastZoomTime  := 0   ; last time we sent ^{NumpadAdd}
 WD_lastWheelTime := 0   ; last time any WheelDown happened
 WD_burstGap      := 250 ; ms: gap that defines a "new burst"
-WD_zoomInterval  := 100 ; ms: min time between zooms *within* a burst
+WD_zoomInterval  := 200 ; ms: min time between zooms *within* a burst
 
 $~WheelDown::
     StopRecursion := True
@@ -1300,7 +1305,6 @@ $~WheelDown::
           || wuCtrl == "DirectUIHWND2"
           || wuCtrl == "DirectUIHWND3"))
         {
-            Critical, On
             now := A_TickCount
 
             ; --- Burst detection ---
@@ -1316,19 +1320,17 @@ $~WheelDown::
             ; First in burst (WD_lastZoomTime=0) -> zoom immediately.
             ; In a burst -> zoom only If >= WD_zoomInterval has passed.
             If (WD_lastZoomTime = 0 || now - WD_lastZoomTime >= WD_zoomInterval) {
+                Critical, On
                 WD_lastZoomTime := now
                 ; Optional debug:
                 ; ToolTip % "Zoom at: " . now
                 ; SetTimer, ClearToolTip, -400
                 blockKeys := True
-                Send, {Ctrl UP}
-                sleep, 100
                 Send, ^{NumpadAdd}
-                sleep, 100
-                Send, {Ctrl UP}
                 blockKeys := False
+                Critical, Off
+                FixModifiers()
             }
-            Critical, Off
         }
         ; We still want normal scrolling here, so handled stays False
     }
@@ -1347,7 +1349,6 @@ $~WheelDown::
     }
     StopRecursion := False
 Return
-
 
 IsConsoleWindow() {
     WinGetClass, targetClass, A
@@ -2341,12 +2342,10 @@ $~Enter::
 
         Keywait, Enter, U T3
 
-        ; WaitForExplorerLoad(entID)
         WinGet, checkID, ID, A
         If (checkID == entID)
             SendCtrlAdd(entID, , , entCl)
-            ; Send, ^{NumpadAdd}
-    }
+        }
 Return
 
 $~F2::
@@ -4861,7 +4860,6 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
         shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
         If !isCabinetWClass10 && !skipFocus {
             loop 50 {
-                ; shellEl.setFocus()
                 ControlFocusEx(targetHwndID,"DirectUIHWND2")
                 sleep, 1
                 ControlGetFocus, testFocus, ahk_id %targetHwndID%
@@ -4871,7 +4869,15 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
         }
     } catch e {
         tooltip, 4: UIA TIMED OUT!!!!
-        MsgBox % "Exception caught:`n" . "Message: " e.Message "`n" . "What: " e.What "`n" . "File: " e.File "`n" . "Line: " e.Line "`n" . "Extra: " e.Extra
+        WinGetClass, wndClass, ahk_id %targetHwndID%
+        MsgBox % "Exception caught:`n"
+            . "targetHwndID: " targetHwndID "`n"
+            . "Class: " wndClass "`n"
+            . "Message: " e.Message "`n"
+            . "What: " e.What "`n"
+            . "File: " e.File "`n"
+            . "Line: " e.Line "`n"
+            . "Extra: " e.Extra
         UIA :=  ;// set to a different value
         ; VarSetCapacity(UIA, 0) ;// set capacity to zero
         UIA := UIA_Interface() ; Initialize UIA interface
@@ -6446,21 +6452,13 @@ mouseTrack() {
         If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
             StopRecursion := True
             DetectHiddenWindows, Off
-            WinGet, allWindows, List, , , ""
-            loop % allWindows {
-                hwnd_id := allWindows%A_Index%
-                WinGet, isMin, MinMax, ahk_id %hwnd_id%
-                WinGet, whatProc, ProcessName, ahk_id %hwnd_id%
-                currentMonHasActWin := IsWindowOnMonNum(hwnd_id, currentMon)
 
-                If (isMin > -1 &&  currentMonHasActWin && (IsAltTabWindow(hwnd_id) || whatProc == "Zoom.exe")) {
-                    WinActivate, ahk_id %hwnd_id%
-                    GoSub, DrawRect
-                    ClearRect()
-                    Gui, GUI4Boarder: Hide
-                    break
-                }
-            }
+            escHwndID := FindTopMostWindow()
+            WinActivate, ahk_id %escHwndID%
+            GoSub, DrawRect
+            ClearRect()
+            Gui, GUI4Boarder: Hide
+
             previousMon := currentMon
             StopRecursion := False
         }
@@ -8225,6 +8223,7 @@ SetTitleMatchMode, 2
 ::dunk::
 ::cases::
 ::tick::
+::rake::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -8834,7 +8833,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::acustommed::accustomed
 ::acutaly::actually
 ::acutlaly::actually
-::ad::had
+::ad::Ad
 ::adaption::adaptation
 ::adaptions::adaptations
 ::adavanced::advanced
