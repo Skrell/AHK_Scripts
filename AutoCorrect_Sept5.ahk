@@ -15,7 +15,6 @@
 ; #include %A_ScriptDir%\Acc.ahk
 #HotString EndChars ()[]{}:;,.?!`n `t
 #MaxhotKeysPerInterval 500
-#MaxThreadsPerHotkey 10
 #KeyHistory 25
 
 ; #include %A_ScriptDir%\_VD.ahk
@@ -66,7 +65,6 @@ Global memotext                            := ""
 Global totalMenuItemCount                  := 0
 Global onlyTitleFound                      := ""
 Global CancelClose                         := False
-Global lastWinMinHwndId                    := 0x999999
 Global DrawingRect                         := False
 Global LclickSelected                      := False
 Global StopRecursion                       := False
@@ -76,7 +74,6 @@ Global LbuttonEnabled                      := True
 Global X_PriorPriorHotKey                  :=
 Global StopAutoFix                         := False
 Global disableEnter                        := False
-Global disableWheeldown                    := False
 Global EVENT_SYSTEM_MENUPOPUPSTART         := 0x0006
 Global EVENT_SYSTEM_MENUPOPUPEND           := 0x0007
 Global TimeOfLastHotkeyTyped               := A_TickCount
@@ -927,6 +924,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Send, {LShift UP}
             Send, {. UP}
             Send, {Backspace}
+            ControlFocus, Edit1, ahk_id %hWnd%
         }
 
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
@@ -1227,9 +1225,8 @@ $~WheelUp::
     Sleep, -1
 
     Global WU_lastZoomTime, WU_lastWheelTime, WU_burstGap, WU_zoomInterval
-    Global disableWheeldown  ; If you use these elsewhere
 
-    If (!MouseIsOverTitleBar() && !disableWheeldown && !MouseIsOverTaskbarBlank()) {
+    If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
         WinGetClass, wdClass, ahk_id %wdID%
 
@@ -1291,9 +1288,9 @@ $~WheelDown::
     Sleep, -1
 
     Global WD_lastZoomTime, WD_lastWheelTime, WD_burstGap, WD_zoomInterval
-    Global disableWheeldown, pauseWheel  ; If you use these elsewhere
+    Global pauseWheel  ; If you use these elsewhere
 
-    If (!MouseIsOverTitleBar() && !disableWheeldown && !MouseIsOverTaskbarBlank()) {
+    If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
         WinGetClass, wdClass, ahk_id %wdID%
 
@@ -1334,13 +1331,13 @@ $~WheelDown::
         }
         ; We still want normal scrolling here, so handled stays False
     }
-    Else If (MouseIsOverTitleBar() && !disableWheeldown) {
+    Else If (MouseIsOverTitleBar()) {
         ; In this branch we swallow the wheel
-        disableWheeldown := True
+        blockKeys := True
         MouseGetPos,,, wdID
         WinMinimize, ahk_id %wdID%
         Sleep, 500
-        disableWheeldown := False
+        blockKeys := False
         Return
     }
     Else If MouseIsOverTaskbarBlank() {
@@ -1349,6 +1346,7 @@ $~WheelDown::
     }
     StopRecursion := False
 Return
+#MaxThreadsPerHotkey 1
 
 IsConsoleWindow() {
     WinGetClass, targetClass, A
@@ -2923,7 +2921,6 @@ ResetWins:
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
-; #MaxThreadsPerHotkey 2
 $!Tab::
 $!+Tab::
 If !hitTAB {
@@ -3208,10 +3205,11 @@ Cycle()
     cycling := True
 
     If cycling {
-        loop {
+        loop
+        {
             If (GroupedWindows.length() >= 2 && cycling)
             {
-                KeyWait, Tab, D  T0.1
+                KeyWait, Tab, D T0.1
                 If !ErrorLevel
                 {
                     If !GetKeyState("LShift","P") {
@@ -3380,7 +3378,7 @@ Return
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    Global MonCount, VD, Highlighter, hitTAB, hitTilde, GroupedWindows, cycleCount, LclickSelected
+    Global MonCount, Highlighter, hitTAB, hitTilde, GroupedWindows, cycleCount, LclickSelected
 
     windowsToMinimize := []
     minimizedWindows  := []
@@ -3456,7 +3454,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         cycleCount := 1
     }
     gwHwndId := GroupedWindows[cycleCount]
-
+    ; tooltip, num of windows is %numWindows%
     loop
     {
         If LclickSelected
@@ -3500,8 +3498,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                 }
             }
         }
-    }
-    until (!GetKeyState("LAlt", "P"))
+    } until (!GetKeyState("LAlt", "P"))
+
     GoSub, FadeOutWindowTitle
 
     loop % windowsToMinimize.length()
@@ -3665,10 +3663,6 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         transVal          := opacityInterval
     } Else {
         ; For subsequent moves, you can skip animation entirely If you want:
-        ; incrValue       := 1
-        ; opacityInterval := 0
-        ; transVal        := Opacity
-
         incrValue         := 1
         opacityInterval   := 0
         transVal          := Opacity
@@ -3683,8 +3677,13 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
         transVal += opacityInterval
         Sleep, 2   ; purely visual – safe outside Critical
+        If (!GetKeyState("LAlt", "P")) {
+            WinSet, Transparent, %Opacity%, ahk_id %black1Hwnd%
+            WinSet, Transparent, %Opacity%, ahk_id %black2Hwnd%
+            WinSet, Transparent, %Opacity%, ahk_id %black3Hwnd%
+            WinSet, Transparent, %Opacity%, ahk_id %black4Hwnd%
+        }
     }
-
     Return
 }
 
@@ -4922,7 +4921,6 @@ RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2) ; from the FindText lib
 }
 
 #MaxThreadsPerHotkey 1
-
 UpdateInputBoxTitle:
     WinSet, ExStyle, +0x80, ahk_class #32770 ; 0x80 is WS_EX_TOOLWINDOW
     If (WinExist("Type Up to 3 Letters of a Window Title to Search") && !StopCheck) {
@@ -6273,52 +6271,70 @@ FrameShadow(HGui) {
 ; ForceMouseUp("L")  ; release left button
 ; ForceMouseUp("R")  ; release right button
 ; ForceMouseUp("M")  ; release middle button
-ForceMouseUp(btn) {
-    static DOWN := { "L":0x0002, "R":0x0008, "M":0x0020 }
-    static UP   := { "L":0x0004, "R":0x0010, "M":0x0040 }
+; ForceMouseUp(btn) {
+    ; static DOWN := { "L":0x0002, "R":0x0008, "M":0x0020 }
+    ; static UP   := { "L":0x0004, "R":0x0010, "M":0x0040 }
 
-    ; Send only UP event (even if DOWN wasn't detected)
-    flags := UP[btn]
+    ; ; Send only UP event (even if DOWN wasn't detected)
+    ; flags := UP[btn]
 
-    Critical, On
-    DllCall("mouse_event", "UInt", flags, "UInt", 0, "UInt", 0, "UInt", 0, "UPtr", 0)
-    Critical, Off
-}
+    ; Critical, On
+    ; DllCall("mouse_event", "UInt", flags, "UInt", 0, "UInt", 0, "UInt", 0, "UPtr", 0)
+    ; Critical, Off
+; }
 ; Use a low-level key-up in case Send fails
-ForceKeyUpVK(vk) {
-    static KEYEVENTF_KEYUP := 0x2
-    Critical, On
-    ; keybd_event is old but very dependable for “unsticking”
-    DllCall("keybd_event", "UChar", vk, "UChar", 0, "UInt", KEYEVENTF_KEYUP, "UPtr", 0)
-    Critical, Off
-}
+; ForceKeyUpVK(vk) {
+    ; static KEYEVENTF_KEYUP := 0x2
+    ; Critical, On
+    ; ; keybd_event is old but very dependable for “unsticking”
+    ; DllCall("keybd_event", "UChar", vk, "UChar", 0, "UInt", KEYEVENTF_KEYUP, "UPtr", 0)
+    ; Critical, Off
+; }
 ; --------------------------------------------------------------------------------
 FixModifiers() {
-    static keys := ["LShift","RShift","LCtrl","RCtrl","LAlt","RAlt","LWin","RWin"]
-    static vkMap := {}
+    ; Each entry: name, vk, sc, isExtended
+    static mods := [ ["LShift",0xA0,0x002A,0]
+                   , ["RShift",0xA1,0x0036,0]
+                   , ["LCtrl" ,0xA2,0x001D,1]
+                   , ["RCtrl" ,0xA3,0x001D,1]
+                   , ["LAlt"  ,0xA4,0x0038,1]
+                   , ["RAlt"  ,0xA5,0x0038,1]   ; AltGr often maps here; extended matters
+                   , ["LWin"  ,0x5B,0x005B,1]
+                   , ["RWin"  ,0x5C,0x005C,1] ]
 
-    vkMap["LShift"] := 0xA0
-    vkMap["RShift"] := 0xA1
-    vkMap["LCtrl"]  := 0xA2
-    vkMap["RCtrl"]  := 0xA3
-    vkMap["LAlt"]   := 0xA4
-    vkMap["RAlt"]   := 0xA5
-    vkMap["LWin"]   := 0x5B
-    vkMap["RWin"]   := 0x5C
+    for _, m in mods {
+        k    := m[1]
+        vk   := m[2]
+        sc   := m[3]
+        ext  := m[4]
 
-    for _, k in keys
-    {
-        phys := GetKeyState(k, "P")   ; physical
-        logi := GetKeyState(k)        ; logical
+        phys := GetKeyState(k, "P")
+        logi := GetKeyState(k)
 
-        ; If logically down but not physically held, treat as ghost and clear it
         if (!phys && logi) {
-            vk := vkMap[k]
-            if (vk) {
-                ForceKeyUpVK(vk)
-            }
+            ; 1) Try AHK-native key-up first (often enough)
+            SendInput, {Blind}{%k% up}
+
+            ; 2) Force key-up by scancode (can clear cases VK-up won't)
+            ForceKeyUpSC(sc, ext)
+
+            ; 3) Force key-up by VK as a final fallback
+            ForceKeyUpVK(vk, ext)
         }
     }
+}
+
+ForceKeyUpSC(sc, ext := 0) {
+    ; KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_SCANCODE = 0x0008, KEYEVENTF_EXTENDEDKEY = 0x0001
+    flags := 0x0002 | 0x0008 | (ext ? 0x0001 : 0x0000)
+    ; keybd_event wants scancode in the second parameter when SCANCODE flag is used
+    DllCall("keybd_event", "UChar", 0, "UChar", sc & 0xFF, "UInt", flags, "UPtr", 0)
+}
+
+ForceKeyUpVK(vk, ext := 0) {
+    ; KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001
+    flags := 0x0002 | (ext ? 0x0001 : 0x0000)
+    DllCall("keybd_event", "UChar", vk, "UChar", 0, "UInt", flags, "UPtr", 0)
 }
 
 keyTrack() {
