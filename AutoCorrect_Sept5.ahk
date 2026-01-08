@@ -3681,6 +3681,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
             WinSet, Transparent, %Opacity%, ahk_id %black2Hwnd%
             WinSet, Transparent, %Opacity%, ahk_id %black3Hwnd%
             WinSet, Transparent, %Opacity%, ahk_id %black4Hwnd%
+            break
         }
     }
     Return
