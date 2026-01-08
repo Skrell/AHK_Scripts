@@ -3524,6 +3524,52 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 }
 
 ; ------------------  ChatGPT ------------------------------------------------------------------
+ClearMasks(monitorHwnd := "", initTransVal := 255) {
+    Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+
+    iterations := 10
+    transVal   := initTransVal
+    opacityInterval := Floor(initTransVal / iterations)
+
+    ; fade-out loop (non-critical)
+    Loop, %iterations%
+    {
+        transVal -= opacityInterval
+        currentVal := transVal
+
+        WinSet, Transparent, %currentVal%, ahk_id %black1Hwnd%
+        WinSet, Transparent, %currentVal%, ahk_id %black2Hwnd%
+        WinSet, Transparent, %currentVal%, ahk_id %black3Hwnd%
+        WinSet, Transparent, %currentVal%, ahk_id %black4Hwnd%
+
+        ; Short sleep for visual smoothness; not in Critical
+        sleep, 3
+        If (GetKeyState("LAlt", "P")) {
+            Loop, 4
+                Gui, %A_Index%: Hide
+            Return
+        }
+
+        ; Now a tiny critical section to safely check/early-exit
+        Critical, On
+        If (monitorHwnd != "" && !WinExist("ahk_id " . monitorHwnd)) {
+            Loop, 4
+                Gui, %A_Index%: Hide
+            Critical, Off
+            Return
+        }
+        Critical, Off
+    }
+
+    ; Final hide – we do want this to be atomic-ish
+    Critical, On
+    Loop, 4
+        Gui, %A_Index%: Hide
+    Critical, Off
+
+    Return
+}
+
 DrawBlackBar(guiIndex, x, y, w, h) {
     Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
     Global hTop, hLeft, hRight, hBottom
@@ -3551,53 +3597,6 @@ DrawBlackBar(guiIndex, x, y, w, h) {
     ; Make sure they’re on top exactly once per draw
     WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
     WinSet, Transparent,  1, ahk_id %hwndVarName%
-}
-
-ClearMasks(monitorHwnd := "", initTransVal := 255) {
-    Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
-
-    iterations := 10
-    transVal   := initTransVal
-    opacityInterval := Floor(initTransVal / iterations)
-
-    ; fade-out loop (non-critical)
-    Loop, %iterations%
-    {
-        transVal -= opacityInterval
-        currentVal := transVal
-
-        WinSet, Transparent, %currentVal%, ahk_id %black1Hwnd%
-        WinSet, Transparent, %currentVal%, ahk_id %black2Hwnd%
-        WinSet, Transparent, %currentVal%, ahk_id %black3Hwnd%
-        WinSet, Transparent, %currentVal%, ahk_id %black4Hwnd%
-
-        ; Short sleep for visual smoothness; not in Critical
-        Sleep, 10
-
-        ; Now a tiny critical section to safely check/early-exit
-        Critical, On
-        If (monitorHwnd != "" && !WinExist("ahk_id " . monitorHwnd)) {
-            Loop, 4
-                Gui, %A_Index%: Hide
-            Critical, Off
-            Return
-        }
-        Critical, Off
-
-        If (GetKeyState("LAlt", "P")) {
-            Loop, 4
-                Gui, %A_Index%: Hide
-            Return
-        }
-    }
-
-    ; Final hide – we do want this to be atomic-ish
-    Critical, On
-    Loop, 4
-        Gui, %A_Index%: Hide
-    Critical, Off
-
-    Return
 }
 
 ; Why this helps flicker:
