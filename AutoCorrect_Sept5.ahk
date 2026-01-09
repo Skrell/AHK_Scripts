@@ -220,8 +220,8 @@ GetDesktopEdges(G_DisplayLeftEdge, G_DisplayTopEdge, G_DisplayRightEdge, G_Displ
 line1 := "Total Number of Monitors is " MonCount " with Primary being " MonNum
 line1a := "Desktop edges: " leftArrow . "(" . G_DisplayLeftEdge . "," . G_DisplayRightEdge . ")" . rightArrow
 line1b := "Desktop edges: " upArrow . "(" . G_DisplayTopEdge . "," . G_DisplayBottomEdge . ")" . downArrow
-line2 := "Current Mon is     " GetCurrentMonitorIndex()
-line3 := "Win11 is           " isWin11
+line2 := "Current Mon is " GetCurrentMonitorIndex()
+line3 := "Win11 is " isWin11
 line4 := "Modern Explorer is " isModernExplorerInReg
 Tooltip, % line1 "`n" line1a "`n" line1b "`n" line2 "`n" line3 "`n" line4
 Sleep 5000
@@ -751,7 +751,11 @@ WhichButton(vPosX, vPosY, hWnd) {
         SysGet, SM_CXSIZEFRAME, 32
         SysGet, SM_CYSIZEFRAME , 33
 
+        WinGet, isMax, MinMax, ahk_id %WindowUnderMouseID%
+
         titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
+        If (isMax == 1)
+            titlebarHeight := SM_CYSIZE
 
         WinGetPosEx(hWnd, wx, wy, ww, wh)
 
@@ -1400,6 +1404,7 @@ IsMouseOnLeftSide() {
 #If !MbuttonIsEnter && !MouseIsOverTaskbar()
 $*MButton::
     Global DraggingWindow
+
     StopRecursion := True
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
