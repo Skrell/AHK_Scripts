@@ -220,8 +220,8 @@ GetDesktopEdges(G_DisplayLeftEdge, G_DisplayTopEdge, G_DisplayRightEdge, G_Displ
 line1 := "Total Number of Monitors is " MonCount " with Primary being " MonNum
 line1a := "Desktop edges: " leftArrow . "(" . G_DisplayLeftEdge . "," . G_DisplayRightEdge . ")" . rightArrow
 line1b := "Desktop edges: " upArrow . "(" . G_DisplayTopEdge . "," . G_DisplayBottomEdge . ")" . downArrow
-line2 := "Current Mon is " GetCurrentMonitorIndex()
-line3 := "Win11 is " isWin11
+line2 := "Current Mon is     " GetCurrentMonitorIndex()
+line3 := "Win11 is           " isWin11
 line4 := "Modern Explorer is " isModernExplorerInReg
 Tooltip, % line1 "`n" line1a "`n" line1b "`n" line2 "`n" line3 "`n" line4
 Sleep 5000
@@ -1350,7 +1350,7 @@ Return
 
 IsConsoleWindow() {
     WinGetClass, targetClass, A
-    If (targetClass == "mintty" || targetClass == "CASCADIA_HOSTING_WINDOW_CLASS" || targetClass == "ConsoleWindowClass ")
+    If (targetClass == "mintty" || targetClass == "CASCADIA_HOSTING_WINDOW_CLASS" || targetClass == "ConsoleWindowClass")
         Return True
     Else
         Return False
@@ -1400,7 +1400,6 @@ IsMouseOnLeftSide() {
 #If !MbuttonIsEnter && !MouseIsOverTaskbar()
 $*MButton::
     Global DraggingWindow
-
     StopRecursion := True
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
@@ -1934,8 +1933,8 @@ ConfineMouseToCurrentMonitorArea(area := "work", x := 0, y := 0, w := 0, h := 0)
         return 0
 
     ; rcMonitor (offset 4), rcWork (offset 20)
-    monL := NumGet(mi,  4, "Int"), monT := NumGet(mi,  8, "Int")
-    monR := NumGet(mi, 12, "Int"), monB := NumGet(mi, 16, "Int")
+    monL  := NumGet(mi,  4, "Int"), monT  := NumGet(mi,  8, "Int")
+    monR  := NumGet(mi, 12, "Int"), monB  := NumGet(mi, 16, "Int")
     workL := NumGet(mi, 20, "Int"), workT := NumGet(mi, 24, "Int")
     workR := NumGet(mi, 28, "Int"), workB := NumGet(mi, 32, "Int")
 
@@ -2002,6 +2001,7 @@ Return
 
     StopAutoFix := True
     SetTimer, keyTrack, Off
+    blockKeys := True
     Send, {Down}
     sleep, 10
     Send, {Home}{Home}
@@ -2014,8 +2014,9 @@ Return
     sleep, 10
     Send, {Delete}
     Hotstring("Reset")
-    StopAutoFix := False
+    blockKeys := False
     SetTimer, keyTrack, On
+    StopAutoFix := False
     FixModifiers()
 Return
 
@@ -5554,31 +5555,38 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
 
         ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
-        Critical, On
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             WaitForExplorerLoad(initTargetHwnd, , True)
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
-            loop, 125 {
-                ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                If (testCtrlFocus == TargetControl)
-                    break
-                sleep, 1
-                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
-                    Return
+            If (TargetControl != initFocusedCtrlNN) {
+                Critical, On
+                loop, 125 {
+                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                    If (testCtrlFocus == TargetControl)
+                        break
+                    sleep, 1
+                    If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+                        Return
+                }
+                Critical, Off
             }
         }
         Else If (TargetControl == "DirectUIHWND2" && lClassCheck == "#32770") {
             WaitForExplorerLoad(initTargetHwnd, True)
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
-            loop, 125 {
-                ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                If (testCtrlFocus == TargetControl)
-                    break
-                sleep, 1
-                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
-                    Return
+            If (TargetControl != initFocusedCtrlNN) {
+                Critical, On
+                loop, 125 {
+                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                    If (testCtrlFocus == TargetControl)
+                        break
+                    sleep, 1
+                    If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+                        Return
+                }
+                Critical, Off
             }
         }
         Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
@@ -5586,20 +5594,23 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
         Else {
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
-            loop, 125 {
-                ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                If (testCtrlFocus == TargetControl)
-                    break
-                sleep, 1
-                If (A_Index == 125)
-                    TargetControl := "" ; then delete it
-                If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
-                    Return
+            If (TargetControl != initFocusedCtrlNN) {
+                Critical, On
+                loop, 125 {
+                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                    If (testCtrlFocus == TargetControl)
+                        break
+                    sleep, 1
+                    If (A_Index == 125)
+                        TargetControl := "" ; then delete it
+                    If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+                        Return
+                }
+                Critical, Off
             }
         }
         ; tooltip, here8
-        Critical,   Off
 
         If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
@@ -5608,9 +5619,10 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             blockKeys := True
-            Send, {LCtrl UP}
+            FixModifiers()
+            ; Send, {LCtrl UP}
             Send, ^{NumpadAdd}
-            Send, {LCtrl UP}
+            ; Send, {LCtrl UP}
 
             ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
                 ; tooltip, sent to %TargetControl% with init at %initHoveredCtrlNN% - %prevPath% VS %currentPath%
@@ -5680,7 +5692,6 @@ $WheelUp::send {Volume_Up}
 $WheelDown::send {Volume_Down}
 #If
 
-
 #If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
 RButton & WheelUp::
     SetTimer, SendCtrlAddLabel, Off
@@ -5696,21 +5707,10 @@ Return
 
 $RButton::
     StopRecursion := True
-    Send {Rbutton}
+    Send, {Rbutton}
     StopRecursion := False
 Return
 #If
-
-ScrollLines(lines,hWnd="") {
-static EM_LINESCROLL := 0xB6
-    If !hWnd
-    {
-        ControlGetFocus, c, A
-        ControlGet, hWnd, hWnd, , %c%, A
-    }
-    PostMessage, EM_LINESCROLL, 0, lines-1, , ahk_id %hWnd% ; 'lines-1' makes the line you wish to jump to visible
-Return
-}
 
 /* ;
 ***********************************
@@ -5816,9 +5816,9 @@ ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ;  ShowMenu v0.63 by SKAN on 
 Return R
 }
 
-IsWindow(hWnd){
+IsWindow(hWnd) {
     WinGet, dwStyle, Style, ahk_id %hWnd%
-    If ((dwStyle&0x08000000) || !(dwStyle&0x10000000)) {
+    If ((dwStyle & 0x08000000) || !(dwStyle & 0x10000000)) {
         Return False
     }
     WinGet, dwExStyle, ExStyle, ahk_id %hWnd%
