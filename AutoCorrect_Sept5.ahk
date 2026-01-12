@@ -220,8 +220,8 @@ GetDesktopEdges(G_DisplayLeftEdge, G_DisplayTopEdge, G_DisplayRightEdge, G_Displ
 line1 := "Total Number of Monitors is " MonCount " with Primary being " MonNum
 line1a := "Desktop edges: " leftArrow . "(" . G_DisplayLeftEdge . "," . G_DisplayRightEdge . ")" . rightArrow
 line1b := "Desktop edges: " upArrow . "(" . G_DisplayTopEdge . "," . G_DisplayBottomEdge . ")" . downArrow
-line2 := "Current Mon is " GetCurrentMonitorIndex()
-line3 := "Win11 is " isWin11
+line2 := "Current Mon is     " GetCurrentMonitorIndex()
+line3 := "Win11 is           " isWin11
 line4 := "Modern Explorer is " isModernExplorerInReg
 Tooltip, % line1 "`n" line1a "`n" line1b "`n" line2 "`n" line3 "`n" line4
 Sleep 5000
@@ -4011,6 +4011,13 @@ Explorer__GetRoleNum(ByRef accObj := "") {
     return 0
 }
 ; ------------------------------------------------------------------
+; 1. Gets the window + control under the cursor (MouseGetPos → ctrlNN → ControlGet Hwnd).
+; 2. Converts screen coords to that control’s client coords (ScreenToClient).
+; 3. Gets the accessibility root for that control (Acc_ObjectFromWindow(hCtl)).
+; 4. Calls accHitTest(cx, cy) and then:
+; a) If it gets an object: optionally walks up parents up to maxHops looking for ROLE_SYSTEM_OUTLINE.
+; b) If it gets a child-id: checks accRoot.accRole(childId).
+; This is basically “restrict the search to a known hwnd, then do a precise hit-test”.
 IsExplorerHeaderClick_Local() {
     static ROLE_SYSTEM_OUTLINE := 0x3E
     static maxHops := 6
@@ -4064,7 +4071,11 @@ IsExplorerHeaderClick_Local() {
 
     return false
 }
-
+; 1. Gets screen coords.
+; 2. Calls Acc_ObjectFromPoint(idChild, mx, my) (wrapper over AccessibleObjectFromPoint).
+; 3. Checks acc.accRole(0) only.
+; AccessibleObjectFromPoint returns the accessible object “displayed at a specified point on the screen” and the point must be in physical screen coordinates.
+; Also, it can return the parent object plus a child-id for the element at the point.
 IsExplorerHeaderClick() {
     static ROLE_SYSTEM_OUTLINE := 0x3E
     static lastWin := 0, lastCls := ""
@@ -4100,7 +4111,530 @@ IsExplorerHeaderClick() {
 
     return (role == ROLE_SYSTEM_OUTLINE)
 }
+; COMPARISONS:
+; Rule of thumb: if you call this on every mouse move, the point-based one will typically feel lighter. If you call it only on click, you probably won’t notice either way.
+; Rule of thumb: if your script sometimes can’t trust the control under the cursor, “point-based” is usually the most broadly robust.
+; Rule of thumb: if you can reliably identify the correct control hwnd, “local hit-test” is usually the most semantically correct.
+; ------------------------------------------------------------------
 
+Dialog_IsDetails_UIA_ByPoint(dlgHwnd := "") {
+    ; Requires: #Include UIA_Interface.ahk
+    ; Uses ElementFromPoint only (since ElementFromHandle fails for you)
+
+    static UIA_HeaderTypeId := 50034
+    static UIA_SplitButtonTypeId := 50031
+
+    global UIA
+    if (!IsObject(UIA))
+        UIA := UIA_Interface()
+
+    if (!dlgHwnd)
+        WinGet, dlgHwnd, ID, A
+    if (!dlgHwnd)
+        return false
+
+    WinGetPos, wx, wy, ww, wh, ahk_id %dlgHwnd%
+    probes := [[70,45],[60,45],[80,45],[70,55],[60,55],[80,55],[75,35],[75,65],[55,50],[85,50]]
+
+    items := ""
+    for _, p in probes
+    {
+        px := wx + (ww * p[1] // 100)
+        py := wy + (wh * p[2] // 100)
+
+        el := UIA_SafeElementFromPoint_(px, py)
+        if !IsObject(el)
+        continue
+
+        items := UIA_WalkUpToUIItemsView_(el)
+        if IsObject(items)
+        break
+    }
+
+    if !IsObject(items)
+        return false
+
+    ; Signal #1: Header exists (try multiple APIs)
+    if (UIA_FindFirstByControlTypeAny_(items, UIA_HeaderTypeId))
+        return true
+
+    ; Signal #2: Grid pattern column count >= 2 (try ID + name)
+    cols := UIA_TryGetGridColumnCountAny_(items)
+    if (cols >= 2)
+        return true
+
+    ; Signal #3: SplitButton named "Name" (typical details header widget)
+    if (UIA_FindFirstByControlTypeAndNameAny_(items, UIA_SplitButtonTypeId, "Name"))
+        return true
+
+    return false
+}
+
+UIA_FindFirstByControlTypeAny_(rootEl, ctlTypeId) {
+    ; Returns true if a descendant with ControlType == ctlTypeId exists.
+    ; Uses UIA_Interface.ahk (CreatePropertyCondition + FindFirst) with a couple fallbacks.
+
+    global UIA
+    static TreeScope_Subtree := 0x4
+    static UIA_ControlTypePropertyId := 30003
+
+    if !IsObject(rootEl)
+        return false
+
+    cond := ""
+    try
+        cond := UIA.CreatePropertyCondition(UIA_ControlTypePropertyId, ctlTypeId)
+    catch
+        cond := ""
+
+    if IsObject(cond)
+    {
+        found := ""
+        try
+            found := rootEl.FindFirst(TreeScope_Subtree, cond)
+        catch
+            found := ""
+
+        if IsObject(found)
+            return true
+    }
+
+    ; Some forks expose convenience search methods
+    found2 := ""
+    try
+        found2 := rootEl.FindFirstByControlType(ctlTypeId)
+    catch
+        found2 := ""
+
+    return IsObject(found2)
+}
+
+UIA_TryGetGridColumnCountAny_(el) {
+    ; Returns GridPattern ColumnCount, or -1 if not available.
+    ; Tries both numeric ID and string name variants (fork tolerance).
+
+    static UIA_GridPatternId := 10006
+
+    if !IsObject(el)
+    return -1
+
+    pat := ""
+
+    try
+        pat := el.GetCurrentPattern(UIA_GridPatternId)
+    catch
+        pat := ""
+
+    if !IsObject(pat)
+    {
+        try
+            pat := el.GetPattern(UIA_GridPatternId)
+        catch
+            pat := ""
+    }
+
+    if !IsObject(pat)
+    {
+        try
+            pat := el.GetCurrentPattern("Grid")
+        catch
+            pat := ""
+    }
+
+    if !IsObject(pat)
+    {
+        try
+            pat := el.GetPattern("Grid")
+        catch
+            pat := ""
+    }
+
+    if !IsObject(pat)
+    return -1
+
+    cols := -1
+    try
+        cols := pat.CurrentColumnCount
+    catch
+        cols := -1
+
+    return cols
+}
+
+UIA_FindFirstByControlTypeAndNameAny_(rootEl, ctlTypeId, wantName) {
+    ; Returns true if a descendant exists with:
+        ; ControlType == ctlTypeId AND Name == wantName
+    ; Uses UIA_Interface.ahk (CreateAndCondition + FindFirst) with fallbacks.
+
+    global UIA
+    static TreeScope_Subtree := 0x4
+    static UIA_ControlTypePropertyId := 30003
+    static UIA_NamePropertyId := 30005
+
+    if !IsObject(rootEl)
+        return false
+
+    condType := ""
+    condName := ""
+    condAnd := ""
+
+    try
+        condType := UIA.CreatePropertyCondition(UIA_ControlTypePropertyId, ctlTypeId)
+    catch
+        condType := ""
+
+    try
+        condName := UIA.CreatePropertyCondition(UIA_NamePropertyId, wantName)
+    catch
+        condName := ""
+
+    if (IsObject(condType) && IsObject(condName))
+    {
+        try
+            condAnd := UIA.CreateAndCondition(condType, condName)
+        catch
+            condAnd := ""
+
+        if IsObject(condAnd)
+        {
+            found := ""
+            try
+                found := rootEl.FindFirst(TreeScope_Subtree, condAnd)
+            catch
+                found := ""
+
+            if IsObject(found)
+                return true
+        }
+    }
+
+    ; Convenience fallback: Find by name, then verify control type if possible
+    found2 := ""
+    try
+        found2 := rootEl.FindFirstByName(wantName)
+    catch
+        found2 := ""
+
+    if !IsObject(found2)
+        return false
+
+    t := ""
+    try
+        t := found2.CurrentControlType
+    catch
+        t := ""
+
+    return (t = ctlTypeId)
+}
+
+UIA_TryGetGridColumnCount_(el, gridPatternId := 10006) {
+    ; gridPatternId default = UIA_GridPatternId (10006)
+    ; Returns column count, or -1 if GridPattern not available.
+
+    pat := ""
+    try
+        pat := el.GetCurrentPattern(gridPatternId)
+    catch
+        pat := ""
+
+    if !IsObject(pat)
+    return -1
+
+    cols := -1
+    try
+        cols := pat.CurrentColumnCount
+    catch
+        cols := -1
+
+    return cols
+}
+
+UIA_WalkUpToUIItemsView_(el) {
+    ; Walk up until we hit ClassName UIItemsView OR Name Items View (List)
+    static UIA_ListTypeId := 50008
+
+    cur := el
+    Loop, 25
+    {
+        cls := ""
+        try
+            cls := cur.CurrentClassName
+        catch
+            cls := ""
+
+        if (cls = "UIItemsView")
+            return cur
+
+        name := ""
+        ctype := ""
+
+        try
+            name := cur.CurrentName
+        catch
+            name := ""
+
+        try
+            ctype := cur.CurrentControlType
+        catch
+            ctype := ""
+
+        if (ctype = UIA_ListTypeId && name = "Items View")
+        return cur
+
+        next := ""
+        try
+            next := cur.GetParent()
+        catch
+            next := ""
+
+        if !IsObject(next)
+            break
+
+        cur := next
+    }
+
+    return ""
+}
+
+UIA_SubtreeHasType_(rootEl, scope, propTypeId, ctlTypeId) {
+    global UIA
+    cond := ""
+    try
+        cond := UIA.CreatePropertyCondition(propTypeId, ctlTypeId)
+    catch
+        return false
+
+    found := ""
+    try
+        found := rootEl.FindFirst(scope, cond)
+    catch
+        found := ""
+
+    return IsObject(found)
+}
+
+UIA_SubtreeHasTypeAndName_(rootEl, scope, propTypeId, propNameId, ctlTypeId, wantName) {
+    global UIA
+
+    condType := ""
+    condName := ""
+    condAnd := ""
+
+    try
+        condType := UIA.CreatePropertyCondition(propTypeId, ctlTypeId)
+    catch
+        return false
+
+    try
+        condName := UIA.CreatePropertyCondition(propNameId, wantName)
+    catch
+        return false
+
+    try
+        condAnd := UIA.CreateAndCondition(condType, condName)
+    catch
+        return false
+
+    found := ""
+    try
+        found := rootEl.FindFirst(scope, condAnd)
+    catch
+        found := ""
+
+    return IsObject(found)
+}
+
+Dialog_IsDetails_UIA_ByPoint_COM(dlgHwnd := "") {
+    static UIA_ControlTypePropertyId := 30003
+    static UIA_ClassNamePropertyId := 30012
+    static UIA_HeaderTypeId := 50034
+
+    static UIA_GridPatternId := 10006
+    static TreeScope_Subtree := 0x4
+
+    if (!dlgHwnd)
+        WinGet, dlgHwnd, ID, A
+    if (!dlgHwnd)
+        return false
+
+    WinGetPos, wx, wy, ww, wh, ahk_id %dlgHwnd%
+
+    probes := [[70,45],[60,45],[80,45],[70,55],[60,55],[80,55],[75,35],[75,65]]
+
+    uia := ComObjCreate("UIAutomationClient.CUIAutomation")
+    walker := uia.ControlViewWalker
+
+    items := ""
+    for _, p in probes
+    {
+        px := wx + (ww * p[1] // 100)
+        py := wy + (wh * p[2] // 100)
+
+        el := UIA_ComElementFromPoint_(uia, px, py)
+        if !IsObject(el)
+            continue
+
+        items := UIA_ComWalkUpToClass_(walker, el, "UIItemsView")
+        if IsObject(items)
+            break
+    }
+
+    if !IsObject(items)
+        return false
+
+    ; 1) Header exists => Details
+    condHeader := uia.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_HeaderTypeId)
+    hdr := ""
+    try
+        hdr := items.FindFirst(TreeScope_Subtree, condHeader)
+    catch
+        hdr := ""
+
+    if IsObject(hdr)
+        return true
+
+    ; 2) GridPattern column count >= 2 => Details
+    pat := ""
+    try
+        pat := items.GetCurrentPattern(UIA_GridPatternId)
+    catch
+        pat := ""
+
+    if IsObject(pat)
+    {
+        cols := -1
+        try
+            cols := pat.CurrentColumnCount
+        catch
+            cols := -1
+
+        if (cols >= 2)
+            return true
+    }
+
+    return false
+}
+
+UIA_ComElementFromPoint_(uia, x, y) {
+    VarSetCapacity(pt, 8, 0)
+    NumPut(x, pt, 0, "Int")
+    NumPut(y, pt, 4, "Int")
+
+    el := ""
+    try
+        el := uia.ElementFromPoint(pt)
+    catch
+        el := ""
+    return el
+}
+
+UIA_ComWalkUpToClass_(walker, el, wantClass) {
+    cur := el
+    Loop, 25
+    {
+        cls := ""
+        try
+            cls := cur.CurrentClassName
+        catch
+            cls := ""
+
+        if (cls = wantClass)
+        return cur
+
+        next := ""
+        try
+            next := walker.GetParentElement(cur)
+        catch
+            next := ""
+
+        if !IsObject(next)
+            break
+
+        cur := next
+    }
+    return ""
+}
+
+IsDetailsView(winHwnd := "") {
+    if (!winHwnd)
+        WinGet, winHwnd, ID, A
+    if (!winHwnd)
+        return false
+
+    WinGetClass, cls, ahk_id %winHwnd%
+
+    if (cls = "CabinetWClass" || cls = "ExplorerWClass")
+    return IsDetailsView_ExplorerCOM(winHwnd)
+
+    if (cls = "#32770")
+    return Dialog_IsDetails_UIA_ByPoint(winHwnd)
+
+    return false
+}
+
+IsDetailsView_ExplorerCOM(winHwnd := "") {
+    static FVM_DETAILS := 4  ; FOLDERVIEWMODE.FVM_DETAILS
+
+    if (!winHwnd)
+        WinGet, winHwnd, ID, A
+    if (!winHwnd)
+        return false
+
+    shell := ComObjCreate("Shell.Application")
+    for oWin in shell.Windows
+    {
+        h := ""
+        try
+            h := oWin.Hwnd
+        catch
+        {
+            try
+                h := oWin.HWND
+            catch
+                h := ""
+        }
+
+        if (h = winHwnd)
+        {
+            try
+                return (oWin.Document.CurrentViewMode = FVM_DETAILS)
+            catch
+                return false
+        }
+    }
+
+    return false
+}
+
+
+UIA_SafeElementFromPoint_(x, y) {
+    ; Requires: #Include UIA_Interface.ahk
+    ; Returns a UIA element or "" if it fails.
+
+    global UIA
+
+    if (!IsObject(UIA))
+        UIA := UIA_Interface()
+
+    el := ""
+    try
+        el := UIA.ElementFromPoint(x, y, False)
+    catch
+    {
+        ; UIA wrapper can occasionally get into a bad COM state, re-init once
+        UIA := ""
+        UIA := UIA_Interface()
+
+        try
+            el := UIA.ElementFromPoint(x, y, False)
+        catch
+            el := ""
+    }
+
+return el
+}
+
+; ------------------------------------------------------------------
 ; Returns true if the mouse is over a file/folder item in an Explorer file view
 IsExplorerItemClick() {
     static ROLE_SYSTEM_LISTITEM    := 0x22  ; 34
@@ -4482,6 +5016,20 @@ ControlFocusEx(hWnd := "", ctrlNN := "") {
         return FocusHwndFast(hCtl, true)
     }
 }
+
+F8::
+    WinGet, hwnd, ID, A
+
+    ok := IsDetailsView(hwnd)
+
+    msg := "Probe: " px "," py
+    msg := msg "`nHit Name: " n
+    msg := msg "`nHit Class: " c
+    msg := msg "`nHit Type: " t
+    msg := msg "`nDetails?: " (ok ? "YES" : "NO")
+
+    ToolTip % msg
+return
 
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
@@ -7868,6 +8416,125 @@ Acc_Init() {
     static h
     if (!h)
         h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
+}
+Acc_FindFirstByRole(accNode, roleNeed, maxDepth := 6) {
+    ; Iterative DFS, early exit
+    stack := []
+    stack.Push([accNode, 0])
+
+    while (stack.Length()) {
+        item := stack.Pop()
+        node  := item[1]
+        depth := item[2]
+
+        r := ""
+        try
+            r := node.accRole(0)
+        catch
+            r := ""
+
+        if (r = roleNeed)
+            return node
+
+        if (depth >= maxDepth)
+            continue
+
+        kids := Acc_Children(node)
+        i := kids.Length()
+        while (i >= 1) {
+            k := kids[i]
+            if IsObject(k)
+                stack.Push([k, depth+1])
+            i--
+        }
+    }
+    return ""
+}
+Acc_WindowFromObject(accObj, maxUp := 8) {
+    ; Walk up accParent until we find an object that maps to an HWND.
+    cur := accObj
+    Loop, % maxUp + 1 {
+        hwnd := Acc_WindowFromObjectOnce(cur)
+        if (hwnd)
+            return hwnd
+        try
+            cur := cur.accParent
+        catch
+            break
+        if !IsObject(cur)
+            break
+    }
+    return 0
+}
+Acc_WindowFromObjectOnce(accObj) {
+    static IID_IAccessible := "{618736E0-3C3D-11CF-810C-00AA00389B71}"
+
+    if !IsObject(accObj)
+        return 0
+
+    pacc := 0
+    try
+        pacc := ComObjQuery(accObj, IID_IAccessible) ; get real IAccessible*
+    catch
+        pacc := 0
+
+    if (!pacc)
+        return 0
+
+    hwnd := 0
+    hr := DllCall("oleacc\WindowFromAccessibleObject", "Ptr", pacc, "Ptr*", hwnd, "Int")
+    ObjRelease(pacc)
+
+    return (hr = 0) ? hwnd : 0
+}
+Acc_Children(accObj) {
+    ; Returns an Array of child IAccessible objects and/or child IDs (numbers).
+    ; Works with typical Acc_ObjectFromWindow / Acc_ObjectFromPoint outputs.
+
+    if !IsObject(accObj)
+        return []
+
+    try childCount := accObj.accChildCount
+    catch
+        return []
+
+    if (childCount <= 0)
+        return []
+
+    ; Prepare VARIANT array: each VARIANT is 16 bytes on 32/64-bit in AHK v1
+    VarSetCapacity(varChildren, childCount * 16, 0)
+    obtained := 0
+
+    hr := DllCall("oleacc\AccessibleChildren"
+                , "Ptr",  ComObjValue(accObj)   ; IAccessible*
+                , "Int",  0                     ; iChildStart
+                , "Int",  childCount            ; cChildren
+                , "Ptr",  &varChildren          ; rgvarChildren
+                , "Int*", obtained              ; pcObtained
+                , "Int")
+
+    if (hr != 0 || obtained <= 0)
+        return []
+
+    kids := []
+    Loop, %obtained% {
+        off := (A_Index-1) * 16
+        vt  := NumGet(varChildren, off+0, "UShort")
+
+        ; VT_DISPATCH = 9 -> IDispatch (IAccessible)
+        if (vt = 9) {
+            pdisp := NumGet(varChildren, off + 8, "Ptr")
+            if (pdisp)
+                kids.Push(ComObject(9, pdisp, 1)) ; take ownership (release when out of scope)
+        }
+        ; VT_I4 = 3 -> child ID (integer)
+        else if (vt = 3) {
+            cid := NumGet(varChildren, off + 8, "Int")
+            kids.Push(cid)
+        }
+        ; ignore other variant types
+    }
+    return kids
 }
 Acc_ObjectFromPoint(ByRef _idChild_ := "", x := "", y := "") {
     Acc_Init()
