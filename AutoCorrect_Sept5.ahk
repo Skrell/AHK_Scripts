@@ -1338,8 +1338,18 @@ $~WheelDown::
     Else If (MouseIsOverTitleBar()) {
         ; In this branch we swallow the wheel
         blockKeys := True
-        MouseGetPos,,, wdID
-        WinMinimize, ahk_id %wdID%
+        MouseGetPos,,, winHwnd, ctrlHwnd, 2
+
+        rootHwnd := DllCall("GetAncestor", "ptr", winHwnd, "uint", 2, "ptr") ; GA_ROOT
+        ; ownHwnd  := DllCall("GetAncestor", "ptr", winHwnd, "uint", 3, "ptr") ; GA_ROOTOWNER
+
+        ; WinGetClass, cWin,  ahk_id %winHwnd%
+        ; WinGetClass, cRoot, ahk_id %rootHwnd%
+        ; WinGetClass, cOwn,  ahk_id %ownHwnd%
+        ; WinGetTitle, tOwn,  ahk_id %ownHwnd%
+        ; ToolTip, win=%winHwnd% %cWin%`nroot=%rootHwnd% %cRoot%`nown=%ownHwnd% %cOwn%`n%tOwn%
+
+        WinMinimize, ahk_id %rootHwnd%
         Sleep, 500
         blockKeys := False
         Return
@@ -4144,11 +4154,11 @@ Dialog_IsDetails_UIA_ByPoint(dlgHwnd := "") {
 
         el := UIA_SafeElementFromPoint_(px, py)
         if !IsObject(el)
-        continue
+            continue
 
         items := UIA_WalkUpToUIItemsView_(el)
         if IsObject(items)
-        break
+            break
     }
 
     if !IsObject(items)
@@ -4250,7 +4260,7 @@ UIA_TryGetGridColumnCountAny_(el) {
     }
 
     if !IsObject(pat)
-    return -1
+        return -1
 
     cols := -1
     try
@@ -4338,7 +4348,7 @@ UIA_TryGetGridColumnCount_(el, gridPatternId := 10006) {
         pat := ""
 
     if !IsObject(pat)
-    return -1
+        return -1
 
     cols := -1
     try
@@ -4379,7 +4389,7 @@ UIA_WalkUpToUIItemsView_(el) {
             ctype := ""
 
         if (ctype = UIA_ListTypeId && name = "Items View")
-        return cur
+            return cur
 
         next := ""
         try
@@ -4564,10 +4574,10 @@ IsDetailsView(winHwnd := "") {
     WinGetClass, cls, ahk_id %winHwnd%
 
     if (cls = "CabinetWClass" || cls = "ExplorerWClass")
-    return IsDetailsView_ExplorerCOM(winHwnd)
+        return IsDetailsView_ExplorerCOM(winHwnd)
 
     if (cls = "#32770")
-    return Dialog_IsDetails_UIA_ByPoint(winHwnd)
+        return Dialog_IsDetails_UIA_ByPoint(winHwnd)
 
     return false
 }
@@ -4602,10 +4612,8 @@ IsDetailsView_ExplorerCOM(winHwnd := "") {
                 return false
         }
     }
-
     return false
 }
-
 
 UIA_SafeElementFromPoint_(x, y) {
     ; Requires: #Include UIA_Interface.ahk
@@ -4630,8 +4638,7 @@ UIA_SafeElementFromPoint_(x, y) {
         catch
             el := ""
     }
-
-return el
+    return el
 }
 
 ; ------------------------------------------------------------------
@@ -5987,9 +5994,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     If (quickCheckID != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd)) {
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
-        toolTip % "failed quick check: " lClassCheck
-                . " - " Format("0x{:X}", quickCheckID+0)
-                . " - " Format("0x{:X}", initTargetHwnd+0)
+        ; toolTip % "failed quick check: " lClassCheck
+                ; . " - " Format("0x{:X}", quickCheckID+0)
+                ; . " - " Format("0x{:X}", initTargetHwnd+0)
         Return
     }
     ; tooltip, here1
@@ -6506,6 +6513,65 @@ JEE_WinHasAltTabIcon(hWnd)
     Return 1
 }
 
+IsAltTabWindow_Why(hWnd)
+{
+    static WS_EX_APPWINDOW := 0x40000
+    static WS_EX_TOOLWINDOW := 0x80
+    static DWMWA_CLOAKED := 14
+    static DWM_CLOAKED_SHELL := 2
+    static WS_EX_NOACTIVATE := 0x8000000
+    static GA_PARENT := 1
+    static GW_OWNER := 4
+    static WS_EX_WINDOWEDGE := 0x100
+    static WS_EX_CONTROLPARENT := 0x10000
+    static WS_EX_DLGMODALFRAME := 0x00000001
+
+    WinGetTitle, hasTitle, ahk_id %hWnd%
+    if (!hasTitle)
+        return "no title"
+
+    if !DllCall("IsWindowVisible", "uptr", hWnd)
+        return "not visible"
+
+    DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
+    if (cloaked = DWM_CLOAKED_SHELL)
+        return "cloaked shell"
+
+    parent := DllCall("GetAncestor", "uptr", hWnd, "uint", GA_PARENT, "ptr")
+    if (parent && realHwnd(parent) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
+        return "parent not desktop"
+
+    WinGetClass, winClass, ahk_id %hWnd%
+    if (winClass = "Windows.UI.Core.CoreWindow" || winClass = "ProgMan" || winClass = "WorkerW")
+        return "blocked class: " . winClass
+
+    WinGet, exStyles, ExStyle, ahk_id %hWnd%
+    if (exStyles & WS_EX_APPWINDOW)
+        return "passes via WS_EX_APPWINDOW"
+
+    if (exStyles & WS_EX_TOOLWINDOW)
+        return "toolwindow"
+    if (exStyles & WS_EX_NOACTIVATE)
+        return "noactivate"
+    if (exStyles & WS_EX_DLGMODALFRAME)
+        return "dlgmodalframe"
+
+    if (exStyles & (WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT))
+        return "passes via edge/controlparent"
+
+    hwnd2 := hWnd
+    loop
+    {
+        prev := hwnd2
+        hwnd2 := DllCall("GetWindow", "uptr", hwnd2, "uint", GW_OWNER, "ptr")
+        if (!hwnd2)
+            return "passes via owner-walk end (prev=" . prev . ")"
+
+        if DllCall("IsWindowVisible", "uptr", hwnd2)
+            return "visible owner: " . hwnd2
+    }
+}
+
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399
 IsAltTabWindow(hWnd) {
@@ -6513,8 +6579,16 @@ IsAltTabWindow(hWnd) {
     static WS_EX_WINDOWEDGE := 0x100, WS_EX_CONTROLPARENT := 0x10000, WS_EX_DLGMODALFRAME := 0x00000001
 
     WinGetTitle, hasTitle, ahk_id %hWnd%
-    If !hasTitle
-       Return False
+    WinGetClass, winClass, ahk_id %hWnd%
+    ; Windows Terminal (WinUI/XAML Island) content window -> use its host window
+    if (winClass = "CASCADIA_HOSTING_WINDOW_CLASS")
+    {
+        ; GA_ROOT = 2 (top-level window in the parent chain)
+        hWnd := DllCall("GetAncestor", "uptr", hWnd, "uint", 2, "ptr")
+        WinGetClass, winClass, ahk_id %hWnd%
+    }
+    if (!hasTitle && winClass != "CASCADIA_HOSTING_WINDOW_CLASS")
+        return False
 
     If (VirtualDesktopExist = "")
     {
@@ -6531,7 +6605,6 @@ IsAltTabWindow(hWnd) {
        Return False
     If (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
        Return False
-    WinGetClass, winClass, ahk_id %hWnd%
     If (winClass = "Windows.UI.Core.CoreWindow" || (InStr(winClass, "Shell",False) && InStr(winClass, "TrayWnd",False)) || winClass == "ProgMan" || winClass == "WorkerW")
        Return False
     If (winClass = "ApplicationFrameWindow")
@@ -7043,9 +7116,9 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
 
     CoordMode, Mouse, Screen
     If (xPos != "" && yPos != "")
-        MouseGetPos, , , WindowUnderMouseID
+        MouseGetPos, , , WindowUnderMouseID, ctrlnnUnderMouse
     Else
-        MouseGetPos, xPos, yPos, WindowUnderMouseID
+        MouseGetPos, xPos, yPos, WindowUnderMouseID, ctrlnnUnderMouse
 
     If (!IsAltTabWindow(WindowUnderMouseID))
         Return False
@@ -7082,8 +7155,12 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
 
         If ((yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-widthOfCaptions))) {
-            ; tooltip, Final decision: trust WM_NCHITTEST
+
+            If (ctrlnnUnderMouse == "DRAG_BAR_WINDOW_CLASS1")
+                Return True
+
             hitVal := IsPointOnCaption(xPos, yPos, WindowUnderMouseID)
+
             If ((hitVal == 2) || mClass == "CabinetWClass")
                 Return True
             Else If (hitVal == 12 || hitVal == 13 || hitVal == 14)
@@ -7094,7 +7171,6 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
                     ctype := SafeUIA_GetControlType(pt)
                     ccname := SafeUIA_GetClassName(pt)
 
-                    ; tooltip, % pt.CurrentControlType
                     If (mClass == "Chrome_WidgetWin_1" && ctype == 50033 && ccname == "FrameGrabHandle")
                         Return True
                     Else If (mClass == "Chrome_WidgetWin_1" && ctype == 50033 && ccname != "FrameGrabHandle")
