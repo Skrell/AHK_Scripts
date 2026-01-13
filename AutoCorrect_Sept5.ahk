@@ -5002,26 +5002,113 @@ MSAA_IsFocusedEditable() {
     return false
 }
 
-ControlFocusEx(hWnd := "", ctrlNN := "") {
+
+GetThreadFocusHwnd(tid)
+{
+    ; GUITHREADINFO size differs slightly by arch; this works for both.
+    size := 48 + (A_PtrSize * 2)
+    VarSetCapacity(gui, size, 0)
+    NumPut(size, gui, 0, "UInt")
+
+    ok := DllCall("user32\GetGUIThreadInfo", "UInt", tid, "Ptr", &gui, "Int")
+    if (!ok)
+        return 0
+
+    return NumGet(gui, 12, "Ptr") ; hwndFocus
+}
+
+IsDescendant(hwndParent, hwndChild)
+{
+    if (!hwndParent || !hwndChild)
+        return false
+    if (hwndParent = hwndChild)
+        return true
+    return DllCall("user32\IsChild", "Ptr", hwndParent, "Ptr", hwndChild, "Int")
+}
+
+ControlGetFocusEx(tidTarget, hwndTarget, timeoutMs := 15)
+{
+    hwndFocus := GetThreadFocusHwnd(tidTarget)
+    if (hwndFocus && (hwndFocus = hwndTarget || DllCall("user32\IsChild", "Ptr", hwndTarget, "Ptr", hwndFocus, "Int")))
+        return true
+
+    if (timeoutMs <= 0)
+        return false
+
+    start := A_TickCount
+    Loop
+    {
+        hwndFocus := GetThreadFocusHwnd(tidTarget)
+        if (hwndFocus && (hwndFocus = hwndTarget || DllCall("user32\IsChild", "Ptr", hwndTarget, "Ptr", hwndFocus, "Int")))
+            return true
+
+        if ((A_TickCount - start) >= timeoutMs)
+            break
+
+        Sleep, 0
+    }
+    return false
+}
+
+; ControlFocusEx(hWnd := "", ctrlNN := "") {
+    ; if (hWnd = "")
+        ; return False
+
+    ; ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hWnd%
+
+    ; if (!hCtl)
+        ; return False
+
+    ; ; Determine thread ownership
+    ; tidTarget := DllCall("GetWindowThreadProcessId","ptr", hCtl, "uint*", 0, "uint")
+    ; tidAHK    := DllCall("GetCurrentThreadId", "uint")
+    ; if (tidTarget == tidAHK) {
+        ; ; Same thread: fastest path
+        ; DllCall("SetFocus", "ptr", hCtl)
+        ; return (DllCall("GetFocus","ptr") = hCtl)
+    ; } else {
+        ; ; Cross-thread: use robust routine
+        ; return FocusHwndFast(hCtl, true)
+    ; }
+; }
+
+
+ControlFocusEx(hWnd := "", ctrlNN := "", verifyMs := 30)
+{
     if (hWnd = "")
-        return False
+        return false
 
     ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hWnd%
-
     if (!hCtl)
-        return False
+        return false
 
-    ; Determine thread ownership
-    tidTarget := DllCall("GetWindowThreadProcessId","ptr", hCtl, "uint*", 0, "uint")
-    tidAHK    := DllCall("GetCurrentThreadId", "uint")
-    if (tidTarget == tidAHK) {
-        ; Same thread: fastest path
-        DllCall("SetFocus", "ptr", hCtl)
-        return (DllCall("GetFocus","ptr") = hCtl)
-    } else {
-        ; Cross-thread: use robust routine
-        return FocusHwndFast(hCtl, true)
+    tidTarget := DllCall("GetWindowThreadProcessId", "Ptr", hCtl, "UInt*", 0, "UInt")
+    tidAHK    := DllCall("GetCurrentThreadId", "UInt")
+
+    if (tidTarget = tidAHK)
+    {
+        DllCall("SetFocus", "Ptr", hCtl)
+        return (DllCall("GetFocus", "Ptr") = hCtl)
     }
+
+    ; Cross-thread: do the focus attempt
+    if !FocusHwndFast(hCtl, false)
+        return false
+
+    ; Cross-thread: verify via GUITHREADINFO for the target GUI thread
+    start := A_TickCount
+    Loop
+    {
+        hwndFocus := GetThreadFocusHwnd(tidTarget)
+        if (IsDescendant(hCtl, hwndFocus))
+            return true
+
+        if ((A_TickCount - start) >= verifyMs)
+            break
+
+        Sleep, 0
+    }
+    return false
 }
 
 F8::
@@ -5038,6 +5125,179 @@ F8::
     ToolTip % msg
 return
 
+EnsureFocusedHwnd(hwndTarget, totalMs := 60, refocusEveryMs := 15)
+{
+    if !DllCall("user32\IsWindow", "Ptr", hwndTarget, "Int")
+        return false
+
+    tidTarget := DllCall("user32\GetWindowThreadProcessId", "Ptr", hwndTarget, "UInt*", 0, "UInt")
+
+    ; already focused?
+    if (ControlGetFocusEx(tidTarget, hwndTarget, 0))
+        return true
+
+    start := A_TickCount
+    nextRefocus := 0
+    didForeground := false
+
+    Loop
+    {
+        now := A_TickCount
+        if ((now - start) >= totalMs)
+            break
+
+        if (now >= nextRefocus)
+        {
+            ; Foreground only once, retries are cheap (ensureForeground := false)
+            FocusHwndFast(hwndTarget, false, !didForeground)
+            didForeground := true
+            nextRefocus := now + refocusEveryMs
+        }
+
+        if (ControlGetFocusEx(tidTarget, hwndTarget, 0))
+            return true
+
+        Sleep, 0
+    }
+
+    return ControlGetFocusEx(tidTarget, hwndTarget, 0)
+}
+
+EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15)
+{
+    ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hwndTop%
+    if (!hCtl)
+        return false
+    return EnsureFocusedHwnd(hCtl, totalMs, refocusEveryMs)
+}
+
+GetClassName(hwnd)
+{
+    VarSetCapacity(buf, 256 * 2, 0)
+    DllCall("user32\GetClassNameW", "Ptr", hwnd, "Ptr", &buf, "Int", 256)
+    return StrGet(&buf, "UTF-16")
+}
+
+FindAncestorByClassPrefix_Walk(hwnd, prefix, maxDepth := 20)
+{
+    Loop, %maxDepth%
+    {
+        if (!hwnd)
+            return 0
+
+        cls := GetClassName(hwnd)
+        if (SubStr(cls, 1, StrLen(prefix)) = prefix)
+            return hwnd
+
+        hwnd := DllCall("user32\GetParent", "Ptr", hwnd, "Ptr")
+    }
+    return 0
+}
+
+ToolbarHitTest(tbHwnd)
+{
+    VarSetCapacity(pt, 8, 0)
+    DllCall("user32\GetCursorPos", "Ptr", &pt)
+    DllCall("user32\ScreenToClient", "Ptr", tbHwnd, "Ptr", &pt)
+
+    ; TB_HITTEST = WM_USER + 69 = 0x445
+    idx := DllCall("user32\SendMessageW", "Ptr", tbHwnd, "UInt", 0x445, "Ptr", 0, "Ptr", &pt, "Ptr")
+    return idx ; -1 means none
+}
+
+UIA_HitTestName(desiredName, ByRef extra := "")
+{
+    global UIA
+    extra := ""
+
+    if (!IsObject(UIA))
+        return 0
+
+    VarSetCapacity(pt, 8, 0)
+    DllCall("user32\GetCursorPos", "Ptr", &pt)
+    x := NumGet(pt, 0, "Int")
+    y := NumGet(pt, 4, "Int")
+
+    el := ""
+    try
+        el := UIA.ElementFromPoint(x, y)
+    catch e
+        return 0
+
+    if (!IsObject(el))
+        return 0
+
+    cur := el
+    Loop, 20
+    {
+        nm := ""
+        try
+            nm := cur.CurrentName
+        catch e
+            nm := ""
+
+        if (nm = desiredName)
+        {
+            extra := nm
+            ; Return native hwnd if available, else just return 1
+            h := 0
+            try
+                h := cur.CurrentNativeWindowHandle
+            catch e
+                h := 0
+
+            if (h)
+                return h
+            return 1
+        }
+
+        parent := ""
+        try
+            parent := cur.GetParent()
+        catch e
+            parent := ""
+
+        if (!IsObject(parent))
+            break
+
+        cur := parent
+    }
+
+    return 0
+}
+
+FindAncestorByClassPrefix(hwnd, prefix, ByRef extra := "", maxDepth := 20)
+{
+    extra := ""
+
+    ; Special case: detect "any toolbar button item" (Back/Forward/Up/Refresh are items, not HWNDs)
+    if (prefix = "ToolbarButton")
+    {
+        tbHwnd := FindAncestorByClassPrefix_Walk(hwnd, "ToolbarWindow32", maxDepth)
+        if (!tbHwnd)
+            return 0
+
+        idx := ToolbarHitTest(tbHwnd)
+        if (idx < 0)
+            return 0
+
+        extra := idx  ; which toolbar item index is under the mouse
+        return tbHwnd ; returns the toolbar HWND
+    }
+
+    ; Optional special case: UIA name hit-test (Win11 command bar buttons)
+    ; Use prefix like: "UIA:Back" or "UIA:Refresh"
+    if (SubStr(prefix, 1, 4) = "UIA:")
+    {
+        desiredName := SubStr(prefix, 5)
+        return UIA_HitTestName(desiredName, extra)
+    }
+
+    ; Default: original behavior
+    return FindAncestorByClassPrefix_Walk(hwnd, prefix, maxDepth)
+}
+
+
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
 $~LButton::
@@ -5047,17 +5307,17 @@ $~LButton::
     textBoxSelected := False
 
     CoordMode, Mouse, Screen
-    MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
+    MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD, 2
     WinGetClass, wmClassD, ahk_id %_winIdD%
     Gui, GUI4Boarder: Hide
 
-    If (   wmClassD != "CabinetWClass"
-        && wmClassD != "#32770"
-        && !InStr(_winCtrlD, "SysListView32", True)
-        && !InStr(_winCtrlD, "DirectUIHWND", True)
-        && !InStr(_winCtrlD, "SysTreeView32", True)
-        && !InStr(_winCtrlD, "SysHeader32", True))
-        Return
+    ; If (   wmClassD != "CabinetWClass"
+        ; && wmClassD != "#32770"
+        ; && !InStr(_winCtrlD, "SysListView32", True)
+        ; && !InStr(_winCtrlD, "DirectUIHWND", True)
+        ; && !InStr(_winCtrlD, "SysTreeView32", True)
+        ; && !InStr(_winCtrlD, "SysHeader32", True))
+        ; Return
 
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
@@ -5067,10 +5327,10 @@ $~LButton::
     If (    A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < DoubleClickTime)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (_winCtrlD == "SysListView321" || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")) {
+        && (FindAncestorByClassPrefix(_winCtrlD, "SysListView32") || FindAncestorByClassPrefix(_winCtrlD, "DirectUIHWND"))) {
         ; tooltip, %isBlankSpaceExplorer% - %isBlankSpaceNonExplorer%
         If (isBlankSpaceExplorer || isBlankSpaceNonExplorer) {
-            If (_winCtrlD == "SysListView321") {
+            If (FindAncestorByClassPrefix(_winCtrlD, "SysListView32")) {
                 Send, {Backspace}
                 SetTimer, RunDynaExprTimeout, -1
             }
@@ -5092,7 +5352,6 @@ $~LButton::
                     break
                 sleep, 1
             }
-            ; tooltip, path found
             ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
                 SendCtrlAdd(_winIdD, prevPath, currentPath, wmClassD)
@@ -5121,7 +5380,7 @@ $~LButton::
 
     prevPath := ""
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
-        If (InStr(_winCtrlD,"SysListView32",True) || _winCtrlD == "DirectUIHWND2" || _winCtrlD == "DirectUIHWND3" || _winCtrlD == "DirectUIHWND4" || _winCtrlD == "DirectUIHWND6" || _winCtrlD == "DirectUIHWND8")
+        If (FindAncestorByClassPrefix(_winCtrlD, "SysListView32") || FindAncestorByClassPrefix(_winCtrlD, "DirectUIHWND"))
             isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
         loop 100 {
             prevPath := GetExplorerPath(_winIdD)
@@ -5148,24 +5407,25 @@ $~LButton::
 
     KeyWait, LButton, U T5
 
-    MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU
+    MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU, 2
+    MouseGetPos, , , , _winCtrlUNN
 
     rlsTime  := A_TickCount
     timeDiff := rlsTime - initTime
-
+    extra := ""
     ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick() "-" IsModernExplorerActive(_winIdU)
     ; tooltip, %timeDiff% ms - %wmClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
     If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)) {
 
-        If (   (InStr(_winCtrlU,"SysListView32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
+        If ( FindAncestorByClassPrefix(_winCtrlU, "SysListView32") || FindAncestorByClassPrefix(_winCtrlU, "DirectUIHWND")
             && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
 
             SetTimer, SendCtrlAddLabel, -125
         }
-        Else If ((InStr(_winCtrlU,"SysHeader32",True) || _winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")
-            && !IsExplorerItemClick()) {
+        Else If (FindAncestorByClassPrefix(_winCtrlU,"SysHeader32") || FindAncestorByClassPrefix(_winCtrlU, "DirectUIHWND")
+                 && !IsExplorerItemClick()) {
 
-            If (!InStr(_winCtrlU,"SysHeader32",True)) {
+            If (!FindAncestorByClassPrefix(_winCtrlU,"SysHeader32")) {
                 If (wmClassD == "#32770") {
                     isExplorerHeader := IsExplorerHeaderClick_Local()
                 }
@@ -5215,39 +5475,38 @@ $~LButton::
 
                 If (isExplorerHeader || ctype  == 50031) {
                     ; tooltip, % "line4 - " pt.CurrentControlType
-                    If (wmClassD == "#32770" || _winCtrlU == "DirectUIHWND3") {
-                        loop 50
-                        {
-                            sleep, 1
-                            ControlFocus, %_winCtrlU%, ahk_id %_winIdU%
-                            ControlGetFocus, testCtrlFocus, ahk_id %_winIdU%
-                            If (testCtrlFocus == _winCtrlU)
-                                break
-                        }
+                    If (wmClassD == "#32770" || FindAncestorByClassPrefix(_winCtrlU,"DirectUIHWND3")) {
+                        ; loop 50
+                        ; {
+                            ; sleep, 1
+                            ; ControlFocus, %_winCtrlUNN%, ahk_id %_winIdU%
+                            ; ControlGetFocus, testCtrlFocus, ahk_id %_winIdU%
+                            ; If (testCtrlFocus == _winCtrlUNN)
+                                ; break
+                        ; }
+                        EnsureFocusedCtrlNN(_winIdU, _winCtrlUNN, 60, 15)
                         Send, ^{NumpadAdd}
                         Return
                     }
                     Else If (wmClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
-                        loop 50 {
-                            If (ControlFocusEx(_winIdU, _winCtrlU))
-                                break
-                            sleep, 1
-                            ; ControlGetFocus, testFocus, ahk_id %_winIdU%
-                            ; if (InStr(testFocus, "DirectUIHWND", false))
+                        ; ControlFocusEx(_winIdU, _winCtrlUNN, true)
+                        ; loop 50 {
+                            ; If (ControlFocusEx(_winIdU, _winCtrlUNN, false))
                                 ; break
-                        }
+                            ; sleep, 1
+                        ; }
+                        EnsureFocusedCtrlNN(_winIdU, _winCtrlUNN, 60, 15)
                         Send, ^{NumpadAdd}
                         Return
                     }
                     Else If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
-                        ; ControlFocusEx(_winIdU, "SysListView321")
                         If !isWin11
                             Send, {F5}
 
                         Send, ^{NumpadAdd}
                         Return
                     }
-                    Else If ((ctype == 50033) && (_winCtrlU == "DirectUIHWND2" || _winCtrlU == "DirectUIHWND3" || _winCtrlU == "DirectUIHWND4" || _winCtrlU == "DirectUIHWND6" || _winCtrlU == "DirectUIHWND8")) {
+                    Else If ((ctype == 50033) && (FindAncestorByClassPrefix(_winCtrlU, "DirectUIHWND"))) {
 
                         Send, ^{NumpadAdd}
                         Return
@@ -5268,7 +5527,7 @@ $~LButton::
             ; }
         }
         Else If ((wmClassD == "CabinetWClass" || wmClassD == "#32770")
-            && (_winCtrlU == "UpBand1" || InStr(_winCtrlU,"ToolbarWindow32", True) || _winCtrlU == "Microsoft.UI.Content.DesktopChildSiteBridge1")) {
+            && (FindAncestorByClassPrefix(_winCtrlU, "UpBand") || FindAncestorByClassPrefix(_winCtrlU, "ToolbarWindow32") || FindAncestorByClassPrefix(_winCtrlU, "Microsoft.UI.Content.DesktopChildSiteBridge"))) {
 
             ; try {
                 pt     := SafeUIA_ElementFromPoint(lbX2,lbY2)
@@ -5323,9 +5582,9 @@ $~LButton::
                 SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
             }
         }
-        Else If (InStr(_winCtrlU, "SysTreeView32", True)
-            && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
-            && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
+        Else If (FindAncestorByClassPrefix(_winCtrlU, "SysTreeView32")
+                && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
+                && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
 
             currentPath := ""
             loop 100 {
@@ -5347,69 +5606,73 @@ Return
 ; - Activates the top-level window, brings it to foreground safely, and sets keyboard focus to 'hwnd'.
 ; - Pure Win32, avoids UIA. Works only for HWND-backed controls.
 ; Fast, reliable focus with minimal overhead
-FocusHwndFast(hwndTarget, verify := true) {
-    if !DllCall("IsWindow", "ptr", hwndTarget)
-        return False
+FocusHwndFast(hwndTarget, verify := true, ensureForeground := true)
+{
+    if !DllCall("IsWindow", "Ptr", hwndTarget)
+        return false
 
-    ; Quick success path: already focused
-    if (DllCall("GetFocus", "ptr") = hwndTarget)
+    ; Quick success path (same as your original)
+    if (DllCall("GetFocus", "Ptr") = hwndTarget)
         return true
 
-    ; Get top-level (root) window
-    hwndTop := DllCall("GetAncestor", "ptr", hwndTarget, "uint", 2, "ptr")
+    hwndTop := DllCall("GetAncestor", "Ptr", hwndTarget, "UInt", 2, "Ptr")
     if (!hwndTop)
         hwndTop := hwndTarget
 
-    ; If minimized, restore (async is cheaper cross-thread)
-    if (DllCall("IsIconic", "ptr", hwndTop))
-        DllCall("ShowWindowAsync", "ptr", hwndTop, "int", 9)  ; SW_RESTORE
+    if (DllCall("IsIconic", "Ptr", hwndTop))
+        DllCall("ShowWindowAsync", "Ptr", hwndTop, "Int", 9)
 
-    hFG   := DllCall("GetForegroundWindow", "ptr")
-    tidFG := DllCall("GetWindowThreadProcessId", "ptr", hFG,     "uint*", 0, "uint")
-    tidTW := DllCall("GetWindowThreadProcessId", "ptr", hwndTop, "uint*", 0, "uint")
-    tidAHK:= DllCall("GetCurrentThreadId", "uint")
+    hFG    := DllCall("GetForegroundWindow", "Ptr")
+    tidAHK := DllCall("GetCurrentThreadId", "UInt")
+    tidTW  := DllCall("GetWindowThreadProcessId", "Ptr", hwndTop, "UInt*", 0, "UInt")
 
-    ; Another quick path: if the top window is already foreground,
-    ; no need to attach to the foreground thread—just ensure active+focus.
-    attachedToFG  := False
-    attachedToTW  := False
-    if (hFG != hwndTop) {
-        ; Only attach to FG if it's a different thread than us (AHK)
-        if (tidFG != tidAHK) {
-            DllCall("AttachThreadInput", "uint", tidFG, "uint", tidAHK, "int", 1)
-            attachedToFG := true
-        }
-    }
-
-    ; Attach to the target window's thread only if it's different from us.
-    if (tidTW != tidAHK) {
-        DllCall("AttachThreadInput", "uint", tidTW, "uint", tidAHK, "int", 1)
+    attachedToTW := false
+    if (tidTW != tidAHK)
+    {
+        DllCall("AttachThreadInput", "UInt", tidTW, "UInt", tidAHK, "Int", 1)
         attachedToTW := true
     }
 
-    ; Bring to front/activate. SetForegroundWindow usually implies activation,
-    ; so BringWindowToTop is only used if not already FG.
-    if (hFG != hwndTop)
-        DllCall("SetForegroundWindow", "ptr", hwndTop)
-    DllCall("SetActiveWindow", "ptr", hwndTop)
+    attachedToFG := false
+    if (ensureForeground && hFG != hwndTop)
+    {
+        tidFG := DllCall("GetWindowThreadProcessId", "Ptr", hFG, "UInt*", 0, "UInt")
+        if (tidFG != tidAHK)
+        {
+            DllCall("AttachThreadInput", "UInt", tidFG, "UInt", tidAHK, "Int", 1)
+            attachedToFG := true
+        }
 
-    ; Try to focus the exact control (safe no-op if not focusable)
-    DllCall("SetFocus", "ptr", hwndTarget, "ptr")
-
-    ; Optional verification (skip for a tiny speed bump)
-    success := true
-    if (verify) {
-        curFocus := DllCall("GetFocus", "ptr")
-        success := (curFocus = hwndTarget)
+        DllCall("SetForegroundWindow", "Ptr", hwndTop)
     }
 
-    ; Detach only what we attached
-    if (attachedToTW)
-        DllCall("AttachThreadInput", "uint", tidTW, "uint", tidAHK, "int", 0)
+    DllCall("SetActiveWindow", "Ptr", hwndTop)
+    DllCall("SetFocus", "Ptr", hwndTarget, "Ptr")
+
+    success := true
+    if (verify)
+        success := (DllCall("GetFocus", "Ptr") = hwndTarget)
+
     if (attachedToFG)
-        DllCall("AttachThreadInput", "uint", tidFG, "uint", tidAHK, "int", 0)
+        DllCall("AttachThreadInput", "UInt", tidFG, "UInt", tidAHK, "Int", 0)
+
+    if (attachedToTW)
+        DllCall("AttachThreadInput", "UInt", tidTW, "UInt", tidAHK, "Int", 0)
 
     return success
+}
+
+GetItemsViewHwndFromUIA(shellEl)
+{
+    hCtl := 0
+
+    ; Most UIA wrappers expose CurrentNativeWindowHandle
+    try
+        hCtl := shellEl.CurrentNativeWindowHandle
+    catch e
+        hCtl := 0
+
+    return hCtl
 }
 
 WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
@@ -5418,13 +5681,35 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
         exEl := UIA.ElementFromHandle(targetHwndID)
         shellEl := exEl.FindFirstByName("Items View")
         shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+
         If !isCabinetWClass10 && !skipFocus {
-            loop 50 {
-                ControlFocusEx(targetHwndID,"DirectUIHWND2")
-                sleep, 1
-                ControlGetFocus, testFocus, ahk_id %targetHwndID%
-                if (InStr(testFocus, "DirectUIHWND", False))
+            ; ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %targetHwndID%
+            hCtl := GetItemsViewHwndFromUIA(shellEl)
+
+            if (!hCtl)
+                ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %targetHwndID%
+
+            if (!hCtl)
+                return
+
+            tidTarget := DllCall("GetWindowThreadProcessId", "Ptr", hCtl, "UInt*", 0, "UInt")
+
+            ; if already focused inside the view, skip everything
+            if (ControlGetFocusEx(tidTarget, hCtl, 0))
+                return
+
+            ; expensive once
+            FocusHwndFast(hCtl, false, true)
+            if (ControlGetFocusEx(tidTarget, hCtl, 15))
+                return
+
+            ; cheap retry (usually 1-2 is enough)
+            Loop, 2
+            {
+                FocusHwndFast(hCtl, false, false)
+                if (ControlGetFocusEx(tidTarget, hCtl, 15))
                     break
+                Sleep, 1
             }
         }
     } catch e {
@@ -5449,7 +5734,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
 }
 
 SendCtrlAddLabel:
-    SendCtrlAdd(_winIdU, , , _winCtrlU)
+    SendCtrlAdd(_winIdU, , , , _winCtrlUNN)
 Return
 
 RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2) ; from the FindText library, credit goes to feiyue
@@ -6105,8 +6390,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 Else If OutputVar8
                     TargetControl := "DirectUIHWND8"
             }
-            ; tooltip, here7
         }
+        ; tooltip, here7
 
         If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
@@ -6150,10 +6435,11 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
+            ; tooltip, here7b
             WaitForExplorerLoad(initTargetHwnd)
         }
         Else {
-            ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
                 Critical, On
                 loop, 125 {
@@ -7872,8 +8158,8 @@ FindTopMostWindow() {
             WinGet, mmState, MinMax, ahk_id %hwndId%
             WinGet, procName, ProcessName, ahk_id %hwndId%
             WinGet, ExStyle, ExStyle, ahk_id %hwndId%
-            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip If zoom or always on top window
-                continue
+            ; If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip If zoom or always on top window
+                ; continue
             If (mmState > -1) {
                 If (MonCount > 1) {
                     currentMon := MWAGetMonitorMouseIsIn()
