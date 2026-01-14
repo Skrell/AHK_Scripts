@@ -5216,35 +5216,54 @@ UIA_HitTestName(desiredName, ByRef extra := "")
 
 FindAncestorByClassPrefix(hwnd, prefix, ByRef extra := "", maxDepth := 20)
 {
-    extra := ""
+    extra := 0
 
-    ; Special case: detect "any toolbar button item" (Back/Forward/Up/Refresh are items, not HWNDs)
+    ; Special case: detect "any toolbar button item"
     if (prefix = "ToolbarButton")
     {
         tbHwnd := FindAncestorByClassPrefix_Walk(hwnd, "ToolbarWindow32", maxDepth)
         if (!tbHwnd)
-            return 0
+            return false
 
         idx := ToolbarHitTest(tbHwnd)
         if (idx < 0)
-            return 0
+            return false
 
-        extra := idx  ; which toolbar item index is under the mouse
-        return tbHwnd ; returns the toolbar HWND
+        ; extra can carry both values if you want:
+        ; - store toolbar hwnd, and index as a string "HWND|IDX"
+        extra := tbHwnd "|" idx
+        return true
     }
 
     ; Optional special case: UIA name hit-test (Win11 command bar buttons)
-    ; Use prefix like: "UIA:Back" or "UIA:Refresh"
     if (SubStr(prefix, 1, 4) = "UIA:")
     {
         desiredName := SubStr(prefix, 5)
-        return UIA_HitTestName(desiredName, extra)
+
+        ; UIA_HitTestName can return hwnd (if it has one) or 1/0.
+        hit := UIA_HitTestName(desiredName, extra)
+
+        ; Normalize to boolean; also capture hit in extra
+        if (hit)
+        {
+            ; if UIA_HitTestName returned a hwnd, keep it
+            ; otherwise keep whatever it wrote to extra
+            if (!extra)
+                extra := hit
+            return true
+        }
+        return false
     }
 
     ; Default: original behavior
-    return FindAncestorByClassPrefix_Walk(hwnd, prefix, maxDepth)
+    hFound := FindAncestorByClassPrefix_Walk(hwnd, prefix, maxDepth)
+    if (hFound)
+    {
+        extra := hFound
+        return true
+    }
+    return false
 }
-
 
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
@@ -5255,17 +5274,17 @@ $~LButton::
     textBoxSelected := False
 
     CoordMode, Mouse, Screen
-    MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD, 2
+    MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
     WinGetClass, wmClassD, ahk_id %_winIdD%
-    Gui, GUI4Boarder: Hide
+    ; Gui, GUI4Boarder: Hide
 
-    ; If (   wmClassD != "CabinetWClass"
-        ; && wmClassD != "#32770"
-        ; && !InStr(_winCtrlD, "SysListView32", True)
-        ; && !InStr(_winCtrlD, "DirectUIHWND", True)
-        ; && !InStr(_winCtrlD, "SysTreeView32", True)
-        ; && !InStr(_winCtrlD, "SysHeader32", True))
-        ; Return
+    If (   wmClassD != "CabinetWClass"
+        && wmClassD != "#32770"
+        && !InStr(_winCtrlD, "SysListView32", True)
+        && !InStr(_winCtrlD, "DirectUIHWND", True)
+        && !InStr(_winCtrlD, "SysTreeView32", True)
+        && !InStr(_winCtrlD, "SysHeader32", True))
+        Return
 
     SetTimer, keyTrack, Off
     SetTimer, mouseTrack, Off
@@ -5275,10 +5294,10 @@ $~LButton::
     If (    A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < DoubleClickTime)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (FindAncestorByClassPrefix(_winCtrlD, "SysListView32") || FindAncestorByClassPrefix(_winCtrlD, "DirectUIHWND"))) {
+        && (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))) {
         ; tooltip, %isBlankSpaceExplorer% - %isBlankSpaceNonExplorer%
         If (isBlankSpaceExplorer || isBlankSpaceNonExplorer) {
-            If (FindAncestorByClassPrefix(_winCtrlD, "SysListView32")) {
+            If (InStr(_winCtrlD, "SysListView32", True)) {
                 Send, {Backspace}
                 SetTimer, RunDynaExprTimeout, -1
             }
@@ -5328,7 +5347,7 @@ $~LButton::
 
     prevPath := ""
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
-        If (FindAncestorByClassPrefix(_winCtrlD, "SysListView32") || FindAncestorByClassPrefix(_winCtrlD, "DirectUIHWND"))
+        If (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))
             isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
         loop 100 {
             prevPath := GetExplorerPath(_winIdD)
@@ -5355,25 +5374,29 @@ $~LButton::
 
     KeyWait, LButton, U T5
 
-    MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU, 2
-    MouseGetPos, , , , _winCtrlUNN
+    MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU
+    ; MouseGetPos, , , , _winCtrlUNN
 
     rlsTime  := A_TickCount
     timeDiff := rlsTime - initTime
-    extra := ""
+    extra    := ""
+
     ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick() "-" IsModernExplorerActive(_winIdU)
     ; tooltip, %timeDiff% ms - %wmClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
-    If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)) {
 
-        If ( FindAncestorByClassPrefix(_winCtrlU, "SysListView32") || FindAncestorByClassPrefix(_winCtrlU, "DirectUIHWND")
+    If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
+
+        If (   (InStr(_winCtrlU, "SysListView32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
             && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
 
+            ; tooltip, here1
             SetTimer, SendCtrlAddLabel, -125
         }
-        Else If (FindAncestorByClassPrefix(_winCtrlU,"SysHeader32") || FindAncestorByClassPrefix(_winCtrlU, "DirectUIHWND")
-                 && !IsExplorerItemClick()) {
+        Else If ( (InStr(_winCtrlU,"SysHeader32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
+               && !IsExplorerItemClick()) {
 
-            If (!FindAncestorByClassPrefix(_winCtrlU,"SysHeader32")) {
+            ; tooltip, here1a
+            If (!InStr(_winCtrlU,"SysHeader32", True)) {
                 If (wmClassD == "#32770") {
                     isExplorerHeader := IsExplorerHeaderClick_Local()
                 }
@@ -5387,119 +5410,74 @@ $~LButton::
             ListLines, Off
             ListLines, On ; clears history and starts fresh
 
-            ; try {
-                If (!isExplorerHeader) {
-                    ; Get UIA element
-                    pt := SafeUIA_ElementFromPoint(lbX2, lbY2)
-                    ctype := SafeUIA_GetControlType(pt)
-                    ; Optional if used later
-                    ; cname := SafeUIA_GetName(pt, "")
-                    ; Cache risky UIA properties ONCE
-                    If (ctype == "" || ctype > 50035 || ctype < 50031) {
-                        SetTimer, keyTrack,   On
-                        SetTimer, mouseTrack, On
-                        Return
-                    }
+            If (!isExplorerHeader) {
+                ; Get UIA element
+                pt    := SafeUIA_ElementFromPoint(lbX2, lbY2)
+                ctype := SafeUIA_GetControlType(pt)
+                ; Optional if used later
+                ; cname := SafeUIA_GetName(pt, "")
+                ; Cache risky UIA properties ONCE
+                If (ctype == "" || ctype > 50035 || ctype < 50031) {
+                    SetTimer, keyTrack,   On
+                    SetTimer, mouseTrack, On
+                    Return
                 }
+            }
 
-                ; wm := wmClassD
-                ; ctrl := _winCtrlU
-                ; winid := _winIdU
-                ; is11 := isWin11 ? "1" : "0"
-                ; iex := isModernExplorerInReg ? "1" : "0"
-                ; ima := IsModernExplorerActive(winid) ? "1" : "0"
-                ; ih := isExplorerHeader ? "1" : "0"
-                ; ptType := IsObject(pt) ? pt.CurrentControlType : "none"
+            If (isExplorerHeader || ctype  == 50031) {
+                ; tooltip, % "line4 - " pt.CurrentControlType
+                If (wmClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
 
-                ; tooltipText := "wmClassD=[" . wm . "] len=" . StrLen(wm) . "`n"
-                            ; . "_winCtrlU=[" . ctrl . "] len=" . StrLen(ctrl) . "`n"
-                            ; . "_winIdU=" . winid . "`n"
-                            ; . "isWin11=" . is11 . "`n"
-                            ; . "isModernExplorerInReg=" . iex . "`n"
-                            ; . "IsModernExplorerActive()=" . ima . "`n"
-                            ; . "isExplorerHeader=" . ih . "`n"
-                            ; . "pt.CurrentControlType=" . ptType
-                ; tooltip, %tooltipText%
-
-                If (isExplorerHeader || ctype  == 50031) {
-                    ; tooltip, % "line4 - " pt.CurrentControlType
-                    If (wmClassD == "#32770" || FindAncestorByClassPrefix(_winCtrlU,"DirectUIHWND3")) {
-
-                        EnsureFocusedCtrlNN(_winIdU, _winCtrlUNN, 60, 15)
-                        Send, ^{NumpadAdd}
-                        Return
-                    }
-                    Else If (wmClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
-
-                        EnsureFocusedCtrlNN(_winIdU, _winCtrlUNN, 60, 15)
-                        Send, ^{NumpadAdd}
-                        Return
-                    }
-                    Else If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
-                        If !isWin11
-                            Send, {F5}
-
-                        Send, ^{NumpadAdd}
-                        Return
-                    }
-                    Else If ((ctype == 50033) && (FindAncestorByClassPrefix(_winCtrlU, "DirectUIHWND"))) {
-
-                        Send, ^{NumpadAdd}
-                        Return
-                    }
+                    EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
+                    Send, ^{NumpadAdd}
+                    Return
                 }
-            ; } catch e {
-                ; ; tooltip, 1: UIA TIMED OUT!!!!
-                ; ListLines
-                ; MsgBox % "Exception caught:`n"
-                    ; . "Message: " e.Message "`n"
-                    ; . "What: " e.What "`n"
-                    ; . "File: " e.File "`n"
-                    ; . "Line: " e.Line "`n"
-                    ; . "Extra: " e.Extra "`n`n"
-                    ; . "A_LastError: " A_LastError "`n"
-                    ; . "ErrorLevel: " ErrorLevel
-                ; Pause
-            ; }
+                Else If (wmClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
+
+                    EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
+                    Send, ^{NumpadAdd}
+                    Return
+                }
+                Else If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
+                    If !isWin11
+                        Send, {F5}
+
+                    Send, ^{NumpadAdd}
+                    Return
+                }
+                Else If ((ctype == 50033) && (InStr(_winCtrlU, "DirectUIHWND", True))) {
+
+                    Send, ^{NumpadAdd}
+                    Return
+                }
+            }
         }
-        Else If ((wmClassD == "CabinetWClass" || wmClassD == "#32770")
-            && (   FindAncestorByClassPrefix(_winCtrlU, "ToolbarWindow32")
-                || FindAncestorByClassPrefix(_winCtrlU, "ReBarWindow32")
-                || FindAncestorByClassPrefix(_winCtrlU, "Microsoft.UI.Content.DesktopChildSiteBridge")
-                || FindAncestorByClassPrefix(_winCtrlU, "Windows.UI.Composition.DesktopWindowContentBridge") )) {
-            ; try {
-                pt     := SafeUIA_ElementFromPoint(lbX2,lbY2)
-                ctype  := SafeUIA_GetControlType(pt)
-                cname  := SafeUIA_GetName(pt)
-                cltype := SafeUIA_GetLocalizedControlType(pt)
+        Else If ( (wmClassD == "CabinetWClass" || wmClassD == "#32770")
+            && (   InStr(_winCtrlU, "ToolbarWindow32", True)
+                || InStr(_winCtrlU, "ReBarWindow32", True)
+                || InStr(_winCtrlU, "Microsoft.UI.Content.DesktopChildSiteBridge", True)
+                || InStr(_winCtrlU, "Windows.UI.Composition.DesktopWindowContentBridge", True) )) {
 
-                If (ctype == "") {
+            ; tooltip, here2
+            pt     := SafeUIA_ElementFromPoint(lbX2,lbY2)
+            ctype  := SafeUIA_GetControlType(pt)
+            cname  := SafeUIA_GetName(pt)
+            cltype := SafeUIA_GetLocalizedControlType(pt)
 
-                    SetTimer, keyTrack,   On
-                    SetTimer, mouseTrack, On
-                    Return
-                }
-                ; tooltip, % pt.CurrentControlType "-" pt.CurrentName "-" pt.CurrentLocalizedControlType
-                If (ctype == 50000
-                    && !InStr(cname, "Back", True) && !InStr(cname, "Forward", True) && !InStr(cname, "Up", True) && !InStr(cname, "Refresh", True)) {
+            If (ctype == "") {
 
-                    SetTimer, keyTrack,   On
-                    SetTimer, mouseTrack, On
-                    Return
-                }
-            ; } catch e {
-                ; tooltip, 2: UIA TIMED OUT!!!!
-                ; ListLines
-                ; MsgBox % "Exception caught:`n"
-                    ; . "Message: " e.Message "`n"
-                    ; . "What: " e.What "`n"
-                    ; . "File: " e.File "`n"
-                    ; . "Line: " e.Line "`n"
-                    ; . "Extra: " e.Extra "`n`n"
-                    ; . "A_LastError: " A_LastError "`n"
-                    ; . "ErrorLevel: " ErrorLevel
-                ; Pause
-            ; }
+                SetTimer, keyTrack,   On
+                SetTimer, mouseTrack, On
+                Return
+            }
+            ; tooltip, % pt.CurrentControlType "-" pt.CurrentName "-" pt.CurrentLocalizedControlType
+            If (ctype == 50000
+                && !InStr(cname, "Back", True) && !InStr(cname, "Forward", True) && !InStr(cname, "Up", True) && !InStr(cname, "Refresh", True)) {
+
+                SetTimer, keyTrack,   On
+                SetTimer, mouseTrack, On
+                Return
+            }
 
             If InStr(cname, "Refresh", True) {
                 SendCtrlAdd(_winIdU, , , wmClassD)
@@ -5510,6 +5488,7 @@ $~LButton::
                     || (ctype == 50031 && !InStr(cname,  "Open",  True)) ; handles #32770 breadcrumb bar
                     || (ctype == 50031 && !InStr(cltype, "split", True))) { ; handles normal explorer breadcrumb bar
 
+                ; tooltip, here3
                 currentPath := ""
                 loop 100 {
                     currentPath := GetExplorerPath(_winIdU)
@@ -5520,10 +5499,11 @@ $~LButton::
                 SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
             }
         }
-        Else If (FindAncestorByClassPrefix(_winCtrlU, "SysTreeView32")
+        Else If (   InStr(_winCtrlU, "SysTreeView32", True)
                 && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
                 && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
 
+            ; tooltip, here4
             currentPath := ""
             loop 100 {
                 currentPath := GetExplorerPath(_winIdU)
@@ -5531,6 +5511,7 @@ $~LButton::
                     break
                 sleep, 1
             }
+            ; tooltip, sending
             SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD, _winCtrlU)
         }
     }
@@ -6197,6 +6178,40 @@ IsModernExplorerActive(hWnd := "") {
     return false
 }
 
+GetCtrlNNsByPrefix(hwndTop, classPrefix)
+{
+    WinGet, listC, ControlList,     ahk_id %hwndTop%
+    WinGet, listH, ControlListHwnd, ahk_id %hwndTop%
+
+    ; Build array of ctrlNNs by index in one pass
+    ctrlAt := []
+    Loop, Parse, listC, `n, `r
+    {
+        ctrlAt.Push(A_LoopField)
+    }
+
+    out := ""
+    idx := 0
+    Loop, Parse, listH, `n, `r
+    {
+        idx++
+        hCtl := A_LoopField + 0
+        if (!hCtl)
+            continue
+
+        cls := GetClassName(hCtl)
+        if (SubStr(cls, 1, StrLen(classPrefix)) != classPrefix)
+            continue
+
+        ctrlNN := (idx <= ctrlAt.Length()) ? ctrlAt[idx] : ""
+        if (ctrlNN != "")
+            out .= ctrlNN " "
+    }
+
+    return RTrim(out, " ")
+}
+
+
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
     Global UIA, isWin11, blockKeys
 
@@ -6236,44 +6251,41 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             Return
 
         If (InStr(initFocusedCtrlNN,  "SysListView32", True)) {
-            OutputVar1 := 1
+            OutputVar1    := 1
             TargetControl := initFocusedCtrlNN
         }
         Else If (initFocusedCtrlNN == "DirectUIHWND4") {
-            OutputVar4 := 1
+            OutputVar4    := 1
             TargetControl := initFocusedCtrlNN
         }
         Else If (initFocusedCtrlNN == "DirectUIHWND6") {
-            OutputVar6 := 1
+            OutputVar6    := 1
             TargetControl := initFocusedCtrlNN
         }
         Else If (initFocusedCtrlNN == "DirectUIHWND8") {
-            OutputVar8 := 1
+            OutputVar8    := 1
             TargetControl := initFocusedCtrlNN
         }
         Else If (initFocusedCtrlNN == "DirectUIHWND2") {
-            OutputVar2 := 1
+            OutputVar2    := 1
             TargetControl := initFocusedCtrlNN
         }
         Else If (initFocusedCtrlNN == "DirectUIHWND3") {
-            OutputVar3 := 1
+            OutputVar3    := 1
             TargetControl := initFocusedCtrlNN
         }
         Else {
-            loop 100 {
-                ControlGet, OutputVar1, Visible ,, SysListView321, ahk_id %initTargetHwnd%
-                ControlGet, OutputVar2, Visible ,, DirectUIHWND2,  ahk_id %initTargetHwnd%
-                ControlGet, OutputVar3, Visible ,, DirectUIHWND3,  ahk_id %initTargetHwnd%
-                ControlGet, OutputVar4, Visible ,, DirectUIHWND4,  ahk_id %initTargetHwnd%
-                ControlGet, OutputVar6, Visible ,, DirectUIHWND6,  ahk_id %initTargetHwnd%
-                ControlGet, OutputVar8, Visible ,, DirectUIHWND8,  ahk_id %initTargetHwnd%
-                If (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)
-                    break
-                sleep, 1
-            }
+            AllOutputs := GetCtrlNNsByPrefix(initTargetHwnd, "DirectUIHWND")
+            OutputVar1 := InStr(AllOutputs, "SysListView32", false) > 0
+            OutputVar2 := InStr(AllOutputs, "DirectUIHWND2", false) > 0
+            OutputVar3 := InStr(AllOutputs, "DirectUIHWND3", false) > 0
+            OutputVar4 := InStr(AllOutputs, "DirectUIHWND4", false) > 0
+            OutputVar6 := InStr(AllOutputs, "DirectUIHWND6", false) > 0
+            OutputVar8 := InStr(AllOutputs, "DirectUIHWND8", false) > 0
         }
 
-        ; tooltip, here5
+        ; tooltip, OutputVar1:%OutputVar1% OutputVar2:%OutputVar2% OutputVar3:%OutputVar3% OutputVar4:%OutputVar4% OutputVar6:%OutputVar6% OutputVar8:%OutputVar8%
+
         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
 
@@ -6283,7 +6295,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             If (OutputVar1 == 1) {
                 TargetControl := "SysListView321"
             }
-            Else If (((OutputVar2 == 1 && OutputVar3 == 1) && !OutputVar4 && !OutputVar6 && !OutputVar8)
+            Else If ((OutputVar2 == 1 && OutputVar3 == 1 && !OutputVar4 && !OutputVar6 && !OutputVar8)
                     && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
 
                 OutHeight2 := 0
@@ -6301,12 +6313,10 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 Else {
                     ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
                 }
-
-                ; If !IsModernExplorerActive(initTargetHwnd)
+                ; tooltip, 2: %OutHeight2% vs 3: %OutHeight3%
                 If (lClassCheck == "CabinetWClass" && !isModernExplorerInReg)
                     ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
 
-                ; If (lClassCheck == "CabinetWClass" && (!isWin11 || !IsModernExplorerActive(initTargetHwnd)))
                 If (lClassCheck == "CabinetWClass" && (!isWin11 || !isModernExplorerInReg))
                     TargetControl := "DirectUIHWND3"
                 Else If (OutHeight2 > OutHeight3)
@@ -6358,7 +6368,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
         Else If (TargetControl == "DirectUIHWND2" && lClassCheck == "#32770") {
             WaitForExplorerLoad(initTargetHwnd, True)
-            ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            ; tooltip, here7b targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
                 ; Critical, On
                 ; loop, 125 {
@@ -6375,11 +6385,11 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
-            ; tooltip, here7b
+            ; tooltip, here7c
             WaitForExplorerLoad(initTargetHwnd)
         }
         Else {
-            ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            ; tooltip, here7d targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
                 ; Critical, On
                 ; loop, 125 {
@@ -8344,40 +8354,109 @@ DynaRun(TempScript, pipename="")
    Return PID
 }
 
-; https://www.autohotkey.com/boards/viewtopic.php?t=3951
-; Modified from AutoHotkey.chm::/docs/commands/_If.htm
-ControlWaitActive(Hwnd, Seconds = "") {
-    StartTime := A_TickCount
-
-    Loop {
-        Sleep, 100
-        ControlGetFocus, TargetControl, A
-        ControlGet, FocusedControlHwnd, Hwnd,, %TargetControl%, A
-    }
-    Until ( FocusedControlHwnd = Hwnd )
-       || ( Seconds && (A_TickCount-StartTime)/1000 >= Seconds )
-
-    Return (FocusedControlHwnd=Hwnd)
-}
-
-; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=69925
-GetActiveExplorerPath()
+GetDialogBreadcrumbText(hwndDlg)
 {
-    explorerHwnd := WinActive("ahk_class CabinetWClass")
-    If (explorerHwnd)
+    static cache := {}   ; hwndDlg -> toolbar hwnd
+    tbHwnd := 0
+
+    if (cache.HasKey(hwndDlg))
+        tbHwnd := cache[hwndDlg]
+
+    if (!tbHwnd || !DllCall("user32\IsWindow", "Ptr", tbHwnd, "Int"))
     {
-        for window in ComObjCreate("Shell.Application").Windows
+        tbHwnd := ResolveDialogBreadcrumbToolbar(hwndDlg)
+        cache[hwndDlg] := tbHwnd
+    }
+
+    if (!tbHwnd)
+        return ""
+
+    dir := GetWindowTextTimeout(tbHwnd, 25)
+
+    ; Validate we grabbed the right toolbar; if not, rescan once
+    if (dir = "" || !InStr(dir, "address", false))
+    {
+        tbHwnd2 := ResolveDialogBreadcrumbToolbar(hwndDlg, tbHwnd)
+        if (tbHwnd2 && tbHwnd2 != tbHwnd)
         {
-            If (window.hwnd==explorerHwnd)
+            dir2 := GetWindowTextTimeout(tbHwnd2, 25)
+            if (dir2 != "")
             {
-                Return window.Document.Folder.Self.Path
+                cache[hwndDlg] := tbHwnd2
+                dir := dir2
             }
         }
     }
+
+    return dir
 }
 
+ResolveDialogBreadcrumbToolbar(hwndDlg, excludeHwnd := 0)
+{
+    ; Fast path: common ctrlNNs (may vary, but cheap to try)
+    ControlGet, h1, Hwnd,, ToolbarWindow323, ahk_id %hwndDlg%
+    if (h1 && h1 != excludeHwnd)
+        return h1
+
+    ControlGet, h2, Hwnd,, ToolbarWindow324, ahk_id %hwndDlg%
+    if (h2 && h2 != excludeHwnd)
+        return h2
+
+    ; Fallback: find any ToolbarWindow32 child hwnd
+    WinGet, listH, ControlListHwnd, ahk_id %hwndDlg%
+    Loop, Parse, listH, `n, `r
+    {
+        h := A_LoopField + 0
+        if (!h || h = excludeHwnd)
+            continue
+
+        cls := GetClassName(h)
+        if (cls = "ToolbarWindow32")
+            return h
+    }
+
+    return 0
+}
+
+GetWindowTextTimeout(hwndCtl, timeoutMs := 25)
+{
+    static WM_GETTEXT := 0x0D
+    static WM_GETTEXTLENGTH := 0x0E
+    static SMTO_ABORTIFHUNG := 0x0002
+
+    len := 0
+    ok := DllCall("user32\SendMessageTimeoutW"
+        , "Ptr", hwndCtl
+        , "UInt", WM_GETTEXTLENGTH
+        , "Ptr", 0
+        , "Ptr", 0
+        , "UInt", SMTO_ABORTIFHUNG
+        , "UInt", timeoutMs
+        , "UPtr*", len)
+
+    if (!ok || len <= 0)
+        return ""
+
+    VarSetCapacity(buf, (len + 1) * 2, 0)
+
+    ok := DllCall("user32\SendMessageTimeoutW"
+        , "Ptr", hwndCtl
+        , "UInt", WM_GETTEXT
+        , "UPtr", len + 1
+        , "Ptr", &buf
+        , "UInt", SMTO_ABORTIFHUNG
+        , "UInt", timeoutMs
+        , "UPtr*", 0)
+
+    if (!ok)
+        return ""
+
+    return StrGet(&buf, "UTF-16")
+}
+
+
 ; https://www.reddit.com/r/AutoHotkey/comments/10fmk4h/get_path_of_active_explorer_tab/
-GetExplorerPath(hwnd:="") {
+GetExplorerPath(hwnd := "" ) {
     ; tooltip, entering
     If !hwnd
         hwnd := WinExist("A")
@@ -8388,13 +8467,12 @@ GetExplorerPath(hwnd:="") {
     WinGetClass, clCheck, ahk_id %hwnd%
 
     If (clCheck == "#32770") {
-        ; ControlFocus, ToolbarWindow323, ahk_id %hwnd%
-        ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-        If (dir == "" || !InStr(dir,"address",False)) {
-            ; ControlFocus, ToolbarWindow324, ahk_id %hwnd%
-            ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-        }
-        Return dir
+        ; ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+        ; If (dir == "" || !InStr(dir,"address",False)) {
+            ; ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+        ; }
+        ; Return dir
+        return GetDialogBreadcrumbText(hwnd)
     }
     Else If (clCheck == "CabinetWClass" && !isWin11) {
         WinGetTitle, expTitle, ahk_id %hwnd%
