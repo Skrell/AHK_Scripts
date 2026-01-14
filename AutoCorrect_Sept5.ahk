@@ -6379,7 +6379,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             WaitForExplorerLoad(initTargetHwnd)
         }
         Else {
-            tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
+            ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
                 ; Critical, On
                 ; loop, 125 {
@@ -6394,7 +6394,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                         ; Return
                 ; }
                 ; Critical, Off
-                TargetControl := "" ; then delete it
+                ; TargetControl := "" ; then delete it
                 EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
@@ -6408,29 +6408,21 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             blockKeys := True
             FixModifiers()
-            ; Send, {LCtrl UP}
-            Send, ^{NumpadAdd}
-            ; Send, {LCtrl UP}
 
-            ; If (prevPath != "" && currentPath != "" && prevPath != currentPath)
-                ; tooltip, sent to %TargetControl% with init at %initHoveredCtrlNN% - %prevPath% VS %currentPath%
+            Send, ^{NumpadAdd}
 
             If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
                 sleep, 125
                 blockKeys := False
-                loop, 200 {
-                    If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd)
-                        Return
+                ; loop, 200 {
+                If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd)
+                    Return
 
-                    ControlFocus , %initFocusedCtrlNN%, ahk_id %initTargetHwnd%
-                    ControlGetFocus, testCtrlFocus , ahk_id %initTargetHwnd%
-                    If (testCtrlFocus == initFocusedCtrlNN)
-                        break
-                    sleep, 1
-                }
+                ; Use bounded focus+verify instead of 200 iterations
+                EnsureFocusedCtrlNN(initTargetHwnd, initFocusedCtrlNN, 120, 15)
             }
-            blockKeys := False
             FixModifiers()
+            blockKeys := False
         }
     }
 Return
