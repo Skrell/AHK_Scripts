@@ -5596,6 +5596,7 @@ GetItemsViewHwndFromUIA(shellEl)
 
 WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
     Global UIA
+
     try {
         exEl := UIA.ElementFromHandle(targetHwndID)
         shellEl := exEl.FindFirstByName("Items View")
