@@ -4060,12 +4060,16 @@ IsExplorerHeaderClick_Local() {
     if (IsObject(hit)) {
         acc := hit
         Loop, %maxHops% {
-            try role := acc.accRole(0)
-            catch break
+            try
+                role := acc.accRole(0)
+            catch
+                break
             if (role == ROLE_SYSTEM_OUTLINE)
                 return true
-            try acc := acc.accParent
-            catch break
+            try
+                acc := acc.accParent
+            catch
+                break
             if !IsObject(acc)
                 break
         }
@@ -4115,7 +4119,8 @@ IsExplorerHeaderClick() {
     if !IsObject(acc)
         return False
 
-    try role := acc.accRole(0)
+    try
+        role := acc.accRole(0)
     catch
         return False
 
@@ -5017,17 +5022,11 @@ GetThreadFocusHwnd(tid)
     return NumGet(gui, 12, "Ptr") ; hwndFocus
 }
 
-IsDescendant(hwndParent, hwndChild)
-{
-    if (!hwndParent || !hwndChild)
-        return false
-    if (hwndParent = hwndChild)
-        return true
-    return DllCall("user32\IsChild", "Ptr", hwndParent, "Ptr", hwndChild, "Int")
-}
-
 ControlGetFocusEx(tidTarget, hwndTarget, timeoutMs := 15)
 {
+    if !DllCall("user32\IsWindow", "Ptr", hwndTarget, "Int")
+        return false
+
     hwndFocus := GetThreadFocusHwnd(tidTarget)
     if (hwndFocus && (hwndFocus = hwndTarget || DllCall("user32\IsChild", "Ptr", hwndTarget, "Ptr", hwndFocus, "Int")))
         return true
@@ -5043,67 +5042,6 @@ ControlGetFocusEx(tidTarget, hwndTarget, timeoutMs := 15)
             return true
 
         if ((A_TickCount - start) >= timeoutMs)
-            break
-
-        Sleep, 0
-    }
-    return false
-}
-
-; ControlFocusEx(hWnd := "", ctrlNN := "") {
-    ; if (hWnd = "")
-        ; return False
-
-    ; ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hWnd%
-
-    ; if (!hCtl)
-        ; return False
-
-    ; ; Determine thread ownership
-    ; tidTarget := DllCall("GetWindowThreadProcessId","ptr", hCtl, "uint*", 0, "uint")
-    ; tidAHK    := DllCall("GetCurrentThreadId", "uint")
-    ; if (tidTarget == tidAHK) {
-        ; ; Same thread: fastest path
-        ; DllCall("SetFocus", "ptr", hCtl)
-        ; return (DllCall("GetFocus","ptr") = hCtl)
-    ; } else {
-        ; ; Cross-thread: use robust routine
-        ; return FocusHwndFast(hCtl, true)
-    ; }
-; }
-
-
-ControlFocusEx(hWnd := "", ctrlNN := "", verifyMs := 30)
-{
-    if (hWnd = "")
-        return false
-
-    ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hWnd%
-    if (!hCtl)
-        return false
-
-    tidTarget := DllCall("GetWindowThreadProcessId", "Ptr", hCtl, "UInt*", 0, "UInt")
-    tidAHK    := DllCall("GetCurrentThreadId", "UInt")
-
-    if (tidTarget = tidAHK)
-    {
-        DllCall("SetFocus", "Ptr", hCtl)
-        return (DllCall("GetFocus", "Ptr") = hCtl)
-    }
-
-    ; Cross-thread: do the focus attempt
-    if !FocusHwndFast(hCtl, false)
-        return false
-
-    ; Cross-thread: verify via GUITHREADINFO for the target GUI thread
-    start := A_TickCount
-    Loop
-    {
-        hwndFocus := GetThreadFocusHwnd(tidTarget)
-        if (IsDescendant(hCtl, hwndFocus))
-            return true
-
-        if ((A_TickCount - start) >= verifyMs)
             break
 
         Sleep, 0
@@ -5162,7 +5100,15 @@ EnsureFocusedHwnd(hwndTarget, totalMs := 60, refocusEveryMs := 15)
 
     return ControlGetFocusEx(tidTarget, hwndTarget, 0)
 }
-
+; Why that’s faster
+    ; One-time ControlGet and minimal focus calls
+    ; Verification is a single API call (GetGUIThreadInfo) + IsChild, rather than a higher-level AHK command and repeated focus attempts
+    ; The total work is bounded by a time budget (e.g., 35–60ms), not a huge loop count
+; Why it’s more reliable
+    ; It doesn’t require the focused thing to equal your exact ClassNN string.
+    ; It treats “focus is within the target control subtree” as success, which is what you actually want before sending keys (especially for DirectUIHWND*).
+; When not to use it
+    ; For simple, same-process Win32 apps where ControlGetFocus is perfectly reliable, your old loop isn’t necessary anyway; one ControlFocus is enough.
 EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15)
 {
     ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hwndTop%
@@ -5170,7 +5116,9 @@ EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15)
         return false
     return EnsureFocusedHwnd(hCtl, totalMs, refocusEveryMs)
 }
-
+;You can use WinGetClass, cls, ahk_id %hwnd%, but it’s heavier in tight loops because it’s a higher-
+; level AHK command. The direct DllCall("GetClassNameW") version is typically faster and easier
+; to use in a parent-walk loop.
 GetClassName(hwnd)
 {
     VarSetCapacity(buf, 256 * 2, 0)
@@ -5437,7 +5385,7 @@ $~LButton::
             }
 
             ListLines, Off
-            ListLines, On        ; clears history and starts fresh
+            ListLines, On ; clears history and starts fresh
 
             ; try {
                 If (!isExplorerHeader) {
@@ -5476,25 +5424,13 @@ $~LButton::
                 If (isExplorerHeader || ctype  == 50031) {
                     ; tooltip, % "line4 - " pt.CurrentControlType
                     If (wmClassD == "#32770" || FindAncestorByClassPrefix(_winCtrlU,"DirectUIHWND3")) {
-                        ; loop 50
-                        ; {
-                            ; sleep, 1
-                            ; ControlFocus, %_winCtrlUNN%, ahk_id %_winIdU%
-                            ; ControlGetFocus, testCtrlFocus, ahk_id %_winIdU%
-                            ; If (testCtrlFocus == _winCtrlUNN)
-                                ; break
-                        ; }
+
                         EnsureFocusedCtrlNN(_winIdU, _winCtrlUNN, 60, 15)
                         Send, ^{NumpadAdd}
                         Return
                     }
                     Else If (wmClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
-                        ; ControlFocusEx(_winIdU, _winCtrlUNN, true)
-                        ; loop 50 {
-                            ; If (ControlFocusEx(_winIdU, _winCtrlUNN, false))
-                                ; break
-                            ; sleep, 1
-                        ; }
+
                         EnsureFocusedCtrlNN(_winIdU, _winCtrlUNN, 60, 15)
                         Send, ^{NumpadAdd}
                         Return
@@ -5527,8 +5463,10 @@ $~LButton::
             ; }
         }
         Else If ((wmClassD == "CabinetWClass" || wmClassD == "#32770")
-            && (FindAncestorByClassPrefix(_winCtrlU, "UpBand") || FindAncestorByClassPrefix(_winCtrlU, "ToolbarWindow32") || FindAncestorByClassPrefix(_winCtrlU, "Microsoft.UI.Content.DesktopChildSiteBridge"))) {
-
+            && (   FindAncestorByClassPrefix(_winCtrlU, "ToolbarWindow32")
+                || FindAncestorByClassPrefix(_winCtrlU, "ReBarWindow32")
+                || FindAncestorByClassPrefix(_winCtrlU, "Microsoft.UI.Content.DesktopChildSiteBridge")
+                || FindAncestorByClassPrefix(_winCtrlU, "Windows.UI.Composition.DesktopWindowContentBridge") )) {
             ; try {
                 pt     := SafeUIA_ElementFromPoint(lbX2,lbY2)
                 ctype  := SafeUIA_GetControlType(pt)
@@ -6404,34 +6342,36 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             WaitForExplorerLoad(initTargetHwnd, , True)
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
-                Critical, On
-                loop, 125 {
-                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                    If (testCtrlFocus == TargetControl)
-                        break
-                    sleep, 1
-                    If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
-                        Return
-                }
-                Critical, Off
+                ; Critical, On
+                ; loop, 125 {
+                    ; ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                    ; ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                    ; If (testCtrlFocus == TargetControl)
+                        ; break
+                    ; sleep, 1
+                    ; If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+                        ; Return
+                ; }
+                ; Critical, Off
+                EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
         Else If (TargetControl == "DirectUIHWND2" && lClassCheck == "#32770") {
             WaitForExplorerLoad(initTargetHwnd, True)
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
-                Critical, On
-                loop, 125 {
-                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                    If (testCtrlFocus == TargetControl)
-                        break
-                    sleep, 1
-                    If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
-                        Return
-                }
-                Critical, Off
+                ; Critical, On
+                ; loop, 125 {
+                    ; ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                    ; ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                    ; If (testCtrlFocus == TargetControl)
+                        ; break
+                    ; sleep, 1
+                    ; If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+                        ; Return
+                ; }
+                ; Critical, Off
+                EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
         Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
@@ -6441,19 +6381,21 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         Else {
             tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
-                Critical, On
-                loop, 125 {
-                    ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                    If (testCtrlFocus == TargetControl)
-                        break
-                    sleep, 1
-                    If (A_Index == 125)
-                        TargetControl := "" ; then delete it
-                    If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
-                        Return
-                }
-                Critical, Off
+                ; Critical, On
+                ; loop, 125 {
+                    ; ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
+                    ; ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
+                    ; If (testCtrlFocus == TargetControl)
+                        ; break
+                    ; sleep, 1
+                    ; If (A_Index == 125)
+                        ; TargetControl := "" ; then delete it
+                    ; If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+                        ; Return
+                ; }
+                ; Critical, Off
+                TargetControl := "" ; then delete it
+                EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
         ; tooltip, here8
