@@ -2029,10 +2029,10 @@ Return
     sleep, 10
     Send, {Delete}
     Hotstring("Reset")
-    blockKeys := False
     SetTimer, keyTrack, On
     StopAutoFix := False
     FixModifiers()
+    blockKeys := False
 Return
 
 ^d::
@@ -2041,7 +2041,7 @@ Return
 
     StopAutoFix := True
     SetTimer, keyTrack, Off
-
+    blockKeys := True
     ; If there’s no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
     if (A_CaretX = "")
     {
@@ -2083,6 +2083,7 @@ Return
     StopAutoFix := False
     SetTimer, keyTrack, On
     FixModifiers()
+    blockKeys := False
 Return
 #If
 
@@ -5657,35 +5658,6 @@ SendCtrlAddLabel:
     SendCtrlAdd(_winIdU, , , , _winCtrlUNN)
 Return
 
-RangeTip(x:="", y:="", w:="", h:="", color:="Red", d:=2) ; from the FindText library, credit goes to feiyue
-{
-  static id:=0
-  If (x="")
-  {
-    id:=0
-    Loop 4
-      Gui, Range_%A_Index%: Destroy
-    Return
-  }
-  If (!id)
-  {
-    Loop 4
-      Gui, Range_%A_Index%: +Hwndid +AlwaysOnTop -Caption +ToolWindow
-        -DPIScale +E0x08000000
-  }
-  x:=Floor(x), y:=Floor(y), w:=Floor(w), h:=Floor(h), d:=Floor(d)
-  Loop 4
-  {
-    i:=A_Index
-    , x1:=(i=2 ? x+w : x-d)
-    , y1:=(i=3 ? y+h : y-d)
-    , w1:=(i=1 or i=3 ? w+2*d : d)
-    , h1:=(i=2 or i=4 ? h+2*d : d)
-    Gui, Range_%i%: Color, %color%
-    Gui, Range_%i%: Show, NA x%x1% y%y1% w%w1% h%h1%
-  }
-}
-
 #MaxThreadsPerHotkey 1
 UpdateInputBoxTitle:
     WinSet, ExStyle, +0x80, ahk_class #32770 ; 0x80 is WS_EX_TOOLWINDOW
@@ -5865,7 +5837,6 @@ LaunchWinFind:
 Return
 
 ActivateWindow:
-
     Gui, ShadowFrFull:  Hide
     ; Gui, ShadowFrFull2: Hide
     DetectHiddenWindows, On
@@ -8468,11 +8439,7 @@ GetExplorerPath(hwnd := "" ) {
     WinGetClass, clCheck, ahk_id %hwnd%
 
     If (clCheck == "#32770") {
-        ; ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-        ; If (dir == "" || !InStr(dir,"address",False)) {
-            ; ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-        ; }
-        ; Return dir
+
         return GetDialogBreadcrumbText(hwnd)
     }
     Else If (clCheck == "CabinetWClass" && !isWin11) {
