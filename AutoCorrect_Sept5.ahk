@@ -888,7 +888,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
         If (proc == "Everything.exe") {
             blockKeys := True
-            Send, {Ctrl UP}
+            Send, {LCtrl UP}
             Send, {Space UP}
             SendEvent, {Blind}{vkFF} ; send a dummy key (vkFF = undefined key)
             blockKeys := False
@@ -917,18 +917,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         LbuttonEnabled := False
 
         If (vWinClass == "wxWindowNR") {
-            loop, 150 {
-                ControlFocus, Edit1, ahk_id %hWnd%
-                ControlGetFocus, testCtrlFocus , ahk_id %hWnd%
-                If (testCtrlFocus == "Edit1")
-                    break
-                sleep, 1
-            }
+            EnsureFocusedCtrlNN(hWnd, "Edit1", 60, 10)
+            blockKeys := True
             Send, {LCtrl UP}
             Send, {LShift UP}
             Send, {. UP}
             Send, {Backspace}
             ControlFocus, Edit1, ahk_id %hWnd%
+            blockKeys := False
         }
 
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
@@ -971,6 +967,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     break
                 sleep, 1
             }
+
             SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
             LbuttonEnabled := True
 
@@ -1409,7 +1406,6 @@ IsMouseOnLeftSide() {
             Return False
     }
 }
-
 
 #If !MbuttonIsEnter && !MouseIsOverTaskbar()
 $*MButton::
@@ -2014,9 +2010,10 @@ Return
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
-    StopAutoFix := True
     SetTimer, keyTrack, Off
-    blockKeys := True
+    StopAutoFix := True
+    blockKeys   := True
+
     Send, {Down}
     sleep, 10
     Send, {Home}{Home}
@@ -2028,20 +2025,22 @@ Return
     ; Send, +{Home}+{Home}+{Home}
     sleep, 10
     Send, {Delete}
+
+    ; Your environment reset
     Hotstring("Reset")
-    SetTimer, keyTrack, On
-    StopAutoFix := False
     FixModifiers()
-    blockKeys := False
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 ^d::
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
-    StopAutoFix := True
     SetTimer, keyTrack, Off
-    blockKeys := True
+    StopAutoFix := True
+    blockKeys   := True
     ; If there’s no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
     if (A_CaretX = "")
     {
@@ -2080,10 +2079,10 @@ Return
 
     ; Your environment reset
     Hotstring("Reset")
-    StopAutoFix := False
-    SetTimer, keyTrack, On
     FixModifiers()
-    blockKeys := False
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 #If
 
@@ -2128,7 +2127,10 @@ Return
 Return
 
 !+':: ;'
-    Critical, On
+    SetTimer, keyTrack, Off
+    StopAutoFix := True
+    blockKeys   := True
+
     store := Clip()
     len := StrLen(store)
     foundSpace := SubStr(store, len-1, 1) == " " ? True : False
@@ -2138,12 +2140,19 @@ Return
     Else
         store := """" . store . """" . " "
     Clip(store)
-    Critical, Off
+
+    Hotstring("Reset")
     FixModifiers()
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 !+[::
-    Critical, On
+    SetTimer, keyTrack, Off
+    StopAutoFix := True
+    blockKeys   := True
+
     store := Clip()
     len := StrLen(store)
     foundSpace := SubStr(store, len-1, 1) == " " ? True : False
@@ -2153,12 +2162,19 @@ Return
     Else
         store := "{" . store . "} "
     Clip(store)
-    Critical, Off
+
+    Hotstring("Reset")
     FixModifiers()
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 !+]::
-    Critical, On
+    SetTimer, keyTrack, Off
+    StopAutoFix := True
+    blockKeys   := True
+
     store := Clip()
     len := StrLen(store)
     foundSpace := SubStr(store, len-1, 1) == " " ? True : False
@@ -2168,12 +2184,19 @@ Return
     Else
         store := "{" . store . "} "
     Clip(store)
-    Critical, Off
+
+    Hotstring("Reset")
     FixModifiers()
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 !+<::
-    Critical, On
+    SetTimer, keyTrack, Off
+    StopAutoFix := True
+    blockKeys   := True
+
     store := Clip()
     len := StrLen(store)
     foundSpace := SubStr(store, len-1, 1) == " " ? True : False
@@ -2183,12 +2206,19 @@ Return
     Else
         store := "<" . store . "> "
     Clip(store)
-    Critical, Off
+
+    Hotstring("Reset")
     FixModifiers()
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 !+>::
-    Critical, On
+    SetTimer, keyTrack, Off
+    StopAutoFix := True
+    blockKeys   := True
+
     store := Clip()
     len := StrLen(store)
     foundSpace := SubStr(store, len-1, 1) == " " ? True : False
@@ -2198,12 +2228,19 @@ Return
     Else
         store := "<" . store . "> "
     Clip(store)
-    Critical, Off
+
+    Hotstring("Reset")
     FixModifiers()
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 !+(::
-    Critical, On
+    SetTimer, keyTrack, Off
+    StopAutoFix := True
+    blockKeys   := True
+
     store := Clip()
     len := StrLen(store)
     foundSpace := SubStr(store, len-1, 1) == " " ? True : False
@@ -2213,12 +2250,19 @@ Return
     Else
         store := "(" . store . ") "
     Clip(store)
-    Critical, Off
+
+    Hotstring("Reset")
     FixModifiers()
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 !+)::
-    Critical, On
+    SetTimer, keyTrack, Off
+    StopAutoFix := True
+    blockKeys   := True
+
     store := Clip()
     len := StrLen(store)
     foundSpace := SubStr(store, len-1, 1) == " " ? True : False
@@ -2228,12 +2272,19 @@ Return
     Else
         store := "(" . store . ") "
     Clip(store)
-    Critical, Off
+
+    Hotstring("Reset")
     FixModifiers()
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 !+b::
-    Critical, On
+    SetTimer, keyTrack, Off
+    StopAutoFix := True
+    blockKeys   := True
+
     store := Clip()
     len := StrLen(store)
     foundSpace := SubStr(store, len-1, 1) == " " ? True : False
@@ -2243,12 +2294,19 @@ Return
     Else
         store := "\b" . store . "\b "
     Clip(store)
-    Critical, Off
+
+    Hotstring("Reset")
     FixModifiers()
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 !+5::
-    Critical, On
+    SetTimer, keyTrack, Off
+    StopAutoFix := True
+    blockKeys   := True
+
     store := Clip()
     len := StrLen(store)
     foundSpace := SubStr(store, len-1, 1) == " " ? True : False
@@ -2258,8 +2316,12 @@ Return
     Else
         store := "%" . store . "% "
     Clip(store)
-    Critical, Off
+
+    Hotstring("Reset")
     FixModifiers()
+    StopAutoFix := False
+    blockKeys   := False
+    SetTimer, keyTrack, On
 Return
 
 $!i::
@@ -2324,10 +2386,8 @@ Return
 
 ; --- Volume control when holding Left Win ---
 #If GetKeyState("LWin", "P")   ; condition: while LWin is physically held
-
 $WheelUp::Send {Volume_Up}
 $WheelDown::Send {Volume_Down}
-
 #If   ; end of context-sensitive block
 ;=============== KILL WINDOWS SHORTCUT KEYS =============
 ; Block bare Win keys
@@ -5314,7 +5374,13 @@ $~LButton::
         If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
             ; tooltip, getting path
             currentPath    := ""
-            loop 100 {
+            loop 50 {
+                If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
+                    LbuttonEnabled     := True
+                    SetTimer, keyTrack, On
+                    SetTimer, mouseTrack, On
+                    Return
+                }
                 currentPath := GetExplorerPath(_winIdD)
                 If (currentPath != "" && prevPath != currentPath )
                     break
@@ -5335,7 +5401,8 @@ $~LButton::
             SendCtrlAdd(_winIdD,,,wmClassD)
             SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
-            sleep, 250
+            If isBlankSpaceNonExplorer
+                sleep, 250
             LbuttonEnabled     := True
             Return
         }
@@ -5350,7 +5417,13 @@ $~LButton::
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
         If (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))
             isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
-        loop 100 {
+        loop 50 {
+            If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
+                LbuttonEnabled     := True
+                SetTimer, keyTrack, On
+                SetTimer, mouseTrack, On
+                Return
+            }
             prevPath := GetExplorerPath(_winIdD)
             If (prevPath != "")
                 break
@@ -5603,7 +5676,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
         shellEl := exEl.FindFirstByName("Items View")
         shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
 
-        If !isCabinetWClass10 && !skipFocus {
+        If (!isCabinetWClass10 && !skipFocus) {
             ; ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %targetHwndID%
             hCtl := GetItemsViewHwndFromUIA(shellEl)
 
@@ -6247,13 +6320,14 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             TargetControl := initFocusedCtrlNN
         }
         Else {
-            AllOutputs := GetCtrlNNsByPrefix(initTargetHwnd, "DirectUIHWND")
-            OutputVar1 := InStr(AllOutputs, "SysListView32", false) > 0
-            OutputVar2 := InStr(AllOutputs, "DirectUIHWND2", false) > 0
-            OutputVar3 := InStr(AllOutputs, "DirectUIHWND3", false) > 0
-            OutputVar4 := InStr(AllOutputs, "DirectUIHWND4", false) > 0
-            OutputVar6 := InStr(AllOutputs, "DirectUIHWND6", false) > 0
-            OutputVar8 := InStr(AllOutputs, "DirectUIHWND8", false) > 0
+            DirectUICtrls := GetCtrlNNsByPrefix(initTargetHwnd, "DirectUIHWND")
+            SysListCtrls := GetCtrlNNsByPrefix(initTargetHwnd, "SysListView32")
+            OutputVar1 := InStr(SysListCtrls,  "SysListView32", false) > 0
+            OutputVar2 := InStr(DirectUICtrls, "DirectUIHWND2", false) > 0
+            OutputVar3 := InStr(DirectUICtrls, "DirectUIHWND3", false) > 0
+            OutputVar4 := InStr(DirectUICtrls, "DirectUIHWND4", false) > 0
+            OutputVar6 := InStr(DirectUICtrls, "DirectUIHWND6", false) > 0
+            OutputVar8 := InStr(DirectUICtrls, "DirectUIHWND8", false) > 0
         }
 
         ; tooltip, OutputVar1:%OutputVar1% OutputVar2:%OutputVar2% OutputVar3:%OutputVar3% OutputVar4:%OutputVar4% OutputVar6:%OutputVar6% OutputVar8:%OutputVar8%
@@ -6324,17 +6398,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             WaitForExplorerLoad(initTargetHwnd, , True)
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
-                ; Critical, On
-                ; loop, 125 {
-                    ; ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ; ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                    ; If (testCtrlFocus == TargetControl)
-                        ; break
-                    ; sleep, 1
-                    ; If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
-                        ; Return
-                ; }
-                ; Critical, Off
+
                 EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
@@ -6342,17 +6406,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             WaitForExplorerLoad(initTargetHwnd, True)
             ; tooltip, here7b targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
-                ; Critical, On
-                ; loop, 125 {
-                    ; ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ; ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                    ; If (testCtrlFocus == TargetControl)
-                        ; break
-                    ; sleep, 1
-                    ; If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
-                        ; Return
-                ; }
-                ; Critical, Off
+
                 EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
@@ -6363,20 +6417,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         Else {
             ; tooltip, here7d targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
-                ; Critical, On
-                ; loop, 125 {
-                    ; ControlFocus, %TargetControl%, ahk_id %initTargetHwnd%
-                    ; ControlGetFocus, testCtrlFocus, ahk_id %initTargetHwnd%
-                    ; If (testCtrlFocus == TargetControl)
-                        ; break
-                    ; sleep, 1
-                    ; If (A_Index == 125)
-                        ; TargetControl := "" ; then delete it
-                    ; If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
-                        ; Return
-                ; }
-                ; Critical, Off
-                ; TargetControl := "" ; then delete it
+
                 EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
@@ -6389,14 +6430,13 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             blockKeys := True
-            FixModifiers()
 
             Send, ^{NumpadAdd}
 
             If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
                 sleep, 125
                 blockKeys := False
-                ; loop, 200 {
+
                 If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd)
                     Return
 
@@ -6440,14 +6480,59 @@ IsAlwaysOnTop(hwndID) {
         Return False
 }
 
+; Requires your WinGetPosEx() function to be present.
+
+; Uses SysGet(SM_CXVSCROLL) to size the right-edge zone.
+; extraW lets you widen beyond the system metric (useful for overlay scrollbars).
+IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
+    , extraW := 6
+    , ByRef hitHwnd := 0, useRoot := true
+    , ByRef wx := "", ByRef wy := "", ByRef ww := "", ByRef wh := ""
+    , ByRef zoneW := "")
+{
+    ; System metric: vertical scrollbar width
+    SysGet, sbW, 2  ; SM_CXVSCROLL
+    if (sbW <= 0)
+        sbW := 17  ; sane fallback
+
+    ; Make it a bit wider than the metric (Win11 overlay scrollbars feel easier this way)
+    zoneW := sbW + extraW
+
+    MouseGetPos, mx, my, winHwnd
+    if (!winHwnd)
+        return false
+
+    hitHwnd := winHwnd
+
+    if (useRoot)
+    {
+        rootHwnd := DllCall("GetAncestor", "ptr", hitHwnd, "uint", 2, "ptr") ; GA_ROOT=2
+        if (rootHwnd)
+            hitHwnd := rootHwnd
+    }
+
+    WinGetPosEx(hitHwnd, wx, wy, ww, wh)
+
+    if (ww <= 0 || wh <= 0)
+        return false
+
+    right  := wx + ww
+    bottom := wy + wh
+
+    if (my < wy + zonePadTop || my >= bottom - zonePadBot)
+        return false
+
+    if (mx >= right - zoneW && mx < right)
+        return true
+
+    return false
+}
+
 #If MouseIsOverTaskbarBlank()
 Lbutton & Rbutton::
     Send, #{r}
 Return
 #If
-
-$!WheelUp::send, {PgUp}
-$!WheelDown::send, {PgDn}
 
 #If VolumeHover()
 $WheelUp::send {Volume_Up}
@@ -6457,14 +6542,42 @@ $WheelDown::send {Volume_Down}
 #If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
 RButton & WheelUp::
     SetTimer, SendCtrlAddLabel, Off
-    Send, ^{Home}
-    Send, {Home}
+    WinGetClass, currClass, A
+    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 6, h) {
+        If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+            Send, ^+{Home}
+        }
+        Else {
+            Send, ^{Home}
+            Send, {Home}
+        }
+    }
+    Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+        Send, ^+{PgUp}
+    }
+    Else {
+        Send, {PgUp}
+    }
 Return
 
 RButton & WheelDown::
     SetTimer, SendCtrlAddLabel, Off
-    Send, ^{End}
-    Send, {End}
+    WinGetClass, currClass, A
+    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 6, h) {
+        If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+            Send, ^+{End}
+        }
+        Else {
+            Send, ^{End}
+            Send, {End}
+        }
+    }
+    Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+        Send, ^+{PgDn}
+    }
+    Else {
+        Send, {PgDn}
+    }
 Return
 
 $RButton::
@@ -9061,6 +9174,33 @@ SafeUIA_GetClassName(el, default := "") {
     }
 }
 
+SafeUIA_GetOrientation(el, default := 0)
+{
+    if !IsObject(el)
+        return default
+    try
+    {
+        return el.CurrentOrientation
+    }
+    catch e
+    {
+        return default
+    }
+}
+
+SafeUIA_GetParent(el)
+{
+    if !IsObject(el)
+        return ""
+    try
+    {
+        return el.Parent
+    }
+    catch e
+    {
+        return ""
+    }
+}
 
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
