@@ -1465,9 +1465,9 @@ $*MButton::
         return
     }
 
-    snapState := ""   ; "", "left", "right"
-    mxPrev := mx0         ; track prior mouse X to know approach direction
-    myPrev := my0         ; track prior mouse X to know approach direction
+    snapState     := ""   ; "", "left", "right"
+    mxPrev        := mx0  ; track prior mouse X to know approach direction
+    myPrev        := my0  ; track prior mouse X to know approach direction
 
     leftWinEdge   := wx0
     topWinEdge    := wy0
@@ -1705,7 +1705,6 @@ $*MButton::
             gridDx := ceil(dx/gridSize) * gridSize
             gridDy := ceil(dy/gridSize) * gridSize
 
-
             If      (TL || TR) && (dragVert == "up"   || dragVert == "down") {
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
                 If (dragVert == "up" && ty == minY) {
@@ -1736,7 +1735,7 @@ $*MButton::
                     newH := virtwh0 + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
                 }
             }
-            Else If (BL || BR) && (dragVert == "up"   || dragVert == "down")  {
+            Else If (BL || BR) && (dragVert == "up"   || dragVert == "down") {
                 WinGetPosEx(hWnd, tx, ty, tw, th, null, null)
                 If (dragVert == "down" && th == maxHD) {
                     adjustSize := False
@@ -2011,6 +2010,7 @@ Return
         Send, {Esc}
 
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2032,6 +2032,7 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 ^d::
@@ -2039,6 +2040,7 @@ Return
         Send, {Esc}
 
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
     ; If there’s no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
@@ -2049,8 +2051,8 @@ Return
     }
     Send, {Ctrl Up}
     ; Your environment hooks
-    StopAutoFix := True
-    SetTimer, keyTrack, Off
+    ; StopAutoFix := True
+    ; SetTimer, keyTrack, Off
 
     ; 1) Go to absolute start of the line and select it
     Send, {Home}{Home}
@@ -2083,6 +2085,7 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 #If
 
@@ -2128,6 +2131,7 @@ Return
 
 !+':: ;'
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2146,10 +2150,12 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 !+[::
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2168,10 +2174,12 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 !+]::
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2190,10 +2198,12 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 !+<::
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2212,10 +2222,12 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 !+>::
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2234,10 +2246,12 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 !+(::
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2256,10 +2270,12 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 !+)::
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2278,10 +2294,12 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 !+b::
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2300,10 +2318,12 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 !+5::
     SetTimer, keyTrack, Off
+    SetTimer, mouseTrack, Off
     StopAutoFix := True
     blockKeys   := True
 
@@ -2322,6 +2342,7 @@ Return
     StopAutoFix := False
     blockKeys   := False
     SetTimer, keyTrack, On
+    SetTimer, mouseTrack, On
 Return
 
 $!i::
