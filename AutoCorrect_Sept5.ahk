@@ -1860,7 +1860,7 @@ $*MButton::
 
     WinSet, Transparent, Off, ahk_id %hWnd%
 
-   If (GetKeyState("Ctrl","P") && startMon != stopMon && MonCount > 1) { ; mouse dragged window
+    If (GetKeyState("Ctrl","P") && startMon != stopMon && MonCount > 1) { ; mouse dragged window
         WinSet, AlwaysOnTop, On, ahk_id %hWnd%
         WinGet, targetProcess, ProcessName, ahk_id %hWnd%
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %cls%
@@ -6564,7 +6564,7 @@ $WheelDown::send {Volume_Down}
 RButton & WheelUp::
     SetTimer, SendCtrlAddLabel, Off
     WinGetClass, currClass, A
-    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 6, h) {
+    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12, h) {
         If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
             Send, ^+{Home}
         }
@@ -6584,7 +6584,7 @@ Return
 RButton & WheelDown::
     SetTimer, SendCtrlAddLabel, Off
     WinGetClass, currClass, A
-    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 6, h) {
+    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12, h) {
         If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
             Send, ^+{End}
         }
