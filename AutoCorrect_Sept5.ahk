@@ -479,10 +479,12 @@ InitVDA() {
 }
 ; ---- Low-level hardware key filter ----
 ; --------------------------------------------------
-; Common filter logic for keyboard
+; Common filter logic for keyboard - Yes, your hook can create the stuck modifier by swallowing physical KEYUP.
 ; --------------------------------------------------
 LL_KeyboardHook(nCode, wParam, lParam)
 {
+    ; When blockKeys := true, you return 1 for everything physical, including key-up messages.
+    ; If the user releases LCtrl while blocking is active, Windows never receives the LCtrl-up → Ctrl stays down.
     global blockKeys, hHookKbd
 
     ; If we must pass the event through without processing
@@ -512,10 +514,12 @@ LL_KeyboardHook(nCode, wParam, lParam)
 }
 
 ; --------------------------------------------------
-; Common filter logic for mouse
+; Common filter logic for mouse - Yes, your hook can create the stuck modifier by swallowing physical KEYUP.
 ; --------------------------------------------------
 LL_MouseHook(nCode, wParam, lParam)
 {
+    ; When blockKeys := true, you return 1 for everything physical, including key-up messages.
+    ; If the user releases LCtrl while blocking is active, Windows never receives the LCtrl-up → Ctrl stays down.
     global blockKeys, hHookMouse
 
     if (nCode < 0)
@@ -1229,12 +1233,15 @@ $~WheelUp::
 
     If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
-        WinGetClass, wdClass, ahk_id %wdID%
+        WinGetClass, hoverClass, ahk_id %wdID%
+        WinGetClass, activeClass, A
 
         ; Only do zoom logic for your target controls
-        If (wdClass != "ProgMan"
-         && wdClass != "WorkerW"
-         && wdClass != "Notepad++"
+        If (hoverClass != "ProgMan"
+         && hoverClass != "WorkerW"
+         && hoverClass != "Notepad++"
+         && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+         && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
          && (wuCtrl == "SysListView321"
           || wuCtrl == "DirectUIHWND2"
           || wuCtrl == "DirectUIHWND3"))
@@ -1293,12 +1300,15 @@ $~WheelDown::
 
     If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
-        WinGetClass, wdClass, ahk_id %wdID%
+        WinGetClass, hoverClass, ahk_id %wdID%
+        WinGetClass, activeClass, A
 
         ; Only do zoom logic for your target controls
-        If (wdClass != "ProgMan"
-         && wdClass != "WorkerW"
-         && wdClass != "Notepad++"
+        If (hoverClass != "ProgMan"
+         && hoverClass != "WorkerW"
+         && hoverClass != "Notepad++"
+         && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+         && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
          && (wuCtrl == "SysListView321"
           || wuCtrl == "DirectUIHWND2"
           || wuCtrl == "DirectUIHWND3"))
@@ -1338,13 +1348,6 @@ $~WheelDown::
         MouseGetPos,,, winHwnd, ctrlHwnd, 2
 
         rootHwnd := DllCall("GetAncestor", "ptr", winHwnd, "uint", 2, "ptr") ; GA_ROOT
-        ; ownHwnd  := DllCall("GetAncestor", "ptr", winHwnd, "uint", 3, "ptr") ; GA_ROOTOWNER
-
-        ; WinGetClass, cWin,  ahk_id %winHwnd%
-        ; WinGetClass, cRoot, ahk_id %rootHwnd%
-        ; WinGetClass, cOwn,  ahk_id %ownHwnd%
-        ; WinGetTitle, tOwn,  ahk_id %ownHwnd%
-        ; ToolTip, win=%winHwnd% %cWin%`nroot=%rootHwnd% %cRoot%`nown=%ownHwnd% %cOwn%`n%tOwn%
 
         WinMinimize, ahk_id %rootHwnd%
         Sleep, 500
@@ -2028,9 +2031,9 @@ Return
 
     ; Your environment reset
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2081,9 +2084,9 @@ Return
 
     ; Your environment reset
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2146,9 +2149,9 @@ Return
     Clip(store)
 
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2170,9 +2173,9 @@ Return
     Clip(store)
 
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2194,9 +2197,9 @@ Return
     Clip(store)
 
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2218,9 +2221,9 @@ Return
     Clip(store)
 
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2242,9 +2245,9 @@ Return
     Clip(store)
 
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2266,9 +2269,9 @@ Return
     Clip(store)
 
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2290,9 +2293,9 @@ Return
     Clip(store)
 
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2314,9 +2317,9 @@ Return
     Clip(store)
 
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -2338,9 +2341,9 @@ Return
     Clip(store)
 
     Hotstring("Reset")
-    FixModifiers()
     StopAutoFix := False
     blockKeys   := False
+    FixModifiers()
     SetTimer, keyTrack, On
     SetTimer, mouseTrack, On
 Return
@@ -6464,8 +6467,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 ; Use bounded focus+verify instead of 200 iterations
                 EnsureFocusedCtrlNN(initTargetHwnd, initFocusedCtrlNN, 120, 15)
             }
-            FixModifiers()
             blockKeys := False
+            FixModifiers()
         }
     }
 Return
@@ -7257,10 +7260,10 @@ FixModifiers() {
     ; Each entry: name, vk, sc, isExtended
     static mods := [ ["LShift",0xA0,0x002A,0]
                    , ["RShift",0xA1,0x0036,0]
-                   , ["LCtrl" ,0xA2,0x001D,1]
+                   , ["LCtrl" ,0xA2,0x001D,0]  ; fixed
                    , ["RCtrl" ,0xA3,0x001D,1]
-                   , ["LAlt"  ,0xA4,0x0038,1]
-                   , ["RAlt"  ,0xA5,0x0038,1]   ; AltGr often maps here; extended matters
+                   , ["LAlt"  ,0xA4,0x0038,0]  ; fixed
+                   , ["RAlt"  ,0xA5,0x0038,1]
                    , ["LWin"  ,0x5B,0x005B,1]
                    , ["RWin"  ,0x5C,0x005C,1] ]
 
@@ -9835,6 +9838,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:critiz::criticiz
 :*:desicant::desiccant
 :*:desicat::desiccat
+:*:disparat::disparit
 :*:dissapoint::disappoint
 :*:divsion::division
 :*:dcument::document
@@ -13456,6 +13460,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::asychronously::asynchronously
 ::depdenency::dependency
 ::incredably::incredibly
+::os::so
 ;------------------------------------------------------------------------------
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
