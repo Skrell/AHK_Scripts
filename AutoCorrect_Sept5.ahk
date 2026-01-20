@@ -884,19 +884,19 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         loop 500 {
             WinGetClass, vWinClass, % "ahk_id " hWnd
             WinGetTitle, vWinTitle, % "ahk_id " hWnd
-            WinGet, proc, ProcessName, ahk_id %hWnd%
+            WinGet, vWinProc, ProcessName, ahk_id %hWnd%
             If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768"))
                 break
             sleep, 1
         }
 
-        If (proc == "Everything.exe") {
-            blockKeys := True
-            Send, {LCtrl UP}
-            Send, {Space UP}
-            SendEvent, {Blind}{vkFF} ; send a dummy key (vkFF = undefined key)
-            blockKeys := False
-        }
+        ; If (vWinProc == "Everything.exe") {
+            ; blockKeys := True
+            ; Send, {LCtrl UP}
+            ; Send, {Space UP}
+            ; SendEvent, {Blind}{vkFF} ; send a dummy key (vkFF = undefined key)
+            ; blockKeys := False
+        ; }
 
         If (vWinClass == "#32770" && vWinTitle == "Run") {
             WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
@@ -920,7 +920,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         WaitForFadeInStop(hWnd)
         LbuttonEnabled := False
 
-        If (vWinClass == "wxWindowNR") {
+        If (vWinClass == "wxWindowNR" && vWinProc == "clipdiary-portable.exe") {
             EnsureFocusedCtrlNN(hWnd, "Edit1", 60, 10)
             blockKeys := True
             Send, {LCtrl UP}
@@ -984,10 +984,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 Else
                     ++i
                 If (GetKeyState("Lbutton", "P")) {
-                    DetectHiddenWindows, Off
-                    SetTimer, keyTrack,   On
-                    SetTimer, mouseTrack, On
-                    Return
+                    break
                 }
             }
         }
@@ -7257,55 +7254,56 @@ FrameShadow(HGui) {
 ; }
 ; --------------------------------------------------------------------------------
 FixModifiers() {
-    ; Each entry: name, vk, sc, isExtended
-    static mods := [ ["LShift",0xA0,0x002A,0]
-                   , ["RShift",0xA1,0x0036,0]
-                   , ["LCtrl" ,0xA2,0x001D,0]  ; fixed
-                   , ["RCtrl" ,0xA3,0x001D,1]
-                   , ["LAlt"  ,0xA4,0x0038,0]  ; fixed
-                   , ["RAlt"  ,0xA5,0x0038,1]
-                   , ["LWin"  ,0x5B,0x005B,1]
-                   , ["RWin"  ,0x5C,0x005C,1] ]
+    ; Release all common modifiers (both sides where relevant)
+    SendInput, {Blind}{sc02A up}{sc036 up}          ; L/R Shift
+    SendInput, {Blind}{sc01D up}{sc11D up}          ; L/R Ctrl (11D = extended)
+    SendInput, {Blind}{sc038 up}{sc138 up}          ; L/R Alt  (138 = extended)
+    SendInput, {Blind}{sc15B up}{sc15C up}          ; L/R Win  (extended)
 
-    for _, m in mods {
-        k    := m[1]
-        vk   := m[2]
-        sc   := m[3]
-        ext  := m[4]
+    Sleep, 10
 
-        phys := GetKeyState(k, "P")
-        logi := GetKeyState(k)
-
-        if (!phys && logi) {
-            ; 1) Try AHK-native key-up first (often enough)
-            SendInput, {Blind}{%k% up}
-
-            ; 2) Force key-up by scancode (can clear cases VK-up won't)
-            ForceKeyUpSC(sc, ext)
-
-            ; 3) Force key-up by VK as a final fallback
-            ForceKeyUpVK(vk, ext)
-        }
+    ; Optional verification + second pass (covers rare timing races)
+    if ( GetKeyState("LShift") || GetKeyState("RShift")
+      || GetKeyState("LCtrl")  || GetKeyState("RCtrl")
+      || GetKeyState("LAlt")   || GetKeyState("RAlt")
+      || GetKeyState("LWin")   || GetKeyState("RWin") )
+    {
+        if (!GetKeyState("LShift","P"))
+            SendInput, {Blind}{sc02A up}
+        if (!GetKeyState("RShift","P"))
+            SendInput, {Blind}{sc036 up}
+        if (!GetKeyState("LCtrl","P"))
+            SendInput, {Blind}{sc01D up}
+        if (!GetKeyState("RCtrl","P"))
+            SendInput, {Blind}{sc11D up}
+        if (!GetKeyState("LAlt","P"))
+            SendInput, {Blind}{sc038 up}
+        if (!GetKeyState("RAlt","P"))
+            SendInput, {Blind}{sc138 up}
+        if (!GetKeyState("LWin","P"))
+            SendInput, {Blind}{sc15B up}
+        if (!GetKeyState("RWin","P"))
+            SendInput, {Blind}{sc15C up}
     }
 }
 
-ForceKeyUpSC(sc, ext := 0) {
-    ; KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_SCANCODE = 0x0008, KEYEVENTF_EXTENDEDKEY = 0x0001
-    flags := 0x0002 | 0x0008 | (ext ? 0x0001 : 0x0000)
-    ; keybd_event wants scancode in the second parameter when SCANCODE flag is used
-    DllCall("keybd_event", "UChar", 0, "UChar", sc & 0xFF, "UInt", flags, "UPtr", 0)
-}
 
-ForceKeyUpVK(vk, ext := 0) {
-    ; KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001
-    flags := 0x0002 | (ext ? 0x0001 : 0x0000)
-    DllCall("keybd_event", "UChar", vk, "UChar", 0, "UInt", flags, "UPtr", 0)
-}
+; ForceKeyUpSC(sc, ext := 0) {
+    ; ; KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_SCANCODE = 0x0008, KEYEVENTF_EXTENDEDKEY = 0x0001
+    ; flags := 0x0002 | 0x0008 | (ext ? 0x0001 : 0x0000)
+    ; ; keybd_event wants scancode in the second parameter when SCANCODE flag is used
+    ; DllCall("keybd_event", "UChar", 0, "UChar", sc & 0xFF, "UInt", flags, "UPtr", 0)
+; }
+
+; ForceKeyUpVK(vk, ext := 0) {
+    ; ; KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001
+    ; flags := 0x0002 | (ext ? 0x0001 : 0x0000)
+    ; DllCall("keybd_event", "UChar", vk, "UChar", 0, "UInt", flags, "UPtr", 0)
+; }
 
 keyTrack() {
     Global keys
     Global numbers
-    Global lastHotkeyTyped
     Global StopAutoFix
     Global TimeOfLastHotkeyTyped
     Global blockKeys
@@ -7323,22 +7321,22 @@ keyTrack() {
         If (   TimeOfLastHotkeyTyped
             && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
             && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
-            && (InStr(keys, Substr(A_ThisHotkey,2) , false)
-                || InStr(numbers, Substr(A_ThisHotkey,2) , false)
+            && (   InStr(keys,    Substr(A_ThisHotkey,2), false)
+                || InStr(numbers, Substr(A_ThisHotkey,2), false)
                 || A_ThisHotkey == "~:"
                 || A_ThisHotkey == "~/"
                 || A_ThisHotkey == "$~Space"
                 || A_ThisHotkey == "$CapsLock"
                 || A_ThisHotkey == "$~Backspace") ) {
 
-            TimeOfLastHotkeyTyped :=
-            SetTimer, keyTrack,   Off
+            SetTimer, keyTrack, Off
 
             blockKeys := true
             Send, ^{NumpadAdd}
             blockKeys := false
 
-            SetTimer, keyTrack,   On
+            SetTimer, keyTrack, On
+            TimeOfLastHotkeyTyped :=
         }
         StopAutoFix := False
     }
@@ -7353,13 +7351,10 @@ Return
 }
 
 mouseTrack() {
-    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, LbuttonEnabled, textBoxSelected, TaskBarHeight
-    Static x, y, lastX, lastY, lastMon, taskview, PrevActiveWindHwnd, LastActiveWinHwnd1, LastActiveWinHwnd2, LastActiveWinHwnd3, LastActiveWinHwnd4
+    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, textBoxSelected, TaskBarHeight
+    Static x, y, lastX, lastY, taskview
     Static LbuttonHeld := False, timeOfLastMove
     ListLines Off
-    HexColor1 := 0x0
-    HexColor2 := 0x1
-    HexColor3 := 0x2
 
     WinGet, actwndId, ID, A
     MouseGetPos x, y, hwndId
