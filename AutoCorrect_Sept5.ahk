@@ -40,9 +40,9 @@ SendMode, Input ; It injects the whole keystroke atomically, reducing the window
 ; This same is true for Send when SendMode Input is in effect.
 ; SetKeyDelay, -1, -1
 SetMouseDelay,   -1
-SetBatchLines,   -1
-SetWinDelay,      1 ; 10
-SetControlDelay,  1 ; 10
+SetBatchLines,   -1 ; Remove AHK’s built-in “cooperate with the OS” sleeps
+SetWinDelay,      1 ;
+SetControlDelay,  1 ;
 
 Global CurrentDesktop                      := 1
 Global mouseMoving                         := False
@@ -215,6 +215,7 @@ GetDesktopEdges(ByRef leftEdge, ByRef topEdge, ByRef rightEdge, ByRef bottomEdge
     }
 }
 
+totalVirtualDesktops := getTotalDesktops()
 GetDesktopEdges(G_DisplayLeftEdge, G_DisplayTopEdge, G_DisplayRightEdge, G_DisplayBottomEdge)
 
 line1 := "Total Number of Monitors is " MonCount " with Primary being " MonNum
@@ -223,9 +224,11 @@ line1b := "Desktop edges: " upArrow . "(" . G_DisplayTopEdge . "," . G_DisplayBo
 line2 := "Current Mon is     " GetCurrentMonitorIndex()
 line3 := "Win11 is           " isWin11
 line4 := "Modern Explorer is " isModernExplorerInReg
-Tooltip, % line1 "`n" line1a "`n" line1b "`n" line2 "`n" line3 "`n" line4
+line5 := "Total # of Desktops " totalVirtualDesktops
+Tooltip, % line1 "`n" line1a "`n" line1b "`n" line2 "`n" line3 "`n" line4 "`n" line5
 Sleep 5000
 Tooltip
+; MsgBox % "A_PtrSize=" A_PtrSize "`n(dll must match: 8=64-bit, 4=32-bit)"
 
 Gui, ShadowFrFull: New
 Gui, ShadowFrFull: +HwndIGUIF
@@ -409,6 +412,8 @@ if (!hHookKbd || !hHookMouse)
 
 OnExit, UnhookHooks
 
+InitVDA()
+
 SetTimer mouseTrack, 10
 SetTimer keyTrack, 5
 
@@ -418,66 +423,92 @@ Return
 ; -----------------------------------------------          START OF APPLICATION           --------------------------------------------------
 ; ==========================================================================================================================================
 ; Helper to resolve exports
-_gp(name) {
+_gp(name)
+{
     global hVirtualDesktopAccessor
-
+    ; NO InitVDA() here.
     return DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", name, "Ptr")
 }
 
-InitVDA() {
-    global VDA_DllName, hVirtualDesktopAccessor, dllPath
+InitVDA()
+{
+    global hVirtualDesktopAccessor, dllPath
     global GetDesktopCountProc, GoToDesktopNumberProc, GetCurrentDesktopNumberProc
     global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
     global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
     global CreateDesktopProc, RemoveDesktopProc
 
-    ; If we already resolved at least the "core" proc, assume init done.
-    ; (Change this to a stricter check if you prefer.)
-    if (IsWindowOnCurrentVirtualDesktopProc)
+    static initializing := false
+    if (initializing)
+        return false
+
+    ; already initialized (core proc exists)
+    if (IsWindowOnDesktopNumberProc)
         return true
 
-    ; Optional safety: ensure file exists
-    if !FileExist(dllPath) {
+    initializing := true
+
+    if !FileExist(dllPath)
+    {
+        initializing := false
         MsgBox % "VDA DLL missing:`n" dllPath
         return false
     }
 
-    ; Load DLL (once)
-    if (!hVirtualDesktopAccessor) {
+    if (!hVirtualDesktopAccessor)
+    {
         hVirtualDesktopAccessor := DllCall("LoadLibrary", "Str", dllPath, "Ptr")
-        if (!hVirtualDesktopAccessor) {
+        if (!hVirtualDesktopAccessor)
+        {
+            initializing := false
             MsgBox % "LoadLibrary failed:`n" dllPath "`nA_LastError=" A_LastError
             return false
         }
     }
 
-    ; Resolve all requested exports
+    ; --- core exports (require these) ---
     GetDesktopCountProc                 := _gp("GetDesktopCount")
     GoToDesktopNumberProc               := _gp("GoToDesktopNumber")
     GetCurrentDesktopNumberProc         := _gp("GetCurrentDesktopNumber")
     IsWindowOnCurrentVirtualDesktopProc := _gp("IsWindowOnCurrentVirtualDesktop")
     IsWindowOnDesktopNumberProc         := _gp("IsWindowOnDesktopNumber")
+    ; if (!IsWindowOnDesktopNumberProc)
+    ; {
+        ; MsgBox % "Missing export: IsWindowOnDesktopNumber"
+    ; }
+    ; else
+    ; {
+        ; MsgBox % "IsWindowOnDesktopNumberProc=" Format("0x{:X}", IsWindowOnDesktopNumberProc)
+    ; }
     MoveWindowToDesktopNumberProc       := _gp("MoveWindowToDesktopNumber")
     IsPinnedWindowProc                  := _gp("IsPinnedWindow")
+
+    ; --- optional exports (may be missing depending on build/OS) ---
     GetDesktopNameProc                  := _gp("GetDesktopName")
     SetDesktopNameProc                  := _gp("SetDesktopName")
     CreateDesktopProc                   := _gp("CreateDesktop")
     RemoveDesktopProc                   := _gp("RemoveDesktop")
 
-    ; Return true only if the key procs exist.
-    ; (You can tighten/loosen this depending on what you require.)
-    return !!(GetDesktopCountProc
-           && GoToDesktopNumberProc
-           && GetCurrentDesktopNumberProc
-           && IsWindowOnCurrentVirtualDesktopProc
-           && IsWindowOnDesktopNumberProc
-           && MoveWindowToDesktopNumberProc
-           && IsPinnedWindowProc
-           && GetDesktopNameProc
-           && SetDesktopNameProc
-           && CreateDesktopProc
-           && RemoveDesktopProc)
+    initializing := false
+
+    ; only require “core” to succeed
+    if !(GetDesktopCountProc
+      && GoToDesktopNumberProc
+      && GetCurrentDesktopNumberProc
+      && IsWindowOnCurrentVirtualDesktopProc
+      && IsWindowOnDesktopNumberProc
+      && MoveWindowToDesktopNumberProc
+      && IsPinnedWindowProc)
+    {
+        MsgBox % "InitVDA: missing required export(s).`n"
+             . "Check DLL path/bitness/version.`n"
+             . "A_PtrSize=" A_PtrSize
+        return false
+    }
+
+    return true
 }
+
 ; ---- Low-level hardware key filter ----
 ; --------------------------------------------------
 ; Common filter logic for keyboard - Yes, your hook can create the stuck modifier by swallowing physical KEYUP.
@@ -878,8 +909,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     If !StopRecursion && !hitTab {
 
         DetectHiddenWindows, Off
-        SetTimer, keyTrack,   Off
-        SetTimer, mouseTrack, Off
+        Thread, NoTimers
 
         loop 500 {
             WinGetClass, vWinClass, % "ahk_id " hWnd
@@ -889,14 +919,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 break
             sleep, 1
         }
-
-        ; If (vWinProc == "Everything.exe") {
-            ; blockKeys := True
-            ; Send, {LCtrl UP}
-            ; Send, {Space UP}
-            ; SendEvent, {Blind}{vkFF} ; send a dummy key (vkFF = undefined key)
-            ; blockKeys := False
-        ; }
 
         If (vWinClass == "#32770" && vWinTitle == "Run") {
             WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
@@ -990,8 +1012,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
     }
     DetectHiddenWindows, Off
-    SetTimer, keyTrack,   On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
     LbuttonEnabled := True
     Return
 }
@@ -1093,8 +1114,7 @@ WaitForFadeInStop(hwnd) {
 ; --------------------------------------------------
 UnhookHooks:
     StopRecursion := True
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
 
     if (hActWin)
         DllCall( "UnhookWinEvent", "Ptr", hActWin)
@@ -1228,7 +1248,7 @@ $~WheelUp::
     Critical, Off
     Sleep, -1
 
-
+    Thread, NoTimers
     If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
         WinGetClass, hoverClass, ahk_id %wdID%
@@ -1277,6 +1297,8 @@ $~WheelUp::
         Send, #^{Left}
         sleep, 1000
     }
+
+    Thread, NoTimers, False
     StopRecursion := False
 Return
 
@@ -1294,7 +1316,7 @@ $~WheelDown::
     Critical, Off
     Sleep, -1
 
-
+    Thread, NoTimers
     If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
         WinGetClass, hoverClass, ahk_id %wdID%
@@ -1355,6 +1377,8 @@ $~WheelDown::
         Send, #^{Right}
         sleep, 1000
     }
+
+    Thread, NoTimers, False
     StopRecursion := False
 Return
 #MaxThreadsPerHotkey 1
@@ -1412,8 +1436,7 @@ $*MButton::
     global DraggingWindow
 
     StopRecursion := True
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     Hotkey, *Rbutton, DoNothing, On
     Hotkey, Mbutton & Rbutton, DoNothing, On
 
@@ -1897,8 +1920,7 @@ $*MButton::
     }
 
     StopRecursion := False
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
     Hotkey, *Rbutton, DoNothing, Off
     Hotkey, Mbutton & Rbutton, DoNothing, Off
     DraggingWindow := False
@@ -2009,8 +2031,7 @@ Return
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2031,16 +2052,14 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 ^d::
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
     ; If there’s no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
@@ -2084,8 +2103,7 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 #If
 
@@ -2130,8 +2148,7 @@ Return
 Return
 
 !+':: ;'
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2149,13 +2166,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 !+[::
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2173,13 +2188,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 !+]::
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2197,13 +2210,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 !+<::
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2221,13 +2232,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 !+>::
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2245,13 +2254,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 !+(::
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2269,13 +2276,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 !+)::
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2293,13 +2298,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 !+b::
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2317,13 +2320,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 !+5::
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     StopAutoFix := True
     blockKeys   := True
 
@@ -2341,8 +2342,7 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    SetTimer, keyTrack, On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 $!i::
@@ -2445,10 +2445,9 @@ $~Enter::
 Return
 
 $~F2::
+    Thread, NoTimers
     LbuttonEnabled := False
     StopRecursion  := True
-    SetTimer, mouseTrack, Off
-    SetTimer, keyTrack,   Off
 
     KeyWait, F2, U T3
 
@@ -2460,8 +2459,7 @@ $~F2::
 
     LbuttonEnabled := True
     StopRecursion  := False
-    SetTimer, mouseTrack, On
-    SetTimer, keyTrack,   On
+    Thread, NoTimers, False
 Return
 #If
 
@@ -2542,9 +2540,7 @@ prevChromeTab()
 ; knows whether a combo (with x) is coming. That’s why your 2nd press + hold never reaches your $Esc routine, so GoSub, DrawRect never runs.
 $Esc::
     StopRecursion := True
-    SetTimer, EscTimer, Off
-    SetTimer, keyTrack,   Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     executedOnce   := False
     escHwndID := FindTopMostWindow()
     WinGetTitle, escTitle, ahk_id %escHwndID%
@@ -2575,8 +2571,7 @@ $Esc::
                     sleep, 1500
                     Tooltip,
                     StopRecursion := False
-                    SetTimer, keyTrack,   On
-                    SetTimer, mouseTrack, On
+                    Thread, NoTimers, False
                 }
             }
             Hotkey, x, DoNothing, Off
@@ -2630,8 +2625,7 @@ $Esc::
         }
         tooltip
         StopRecursion := False
-        SetTimer, keyTrack,   On
-        SetTimer, mouseTrack, On
+        Thread, NoTimers, False
         Return
     }
 
@@ -2640,8 +2634,7 @@ $Esc::
     escTitle_old  := escTitle
     escHwndID_old := escHwndID
     StopRecursion := False
-    SetTimer, keyTrack,   On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 
 #If
@@ -2667,12 +2660,10 @@ Return
 
 !1::
     StopRecursion := True
-    SetTimer, keyTrack,   Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     GoSub, SwitchToVD1
     StopRecursion := False
-    SetTimer, keyTrack,   On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
     FixModifiers()
 Return
 
@@ -2699,12 +2690,10 @@ Return
 
 !2::
     StopRecursion := True
-    SetTimer, keyTrack,   Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     GoSub, SwitchToVD2
+    Thread, NoTimers, False
     StopRecursion := False
-    SetTimer, keyTrack,   On
-    SetTimer, mouseTrack, On
     FixModifiers()
 Return
 
@@ -2733,12 +2722,10 @@ Return
 
 !3::
     StopRecursion := True
-    SetTimer, keyTrack,   Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     GoSub, SwitchToVD3
+    Thread, NoTimers, False
     StopRecursion := False
-    SetTimer, keyTrack,   On
-    SetTimer, mouseTrack, On
     FixModifiers()
 Return
 
@@ -2767,12 +2754,10 @@ Return
 
 !4::
     StopRecursion := True
-    SetTimer, keyTrack,   Off
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
     GoSub, SwitchToVD4
+    Thread, NoTimers, False
     StopRecursion := False
-    SetTimer, keyTrack,   On
-    SetTimer, mouseTrack, On
     FixModifiers()
 Return
 
@@ -3016,12 +3001,11 @@ Return
 $!Tab::
 $!+Tab::
 If !hitTAB {
-    firstDraw := True
+    Thread, NoTimers
+    firstDraw       := True
     textBoxSelected := False
-    StopRecursion  := True
-    SetTimer, mouseTrack, Off
-    SetTimer, keyTrack,   Off
-    hitTAB := True
+    StopRecursion   := True
+    hitTAB          := True
     cc := Cycle()
 
     If (cc > 2) {
@@ -3033,18 +3017,15 @@ If !hitTAB {
     GoSub, Altup
     ClearMasks()
 
-    SetTimer, mouseTrack, On
-    SetTimer, keyTrack,   On
     StopRecursion := False
+    Thread, NoTimers, False
 }
 FixModifiers()
 Return
 
 !`::
-    ; tooltip, swapping between windows of app
+    Thread, NoTimers
     StopRecursion  := True
-    SetTimer, mouseTrack, Off
-    SetTimer, keyTrack,   Off
 
     ActivateTopMostWindow()
 
@@ -3100,8 +3081,7 @@ Return
     ValidWindows   := []
     GroupedWindows := []
 
-    SetTimer, mouseTrack, On
-    SetTimer, keyTrack,   On
+    Thread, NoTimers, False
     StopRecursion := False
 Return
 
@@ -3463,7 +3443,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     hitTAB            := False
     hitTilde          := True
 
-    ; SetTimer, UpdateValidWindows, -1
     UpdateValidWindows()
 
     currentMon := MWAGetMonitorMouseIsIn()
@@ -3733,7 +3712,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     ; --- FADE / OPACITY (non-critical) ---
     If (firstDraw) {
-        incrValue         := 5
+        incrValue         := 10
         opacityInterval   := Ceil(Opacity / incrValue)
         transVal          := opacityInterval
     } Else {
@@ -3798,9 +3777,8 @@ Min(a,b) {
 #If MouseIsOverTaskbarWidgets()
 $~^Lbutton::
     global MonCount
+    Thread, NoTimers
     StopRecursion := True
-    SetTimer, mouseTrack, Off
-    SetTimer, keyTrack,   Off
 
     DetectHiddenWindows, Off
     SysGet, MonCount, MonitorCount
@@ -3843,8 +3821,7 @@ $~^Lbutton::
     }
     WinActivate, ahk_id %targetID%
     StopRecursion := False
-    SetTimer, mouseTrack, On
-    SetTimer, keyTrack,   On
+    Thread, NoTimers, False
 Return
 #If
 
@@ -3853,7 +3830,7 @@ $^LButton::
     global currentMon, previousMon, DoubleClickTime, MonCount
     DetectHiddenWindows, Off
     StopRecursion := True
-    SetTimer, mouseTrack, Off
+    Thread, NoTimers
 
     MouseGetPos, mx1, my1, actID,
     If !((A_TimeSincePriorHotkey < DoubleClickTime) && (A_PriorHotKey == A_ThisHotKey)) {
@@ -3897,7 +3874,7 @@ $^LButton::
     }
 
     StopRecursion := False
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 #If
 
@@ -5328,7 +5305,7 @@ FindAncestorByClassPrefix(hwnd, prefix, ByRef extra := "", maxDepth := 20)
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
 $~LButton::
-    SetTimer, SendCtrlAddLabel, Off
+    Thread, NoTimers, False
     tooltip,
     HotString("Reset")
     textBoxSelected := False
@@ -5342,11 +5319,12 @@ $~LButton::
         && !InStr(_winCtrlD, "SysListView32", True)
         && !InStr(_winCtrlD, "DirectUIHWND", True)
         && !InStr(_winCtrlD, "SysTreeView32", True)
-        && !InStr(_winCtrlD, "SysHeader32", True))
-        Return
+        && !InStr(_winCtrlD, "SysHeader32", True)) {
 
-    SetTimer, keyTrack, Off
-    SetTimer, mouseTrack, Off
+        Thread, NoTimers, False
+        Return
+    }
+
     ; tooltip, % "is it blank? " IsExplorerBlankSpaceClick()
     initTime := A_TickCount
 
@@ -5375,8 +5353,7 @@ $~LButton::
             loop 50 {
                 If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
                     LbuttonEnabled     := True
-                    SetTimer, keyTrack, On
-                    SetTimer, mouseTrack, On
+                    Thread, NoTimers, False
                     Return
                 }
                 currentPath := GetExplorerPath(_winIdD)
@@ -5390,15 +5367,13 @@ $~LButton::
             }
 
             LbuttonEnabled     := True
-            SetTimer, keyTrack, On
-            SetTimer, mouseTrack, On
+            Thread, NoTimers, False
             Return
         }
         Else {
             ; tooltip, sending to non-explorer
             SendCtrlAdd(_winIdD,,,wmClassD)
-            SetTimer, keyTrack, On
-            SetTimer, mouseTrack, On
+            Thread, NoTimers, False
             If isBlankSpaceNonExplorer
                 sleep, 250
             LbuttonEnabled     := True
@@ -5418,8 +5393,7 @@ $~LButton::
         loop 50 {
             If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
                 LbuttonEnabled     := True
-                SetTimer, keyTrack, On
-                SetTimer, mouseTrack, On
+                Thread, NoTimers, False
                 Return
             }
             prevPath := GetExplorerPath(_winIdD)
@@ -5462,6 +5436,7 @@ $~LButton::
             && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
 
             ; tooltip, here1
+            Thread, NoTimers, False
             SetTimer, SendCtrlAddLabel, -125
         }
         Else If ( (InStr(_winCtrlU,"SysHeader32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
@@ -5490,8 +5465,7 @@ $~LButton::
                 ; cname := SafeUIA_GetName(pt, "")
                 ; Cache risky UIA properties ONCE
                 If (ctype == "" || ctype > 50035 || ctype < 50031) {
-                    SetTimer, keyTrack,   On
-                    SetTimer, mouseTrack, On
+                    Thread, NoTimers, False
                     Return
                 }
             }
@@ -5538,16 +5512,14 @@ $~LButton::
 
             If (ctype == "") {
 
-                SetTimer, keyTrack,   On
-                SetTimer, mouseTrack, On
+                Thread, NoTimers, False
                 Return
             }
             ; tooltip, % pt.CurrentControlType "-" pt.CurrentName "-" pt.CurrentLocalizedControlType
             If (ctype == 50000
                 && !InStr(cname, "Back", True) && !InStr(cname, "Forward", True) && !InStr(cname, "Up", True) && !InStr(cname, "Refresh", True)) {
 
-                SetTimer, keyTrack,   On
-                SetTimer, mouseTrack, On
+                Thread, NoTimers, False
                 Return
             }
 
@@ -5588,8 +5560,7 @@ $~LButton::
         }
     }
 
-    SetTimer, keyTrack,   On
-    SetTimer, mouseTrack, On
+    Thread, NoTimers, False
 Return
 #If
 
@@ -5756,6 +5727,11 @@ $~Ctrl::
     GoSub, LaunchWinFind
 Return
 
+RegExEscape(s)
+{
+    return RegExReplace(s, "([\\.^$|?*+(){}\[\]-])", "\$1")
+}
+
 LaunchWinFind:
     If (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (DoubleClickTime/2))
     {
@@ -5765,9 +5741,7 @@ LaunchWinFind:
         UserInputTrimmed :=
         StopCheck        := False
         SearchingWindows := True
-        BlockKeyboard(True)
         SetTimer, UpdateInputBoxTitle, 5
-        BlockKeyboard(False)
         InputBox, UserInput, Type Up to 3 Letters of a Window Title to Search, , , 340, 100, CoordXCenterScreen()-(340/2), CoordYCenterScreen()-(100/2)
         SetTimer, UpdateInputBoxTitle, off
 
@@ -5781,25 +5755,30 @@ LaunchWinFind:
         Else
         {
             DetectHiddenWindows, On
-            Critical On
             totalMenuItemCount := 0
-            onlyTitleFound := ""
-            allWinArray := []
-            winAssoc := {}
-            winArraySort := []
+            onlyTitleFound     := ""
+            allWinArray        := []
+            winAssoc           := {}
+            winArraySort       := []
 
-            WinGet, id, list
+            SetTitleMatchMode, RegEx
+            needle := "i)" . RegExEscape(UserInputTrimmed)  ; contains, case-insensitive
+            WinGet, id, List, % needle
+
+            SetTitleMatchMode, 3
+            SetTitleMatchMode, Fast
+            totalCount := id
             Loop, %id%
             {
                 this_ID := id%A_Index%
 
                 If !JEE_WinHasAltTabIcon(this_ID)
-                   continue
+                    continue
 
                 WinGetTitle, title, ahk_id %this_ID%
                 WinGet, procName, ProcessName , ahk_id %this_ID%
                 desknum := findDesktopWindowIsOn(this_ID)
-                ; desknum := 1
+
                 If desknum <= 0
                     continue
                 finalTitle := % "Desktop " desknum " ↑ " procName " ↑ " title "^" this_ID
@@ -5807,8 +5786,7 @@ LaunchWinFind:
             }
 
             If (allWinArray.length() == 0) {
-                Critical, Off
-                Tooltip, No matches found...
+                ToolTip, % "No matches found for """ UserInputTrimmed """ out of " totalCount "..."
                 Sleep, 1500
                 Tooltip,
                 StopRecursion := False
@@ -5816,6 +5794,7 @@ LaunchWinFind:
                 Return
             }
 
+            Critical On
             For k, v in allWinArray
             {
                 winAssoc[v] := k
@@ -5849,9 +5828,9 @@ LaunchWinFind:
                     finalEntry   := % desktopEntry ":  [" titleEntry "] (" procEntry ")"
                 Else
                     finalEntry   := % desktopEntry ":  " titleEntry " (" procEntry ")"
-                ; tooltip, searching for %UserInputTrimmed%
-                If (!InStr(finalEntry, UserInputTrimmed))
-                    continue
+
+                ; If (!InStr(finalEntry, UserInputTrimmed, false))
+                    ; continue
 
                 If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
                     Menu, windows, Add
@@ -5869,8 +5848,9 @@ LaunchWinFind:
                 desktopEntryLast := desktopEntry
             }
             Critical Off
-
+            tooltip, path is %procEntry%
             If (totalMenuItemCount == 1 && onlyTitleFound != "") {
+                ; tooltip, total found windows : %totalMenuItemCount%
                 GoSub, ActivateWindow
             }
             Else If (totalMenuItemCount > 1) {
@@ -5909,7 +5889,6 @@ Return
 
 ActivateWindow:
     Gui, ShadowFrFull:  Hide
-    ; Gui, ShadowFrFull2: Hide
     DetectHiddenWindows, On
     thisMenuItem := ""
     result := {}
@@ -5918,9 +5897,6 @@ ActivateWindow:
         thisMenuItem := onlyTitleFound
     Else
         thisMenuItem := A_ThisMenuItem
-
-    SetTitleMatchMode, 3
-    SetTitleMatchMode, Fast
 
     fulltitle := RegExReplace(thisMenuItem, "\(\S+\.\S+\)$", "")
     fulltitle := Trim(fulltitle)
@@ -5948,19 +5924,11 @@ ActivateWindow:
     Else
         WinActivate, %fulltitle%
 
-    ; tooltip, activating %fulltitle%
     sleep, 125
-    ; WinGet, hwndId, ID, A
-    ; currentMon := MWAGetMonitorMouseIsIn()
-    ; currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
-    ; If !currentMonHasActWin {
-        ; Send, #+{Left}
-        ; sleep, 150
-     ; }
-    GoSub, DrawRect
-    sleep, 200
-    ClearRect()
-    ; }
+    DrawMasks()
+    sleep, 725
+    ClearMasks()
+
     Process, Close, Expr_Name
     Process, Close, ExprAltUp_Name
 
@@ -5970,9 +5938,8 @@ SwitchDesktop:
     global movehWndId
     global GoToDesktop := False
 
+    Thread, NoTimers
     StopRecursion := True
-    SetTimer, keyTrack,   Off
-    SetTimer, mouseTrack, Off
 
     MouseGetPos, , , movehWndId
     WinActivate, ahk_id %movehWndId%
@@ -6010,10 +5977,9 @@ SwitchDesktop:
 
     If GoToDesktop
         sleep, 1000
-    StopRecursion := False
-    SetTimer, keyTrack,   On
-    SetTimer, mouseTrack, On
 
+    StopRecursion := False
+    Thread, NoTimers, False
 Return
 
 SendWindow:
@@ -6973,15 +6939,6 @@ GetLastActivePopup(hwnd)
    Return hwnd
 }
 
-; IsWindowOnCurrentVirtualDesktop(hwnd)
-; {
-   ; static IVirtualDesktopManager
-   ; If !IVirtualDesktopManager
-      ; IVirtualDesktopManager := ComObjCreate(CLSID_VirtualDesktopManager := "{AA509086-5CA9-4C25-8F95-589D3C07B48A}", IID_IVirtualDesktopManager := "{A5CD92FF-29BE-454C-8D04-D82879FB3F1B}")
-   ; DllCall(NumGet(NumGet(IVirtualDesktopManager+0), 3*A_PtrSize), "ptr", IVirtualDesktopManager, "uptr", hwnd, "int*", onCurrentDesktop)   ; IsWindowOnCurrentVirtualDesktop
-   ; Return onCurrentDesktop
-; }
-
 PropEnumProcEx(hWnd, lpszString, hData, dwData)
 {
    If (strget(lpszString, "UTF-16") = "ApplicationViewCloakType")
@@ -7081,6 +7038,102 @@ IsWindowOnCurrentVirtualDesktop(hwnd) {
         return true
     return DllCall(IsWindowOnCurrentVirtualDesktopProc, "Ptr", hwnd, "Int")
 }
+; ---- Window/Desktop queries ----
+IsWindowOnDesktopNumber(hwnd, desktopNumber)
+{
+    global IsWindowOnDesktopNumberProc
+    if (!InitVDA() || !IsWindowOnDesktopNumberProc)
+        return 0
+
+    return DllCall(IsWindowOnDesktopNumberProc
+        , "Int"            ; return type
+        , "Ptr", hwnd
+        , "Int", desktopNumber)
+}
+
+
+MoveWindowToDesktopNumber(hwnd, desktopNumber)
+{
+    global MoveWindowToDesktopNumberProc
+    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
+    if (!InitVDA() || !MoveWindowToDesktopNumberProc)
+        return true
+    return DllCall(MoveWindowToDesktopNumberProc
+        , "Ptr", hwnd
+        , "Int", desktopNumber
+        , "Int") ; return i32
+}
+
+IsPinnedWindow(hwnd)
+{
+    global IsPinnedWindowProc
+    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
+    if (!InitVDA() || !IsPinnedWindowProc)
+        return true
+    return DllCall(IsPinnedWindowProc
+        , "Ptr", hwnd
+        , "Int") ; return i32 (typically 1/0)
+}
+
+; ---- Desktop naming (Win11-only exports in this DLL) ----
+
+GetDesktopName(desktopNumber, bufSize := 1024)
+{
+    global GetDesktopNameProc
+    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
+    if (!InitVDA() || !GetDesktopNameProc)
+        return true
+
+    VarSetCapacity(utf8_buffer, bufSize, 0)
+    ran := DllCall(GetDesktopNameProc
+        , "Int", desktopNumber
+        , "Ptr", &utf8_buffer
+        , "Ptr", bufSize
+        , "Int") ; return i32
+
+    ; If you care about ran, you can check it here.
+    return StrGet(&utf8_buffer, bufSize, "UTF-8")
+}
+
+SetDesktopName(desktopNumber, name)
+{
+    ; NOTE: for UTF-8 literals to work correctly, save this .ahk as UTF-8 with BOM.
+    global SetDesktopNameProc
+    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
+    if (!InitVDA() || !SetDesktopNameProc)
+        return true
+    VarSetCapacity(name_utf8, 1024, 0)
+    StrPut(name, &name_utf8, "UTF-8")
+
+    return DllCall(SetDesktopNameProc
+        , "Int", desktopNumber
+        , "Ptr", &name_utf8
+        , "Int") ; return i32
+}
+
+; ---- Desktop creation/removal (Win11-only exports in this DLL) ----
+
+CreateDesktop()
+{
+    global CreateDesktopProc
+    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
+    if (!InitVDA() || !CreateDesktopProc)
+        return true
+    return DllCall(CreateDesktopProc
+        , "Int") ; return i32 (often new desktop number, or -1 on failure)
+}
+
+RemoveDesktop(removeDesktopNumber, fallbackDesktopNumber)
+{
+    global RemoveDesktopProc
+    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
+    if (!InitVDA() || !RemoveDesktopProc)
+        return true
+    return DllCall(RemoveDesktopProc
+        , "Int", removeDesktopNumber
+        , "Int", fallbackDesktopNumber
+        , "Int") ; return i32 (often 1/0)
+}
 
 MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
     global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
@@ -7160,13 +7213,22 @@ findDesktopWindowIsOn(hwnd)
 {
     global IsWindowOnDesktopNumberProc
 
+    hwnd := hwnd + 0  ; force numeric
     Loop % getTotalDesktops()
     {
-        If (DllCall(IsWindowOnDesktopNumberProc, "Ptr", hwnd, "UInt", A_Index-1, "Int"))
-            Return (A_Index)
+        desktop := A_Index - 1
+        ret := DllCall(IsWindowOnDesktopNumberProc, "Ptr", hwnd, "Int", desktop, "Int")
+        if (ErrorLevel)
+        {
+            MsgBox % "DllCall failed. ErrorLevel=" ErrorLevel "`nA_LastError=" A_LastError
+            return 0
+        }
+        if (ret)
+            return A_Index
     }
-    Return 0
+    return 0
 }
+
 /* ;
 *****************************
 ***** UTILITY FUNCTIONS *****
