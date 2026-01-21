@@ -109,7 +109,7 @@ Global ReleaseAway  := 24     ; px: while snapped, drag this far AWAY from the e
 Global skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
 ; === Settings ===
-Global BlockClicks := true    ; true = block clicks outside active window, false = let clicks pass through
+Global BlockClicks := False    ; true = block clicks outside active window, false = let clicks pass through
 Global Opacity     := 215     ; 255=opaque black; try 200 to "dim" instead of fully black
 
 ; === Globals ===
@@ -153,7 +153,7 @@ Else
 
 ; Create 4 mask GUIs (top, left, right, bottom)
 CreateMaskGui(index, ByRef hWndOut) {
-    Global BlockClicks, Opacity, black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    global BlockClicks, Opacity, black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
 
     clickStyle := BlockClicks ? "" : "+E0x20"
     ; Build a variable name like "hWnd1", "hWnd2", etc.
@@ -419,16 +419,17 @@ Return
 ; ==========================================================================================================================================
 ; Helper to resolve exports
 _gp(name) {
-    Global hVirtualDesktopAccessor
+    global hVirtualDesktopAccessor
+
     return DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", name, "Ptr")
 }
 
 InitVDA() {
-    Global VDA_DllName, hVirtualDesktopAccessor, dllPath
-    Global GetDesktopCountProc, GoToDesktopNumberProc, GetCurrentDesktopNumberProc
-    Global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
-    Global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
-    Global CreateDesktopProc, RemoveDesktopProc
+    global VDA_DllName, hVirtualDesktopAccessor, dllPath
+    global GetDesktopCountProc, GoToDesktopNumberProc, GetCurrentDesktopNumberProc
+    global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
+    global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
+    global CreateDesktopProc, RemoveDesktopProc
 
     ; If we already resolved at least the "core" proc, assume init done.
     ; (Change this to a stricter check if you prefer.)
@@ -565,7 +566,6 @@ LL_MouseHook(nCode, wParam, lParam)
     return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 }
 
-
 OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
     ; tooltip, pop!
 }
@@ -686,19 +686,19 @@ IsThisHotKeyLetterKey() {
     Return (IsThisHotKeyCapital() || IsThisHotKeyLowerCase())
 }
 IsPriorHotKeyCapital() {
-    Global keys
+    global keys
     Return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,1,1)!="!" && SubStr(A_PriorHotKey,2,1)="+" && InStr(keys, Substr(A_PriorHotkey,3,1), False))
 }
 IsPriorHotKeyLowerCase() {
-    Global keys
+    global keys
     Return (StrLen(A_PriorHotkey) == 2 && InStr(keys, Substr(A_PriorHotkey,2,1), False))
 }
 IsThisHotKeyCapital() {
-    Global keys
+    global keys
     Return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,1,1)!="!" && SubStr(A_ThisHotKey,2,1)="+" && InStr(keys, Substr(A_ThisHotKey,3,1), False))
 }
 IsThisHotKeyLowerCase() {
-    Global keys
+    global keys
     Return (StrLen(A_ThisHotKey) == 2 && InStr(keys, Substr(A_ThisHotKey,2,1), False))
 }
 
@@ -871,9 +871,9 @@ GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) 
 ;------------------------------------------------------------------------------
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
-    Global prevActiveWindows
-    Global StopRecursion
-    Global blockKeys
+    global prevActiveWindows
+    global StopRecursion
+    global blockKeys
 
     If !StopRecursion && !hitTab {
 
@@ -1107,7 +1107,8 @@ return
 
 ; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
 UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
-    Global UIA
+    global UIA
+
     try {
         hTask := WinExist("ahk_class Shell_TrayWnd")
         if !hTask
@@ -1222,11 +1223,11 @@ WU_burstGap      := 250 ; ms: gap that defines a "new burst"
 WU_zoomInterval  := 200 ; ms: min time between zooms *within* a burst
 
 $~WheelUp::
+    global WU_lastZoomTime, WU_lastWheelTime, WU_burstGap, WU_zoomInterval
     StopRecursion := True
     Critical, Off
     Sleep, -1
 
-    Global WU_lastZoomTime, WU_lastWheelTime, WU_burstGap, WU_zoomInterval
 
     If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
@@ -1288,12 +1289,11 @@ WD_burstGap      := 250 ; ms: gap that defines a "new burst"
 WD_zoomInterval  := 200 ; ms: min time between zooms *within* a burst
 
 $~WheelDown::
+    global WD_lastZoomTime, WD_lastWheelTime, WD_burstGap, WD_zoomInterval
     StopRecursion := True
     Critical, Off
     Sleep, -1
 
-    Global WD_lastZoomTime, WD_lastWheelTime, WD_burstGap, WD_zoomInterval
-    Global pauseWheel  ; If you use these elsewhere
 
     If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
@@ -1409,7 +1409,7 @@ IsMouseOnLeftSide() {
 
 #If !MbuttonIsEnter && !MouseIsOverTaskbar()
 $*MButton::
-    Global DraggingWindow
+    global DraggingWindow
 
     StopRecursion := True
     SetTimer, keyTrack, Off
@@ -2496,7 +2496,7 @@ Return
 ; Ctl+Tab in chrome to goto recent
 prevChromeTab()
 {
-    Global StopRecursion
+    global StopRecursion
     StopRecursion := True
     DetectHiddenWindows, Off
     Send, ^+{a}
@@ -2802,15 +2802,7 @@ Return
 ; #MaxThreadsBuffer Off
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 Altup:
-    Global cycling
-    Global cycleCount
-    Global ValidWindows
-    Global GroupedWindows
-    Global startHighlight
-    Global hitTAB
-    Global hitTilde
-    Global LclickSelected
-    Global blockKeys
+    global cycling, cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys
 
     Critical, On
     cycling        := False
@@ -2847,6 +2839,8 @@ Altup:
     startHighlight := False
     LclickSelected := False
     Critical, Off
+    SetTimer, mouseTrack, On
+    SetTimer, keyTrack,   On
 Return
 
 ;============================================================================================================================
@@ -3124,46 +3118,31 @@ Return
 #If
 
 $!Lbutton::
-    Critical
-    If hitTab {
+    If (hitTab || hitTilde) {
         LclickSelected := True
+        Gui, WindowTitle: Destroy
+        ClearMasks()
         MouseGetPos, , , _winIdD,
         WinActivate, ahk_id %_winIdD%
         WinGetTitle, actTitle, ahk_id %_winIdD%
         WinGet, pp, ProcessPath , ahk_id %_winIdD%
 
-        GoSub, DrawRect
-        DrawWindowTitlePopup(actTitle, pp)
-        KeyWait, LAlt, U T0.3
-        GoSub, FadeOutWindowTitle
-        GoSub, Altup
-        SetTimer, mouseTrack, On
-        SetTimer, keyTrack,   On
-    }
-    Else If hitTilde {
-        LclickSelected := True
-        MouseGetPos, , , _winIdD,
-        WinGetTitle, actTitle, ahk_id %_winIdD%
-        WinGet, pp, ProcessPath , ahk_id %_winIdD%
-
-        WinActivate, ahk_id %_winIdD%
         lastActWinID := _winIdD
 
-        GoSub, DrawRect
-        DrawWindowTitlePopup(actTitle, pp, True)
-        KeyWait, LAlt, U T0.3
+        DrawMasks(_winIdD)
+        DrawWindowTitlePopup(actTitle, pp)
+
+        KeyWait, LAlt, U T5
+
         GoSub, FadeOutWindowTitle
         GoSub, Altup
-        SetTimer, mouseTrack, On
-        SetTimer, keyTrack,   On
+        ClearMasks()
     }
     Else If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550)) {
         Send, {Click, left}
         Send, {ENTER}
         sleep, 275
-        FixModifiers()
     }
-    KeyWait, LAlt, U T0.3
 Return
 
 RunDynaExpr:
@@ -3183,7 +3162,7 @@ RunDynaExprCenter:
 Return
 
 FadeOutWindowTitle:
-    Global WindowTitleID
+    global WindowTitleID
 
     delayTime := 80
 
@@ -3208,16 +3187,10 @@ Return
 
 Cycle()
 {
-    Global cycling
-    Global ValidWindows
-    Global GroupedWindows
-    Global MonCount
-    Global startHighlight
-    Global LclickSelected
-    Global firstDraw
+    global cycling, ValidWindows, GroupedWindows, MonCount, startHighlight, LclickSelected, firstDraw
 
-    prev_exe :=
-    prev_cl  :=
+    prev_exe   :=
+    prev_cl    :=
     cycleCount := 1
 
     If !cycling
@@ -3348,9 +3321,7 @@ Cycle()
 }
 
 ClearRect(hwnd := "") {
-    Global DrawingRect
-    Global Highlighter
-    Global GUI4Boarder
+    global DrawingRect, Highlighter, GUI4Boarder
 
     If DrawingRect {
         Critical, On
@@ -3476,7 +3447,7 @@ Return
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    Global MonCount, Highlighter, hitTAB, hitTilde, GroupedWindows, cycleCount, LclickSelected
+    global MonCount, Highlighter, hitTAB, hitTilde, GroupedWindows, cycleCount, LclickSelected
 
     windowsToMinimize := []
     minimizedWindows  := []
@@ -3623,7 +3594,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
 ; ------------------  ChatGPT ------------------------------------------------------------------
 ClearMasks(monitorHwnd := "", initTransVal := 255) {
-    Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
 
     iterations := 10
     transVal   := initTransVal
@@ -3669,9 +3640,8 @@ ClearMasks(monitorHwnd := "", initTransVal := 255) {
 }
 
 DrawBlackBar(guiIndex, x, y, w, h) {
-    Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
-    Global hTop, hLeft, hRight, hBottom
-    ; Assume GUI already created and styled elsewhere.
+    global hLeft, hTop, hRight, hBottom
+    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
 
     If (w <= 0 || h <= 0) {
         Gui, %guiIndex%: Hide
@@ -3703,8 +3673,8 @@ DrawBlackBar(guiIndex, x, y, w, h) {
         ; No other thread can sneak in and change these GUIs mid-update.
     ; The visual fade (the transparent WinSet calls) happens after the bars are in their final positions and already visible. So even If a timer/hotkey interrupts, it doesn’t cause a half-drawn layout—only an intermediate opacity.
 DrawMasks(targetHwnd := "", firstDraw := True) {
-    Global hLeft, hTop, hRight, hBottom, Opacity
-    Global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    global hLeft, hTop, hRight, hBottom, Opacity
+    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
 
     Margin := 0  ; expands the hole around the active window by this many pixels
 
@@ -3819,7 +3789,7 @@ Min(a,b) {
 
 #If MouseIsOverTaskbarWidgets()
 $~^Lbutton::
-    Global MonCount
+    global MonCount
     StopRecursion := True
     SetTimer, mouseTrack, Off
     SetTimer, keyTrack,   Off
@@ -3872,7 +3842,7 @@ Return
 
 #If MouseIsOverTitleBar()
 $^LButton::
-    Global currentMon, previousMon, DoubleClickTime, MonCount
+    global currentMon, previousMon, DoubleClickTime, MonCount
     DetectHiddenWindows, Off
     StopRecursion := True
     SetTimer, mouseTrack, Off
@@ -5010,7 +4980,7 @@ IsCaretInEdit(useUIA := true, useMSAA := true) {
 }
 
 UIA_IsFocusedEditable() {
-    Global UIA
+    global UIA
 
     try {
         if !IsObject(UIA)
@@ -5358,7 +5328,6 @@ $~LButton::
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
     WinGetClass, wmClassD, ahk_id %_winIdD%
-    ; Gui, GUI4Boarder: Hide
 
     If (   wmClassD != "CabinetWClass"
         && wmClassD != "#32770"
@@ -5690,7 +5659,7 @@ GetItemsViewHwndFromUIA(shellEl)
 }
 
 WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
-    Global UIA
+    global UIA
 
     try {
         exEl := UIA.ElementFromHandle(targetHwndID)
@@ -5990,8 +5959,8 @@ ActivateWindow:
 Return
 
 SwitchDesktop:
-    Global movehWndId
-    Global GoToDesktop := False
+    global movehWndId
+    global GoToDesktop := False
 
     StopRecursion := True
     SetTimer, keyTrack,   Off
@@ -6040,8 +6009,8 @@ SwitchDesktop:
 Return
 
 SendWindow:
-    Global movehWndId
-    Global targetDesktop
+    global movehWndId
+    global targetDesktop
     moveLeftConst := -1
     moveRightConst := 1
     moveConst := 0
@@ -6097,8 +6066,8 @@ SendWindow:
 Return
 
 SendWindowAndGo:
-    Global movehWndId
-    Global targetDesktop
+    global movehWndId, targetDesktop
+
     GoToDesktop := True
     GoSub, SendWindow
 
@@ -6174,7 +6143,7 @@ IsExplorerModern() {
 ;     MsgB
 
 IsModernExplorerActive(hWnd := "") {
-    Global UIA, isWin11
+    global UIA, isWin11
 
     if !isWin11
         return false
@@ -6279,7 +6248,7 @@ GetCtrlNNsByPrefix(hwndTop, classPrefix)
 
 
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
-    Global UIA, isWin11, blockKeys
+    global UIA, isWin11, blockKeys
 
     TargetControl := ""
     OutputVar1    := 0
@@ -6735,8 +6704,6 @@ IsWindow(hWnd) {
 
 ; https://www.autohotkey.com/boards/search.php?style=17&author_id=62433&sr=posts
 MyTimer() {
-   ; Global IGUIF
-   ; Global IGUIF2
    DllCall("KillTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2)
 
    WinWait, ahk_class #32768,, 3
@@ -7027,14 +6994,16 @@ realHwnd(hwnd)
 ; https://github.com/Ciantic/VirtualDesktopAccessor/blob/rust/example.ahk
 ; -----------------------------------------------------------------------
 GetDesktopCount() {
-    Global GetDesktopCountProc
+    global GetDesktopCountProc
+
     if (!InitVDA() || !GetDesktopCountProc)
         return 1
     return DllCall(GetDesktopCountProc, "Int")
 }
 
 GoToDesktopNumber(num) {
-    Global GoToDesktopNumberProc
+    global GoToDesktopNumberProc
+
     if (!InitVDA() || !GoToDesktopNumberProc)
         return false
 
@@ -7047,14 +7016,16 @@ GoToDesktopNumber(num) {
 }
 
 GetCurrentDesktopNumber() {
-    Global GetCurrentDesktopNumberProc
+    global GetCurrentDesktopNumberProc
+
     if (!InitVDA() || !GetCurrentDesktopNumberProc)
         return 1
     return DllCall(GetCurrentDesktopNumberProc, "Int")
 }
 
 GoToPrevDesktop() {
-    Global GetCurrentDesktopNumberProc
+    global GetCurrentDesktopNumberProc
+
     if (!InitVDA() || !GetCurrentDesktopNumberProc)
         return false
 
@@ -7074,7 +7045,8 @@ GoToPrevDesktop() {
 }
 
 GoToNextDesktop() {
-    Global GetCurrentDesktopNumberProc
+    global GetCurrentDesktopNumberProc
+
     if (!InitVDA() || !GetCurrentDesktopNumberProc)
         return false
 
@@ -7094,7 +7066,8 @@ GoToNextDesktop() {
 }
 
 IsWindowOnCurrentVirtualDesktop(hwnd) {
-    Global IsWindowOnCurrentVirtualDesktopProc
+    global IsWindowOnCurrentVirtualDesktopProc
+
     ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
     if (!InitVDA() || !IsWindowOnCurrentVirtualDesktopProc)
         return true
@@ -7102,7 +7075,8 @@ IsWindowOnCurrentVirtualDesktop(hwnd) {
 }
 
 MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
-    Global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
+    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
+
     if (!InitVDA() || !MoveWindowToDesktopNumberProc || !GoToDesktopNumberProc)
         return false
 
@@ -7114,7 +7088,8 @@ MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
 }
 
 MoveCurrentWindowToDesktop(num) {
-    Global MoveWindowToDesktopNumberProc
+    global MoveWindowToDesktopNumberProc
+
     if (!InitVDA() || !MoveWindowToDesktopNumberProc)
         return false
 
@@ -7128,6 +7103,7 @@ MoveCurrentWindowToDesktop(num) {
 }
 
 MoveOrGotoDesktopNumber(num) {
+    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
     ; NOTE: In your original code this "num" is used as 0-based
     ; from GoToPrevDesktop/GoToNextDesktop, and also passed into
     ; MoveCurrentWindowToDesktop() / GoToDesktopNumber() which treat
@@ -7140,7 +7116,6 @@ MoveOrGotoDesktopNumber(num) {
     ;
     ; If you WANT MoveOrGotoDesktopNumber to be 1-based, tell me and I’ll normalize it.
 
-    Global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
     if (!InitVDA() || !GoToDesktopNumberProc)
         return false
 
@@ -7157,7 +7132,8 @@ MoveOrGotoDesktopNumber(num) {
 
 getForemostWindowIdOnDesktop(n)
 {
-    Global IsWindowOnDesktopNumberProc
+    global IsWindowOnDesktopNumberProc
+
     n := n - 1 ; Desktops start at 0, while in script it's 1
 
     ; winIDList contains a list of windows IDs ordered from the top to the bottom for each desktop.
@@ -7174,7 +7150,8 @@ getForemostWindowIdOnDesktop(n)
 
 findDesktopWindowIsOn(hwnd)
 {
-    Global IsWindowOnDesktopNumberProc
+    global IsWindowOnDesktopNumberProc
+
     Loop % getTotalDesktops()
     {
         If (DllCall(IsWindowOnDesktopNumberProc, "Ptr", hwnd, "UInt", A_Index-1, "Int"))
@@ -7188,8 +7165,7 @@ findDesktopWindowIsOn(hwnd)
 *****************************
 */
 UpdateValidWindows() {
-    Global ValidWindows
-    Global MonCount
+    global ValidWindows, MonCount
 
     currentMon := MWAGetMonitorMouseIsIn()
     WinGet, allWindows, List
@@ -7302,11 +7278,7 @@ FixModifiers() {
 ; }
 
 keyTrack() {
-    Global keys
-    Global numbers
-    Global StopAutoFix
-    Global TimeOfLastHotkeyTyped
-    Global blockKeys
+    global keys, numbers, StopAutoFix, TimeOfLastHotkeyTyped, blockKeys
 
     ListLines, Off
 
@@ -7351,9 +7323,10 @@ Return
 }
 
 mouseTrack() {
-    Global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, textBoxSelected, TaskBarHeight
-    Static x, y, lastX, lastY, taskview
-    Static LbuttonHeld := False, timeOfLastMove
+    global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, textBoxSelected, TaskBarHeight
+    static x, y, lastX, lastY, taskview
+    static LbuttonHeld := False, timeOfLastMove
+
     ListLines Off
 
     WinGet, actwndId, ID, A
@@ -7443,7 +7416,7 @@ mouseTrack() {
 }
 
 MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
-    Global UIA
+    global UIA
 
     if !( GetKeyState("Wheeldown","P") || GetKeyState("Wheelup","P") || GetKeyState("LButton","P") || GetKeyState("RButton","P") || GetKeyState("MButton","P") )
         return False
@@ -7622,7 +7595,7 @@ IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
 ;https://www.autohotkey.com/boards/viewtopic.php?f=6&t=54557
 MWAGetMonitorMouseIsIn(buffer := 0) ; we didn't actually need the "Monitor = 0"
 {
-    Global currMonWidth, currMonHeight
+    global currMonWidth, currMonHeight
     ; get the mouse coordinates first
     Coordmode, Mouse, Screen    ; use Screen, so we can compare the coords with the sysget information`
     MouseGetPos, Mx, My
@@ -7826,7 +7799,7 @@ HasVal(haystack, needle) {
 ; - If UIA.ahk is available, uses it to detect empty selection instantly.
 ; - Otherwise uses a bounded wait + quick retry (no long fixed timeout).
 CopySelection() {
-    Global UIA
+    global UIA
     Critical, On
 
     ; If Chrome (or Edge/Electron), try UIA to see if there is any selected text:
@@ -7893,7 +7866,8 @@ CopySelection() {
 ; --- UIA helper: returns selected text quickly in Chrome if possible.
 ; Requires UIA.ahk (Descolada’s UIA). If not available, returns "__UIA_UNAVAILABLE__".
 __TryGetSelectionViaUIA() {
-    Global UIA
+    global UIA
+
     try {
         if !IsFunc("UIA_Interface")
             throw Exception("no UIA")
@@ -7931,8 +7905,9 @@ __TryGetSelectionViaUIA() {
 ; Uses a short one-shot timer to avoid paste race conditions.
 ;========================
 PastePreservingClipboard(text, reselect := 0, restoreDelayMs := 200) {
-    Critical, On
     global __ClipBakForPaste
+
+    Critical, On
     __ClipBakForPaste := ClipboardAll
 
     ; Publish the text to clipboard and wait until it sticks
@@ -7962,10 +7937,10 @@ PastePreservingClipboard(text, reselect := 0, restoreDelayMs := 200) {
 
 __RestoreClipboard_AfterPaste:
     global __ClipBakForPaste
+
     Clipboard := __ClipBakForPaste
     VarSetCapacity(__ClipBakForPaste, 0)
 Return
-
 
 ; Clip() - Send and Retrieve Text Using the Clipboard
 ; by berban - updated February 18, 2019
@@ -8017,7 +7992,7 @@ Return
 ; AutoHotkey v1 version of Clip()
 Clip(Text := "", Reselect := "", Restore := "")
 {
-    Static BackUpClip := "", Stored := False, LastClip := "", Restored := ""
+    static BackUpClip := "", Stored := False, LastClip := "", Restored := ""
 
     if (Restore) {
         if (Clipboard == LastClip)
@@ -8080,14 +8055,16 @@ return
 ;-------------------------------------------------------------------------------
 getTotalDesktops()
 {
-    Global DesktopCount
+    global DesktopCount
+
     mapDesktopsFromRegistry()
     Return DesktopCount
 }
 
 getCurrentDesktop()
 {
-    Global CurrentDesktop
+    global CurrentDesktop
+
     mapDesktopsFromRegistry()
     ;    MsgBox %CurrentDesktop%
     ;    SetTimer, %CurrentDesktop%, Off  ; i.e. the timer turns itself off here.
@@ -8108,7 +8085,7 @@ getCurrentDesktop()
 ;
 mapDesktopsFromRegistry()
 {
-    Global CurrentDesktop, DesktopCount
+    global CurrentDesktop, DesktopCount
 
     ; Get the current desktop UUID. Length should be 32 always, but there's no guarantee this couldn't change in a later Windows release so we check.
     IdLength := 32
@@ -8362,10 +8339,7 @@ IsEditFieldActive() {
 ;    https://autohotkey.com/boards/viewtopic.php?t=3392
 ;-------------------------------------------------------------------------------
 WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef Offset_X="",ByRef Offset_Y="") {
-    Static Dummy5693
-          ,RECTPlus
-          ,S_OK:=0x0
-          ,DWMWA_EXTENDED_FRAME_BOUNDS:=9
+    static RECTPlus, S_OK := 0x0, DWMWA_EXTENDED_FRAME_BOUNDS := 9
 
     ;-- Workaround for AutoHotkey Basic
     PtrType:=(A_PtrSize=8) ? "Ptr":"UInt"
@@ -8380,7 +8354,7 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
         ,PtrType,&RECTPlus                              ;-- pvAttribute
         ,"UInt",16)                                     ;-- cbAttribute
 
-    If (DWMRC<>S_OK)
+    If (DWMRC <> S_OK)
         {
         If ErrorLevel in -3,-4  ;-- Dll or function not found (older than Vista)
             {
@@ -8732,7 +8706,7 @@ MouseIsOverTaskbar() {
 }
 
 MouseIsOverTaskbarButtonGroup() {
-    Global UIA
+    global UIA
     CoordMode, Mouse, Screen
     MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
 
@@ -8757,7 +8731,7 @@ MouseIsOverTaskbarWidgets() {
 }
 
 MouseIsOverTaskbarBlank() {
-    Global UIA
+    global UIA
 
     if !( GetKeyState("Wheeldown","P") || GetKeyState("Wheelup","P") || GetKeyState("LButton","P") || GetKeyState("RButton","P") || GetKeyState("MButton","P") )
         return False
@@ -8784,9 +8758,9 @@ MouseIsOverTaskbarBlank() {
 }
 
 DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, centerOnHwnd := "") {
-    Global Opacity
-    Global WindowTitleID
+    global Opacity, WindowTitleID
     static IsWindowTitleGuiInitialized := False
+
     strArray := []
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
 
@@ -8888,9 +8862,11 @@ GetNameOfIconUnderMouse() {
 
 Acc_Init() {
     static h
+
     if (!h)
         h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
 }
+
 Acc_FindFirstByRole(accNode, roleNeed, maxDepth := 6) {
     ; Iterative DFS, early exit
     stack := []
@@ -8924,6 +8900,7 @@ Acc_FindFirstByRole(accNode, roleNeed, maxDepth := 6) {
     }
     return ""
 }
+
 Acc_WindowFromObject(accObj, maxUp := 8) {
     ; Walk up accParent until we find an object that maps to an HWND.
     cur := accObj
@@ -8940,6 +8917,7 @@ Acc_WindowFromObject(accObj, maxUp := 8) {
     }
     return 0
 }
+
 Acc_WindowFromObjectOnce(accObj) {
     static IID_IAccessible := "{618736E0-3C3D-11CF-810C-00AA00389B71}"
 
@@ -8961,6 +8939,7 @@ Acc_WindowFromObjectOnce(accObj) {
 
     return (hr = 0) ? hwnd : 0
 }
+
 Acc_Children(accObj) {
     ; Returns an Array of child IAccessible objects and/or child IDs (numbers).
     ; Works with typical Acc_ObjectFromWindow / Acc_ObjectFromPoint outputs.
@@ -8968,7 +8947,8 @@ Acc_Children(accObj) {
     if !IsObject(accObj)
         return []
 
-    try childCount := accObj.accChildCount
+    try
+        childCount := accObj.accChildCount
     catch
         return []
 
@@ -9010,6 +8990,7 @@ Acc_Children(accObj) {
     }
     return kids
 }
+
 Acc_ObjectFromPoint(ByRef _idChild_ := "", x := "", y := "") {
     Acc_Init()
 
@@ -9032,10 +9013,12 @@ Acc_ObjectFromPoint(ByRef _idChild_ := "", x := "", y := "") {
 
     _idChild_ := NumGet(varChild, 8, "UInt")
 
-    try return ComObjEnwrap(9, pacc, 1)
+    try
+        return ComObjEnwrap(9, pacc, 1)
     catch
         return
 }
+
 Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) { ; OBJID_CLIENT
     Acc_Init()
 
@@ -9055,10 +9038,12 @@ Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) { ; OBJID_CLIENT
     if (hr != 0 || !pacc)
         return
 
-    try return ComObjEnwrap(9, pacc, 1)
+    try
+        return ComObjEnwrap(9, pacc, 1)
     catch
         return
 }
+
 Acc_Location(acc, ByRef x, ByRef y, ByRef w, ByRef h) {
     ; Retrieves bounding rectangle of an MSAA object.
     ; acc must be an IAccessible COM object.
@@ -9078,31 +9063,36 @@ Acc_Location(acc, ByRef x, ByRef y, ByRef w, ByRef h) {
         w := NumGet(width,  0, "Int")
         h := NumGet(height, 0, "Int")
         return true
-    }
-    catch
-    {
+    } catch {
         x := y := w := h := ""
         return false
     }
 }
+
 Acc_Parent(Acc) {
-    try parent:=Acc.accParent
+    try
+        parent:=Acc.accParent
     return parent ? Acc_Query(parent) : ""
 }
+
 Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=81731&p=509530#509530
-    try Return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
+    try
+        return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
 }
+
 ; Written by jethrow
 Acc_Role(Acc, ChildId=0) {
-    try Return ComObjType(Acc,"Name")="IAccessible"?Acc_GetRoleText(Acc.accRole(ChildId)):"invalid object"
+    try
+        return ComObjType(Acc,"Name")="IAccessible"?Acc_GetRoleText(Acc.accRole(ChildId)):"invalid object"
 }
-Acc_GetRoleText(nRole)
-{
+
+Acc_GetRoleText(nRole) {
     nSize := DllCall("oleacc\GetRoleText", "Uint", nRole, "Ptr", 0, "Uint", 0)
     VarSetCapacity(sRole, (A_IsUnicode?2:1)*nSize)
     DllCall("oleacc\GetRoleText", "Uint", nRole, "str", sRole, "Uint", nSize+1)
-    Return  sRole
+    return  sRole
 }
+
 Acc_Focus() {
     static OBJID_CARET  := 0xFFFFFFF8
     static OBJID_CLIENT := 0xFFFFFFFC
@@ -9141,7 +9131,8 @@ Acc_FromWindow(hWnd, objID, ByRef acc) {
 }
 
 SafeUIA_ElementFromPoint(x, y, default := "") {
-    Global UIA
+    global UIA
+
     try {
         return UIA.ElementFromPoint(x, y, False)
     } catch {
@@ -9193,30 +9184,22 @@ SafeUIA_GetClassName(el, default := "") {
     }
 }
 
-SafeUIA_GetOrientation(el, default := 0)
-{
+SafeUIA_GetOrientation(el, default := 0) {
     if !IsObject(el)
         return default
-    try
-    {
+    try {
         return el.CurrentOrientation
-    }
-    catch e
-    {
+    } catch e {
         return default
     }
 }
 
-SafeUIA_GetParent(el)
-{
+SafeUIA_GetParent(el) {
     if !IsObject(el)
         return ""
-    try
-    {
+    try {
         return el.Parent
-    }
-    catch e
-    {
+    } catch e {
         return ""
     }
 }
