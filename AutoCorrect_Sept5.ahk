@@ -5848,7 +5848,7 @@ LaunchWinFind:
                 desktopEntryLast := desktopEntry
             }
             Critical Off
-            tooltip, path is %procEntry%
+
             If (totalMenuItemCount == 1 && onlyTitleFound != "") {
                 ; tooltip, total found windows : %totalMenuItemCount%
                 GoSub, ActivateWindow
@@ -5924,7 +5924,9 @@ ActivateWindow:
     Else
         WinActivate, %fulltitle%
 
-    sleep, 125
+    WinGet, actWinState, MinMax, %fulltitle%
+    If actWinState == -1
+        sleep, 125
     DrawMasks()
     sleep, 725
     ClearMasks()
