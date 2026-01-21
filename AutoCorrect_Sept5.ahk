@@ -3111,6 +3111,7 @@ $!x::
     Gui, GUI4Boarder: Hide
     Gui, WindowTitle: Destroy
     GoSub, ResetWins
+    ClearMasks()
     sleep, 1000
     tooltip,
     FixModifiers()
@@ -3120,23 +3121,31 @@ Return
 $!Lbutton::
     If (hitTab || hitTilde) {
         LclickSelected := True
-        Gui, WindowTitle: Destroy
-        ClearMasks()
-        MouseGetPos, , , _winIdD,
-        WinActivate, ahk_id %_winIdD%
-        WinGetTitle, actTitle, ahk_id %_winIdD%
-        WinGet, pp, ProcessPath , ahk_id %_winIdD%
+        loop
+        {
+            KeyWait, Lbutton, D T0.1
+            If (!ErrorLevel) {
+                Gui, WindowTitle: Destroy
+                ClearMasks()
+                MouseGetPos, , , _winIdD,
+                WinActivate, ahk_id %_winIdD%
+                WinGetTitle, actTitle, ahk_id %_winIdD%
+                WinGet, pp, ProcessPath , ahk_id %_winIdD%
 
-        lastActWinID := _winIdD
+                lastActWinID := _winIdD
 
-        DrawMasks(_winIdD)
-        DrawWindowTitlePopup(actTitle, pp)
+                DrawMasks(_winIdD)
+                DrawWindowTitlePopup(actTitle, pp)
+            }
 
-        KeyWait, LAlt, U T5
-
-        GoSub, FadeOutWindowTitle
-        GoSub, Altup
-        ClearMasks()
+            ; KeyWait, LAlt, U T5
+            If (!GetKeyState("Lbutton","P") && !GetKeyState("LAlt","P")) {
+                GoSub, FadeOutWindowTitle
+                GoSub, Altup
+                ClearMasks()
+                Return
+            }
+        }
     }
     Else If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550)) {
         Send, {Click, left}
@@ -3447,11 +3456,10 @@ Return
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    global MonCount, Highlighter, hitTAB, hitTilde, GroupedWindows, cycleCount, LclickSelected
+    global MonCount, Highlighter, hitTAB, hitTilde, GroupedWindows, cycleCount, LclickSelected, lastActWinID
 
     windowsToMinimize := []
     minimizedWindows  := []
-    lastActWinID      := ""
     hitTAB            := False
     hitTilde          := True
 
