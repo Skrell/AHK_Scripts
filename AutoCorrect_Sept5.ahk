@@ -5957,8 +5957,6 @@ ActivateWindow:
         fulltitle := Trim(fulltitle)
     }
 
-    DrawBlackMonitor()
-
     If (fulltitle == "Calculator") {
         ; https://www.autohotkey.com/boards/viewtopic.php?t=43997
         WinGet, CalcIDs, List, Calculator
@@ -5974,6 +5972,13 @@ ActivateWindow:
         WinSet, AlwaysOnTop, On, %fulltitle%
     }
 
+    If (CalcID)
+        WinGet, hwndOfTitle, ID, %CalcID%
+    Else
+        WinGet, hwndOfTitle, ID, %fulltitle%
+
+    DrawBlackMonitor(hwndOfTitle)
+
     WinGet, actWinState, MinMax, %fulltitle%
     If (actWinState == -1)
         sleep, 125
@@ -5983,11 +5988,6 @@ ActivateWindow:
 
     Process, Close, Expr_Name
     Process, Close, ExprAltUp_Name
-
-    If (CalcID)
-        WinGet, hwndOfTitle, ID, %CalcID%
-    Else
-        WinGet, hwndOfTitle, ID, %fulltitle%
 
     WinSet, AlwaysOnTop, Off, ahk_id %hwndOfTitle%
     If IsAlwaysOnTop(hwndOfTitle)
