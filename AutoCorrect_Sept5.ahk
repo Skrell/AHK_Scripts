@@ -5305,7 +5305,7 @@ FindAncestorByClassPrefix(hwnd, prefix, ByRef extra := "", maxDepth := 20)
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
 $~LButton::
-    Thread, NoTimers, False
+    Thread, NoTimers
     tooltip,
     HotString("Reset")
     textBoxSelected := False
@@ -5384,14 +5384,13 @@ $~LButton::
     isBlankSpaceExplorer    := False
     isBlankSpaceNonExplorer := False
     isExplorerHeader        := False
-    ; isExplorerItem          :=
 
     prevPath := ""
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
         If (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))
             isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
         loop 50 {
-            If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
+            If (WinExist("A") != _winIdD) {
                 LbuttonEnabled     := True
                 Thread, NoTimers, False
                 Return
