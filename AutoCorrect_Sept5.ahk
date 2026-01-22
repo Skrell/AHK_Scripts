@@ -117,10 +117,10 @@ Global black1Hwnd := ""
 Global black2Hwnd := ""
 Global black3Hwnd := ""
 Global black4Hwnd := ""
-Global hTop       := ""
-Global hLeft      := ""
-Global hRight     := ""
-Global hBottom    := ""
+; Global black1Hwnd       := ""
+; Global black2Hwnd      := ""
+; Global black3Hwnd     := ""
+; Global black4Hwnd    := ""
 
 Process, Priority,, High
 
@@ -153,24 +153,40 @@ Else
 
 ; Create 4 mask GUIs (top, left, right, bottom)
 CreateMaskGui(index, ByRef hWndOut) {
-    global BlockClicks, Opacity, black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    global BlockClicks, Opacity
+    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd  ; optional, if you want these exact globals
 
     clickStyle := BlockClicks ? "" : "+E0x20"
-    ; Build a variable name like "hWnd1", "hWnd2", etc.
-    if (index) {
-        hwndVarName := "black" . index . "Hwnd"
-        Gui, %index%: +AlwaysOnTop -Caption +ToolWindow %clickStyle% +Hwnd%hwndVarName%
-        Gui, %index%: Color, Black
-        WinSet, Transparent, %Opacity%, ahk_id %hwndVarName%
-        hWndOut := hwndVarName
-        Gui, %index%: Hide
+
+    if (!index) {
+        return
+    }
+
+    ; Create GUI and capture HWND into local variable h
+    Gui, %index%: -Caption +ToolWindow %clickStyle% +Hwndh
+    Gui, %index%: Color, Black
+    WinSet, Transparent, %Opacity%, ahk_id %h%
+    Gui, %index%: Hide
+
+    ; Populate the ByRef output variable (black1Hwnd/black2Hwnd/etc. as passed by caller)
+    hWndOut := h
+
+    ; Also store into globals by index (so they're always available globally)
+    if (index = 1) {
+        black1Hwnd := h
+    } else if (index = 2) {
+        black2Hwnd := h
+    } else if (index = 3) {
+        black3Hwnd := h
+    } else if (index = 4) {
+        black4Hwnd := h
     }
 }
 
-CreateMaskGui(1, hTop)
-CreateMaskGui(2, hLeft)
-CreateMaskGui(3, hRight)
-CreateMaskGui(4, hBottom)
+CreateMaskGui(1, black1Hwnd)
+CreateMaskGui(2, black2Hwnd)
+CreateMaskGui(3, black3Hwnd)
+CreateMaskGui(4, black4Hwnd)
 
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
@@ -2565,7 +2581,7 @@ $Esc::
                 If GetKeyState("x","P") {
                     Tooltip, Canceled!
                     ; ClearRect()
-                    ClearMasks("", Opacity)
+                    ClearMasks(, Opacity)
                     GoSub, FadeOutWindowTitle
                     CancelClose := True
                     sleep, 1500
@@ -2916,10 +2932,10 @@ Return
 SortGroupedWins:
     Critical, On
     WinSet, AlwaysOnTop, Off ,% "ahk_id " GroupedWindows[cycleCount]
-    WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
+    ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
 
     WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
-    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    ; WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
 
     If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) {
         ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
@@ -2938,52 +2954,11 @@ SortGroupedWins:
         WinActivate, % "ahk_id " ValidWindows[1]
     }
 
-    WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
-    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    WinSet, AlwaysOnTop, On, % "ahk_id " GroupedWindows[cycleCount]
+    ; WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, % "ahk_id " GroupedWindows[cycleCount]
 
-    ; If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1])
-    ; {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2])
-    ; {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3])
-    ; {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4])
-    ; {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
-    ; }
-
-    WinSet, AlwaysOnTop, Off ,% "ahk_id " GroupedWindows[cycleCount]
+    WinSet, AlwaysOnTop, Off, % "ahk_id " GroupedWindows[cycleCount]
     Critical, Off
 Return
 
@@ -3006,16 +2981,19 @@ If !hitTAB {
     textBoxSelected := False
     StopRecursion   := True
     hitTAB          := True
-    cc := Cycle()
+    cycleCount := Cycle()
+    lastHwnd := GroupedWindows[cycleCount]
 
-    If (cc > 2) {
+    If (cycleCount > 2) {
         WinSet, Transparent, 255, ahk_id %black1Hwnd%
         WinSet, Transparent, 255, ahk_id %black2Hwnd%
         WinSet, Transparent, 255, ahk_id %black3Hwnd%
         WinSet, Transparent, 255, ahk_id %black4Hwnd%
     }
+
     GoSub, Altup
-    ClearMasks()
+
+    ClearMasks(lastHwnd)
 
     StopRecursion := False
     Thread, NoTimers, False
@@ -3069,8 +3047,8 @@ Return
     If (cycleCount > 2) {
         WinSet, Transparent, 255, ahk_id %black1Hwnd%
         WinSet, Transparent, 255, ahk_id %black2Hwnd%
-        WinSet, Transparent, 255, ahk_id %black3Hwnd%
         WinSet, Transparent, 255, ahk_id %black4Hwnd%
+        WinSet, Transparent, 255, ahk_id %black3Hwnd%
         GoSub, SortGroupedWins
     }
     ClearMasks()
@@ -3223,6 +3201,7 @@ Cycle()
                                 Critical, Off
                                 ; GoSub, DrawRect
                                 DrawMasks(hwndID)
+                                ; DrawBlackMonitor(hwndID)
                                 If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
                                     GroupedWindows := []
                                     ValidWindows   := []
@@ -3237,6 +3216,7 @@ Cycle()
                             Critical, Off
                             ; GoSub, DrawRect
                             DrawMasks(hwndID)
+                            ; DrawBlackMonitor(hwndID)
                         }
                         If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
                             GroupedWindows := []
@@ -3291,6 +3271,7 @@ Cycle()
                     gwHwnd := GroupedWindows[cycleCount]
                     ; GoSub, DrawRect
                     DrawMasks(gwHwnd, False)
+                    ; DrawBlackMonitor(gwHwnd, False)
                     WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                     WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
@@ -3583,10 +3564,16 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 ClearMasks(monitorHwnd := "", initTransVal := 255) {
     global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
 
+    If !monitorHwnd
+        WinGet, hA, ID, A
+    Else
+        hA := monitorHwnd
+
     iterations := 10
     transVal   := initTransVal
     opacityInterval := Floor(initTransVal / iterations)
 
+    WinSet, AlwaysOnTop, On, ahk_id %hA%
     ; fade-out loop (non-critical)
     Loop, %iterations%
     {
@@ -3599,22 +3586,11 @@ ClearMasks(monitorHwnd := "", initTransVal := 255) {
         WinSet, Transparent, %currentVal%, ahk_id %black4Hwnd%
 
         ; Short sleep for visual smoothness; not in Critical
-        sleep, 3
-        If (GetKeyState("LAlt", "P")) {
-            Loop, 4
-                Gui, %A_Index%: Hide
-            Return
-        }
+        sleep, 10
 
         ; Now a tiny critical section to safely check/early-exit
-        Critical, On
-        If (monitorHwnd != "" && !WinExist("ahk_id " . monitorHwnd)) {
-            Loop, 4
-                Gui, %A_Index%: Hide
-            Critical, Off
-            Return
-        }
-        Critical, Off
+        If (GetKeyState("LAlt", "P") || (hA != "" && !WinExist("ahk_id " . hA)))
+            break
     }
 
     ; Final hide – we do want this to be atomic-ish
@@ -3623,28 +3599,34 @@ ClearMasks(monitorHwnd := "", initTransVal := 255) {
         Gui, %A_Index%: Hide
     Critical, Off
 
+    Thread, NoTimers, False
+    WinSet, AlwaysOnTop, Off, ahk_id %hA%
+
     Return
 }
 
 DrawBlackBar(guiIndex, x, y, w, h) {
-    global hLeft, hTop, hRight, hBottom
-    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd
+
+    Thread, NoTimers
 
     If (w <= 0 || h <= 0) {
         Gui, %guiIndex%: Hide
         Return
     }
 
-    hwndVarName := "black" . guiIndex . "Hwnd"
+    buildVar := "black" . guiIndex . "Hwnd"
+    hwndVarName := %buildVar%
+
     If !WinExist("ahk_id " . hwndVarName) {
         If (guiIndex == 1)
-            CreateMaskGui(guiIndex, hTop)
+            CreateMaskGui(guiIndex, black1Hwnd)
         Else if (guiIndex == 2)
-            CreateMaskGui(guiIndex, hLeft)
+            CreateMaskGui(guiIndex, black2Hwnd)
         Else if (guiIndex == 2)
-            CreateMaskGui(guiIndex, hRight)
+            CreateMaskGui(guiIndex, black3Hwnd)
         Else if (guiIndex == 2)
-            CreateMaskGui(guiIndex, hBottom)
+            CreateMaskGui(guiIndex, black4Hwnd)
     }
     ; Showing with new size/position is one atomic operation internally
     Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
@@ -3660,8 +3642,9 @@ DrawBlackBar(guiIndex, x, y, w, h) {
         ; No other thread can sneak in and change these GUIs mid-update.
     ; The visual fade (the transparent WinSet calls) happens after the bars are in their final positions and already visible. So even If a timer/hotkey interrupts, it doesn’t cause a half-drawn layout—only an intermediate opacity.
 DrawMasks(targetHwnd := "", firstDraw := True) {
-    global hLeft, hTop, hRight, hBottom, Opacity
-    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
+    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, Opacity
+
+    Thread, NoTimers
 
     Margin := 0  ; expands the hole around the active window by this many pixels
 
@@ -3672,7 +3655,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         hA := targetHwnd
 
     ; Don’t mask our own mask windows
-    If ((!hA) || (hA == hTop || hA == hLeft || hA == hRight || hA == hBottom))
+    If ((!hA) || (hA == black1Hwnd || hA == black2Hwnd || hA == black3Hwnd || hA == black4Hwnd))
         Return
 
     ; Get monitor WORK AREA for active window’s monitor
@@ -3713,44 +3696,101 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     ; --- FADE / OPACITY (non-critical) ---
     If (firstDraw) {
         incrValue         := 10
-        opacityInterval   := Ceil(Opacity / incrValue)
-        transVal          := opacityInterval
     } Else {
         ; For subsequent moves, you can skip animation entirely If you want:
-        incrValue         := 1
-        opacityInterval   := 0
-        transVal          := Opacity
+        incrValue         := 3
     }
+    opacityInterval   := Ceil(Opacity / incrValue)
+    transVal          := opacityInterval
 
     Loop, %incrValue%
     {
         WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
-        WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
+        WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
 
         transVal += opacityInterval
         Sleep, 2   ; purely visual – safe outside Critical
         If (!GetKeyState("LAlt", "P")) {
             WinSet, Transparent, %Opacity%, ahk_id %black1Hwnd%
             WinSet, Transparent, %Opacity%, ahk_id %black2Hwnd%
-            WinSet, Transparent, %Opacity%, ahk_id %black3Hwnd%
             WinSet, Transparent, %Opacity%, ahk_id %black4Hwnd%
+            WinSet, Transparent, %Opacity%, ahk_id %black3Hwnd%
             break
         }
     }
+
     Return
 }
 
+DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIndex := 1, useWorkArea := true) {
+    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, Opacity
+    static prevTargetHwnd
+
+    If !targetHwnd
+        WinGet, hA, ID, A
+    Else
+        hA := targetHwnd
+
+    currentMon := MWAGetMonitorMouseIsIn()
+    buildVar := "black" . guiIndex . "Hwnd"
+    hwndVarName := %buildVar%
+
+if (targetOpacity >= 0)
+        finalOpacity := targetOpacity
+    else
+        finalOpacity := Opacity
+
+    if (useWorkArea) {
+        SysGet, mon, MonitorWorkArea, %currentMon%
+    } else {
+        SysGet, mon, Monitor, %currentMon%
+    }
+
+    x := monLeft
+    y := monTop
+    w := monRight - monLeft
+    h := monBottom - monTop
+
+    If (prevTargetHwnd != "")
+        WinSet, AlwaysOnTop, Off, ahk_id %prevTargetHwnd%
+
+    DrawBlackBar(guiIndex, x, y, w, h)
+
+    WinSet, AlwaysOnTop, On, ahk_id %hA%
+
+    If (firstDraw) {
+        incrValue     := 15
+    } Else {
+        ; For subsequent moves, you can skip animation entirely If you want:
+        incrValue     := 5
+    }
+    opacityInterval   := Ceil(finalOpacity / incrValue)
+    transVal          := opacityInterval
+
+    Critical, On
+    WinSet, AlwaysOnTop, Off, ahk_id %hwndVarName%
+    Loop, %incrValue%
+    {
+        WinSet, Transparent, %transVal%, ahk_id %hwndVarName%
+        transVal += opacityInterval
+        Sleep, 2   ; purely visual – safe outside Critical
+    }
+
+    Critical, Off
+
+    prevTargetHwnd := hA
+}
 ; Finds the monitor + work area rect that contains the center of the given window.
 GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
-                       , ByRef workX, ByRef workY, ByRef workW, ByRef workH) {
+                             , ByRef workX, ByRef workY, ByRef workW, ByRef workH) {
     ; WinGetPos, wx, wy, ww, wh, ahk_id %hWnd%
     WinGetPosEx(hWnd, wx, wy, ww, wh)
     if (wx = "")
         return false
-    cx := wx + ww//2
-    cy := wy + wh//2
+    cx := round((wx + ww)/2)
+    cy := round((wy + wh)/2)
 
     SysGet, MonCount, MonitorCount
     Loop, %MonCount%
@@ -3758,7 +3798,7 @@ GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
         SysGet, Mon,  Monitor,         %A_Index% ; MonLeft/MonTop/MonRight/MonBottom
         SysGet, Work, MonitorWorkArea, %A_Index% ; WorkLeft/WorkTop/WorkRight/WorkBottom
         if (cx >= MonLeft && cx < MonRight && cy >= MonTop && cy < MonBottom) {
-            monX := MonLeft, monY := MonTop, monW := MonRight - MonLeft, monH := MonBottom - MonTop
+            monX  := MonLeft,   monY := MonTop,   monW := MonRight - MonLeft,    monH := MonBottom - MonTop
             workX := WorkLeft, workY := WorkTop, workW := WorkRight - WorkLeft, workH := WorkBottom - WorkTop
             return true
         }
@@ -5735,7 +5775,8 @@ LaunchWinFind:
     If (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (DoubleClickTime/2))
     {
         StopRecursion   := True
-        SetTimer, mouseTrack, off
+        SetTimer, keyTrack, Off
+        SetTimer, mouseTrack, Off
 
         UserInputTrimmed :=
         StopCheck        := False
@@ -5748,6 +5789,7 @@ LaunchWinFind:
         {
             StopRecursion    := False
             SearchingWindows := False
+            SetTimer, keyTrack, On
             SetTimer, mouseTrack, On
             Return
         }
@@ -5789,6 +5831,8 @@ LaunchWinFind:
                 Sleep, 1500
                 Tooltip,
                 StopRecursion := False
+
+                SetTimer, keyTrack, On
                 SetTimer, mouseTrack, On
                 Return
             }
@@ -5878,9 +5922,10 @@ LaunchWinFind:
                 tooltip,
             }
         }
-        SearchingWindows := False
 
-        StopRecursion   := False
+        SearchingWindows := False
+        StopRecursion    := False
+        SetTimer, keyTrack,   On
         SetTimer, mouseTrack, On
     }
     KeyWait, Ctrl, U T10
@@ -5891,6 +5936,7 @@ ActivateWindow:
     DetectHiddenWindows, On
     thisMenuItem := ""
     result := {}
+    CalcID :=
 
     If (totalMenuItemCount == 1 && onlyTitleFound != "")
         thisMenuItem := onlyTitleFound
@@ -5911,6 +5957,8 @@ ActivateWindow:
         fulltitle := Trim(fulltitle)
     }
 
+    DrawBlackMonitor()
+
     If (fulltitle == "Calculator") {
         ; https://www.autohotkey.com/boards/viewtopic.php?t=43997
         WinGet, CalcIDs, List, Calculator
@@ -5919,19 +5967,31 @@ ActivateWindow:
         Else
             CalcID := CalcIDs2 ; Calc is Minimized use 2nd ID
         WinActivate, ahk_id %CalcID%
+        WinSet, AlwaysOnTop, On, ahk_id %CalcID%
     }
-    Else
+    Else {
         WinActivate, %fulltitle%
+        WinSet, AlwaysOnTop, On, %fulltitle%
+    }
 
     WinGet, actWinState, MinMax, %fulltitle%
-    If actWinState == -1
+    If (actWinState == -1)
         sleep, 125
-    DrawMasks()
-    sleep, 725
+
+    sleep, 500
     ClearMasks()
 
     Process, Close, Expr_Name
     Process, Close, ExprAltUp_Name
+
+    If (CalcID)
+        WinGet, hwndOfTitle, ID, %CalcID%
+    Else
+        WinGet, hwndOfTitle, ID, %fulltitle%
+
+    WinSet, AlwaysOnTop, Off, ahk_id %hwndOfTitle%
+    If IsAlwaysOnTop(hwndOfTitle)
+        WinSet, AlwaysOnTop, Off, ahk_id %hwndOfTitle%
 
 Return
 
@@ -6853,82 +6913,114 @@ IsAltTabWindow_Why(hWnd)
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399
 IsAltTabWindow(hWnd) {
-    static WS_EX_APPWINDOW := 0x40000, WS_EX_TOOLWINDOW := 0x80, DWMWA_CLOAKED := 14, DWM_CLOAKED_SHELL := 2, WS_EX_NOACTIVATE := 0x8000000, GA_PARENT := 1, GW_OWNER := 4, MONITOR_DEFAULTTONULL := 0, VirtualDesktopExist, PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
-    static WS_EX_WINDOWEDGE := 0x100, WS_EX_CONTROLPARENT := 0x10000, WS_EX_DLGMODALFRAME := 0x00000001
+    static WS_EX_APPWINDOW := 0x40000
+    static WS_EX_TOOLWINDOW := 0x80
+    static DWMWA_CLOAKED := 14
+    static DWM_CLOAKED_SHELL := 2
+    static WS_EX_NOACTIVATE := 0x8000000
+    static GA_PARENT := 1
+    static GW_OWNER := 4
+    static MONITOR_DEFAULTTONULL := 0
+    static VirtualDesktopExist
+    static PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
+    static WS_EX_WINDOWEDGE := 0x100
+    static WS_EX_CONTROLPARENT := 0x10000
+    static WS_EX_DLGMODALFRAME := 0x00000001
 
     WinGetTitle, hasTitle, ahk_id %hWnd%
     WinGetClass, winClass, ahk_id %hWnd%
+
     ; Windows Terminal (WinUI/XAML Island) content window -> use its host window
     if (winClass = "CASCADIA_HOSTING_WINDOW_CLASS")
     {
         ; GA_ROOT = 2 (top-level window in the parent chain)
         hWnd := DllCall("GetAncestor", "uptr", hWnd, "uint", 2, "ptr")
         WinGetClass, winClass, ahk_id %hWnd%
+        WinGetTitle, hasTitle, ahk_id %hWnd%
     }
+
     if (!hasTitle && winClass != "CASCADIA_HOSTING_WINDOW_CLASS")
         return False
 
-    If (VirtualDesktopExist = "")
+    if (VirtualDesktopExist = "")
     {
-       OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
-       If (OSbuildNumber < 14393)
-          VirtualDesktopExist := 0
-       Else
-          VirtualDesktopExist := 1
+        OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
+        if (OSbuildNumber < 14393)
+            VirtualDesktopExist := 0
+        else
+            VirtualDesktopExist := 1
     }
-    If !DllCall("IsWindowVisible", "uptr", hWnd)
-       Return False
+
+    ; Key change: treat minimized windows as acceptable even if IsWindowVisible is false.
+    isMinimized := DllCall("IsIconic", "uptr", hWnd)
+
+    if (!DllCall("IsWindowVisible", "uptr", hWnd) && !isMinimized)
+        return False
+
     DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
-    If (cloaked = DWM_CLOAKED_SHELL)
-       Return False
-    If (realHwnd(DllCall("GetAncestor", "uptr", hwnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
-       Return False
-    If (winClass = "Windows.UI.Core.CoreWindow" || (InStr(winClass, "Shell",False) && InStr(winClass, "TrayWnd",False)) || winClass == "ProgMan" || winClass == "WorkerW")
-       Return False
-    If (winClass = "ApplicationFrameWindow")
+    if (cloaked = DWM_CLOAKED_SHELL)
+        return False
+
+    if (realHwnd(DllCall("GetAncestor", "uptr", hWnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
+        return False
+
+    if (winClass = "Windows.UI.Core.CoreWindow"
+        || (InStr(winClass, "Shell", False) && InStr(winClass, "TrayWnd", False))
+        || winClass == "ProgMan"
+        || winClass == "WorkerW")
+        return False
+
+    if (winClass = "ApplicationFrameWindow")
     {
-       varsetcapacity(ApplicationViewCloakType, 4, 0)
-       DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
-       If (numget(ApplicationViewCloakType, 0, "int") = 1)   ; https://github.com/kvakulo/Switcheroo/commit/fa526606d52d5ba066ba0b2b5aa83ed04741390f
-          Return False
+        VarSetCapacity(ApplicationViewCloakType, 4, 0)
+        DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
+        if (NumGet(ApplicationViewCloakType, 0, "int") = 1)
+            return False
     }
-    ; If !DllCall("MonitorFromWindow", "uptr", hwnd, "uint", MONITOR_DEFAULTTONULL, "ptr")   ; test If window is shown on any monitor. alt-tab shows any window even If window is out of monitor.
-    ;   Return
+
     WinGet, exStyles, ExStyle, ahk_id %hWnd%
-    If (exStyles & WS_EX_APPWINDOW)
+
+    if (exStyles & WS_EX_APPWINDOW)
     {
-       If DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr") {
-          Return False
-       }
-       If (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwnd) {
-          Return True
-       }
-       Else {
-          Return False
-       }
+        if DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
+            return False
+
+        if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hWnd)
+            return True
+        else
+            return False
     }
-    If (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE) or (exStyles & WS_EX_DLGMODALFRAME)
-       Return False
-    If (exStyles & (WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT))
-       Return True
+
+    if (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE) or (exStyles & WS_EX_DLGMODALFRAME)
+        return False
+
+    if (exStyles & (WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT))
+        return True
+
     loop
     {
-       hwndPrev := hwnd
-       hwnd := DllCall("GetWindow", "uptr", hwnd, "uint", GW_OWNER, "ptr")
-       If !hwnd
-       {
-          If DllCall("GetProp", "uptr", hwndPrev, "str", "ITaskList_Deleted", "ptr")
-             Return False
-          If (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hwndPrev)
-             Return True
-          Else
-             Return False
-       }
-       If DllCall("IsWindowVisible", "uptr", hwnd)
-          Return False
-       WinGet, exStyles, ExStyle, ahk_id %hwnd%
-       If ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
-          Return False
+        hWndPrev := hWnd
+        hWnd := DllCall("GetWindow", "uptr", hWnd, "uint", GW_OWNER, "ptr")
+
+        if (!hWnd)
+        {
+            if DllCall("GetProp", "uptr", hWndPrev, "str", "ITaskList_Deleted", "ptr")
+                return False
+
+            if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hWndPrev)
+                return True
+            else
+                return False
+        }
+
+        ; Leave owner logic intact: if an owner is visible, the owned window typically isn't Alt-Tab eligible.
+        ; (We do NOT “special-case” minimized owners here.)
+        if DllCall("IsWindowVisible", "uptr", hWnd)
+            return False
+
+        WinGet, exStyles, ExStyle, ahk_id %hWnd%
+        if ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
+            return False
     }
 }
 
