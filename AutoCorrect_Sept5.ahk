@@ -5739,7 +5739,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
 }
 
 SendCtrlAddLabel:
-    SendCtrlAdd(_winIdU, , , , _winCtrlUNN)
+    SendCtrlAdd(_winIdU, , , _winCtrlU)
 Return
 
 #MaxThreadsPerHotkey 1
@@ -7051,9 +7051,7 @@ realHwnd(hwnd)
    numput(hwnd, var, 0, "uint64")
    Return numget(var, 0, "uint")
 }
-; -----------------------------------------------------------------------
-; https://github.com/Ciantic/VirtualDesktopAccessor/blob/rust/example.ahk
-; -----------------------------------------------------------------------
+
 GetDesktopCount() {
     global GetDesktopCountProc
 
