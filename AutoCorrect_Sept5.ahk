@@ -117,10 +117,6 @@ Global black1Hwnd := ""
 Global black2Hwnd := ""
 Global black3Hwnd := ""
 Global black4Hwnd := ""
-; Global black1Hwnd       := ""
-; Global black2Hwnd      := ""
-; Global black3Hwnd     := ""
-; Global black4Hwnd    := ""
 
 Process, Priority,, High
 
@@ -2977,11 +2973,14 @@ $!Tab::
 $!+Tab::
 If !hitTAB {
     Thread, NoTimers
+    StopRecursion   := True
+
     firstDraw       := True
     textBoxSelected := False
-    StopRecursion   := True
     hitTAB          := True
+
     cycleCount := Cycle()
+
     lastHwnd := GroupedWindows[cycleCount]
 
     If (cycleCount > 2) {
@@ -3034,10 +3033,10 @@ Return
         }
     }
 
-    tempWinActID := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
+    cycleCount := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
 
     If !LclickSelected
-        lastActWinID := tempWinActID
+        lastActWinID := GroupedWindows[cycleCount]
     Else
         LclickSelected := False
 
@@ -3059,8 +3058,8 @@ Return
     ValidWindows   := []
     GroupedWindows := []
 
-    Thread, NoTimers, False
     StopRecursion := False
+    Thread, NoTimers, False
 Return
 
 #If hitTAB
@@ -3106,9 +3105,13 @@ $!Lbutton::
         }
     }
     Else If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550)) {
+        blockKeys := True
+        Send, {LAlt UP}
         Send, {Click, left}
         Send, {ENTER}
         sleep, 275
+        blockKeys := False
+        FixModifiers()
     }
 Return
 
@@ -3417,7 +3420,7 @@ Return
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    global MonCount, Highlighter, hitTAB, hitTilde, GroupedWindows, cycleCount, LclickSelected, lastActWinID
+    global MonCount, Highlighter, hitTAB, hitTilde, GroupedWindows, LclickSelected
 
     windowsToMinimize := []
     minimizedWindows  := []
@@ -3468,15 +3471,14 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         Return
     }
 
-    ; WinActivate, % "ahk_id " GroupedWindows[1]
     WinGet, mmState, MinMax, % "ahk_id " GroupedWindows[cycleCount]
     If (MonCount > 1 && mmState == -1) {
         windowsToMinimize.push(GroupedWindows[cycleCount])
-        lastActWinID := GroupedWindows[cycleCount]
     }
     WinActivate, % "ahk_id " GroupedWindows[cycleCount]
     WinGetTitle, actTitle, % "ahk_id " GroupedWindows[cycleCount]
     WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
+    lastActWinID := GroupedWindows[cycleCount]
 
     Critical, Off
 
@@ -3490,8 +3492,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     If (cycleCount > numWindows) {
         cycleCount := 1
     }
-    gwHwndId := GroupedWindows[cycleCount]
-    ; tooltip, num of windows is %numWindows%
+    gwHwndId := GroupedWindows[cycleCount] ; get ready to activate next window
+
     loop
     {
         If LclickSelected
@@ -3553,11 +3555,12 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             }
         }
     }
-    cycleCount := cycleCount - 1
+
+    cycleCount := cycleCount - 1 ; correct for final increment of cycleCount++
     If (cycleCount <= 0)
         cycleCount := GroupedWindows.MaxIndex()
 
-    Return lastActWinID
+    Return cycleCount
 }
 
 ; ------------------  ChatGPT ------------------------------------------------------------------
@@ -3623,9 +3626,9 @@ DrawBlackBar(guiIndex, x, y, w, h) {
             CreateMaskGui(guiIndex, black1Hwnd)
         Else if (guiIndex == 2)
             CreateMaskGui(guiIndex, black2Hwnd)
-        Else if (guiIndex == 2)
+        Else if (guiIndex == 3)
             CreateMaskGui(guiIndex, black3Hwnd)
-        Else if (guiIndex == 2)
+        Else if (guiIndex == 4)
             CreateMaskGui(guiIndex, black4Hwnd)
     }
     ; Showing with new size/position is one atomic operation internally
@@ -3695,7 +3698,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     ; --- FADE / OPACITY (non-critical) ---
     If (firstDraw) {
-        incrValue         := 10
+        incrValue         := 8
     } Else {
         ; For subsequent moves, you can skip animation entirely If you want:
         incrValue         := 3
@@ -3707,16 +3710,16 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     {
         WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
-        WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
+        WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
 
         transVal += opacityInterval
         Sleep, 2   ; purely visual – safe outside Critical
         If (!GetKeyState("LAlt", "P")) {
             WinSet, Transparent, %Opacity%, ahk_id %black1Hwnd%
             WinSet, Transparent, %Opacity%, ahk_id %black2Hwnd%
-            WinSet, Transparent, %Opacity%, ahk_id %black4Hwnd%
             WinSet, Transparent, %Opacity%, ahk_id %black3Hwnd%
+            WinSet, Transparent, %Opacity%, ahk_id %black4Hwnd%
             break
         }
     }
@@ -8825,16 +8828,6 @@ BlockKeyboard( bAction )
     Else
         Blocker.Stop()
 }
-; https://www.autohotkey.com/boards/viewtopic.php?p=583366#p583366
-GetIEobject()
-{
-   WinGet, hWnd, ID, A
-   for oWin in ComObjCreate("Shell.Application").Windows
-   {
-      If (oWin.HWND = hWnd)
-         Return oWin
-   }
-}
 
 IsGoogleDocWindow() {
     WinGetTitle, title, A
@@ -10104,6 +10097,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::stuats::status
 ::claend::cleaned
 ::its he::is the
+::itwas::it was
 ::Shoudl::Should
 ::a mnot::am not
 ::a tthat::at that
@@ -11774,11 +11768,12 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's weight::its weight
 ::it's wings::its wings
 ::it's young::its young
+::upon it's::upon its
+::of it's::of its
 ::its a::it's a
 ::its an::it's an
 ::its apparently::it's apparently
 ::its the::it's the
-::itwas::it was
 ::its any::it's any
 ::its available::it's available
 ::its beautiful::it's beautiful
@@ -13297,6 +13292,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Anything below this point was added to the script by the user via the Win+H hotkey.
 ;------------------------------------------------------------------------------
+::hilighting::highlighting
 ::releasses::releases
 ::ahven't::haven't
 ::ahvent::haven't
