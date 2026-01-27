@@ -3349,62 +3349,63 @@ DrawRect:
     If (x="")
         Return
 
-    borderType:="inside"                ; set to inside, outside, or both
+    borderType := "inside"                ; set to inside, outside, or both
 
-    If (borderType="outside") {
-        outerX:=0
-        outerY:=0
-        outerX2:=w+2*border_thickness
-        outerY2:=h+2*border_thickness
+    If (borderType = "outside") {
+        outerX      := 0
+        outerY      := 0
+        outerX2     := w+2*border_thickness
+        outerY2     := h+2*border_thickness
 
-        innerX:=border_thickness
-        innerY:=border_thickness
-        innerX2:=border_thickness+w
-        innerY2:=border_thickness+h
+        innerX      := border_thickness
+        innerY      := border_thickness
+        innerX2     := border_thickness+w
+        innerY2     := border_thickness+h
 
-        newX:=x-border_thickness
-        newY:=y-border_thickness
-        newW:=w+2*border_thickness
-        newH:=h+2*border_thickness
+        newX        := x-border_thickness
+        newY        := y-border_thickness
+        newW        := w+2*border_thickness
+        newH        := h+2*border_thickness
 
     } Else If (borderType="inside") {
         ; WinGet, myState, MinMax, A
         ; If (myState == 1)
             ; offset:=8
         ; Else
-            offset:=0
+        offset      := 0
 
-        outerX:=offset
-        outerY:=offset
-        outerX2:=w-offset
-        outerY2:=h-offset
+        outerX      := offset
+        outerY      := offset
+        outerX2     := w-offset
+        outerY2     := h-offset
 
-        innerX:=border_thickness+offset
-        innerY:=border_thickness+offset
-        innerX2:=w-border_thickness-offset
-        innerY2:=h-border_thickness-offset
+        innerX      := border_thickness+offset
+        innerY      := border_thickness+offset
+        innerX2     := w-border_thickness-offset
+        innerY2     := h-border_thickness-offset
 
-        newX:=x
-        newY:=y
-        newW:=w
-        newH:=h
+        newX        := x
+        newY        := y
+        newW        := w
+        newH        := h
 
     } Else If (borderType="both") {
-        outerX:=0
-        outerY:=0
-        outerX2:=w+2*border_thickness
-        outerY2:=h+2*border_thickness
+        outerX      := 0
+        outerY      := 0
+        outerX2     := w+2*border_thickness
+        outerY2     := h+2*border_thickness
 
-        innerX:=border_thickness*2
-        innerY:=border_thickness*2
-        innerX2:=w
-        innerY2:=h
+        innerX      := border_thickness*2
+        innerY      := border_thickness*2
+        innerX2     := w
+        innerY2     := h
 
-        newX:=x-border_thickness
-        newY:=y-border_thickness
-        newW:=w+4*border_thickness
-        newH:=h+4*border_thickness
+        newX        := x-border_thickness
+        newY        := y-border_thickness
+        newW        := w+4*border_thickness
+        newH        := h+4*border_thickness
     }
+
     Critical, On
     Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NA, Table awaiting Action
     WinSet, Region, %outerX%-%outerY%  %outerX2%-%outerY%  %outerX2%-%outerY2%  %outerX%-%outerY2%  %outerX%-%outerY%  %innerX%-%innerY%  %innerX2%-%innerY%  %innerX2%-%innerY2%  %innerX%-%innerY2%  %innerX%-%innerY%, ahk_id %Highlighter%
@@ -5046,6 +5047,19 @@ MSAA_IsFocusedEditable() {
     return false
 }
 
+F8::
+    WinGet, hwnd, ID, A
+
+    ok := IsDetailsView(hwnd)
+
+    msg := "Probe: " px "," py
+    msg := msg "`nHit Name: " n
+    msg := msg "`nHit Class: " c
+    msg := msg "`nHit Type: " t
+    msg := msg "`nDetails?: " (ok ? "YES" : "NO")
+
+    ToolTip % msg
+return
 
 GetThreadFocusHwnd(tid)
 {
@@ -5087,20 +5101,6 @@ ControlGetFocusEx(tidTarget, hwndTarget, timeoutMs := 15)
     }
     return false
 }
-
-F8::
-    WinGet, hwnd, ID, A
-
-    ok := IsDetailsView(hwnd)
-
-    msg := "Probe: " px "," py
-    msg := msg "`nHit Name: " n
-    msg := msg "`nHit Class: " c
-    msg := msg "`nHit Type: " t
-    msg := msg "`nDetails?: " (ok ? "YES" : "NO")
-
-    ToolTip % msg
-return
 
 EnsureFocusedHwnd(hwndTarget, totalMs := 60, refocusEveryMs := 15)
 {
