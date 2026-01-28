@@ -3567,7 +3567,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 }
 
 ; ------------------  ChatGPT ------------------------------------------------------------------
-DrawBlackBar(guiIndex, x, y, w, h, firstDraw := True) {
+DrawBlackBar(guiIndex, x, y, w, h) {
     global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd
 
     If (w <= 0 || h <= 0) {
@@ -3590,13 +3590,12 @@ DrawBlackBar(guiIndex, x, y, w, h, firstDraw := True) {
         Else if (guiIndex == 5)
             CreateMaskGui(guiIndex, black5Hwnd)
     }
+
+    WinSet, Transparent,  1, ahk_id %hwndVarName%
     ; Showing with new size/position is one atomic operation internally
     Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
-
     ; Make sure they’re on top exactly once per draw
     WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
-    If firstDraw
-        WinSet, Transparent,  1, ahk_id %hwndVarName%
 }
 
 ClearMasks(appClosingHwnd := "", initTransVal := 255) {
@@ -3655,9 +3654,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     Margin := 0  ; expands the hole around the active window by this many pixels
 
-    if !firstDraw {
-        DrawBlackMonitor(,False, Opacity, 5)
-
+    ; If !firstDraw {
         ; cl_iterations      := 4
         ; cl_transVal        := Opacity
         ; cl_opacityInterval := Floor(Opacity / cl_iterations)
@@ -3675,7 +3672,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
             ; ; Short sleep for visual smoothness; not in Critical
             ; sleep, 2
         ; }
-    }
+    ; }
 
     ; Resolve target window
     If !targetHwnd
@@ -3708,14 +3705,16 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     ; --- CRITICAL SECTION: JUST THE GEOMETRY + SHOWS ---
     Critical, On
+    if !firstDraw
+        DrawBlackMonitor(,False, Opacity, 5)
     ; TOP panel
-    DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2), firstDraw)
+    DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
     ; LEFT panel
-    DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT), firstDraw)
+    DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT))
     ; RIGHT panel
-    DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT), firstDraw)
+    DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT))
     ; BOTTOM panel
-    DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB), firstDraw)
+    DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB))
     Critical, Off
     ; --- END CRITICAL SECTION ---
 
@@ -3739,7 +3738,8 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
-        WinSet, Transparent, %fadeVal%, ahk_id %black5Hwnd%
+        If !firstDraw
+            WinSet, Transparent, %fadeVal%,  ahk_id %black5Hwnd%
 
         transVal += opacityInterval
         fadeVal  -= opacityInterval
