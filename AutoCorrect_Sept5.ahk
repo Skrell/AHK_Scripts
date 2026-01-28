@@ -117,6 +117,7 @@ Global black1Hwnd := ""
 Global black2Hwnd := ""
 Global black3Hwnd := ""
 Global black4Hwnd := ""
+Global black5Hwnd := ""
 
 Process, Priority,, High
 
@@ -150,7 +151,7 @@ Else
 ; Create 4 mask GUIs (top, left, right, bottom)
 CreateMaskGui(index, ByRef hWndOut) {
     global BlockClicks, Opacity
-    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd  ; optional, if you want these exact globals
+    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd, black5Hwnd  ; optional, if you want these exact globals
 
     clickStyle := BlockClicks ? "" : "+E0x20"
 
@@ -176,6 +177,8 @@ CreateMaskGui(index, ByRef hWndOut) {
         black3Hwnd := h
     } else if (index = 4) {
         black4Hwnd := h
+    } else if (index = 5) {
+        black5Hwnd := h
     }
 }
 
@@ -3271,9 +3274,9 @@ Cycle()
                     WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                     WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                     gwHwnd := GroupedWindows[cycleCount]
-                    ; GoSub, DrawRect
+                    ; DrawBlackMonitor(,False, Opacity, 5)
                     DrawMasks(gwHwnd, False)
-                    ; DrawBlackMonitor(gwHwnd, False)
+                    ; ClearBlackMonitor()
                     WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                     WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
@@ -3564,13 +3567,45 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 }
 
 ; ------------------  ChatGPT ------------------------------------------------------------------
-ClearMasks(monitorHwnd := "", initTransVal := 255) {
+DrawBlackBar(guiIndex, x, y, w, h, firstDraw := True) {
+    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd
+
+    If (w <= 0 || h <= 0) {
+        Gui, %guiIndex%: Hide
+        Return
+    }
+
+    buildVar := "black" . guiIndex . "Hwnd"
+    hwndVarName := %buildVar%
+
+    If !WinExist("ahk_id " . hwndVarName) {
+        If (guiIndex == 1)
+            CreateMaskGui(guiIndex, black1Hwnd)
+        Else if (guiIndex == 2)
+            CreateMaskGui(guiIndex, black2Hwnd)
+        Else if (guiIndex == 3)
+            CreateMaskGui(guiIndex, black3Hwnd)
+        Else if (guiIndex == 4)
+            CreateMaskGui(guiIndex, black4Hwnd)
+        Else if (guiIndex == 5)
+            CreateMaskGui(guiIndex, black5Hwnd)
+    }
+    ; Showing with new size/position is one atomic operation internally
+    Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
+
+    ; Make sure they’re on top exactly once per draw
+    WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
+    If firstDraw
+        WinSet, Transparent,  1, ahk_id %hwndVarName%
+}
+
+ClearMasks(appClosingHwnd := "", initTransVal := 255) {
     global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
 
-    If !monitorHwnd
+    If !appClosingHwnd
         WinGet, hA, ID, A
     Else
-        hA := monitorHwnd
+        hA := appClosingHwnd
 
     iterations := 10
     transVal   := initTransVal
@@ -3608,48 +3643,39 @@ ClearMasks(monitorHwnd := "", initTransVal := 255) {
     Return
 }
 
-DrawBlackBar(guiIndex, x, y, w, h) {
-    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd
-
-    Thread, NoTimers
-
-    If (w <= 0 || h <= 0) {
-        Gui, %guiIndex%: Hide
-        Return
-    }
-
-    buildVar := "black" . guiIndex . "Hwnd"
-    hwndVarName := %buildVar%
-
-    If !WinExist("ahk_id " . hwndVarName) {
-        If (guiIndex == 1)
-            CreateMaskGui(guiIndex, black1Hwnd)
-        Else if (guiIndex == 2)
-            CreateMaskGui(guiIndex, black2Hwnd)
-        Else if (guiIndex == 3)
-            CreateMaskGui(guiIndex, black3Hwnd)
-        Else if (guiIndex == 4)
-            CreateMaskGui(guiIndex, black4Hwnd)
-    }
-    ; Showing with new size/position is one atomic operation internally
-    Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
-
-    ; Make sure they’re on top exactly once per draw
-    WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
-    WinSet, Transparent,  1, ahk_id %hwndVarName%
-}
-
 ; Why this helps flicker:
     ; All geometry & showing of the 4 bars happens back-to-back while uninterruptible:
         ; No Sleep inside Critical.
         ; No other thread can sneak in and change these GUIs mid-update.
     ; The visual fade (the transparent WinSet calls) happens after the bars are in their final positions and already visible. So even If a timer/hotkey interrupts, it doesn’t cause a half-drawn layout—only an intermediate opacity.
 DrawMasks(targetHwnd := "", firstDraw := True) {
-    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, Opacity
+    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
 
     Thread, NoTimers
 
     Margin := 0  ; expands the hole around the active window by this many pixels
+
+    if !firstDraw {
+        DrawBlackMonitor(,False, Opacity, 5)
+
+        ; cl_iterations      := 4
+        ; cl_transVal        := Opacity
+        ; cl_opacityInterval := Floor(Opacity / cl_iterations)
+
+        ; Loop, %cl_iterations%
+        ; {
+            ; cl_transVal -= cl_opacityInterval
+            ; cl_currentVal := cl_transVal
+
+            ; WinSet, Transparent, %cl_currentVal%, ahk_id %black1Hwnd%
+            ; WinSet, Transparent, %cl_currentVal%, ahk_id %black2Hwnd%
+            ; WinSet, Transparent, %cl_currentVal%, ahk_id %black3Hwnd%
+            ; WinSet, Transparent, %cl_currentVal%, ahk_id %black4Hwnd%
+
+            ; ; Short sleep for visual smoothness; not in Critical
+            ; sleep, 2
+        ; }
+    }
 
     ; Resolve target window
     If !targetHwnd
@@ -3683,13 +3709,13 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     ; --- CRITICAL SECTION: JUST THE GEOMETRY + SHOWS ---
     Critical, On
     ; TOP panel
-    DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
+    DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2), firstDraw)
     ; LEFT panel
-    DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT))
+    DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT), firstDraw)
     ; RIGHT panel
-    DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT))
+    DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT), firstDraw)
     ; BOTTOM panel
-    DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB))
+    DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB), firstDraw)
     Critical, Off
     ; --- END CRITICAL SECTION ---
 
@@ -3701,10 +3727,11 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         incrValue         := 8
     } Else {
         ; For subsequent moves, you can skip animation entirely If you want:
-        incrValue         := 3
+        incrValue         := 1
     }
     opacityInterval   := Ceil(Opacity / incrValue)
     transVal          := opacityInterval
+    fadeVal           := Opacity
 
     Loop, %incrValue%
     {
@@ -3712,8 +3739,10 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
+        WinSet, Transparent, %fadeVal%, ahk_id %black5Hwnd%
 
         transVal += opacityInterval
+        fadeVal  -= opacityInterval
         Sleep, 2   ; purely visual – safe outside Critical
         If (!GetKeyState("LAlt", "P")) {
             WinSet, Transparent, %Opacity%, ahk_id %black1Hwnd%
@@ -3723,24 +3752,51 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
             break
         }
     }
+    ClearBlackMonitor()
+
+    Return
+}
+
+ClearBlackMonitor(targetOpacity := -1) {
+    global black5Hwnd, Opacity
+
+    if (targetOpacity >= 0)
+        startingOpacity := targetOpacity
+    else
+        startingOpacity := Opacity
+
+    iterations := 0
+    transVal   := startingOpacity
+    opacityInterval := Floor(startingOpacity / iterations)
+
+    WinSet, AlwaysOnTop, On, ahk_id %hA%
+    ; fade-out loop (non-critical)
+    Loop, %iterations%
+    {
+        transVal -= opacityInterval
+        currentVal := transVal
+
+        WinSet, Transparent, %currentVal%, ahk_id %black5Hwnd%
+
+        ; Short sleep for visual smoothness; not in Critical
+        sleep, 10
+    }
+
+    ; Final hide – we do want this to be atomic-ish
+    Gui, 5: Hide
 
     Return
 }
 
 DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIndex := 1, useWorkArea := true) {
-    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, Opacity
+    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
     static prevTargetHwnd
-
-    If !targetHwnd
-        WinGet, hA, ID, A
-    Else
-        hA := targetHwnd
 
     currentMon := MWAGetMonitorMouseIsIn()
     buildVar := "black" . guiIndex . "Hwnd"
     hwndVarName := %buildVar%
 
-if (targetOpacity >= 0)
+    if (targetOpacity >= 0)
         finalOpacity := targetOpacity
     else
         finalOpacity := Opacity
@@ -3761,7 +3817,8 @@ if (targetOpacity >= 0)
 
     DrawBlackBar(guiIndex, x, y, w, h)
 
-    WinSet, AlwaysOnTop, On, ahk_id %hA%
+    If !targetHwnd
+        WinSet, AlwaysOnTop, On, ahk_id %targetHwnd%
 
     If (firstDraw) {
         incrValue     := 15
@@ -3780,10 +3837,10 @@ if (targetOpacity >= 0)
         transVal += opacityInterval
         Sleep, 2   ; purely visual – safe outside Critical
     }
-
     Critical, Off
 
-    prevTargetHwnd := hA
+    If !targetHwnd
+        prevTargetHwnd := targetHwnd
 }
 ; Finds the monitor + work area rect that contains the center of the given window.
 GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
