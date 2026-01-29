@@ -427,7 +427,9 @@ if (!hHookKbd || !hHookMouse)
 
 OnExit, UnhookHooks
 
-InitVDA()
+vdaInitd := InitVDA()
+comInitd := InitCOM_STA()
+accInitd := Acc_Init()
 
 SetTimer mouseTrack, 10
 SetTimer keyTrack, 5
@@ -487,14 +489,6 @@ InitVDA()
     GetCurrentDesktopNumberProc         := _gp("GetCurrentDesktopNumber")
     IsWindowOnCurrentVirtualDesktopProc := _gp("IsWindowOnCurrentVirtualDesktop")
     IsWindowOnDesktopNumberProc         := _gp("IsWindowOnDesktopNumber")
-    ; if (!IsWindowOnDesktopNumberProc)
-    ; {
-        ; MsgBox % "Missing export: IsWindowOnDesktopNumber"
-    ; }
-    ; else
-    ; {
-        ; MsgBox % "IsWindowOnDesktopNumberProc=" Format("0x{:X}", IsWindowOnDesktopNumberProc)
-    ; }
     MoveWindowToDesktopNumberProc       := _gp("MoveWindowToDesktopNumber")
     IsPinnedWindowProc                  := _gp("IsPinnedWindow")
 
@@ -1132,11 +1126,16 @@ UnhookHooks:
     Thread, NoTimers
 
     if (hActWin)
-        DllCall( "UnhookWinEvent", "Ptr", hActWin)
+        DllCall("UnhookWinEvent", "Ptr", hActWin)
     if (hHookKbd)
         DllCall("UnhookWindowsHookEx", "Ptr", hHookKbd)
     if (hHookMouse)
         DllCall("UnhookWindowsHookEx", "Ptr", hHookMouse)
+    if (comInitd)
+        DllCall("ole32\CoUninitialize")
+    if (vdaInitd)
+        DllCall("FreeLibrary", "Ptr", hVirtualDesktopAccessor)
+
     ExitApp
 return
 
@@ -4724,23 +4723,20 @@ IsExplorerHeaderClick() {
         }
     }
 
-    ; ---------- SLOW PATH: discover header element, refresh cache ----------
+    ; ---------- SLOW PATH: single climb to find header, refresh cache ----------
     acc := Acc_GetObjectAtScreenPoint(mx, my)
     if !IsObject(acc) {
         cacheWin := 0
         return False
     }
 
-    if (!Acc_IsHeaderAtPoint(acc, cls, ROLE_SYSTEM_OUTLINE, ROLE_SYSTEM_COLUMNHEADER, ROLE_SYSTEM_MENUPOPUP)) {
+    ; ONE WALK: if we can find the header object, we already know it's a header click
+    hdr := Acc_FindHeaderObject(acc, cls, ROLE_SYSTEM_OUTLINE, ROLE_SYSTEM_COLUMNHEADER, ROLE_SYSTEM_MENUPOPUP)
+    if !IsObject(hdr) {
         return False
     }
 
-    hdr := Acc_FindHeaderObject(acc, cls, ROLE_SYSTEM_OUTLINE, ROLE_SYSTEM_COLUMNHEADER, ROLE_SYSTEM_MENUPOPUP)
-    if !IsObject(hdr) {
-        cacheWin := 0
-        return True
-    }
-
+    ; If we found a header object but can't cache rect, still treat as header click
     try
     {
         hdr.accLocation(hx, hy, hw, hh, 0)
@@ -4759,6 +4755,7 @@ IsExplorerHeaderClick() {
     return True
 }
 
+
 ; ------------------------------------------------------------------
 ; ✅ Use caching to reject header clicks (point-in-rect) before you do any accName() work.
 ; ✅ Only pay the expensive “figure out header rectangle / names” cost on cache miss
@@ -4771,7 +4768,7 @@ IsExplorerHeaderClick() {
 ;     Only occasionally: accName() is used to correctly identify headers that masquerade
 ;     as role 10/62 — but only when building the cache.
 ; ------------------------------------------------------------------
-IsExplorerBlankSpaceClick() {
+IsExplorerBlankSpaceClick(ByRef isExplorerHeader := False) {
     static ROLE_SYSTEM_LIST        := 0x21  ; 33
     static ROLE_SYSTEM_OUTLINE     := 0x3E  ; 62
     static ROLE_SYSTEM_LISTITEM    := 0x22  ; 34
@@ -4795,8 +4792,10 @@ IsExplorerBlankSpaceClick() {
 
     ; If you treat header clicks separately, you can short‑circuit here:
     ; (This calls your IsExplorerHeaderClick that checks for ROLE_SYSTEM_OUTLINE)
-    if (IsExplorerHeaderClick())
+    if (IsExplorerHeaderClick()) {
+        isExplorerHeader := True
         return False
+    }
 
     ; ------------------------------------------------------------
     ; Step 1: Is this click on an item (file/folder/group header)?
@@ -5304,16 +5303,23 @@ $~LButton::
 
     isBlankSpaceExplorer    := False
     isBlankSpaceNonExplorer := False
-    isExplorerHeader        := False
-    If (!detectDoubleClicks && A_TimeSincePriorHotkey > DoubleClickTime)
+    isColumnHeader          := False
+
+    If (!detectDoubleClicks && A_TimeSincePriorHotkey > DoubleClickTime) ; basically a single click
         detectDoubleClicks := True
 
     prevPath := ""
     If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
-        If (InStr(_winCtrlD, "DirectUIHWND", True))
-            isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
+        If (InStr(_winCtrlD,"SysHeader32", True)) {
+            isColumnHeader := True
+        }
+        If (InStr(_winCtrlD, "DirectUIHWND", True)) {
+            isBlankSpaceExplorer := IsExplorerBlankSpaceClick(isColumnHeader)
+            If (!isBlankSpaceExplorer && !isColumnHeader)
+                isColumnHeader := IsExplorerHeaderClick()
+        }
 
-        If (!isBlankSpaceExplorer) {
+        If (!isColumnHeader) {
             loop 50 {
                 If (WinExist("A") != _winIdD) {
                     LbuttonEnabled     := True
@@ -5328,6 +5334,9 @@ $~LButton::
         }
     }
     Else {
+        If (InStr(_winCtrlD,"SysHeader32", True)) {
+            isColumnHeader := True
+        }
         LBD_HexColor1 := 0x000000
         LBD_HexColor2 := 0x000000
         LBD_HexColor3 := 0x000000
@@ -5352,7 +5361,7 @@ $~LButton::
     extra    := ""
 
     ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick() "-" IsModernExplorerActive(_winIdU)
-    ; tooltip, %timeDiff% ms - %detectDoubleClicks% - %wmClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
+    ; tooltip, %timeDiff% ms - %detectDoubleClicks% - %isBlankSpaceExplorer% - %wmClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
 
@@ -5363,63 +5372,46 @@ $~LButton::
             Thread, NoTimers, False
             SetTimer, SendCtrlAddLabel, -125
         }
-        Else If ( (InStr(_winCtrlU,"SysHeader32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
-               && !IsExplorerItemClick()) {
+        Else If ( isColumnHeader && !IsExplorerItemClick()) {
+            ; tooltip, true %_winCtrlU%
+            ; ListLines, Off
+            ; ListLines, On ; clears history and starts fresh
 
-            ; tooltip, here1a
-            If (!InStr(_winCtrlU,"SysHeader32", True)) {
-                ; If (wmClassD == "#32770") {
-                    ; isExplorerHeader := IsExplorerHeaderClick_Local()
-                ; }
-                ; Else
-                    isExplorerHeader := IsExplorerHeaderClick()
-            }
-            Else {
-                isExplorerHeader := False
-            }
-            ; tooltip, done!
-            ListLines, Off
-            ListLines, On ; clears history and starts fresh
-
-            If (!isExplorerHeader) {
-                ; Get UIA element
-                pt    := SafeUIA_ElementFromPoint(lbX2, lbY2)
-                ctype := SafeUIA_GetControlType(pt)
-                ; Optional if used later
-                ; cname := SafeUIA_GetName(pt, "")
-                ; Cache risky UIA properties ONCE
-                If (ctype == "" || ctype > 50035 || ctype < 50031) {
-                    Thread, NoTimers, False
-                    Return
-                }
-            }
-
-            If (isExplorerHeader || ctype  == 50031) {
-                ; tooltip, % "line4 - " pt.CurrentControlType
-                If (wmClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
+            If (wmClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
 
                     EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
                     Send, ^{NumpadAdd}
                     Return
-                }
-                Else If (wmClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
+            }
+            ; Get UIA element
+            pt    := SafeUIA_ElementFromPoint(lbX2, lbY2)
+            ctype := SafeUIA_GetControlType(pt)
+            ; Optional if used later
+            ; cname := SafeUIA_GetName(pt, "")
+            ; Cache risky UIA properties ONCE
+            If (ctype == "" || ctype > 50035 || ctype < 50031) {
+                Thread, NoTimers, False
+                Return
+            }
 
-                    EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
-                    Send, ^{NumpadAdd}
-                    Return
-                }
-                Else If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
-                    If !isWin11
-                        Send, {F5}
+            ; tooltip, % "line4 - " pt.CurrentControlType
+            If (ctype  == 50031) && (wmClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
 
-                    Send, ^{NumpadAdd}
-                    Return
-                }
-                Else If ((ctype == 50033) && (InStr(_winCtrlU, "DirectUIHWND", True))) {
+                EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
+                Send, ^{NumpadAdd}
+                Return
+            }
+            Else If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
+                If !isWin11
+                    Send, {F5}
 
-                    Send, ^{NumpadAdd}
-                    Return
-                }
+                Send, ^{NumpadAdd}
+                Return
+            }
+            Else If ((ctype == 50033) && (InStr(_winCtrlU, "DirectUIHWND", True))) {
+
+                Send, ^{NumpadAdd}
+                Return
             }
         }
         Else If ( (wmClassD == "CabinetWClass" || wmClassD == "#32770")
@@ -8898,136 +8890,46 @@ GetNameOfIconUnderMouse() {
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 ; https://github.com/Drugoy/Autohotkey-scripts-.ahk/blob/master/Libraries/Acc.ahk
+InitCOM_STA() {
+    static didInit := False
+    static didCoInit := False
+
+    if (didInit) {
+        return didCoInit
+    }
+
+    ; COINIT_APARTMENTTHREADED = 0x2
+    hr := DllCall("ole32\CoInitializeEx", "Ptr", 0, "UInt", 0x2, "Int")
+
+    ; Success cases:
+    ; 0 = S_OK (we initialized COM)
+    ; 1 = S_FALSE (COM was already initialized on this thread)
+    if (hr = 0) {
+        didCoInit := True
+    } else if (hr = 1) {
+        didCoInit := False
+    } else {
+        didCoInit := False
+    }
+
+    didInit := True
+
+    ; Return True if COM is usable (S_OK or S_FALSE)
+    return (hr = 0 || hr = 1)
+}
 
 Acc_Init() {
-    static h
+    static h := 0
 
-    if (!h)
-        h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
-}
-
-Acc_FindFirstByRole(accNode, roleNeed, maxDepth := 6) {
-    ; Iterative DFS, early exit
-    stack := []
-    stack.Push([accNode, 0])
-
-    while (stack.Length()) {
-        item := stack.Pop()
-        node  := item[1]
-        depth := item[2]
-
-        r := ""
-        try
-            r := node.accRole(0)
-        catch
-            r := ""
-
-        if (r = roleNeed)
-            return node
-
-        if (depth >= maxDepth)
-            continue
-
-        kids := Acc_Children(node)
-        i := kids.Length()
-        while (i >= 1) {
-            k := kids[i]
-            if IsObject(k)
-                stack.Push([k, depth+1])
-            i--
-        }
+    ; Already loaded
+    if (h) {
+        return True
     }
-    return ""
-}
 
-Acc_WindowFromObject(accObj, maxUp := 8) {
-    ; Walk up accParent until we find an object that maps to an HWND.
-    cur := accObj
-    Loop, % maxUp + 1 {
-        hwnd := Acc_WindowFromObjectOnce(cur)
-        if (hwnd)
-            return hwnd
-        try
-            cur := cur.accParent
-        catch
-            break
-        if !IsObject(cur)
-            break
-    }
-    return 0
-}
+    h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
 
-Acc_WindowFromObjectOnce(accObj) {
-    static IID_IAccessible := "{618736E0-3C3D-11CF-810C-00AA00389B71}"
-
-    if !IsObject(accObj)
-        return 0
-
-    pacc := 0
-    try
-        pacc := ComObjQuery(accObj, IID_IAccessible) ; get real IAccessible*
-    catch
-        pacc := 0
-
-    if (!pacc)
-        return 0
-
-    hwnd := 0
-    hr := DllCall("oleacc\WindowFromAccessibleObject", "Ptr", pacc, "Ptr*", hwnd, "Int")
-    ObjRelease(pacc)
-
-    return (hr = 0) ? hwnd : 0
-}
-
-Acc_Children(accObj) {
-    ; Returns an Array of child IAccessible objects and/or child IDs (numbers).
-    ; Works with typical Acc_ObjectFromWindow / Acc_ObjectFromPoint outputs.
-
-    if !IsObject(accObj)
-        return []
-
-    try
-        childCount := accObj.accChildCount
-    catch
-        return []
-
-    if (childCount <= 0)
-        return []
-
-    ; Prepare VARIANT array: each VARIANT is 16 bytes on 32/64-bit in AHK v1
-    VarSetCapacity(varChildren, childCount * 16, 0)
-    obtained := 0
-
-    hr := DllCall("oleacc\AccessibleChildren"
-                , "Ptr",  ComObjValue(accObj)   ; IAccessible*
-                , "Int",  0                     ; iChildStart
-                , "Int",  childCount            ; cChildren
-                , "Ptr",  &varChildren          ; rgvarChildren
-                , "Int*", obtained              ; pcObtained
-                , "Int")
-
-    if (hr != 0 || obtained <= 0)
-        return []
-
-    kids := []
-    Loop, %obtained% {
-        off := (A_Index-1) * 16
-        vt  := NumGet(varChildren, off+0, "UShort")
-
-        ; VT_DISPATCH = 9 -> IDispatch (IAccessible)
-        if (vt = 9) {
-            pdisp := NumGet(varChildren, off + 8, "Ptr")
-            if (pdisp)
-                kids.Push(ComObject(9, pdisp, 1)) ; take ownership (release when out of scope)
-        }
-        ; VT_I4 = 3 -> child ID (integer)
-        else if (vt = 3) {
-            cid := NumGet(varChildren, off + 8, "Int")
-            kids.Push(cid)
-        }
-        ; ignore other variant types
-    }
-    return kids
+    ; Return success/failure
+    return (h != 0)
 }
 
 Acc_ObjectFromPoint(ByRef _idChild_ := "", x := "", y := "") {
@@ -9081,31 +8983,6 @@ Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) { ; OBJID_CLIENT
         return ComObjEnwrap(9, pacc, 1)
     catch
         return
-}
-
-Acc_Location(acc, ByRef x, ByRef y, ByRef w, ByRef h) {
-    ; Retrieves bounding rectangle of an MSAA object.
-    ; acc must be an IAccessible COM object.
-
-    try {
-        VarSetCapacity(left,   4, 0)
-        VarSetCapacity(top,    4, 0)
-        VarSetCapacity(width,  4, 0)
-        VarSetCapacity(height, 4, 0)
-
-        ; acc.accLocation(&left, &top, &width, &height, childId)
-        ; childId = 0 means "self"
-        acc.accLocation(&left, &top, &width, &height, 0)
-
-        x := NumGet(left,   0, "Int")
-        y := NumGet(top,    0, "Int")
-        w := NumGet(width,  0, "Int")
-        h := NumGet(height, 0, "Int")
-        return true
-    } catch {
-        x := y := w := h := ""
-        return false
-    }
 }
 
 Acc_Parent(Acc) {
@@ -9169,87 +9046,7 @@ Acc_FromWindow(hWnd, objID, ByRef acc) {
     return false
 }
 
-Acc_FindHeaderObjectForCache(accObj, cls, colHeaderRole, rowHeaderRole, menuPopupRole, outlineRole) {
-
-    if !IsObject(accObj) {
-        return ""
-    }
-
-    cur := accObj
-    Loop, 10
-    {
-        if !IsObject(cur) {
-            break
-        }
-
-        role := Acc_RoleSafe(cur)
-
-        ; If role retrieval fails here, try parent instead of bailing out.
-        if (!role) {
-            cur := Acc_ParentSafe(cur)
-            continue
-        }
-
-        if (role = colHeaderRole || role = rowHeaderRole) {
-            return cur
-        }
-
-        ; Win11 #32770 quirk: Name header can be MENUPOPUP (10),
-        ; and other headers may show OUTLINE (62). Use name gating
-        ; ONLY here (cache miss path), not on every click.
-        if (cls = "#32770" && (role = menuPopupRole || role = outlineRole)) {
-
-            nm := Acc_NameSafe(cur)
-            if (nm = "Name" || nm = "Date modified" || nm = "Type" || nm = "Size") {
-                return cur
-            }
-        }
-
-        cur := Acc_ParentSafe(cur)
-    }
-
-    return ""
-}
-
-Acc_IsHeaderAtPoint(accObj, cls, outlineRole, colHeaderRole, menuPopupRole) {
-
-    if !IsObject(accObj) {
-        return False
-    }
-
-    cur := accObj
-    Loop, 10
-    {
-        if !IsObject(cur) {
-            break
-        }
-
-        role := Acc_RoleSafe(cur)
-
-        ; If role retrieval fails here, try parent instead of bailing out.
-        if (!role) {
-            cur := Acc_ParentSafe(cur)
-            continue
-        }
-
-        if (role = outlineRole || role = colHeaderRole) {
-            return True
-        }
-
-        if (cls = "#32770" && role = menuPopupRole) {
-            if (Acc_NameIsKnownColumn(cur)) {
-                return True
-            }
-        }
-
-        cur := Acc_ParentSafe(cur)
-    }
-
-    return False
-}
-
 Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole) {
-
     if !IsObject(accObj) {
         return ""
     }
@@ -9286,7 +9083,9 @@ Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole) {
 }
 
 Acc_NameIsKnownColumn(accObj) {
-
+    if !IsObject(accObj) {
+        return ""
+    }
     nm := ""
     try
         nm := accObj.accName(0)
@@ -9669,6 +9468,9 @@ SetTitleMatchMode, 2
 ::logger::
 ::activate::
 ::checkin::
+::sine::
+::cosine::
+::cos::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
