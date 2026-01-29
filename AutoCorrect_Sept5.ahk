@@ -4772,111 +4772,107 @@ IsExplorerHeaderClick() {
 ;     as role 10/62 — but only when building the cache.
 ; ------------------------------------------------------------------
 IsExplorerBlankSpaceClick() {
-
-    static ROLE_SYSTEM_LIST          := 0x21  ; 33
-    static ROLE_SYSTEM_OUTLINE       := 0x3E  ; 62
-    static ROLE_SYSTEM_LISTITEM      := 0x22  ; 34
-    static ROLE_SYSTEM_OUTLINEITEM   := 0x24  ; 36
-    static ROLE_SYSTEM_COLUMNHEADER  := 0x19  ; 25
-    static ROLE_SYSTEM_ROWHEADER     := 0x1A  ; 26
-    static ROLE_SYSTEM_MENUPOPUP     := 0x0A  ; 10
-
-    ; --- Header cache (screen rect) ---
-    static cacheWin := 0
-    static cacheX := 0, cacheY := 0, cacheW := 0, cacheH := 0
-    static cacheWinX := 0, cacheWinY := 0, cacheWinW := 0, cacheWinH := 0
-    static cacheCls := ""
+    static ROLE_SYSTEM_LIST        := 0x21  ; 33
+    static ROLE_SYSTEM_OUTLINE     := 0x3E  ; 62
+    static ROLE_SYSTEM_LISTITEM    := 0x22  ; 34
+    static ROLE_SYSTEM_OUTLINEITEM := 0x24  ; 36
 
     CoordMode, Mouse, Screen
     MouseGetPos, x, y, winHwnd
-    if (!winHwnd) {
+    if (!winHwnd)
         return False
-    }
 
+    ; Only Explorer + common dialogs
     WinGetClass, cls, ahk_id %winHwnd%
-    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770") {
+    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
         return False
-    }
 
-    ; ------------------------------------------------------------
-    ; FAST PATH: cached header rect reject
-    ; ------------------------------------------------------------
-    if (winHwnd = cacheWin && cls = cacheCls) {
-
-        WinGetPos, wx, wy, ww, wh, ahk_id %winHwnd%
-        if (wx = cacheWinX && wy = cacheWinY && ww = cacheWinW && wh = cacheWinH) {
-
-            if (x >= cacheX && x < cacheX + cacheW && y >= cacheY && y < cacheY + cacheH) {
-                return False
-            }
-        }
-    }
-
-    acc := Acc_GetObjectAtScreenPoint(x, y)
-    if !IsObject(acc) {
+    ; MSAA: object under cursor
+    ; If your Acc.ahk uses ByRef child,x,y, you may need: acc := Acc_ObjectFromPoint(, x, y)
+    acc := Acc_ObjectFromPoint(x, y)
+    if !IsObject(acc)
         return False
-    }
+
+    ; If you treat header clicks separately, you can short‑circuit here:
+    ; (This calls your IsExplorerHeaderClick that checks for ROLE_SYSTEM_OUTLINE)
+    if (IsExplorerHeaderClick())
+        return False
 
     ; ------------------------------------------------------------
-    ; Cache refresh (only when we don't already have a trusted cache)
-    ; ------------------------------------------------------------
-    if !(winHwnd = cacheWin && cls = cacheCls) {
-
-        hdr := Acc_FindHeaderObjectForCache(acc, cls
-            , ROLE_SYSTEM_COLUMNHEADER, ROLE_SYSTEM_ROWHEADER
-            , ROLE_SYSTEM_MENUPOPUP, ROLE_SYSTEM_OUTLINE)
-
-        if IsObject(hdr) {
-            try
-            {
-                hdr.accLocation(hx, hy, hw, hh, 0)
-                cacheWin := winHwnd
-                cacheCls := cls
-                cacheX := hx, cacheY := hy, cacheW := hw, cacheH := hh
-                WinGetPos, cacheWinX, cacheWinY, cacheWinW, cacheWinH, ahk_id %winHwnd%
-            }
-            catch
-            {
-                ; If we fail to cache, continue without cache
-            }
-        }
-    }
-
-    ; ------------------------------------------------------------
-    ; Single parent-walk:
-    ; - reject items
-    ; - accept if we reach LIST/OUTLINE container
+    ; Step 1: Is this click on an item (file/folder/group header)?
     ; ------------------------------------------------------------
     cur := acc
-    Loop, 18
-    {
-        if !IsObject(cur) {
+    Loop 15 {
+        if !IsObject(cur)
             break
-        }
 
-        r := Acc_RoleSafe(cur)
-        if (!r) {
+        role := ""
+        try role := cur.accRole(0)
+        catch
             break
+
+        ; Normalize numeric role
+        if role is number
+            role += 0
+        else {
+            ; Normalize common string variants
+            r := role
+            StringLower, r, r
+            r := Trim(r)
+            if (r = "list item" || r = "listitem")
+                role := ROLE_SYSTEM_LISTITEM
+            else if (r = "outline item" || r = "outlineitem")
+                role := ROLE_SYSTEM_OUTLINEITEM
         }
 
-        if (r = ROLE_SYSTEM_COLUMNHEADER || r = ROLE_SYSTEM_ROWHEADER) {
+        ; Any LISTITEM / OUTLINEITEM on the way up = item / group header → not blank
+        if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
             return False
-        }
 
-        if (r = ROLE_SYSTEM_LISTITEM || r = ROLE_SYSTEM_OUTLINEITEM) {
-            return False
-        }
-
-        if (r = ROLE_SYSTEM_LIST || r = ROLE_SYSTEM_OUTLINE) {
-            return True
-        }
-
-        cur := Acc_ParentSafe(cur)
+        parent := ""
+        try parent := cur.accParent
+        cur := parent
     }
 
+    ; ------------------------------------------------------------
+    ; Step 2: Are we inside a LIST / OUTLINE at all?
+    ;         If yes → blank space within the view.
+    ; ------------------------------------------------------------
+    cur := acc
+    Loop 15 {
+        if !IsObject(cur)
+            break
+
+        role := ""
+        try role := cur.accRole(0)
+        catch
+            break
+
+        if role is number
+            role += 0
+        else {
+            r := role
+            StringLower, r, r
+            r := Trim(r)
+            if (r = "list")
+                role := ROLE_SYSTEM_LIST
+            else if (r = "outline")
+                role := ROLE_SYSTEM_OUTLINE
+        }
+
+        if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE) {
+            ; We're in the file view, and we already ruled out items above → blank
+            return true
+        }
+
+        parent := ""
+        try parent := cur.accParent
+        cur := parent
+    }
+
+    ; No list/outline ancestor: not part of the file view
     return False
 }
-
 
 ; IsExplorerBlankSpaceClick() {
     ; static ROLE_SYSTEM_LIST        := 0x21  ; 33
