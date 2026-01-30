@@ -1278,7 +1278,6 @@ $~WheelUp::
     Critical, Off
     Sleep, -1
 
-    Thread, NoTimers
     If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
         WinGetClass, hoverClass, ahk_id %wdID%
@@ -1294,32 +1293,8 @@ $~WheelUp::
           || wuCtrl == "DirectUIHWND2"
           || wuCtrl == "DirectUIHWND3"))
         {
-            now := A_TickCount
-
-            ; --- Burst detection ---
-            ; If enough time has passed since the last wheel,
-            ; treat this as the first event of a new burst.
-            If (now - WU_lastWheelTime > WU_burstGap) {
-                WU_lastZoomTime := 0  ; reset so first event always zooms
-                ControlFocus, %wuCtrl%, ahk_id %wdID%
-            }
-            WU_lastWheelTime := now
-
-            ; --- Zoom timing ---
-            ; First in burst (WU_lastZoomTime=0) -> zoom immediately.
-            ; In a burst -> zoom only If >= WU_zoomInterval has passed.
-            If (WU_lastZoomTime = 0 || now - WU_lastZoomTime >= WU_zoomInterval) {
-                Critical, On
-                WU_lastZoomTime := now
-                ; Optional debug:
-                ; ToolTip % "Zoom at: " . now
-                ; SetTimer, ClearToolTip, -400
-                blockKeys := True
-                Send, ^{NumpadAdd}
-                blockKeys := False
-                Critical, Off
-                FixModifiers()
-            }
+            SetTimer, AdjustColumns, Off
+            SetTimer, AdjustColumns, -125
         }
         ; We still want normal scrolling here, so handled stays False
     }
@@ -1346,7 +1321,6 @@ $~WheelDown::
     Critical, Off
     Sleep, -1
 
-    Thread, NoTimers
     If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
         MouseGetPos,,, wdID, wuCtrl
         WinGetClass, hoverClass, ahk_id %wdID%
@@ -1362,32 +1336,8 @@ $~WheelDown::
           || wuCtrl == "DirectUIHWND2"
           || wuCtrl == "DirectUIHWND3"))
         {
-            now := A_TickCount
-
-            ; --- Burst detection ---
-            ; If enough time has passed since the last wheel,
-            ; treat this as the first event of a new burst.
-            If (now - WD_lastWheelTime > WD_burstGap) {
-                WD_lastZoomTime := 0  ; reset so first event always zooms
-                ControlFocus, %wuCtrl%, ahk_id %wdID%
-            }
-            WD_lastWheelTime := now
-
-            ; --- Zoom timing ---
-            ; First in burst (WD_lastZoomTime=0) -> zoom immediately.
-            ; In a burst -> zoom only If >= WD_zoomInterval has passed.
-            If (WD_lastZoomTime = 0 || now - WD_lastZoomTime >= WD_zoomInterval) {
-                Critical, On
-                WD_lastZoomTime := now
-                ; Optional debug:
-                ; ToolTip % "Zoom at: " . now
-                ; SetTimer, ClearToolTip, -400
-                blockKeys := True
-                Send, ^{NumpadAdd}
-                blockKeys := False
-                Critical, Off
-                FixModifiers()
-            }
+            SetTimer, AdjustColumns, Off
+            SetTimer, AdjustColumns, -125
         }
         ; We still want normal scrolling here, so handled stays False
     }
@@ -1412,6 +1362,13 @@ $~WheelDown::
     StopRecursion := False
 Return
 #MaxThreadsPerHotkey 1
+
+AdjustColumns:
+    blockKeys := True
+    Send, ^{NumpadAdd}
+    blockKeys := False
+    FixModifiers()
+Return
 
 IsConsoleWindow() {
     WinGetClass, targetClass, A
