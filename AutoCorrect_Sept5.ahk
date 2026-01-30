@@ -67,7 +67,6 @@ Global onlyTitleFound                      := ""
 Global CancelClose                         := False
 Global DrawingRect                         := False
 Global LclickSelected                      := False
-Global StopRecursion                       := False
 Global currMonHeight                       := 0
 Global currMonWidth                        := 0
 Global LbuttonEnabled                      := True
@@ -95,15 +94,17 @@ Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
 Global detectDoubleClicks                  := True
 Global hActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
-; Global winhookevent := DllCall("SetWinEventHook", "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "UInt", EVENT_SYSTEM_MENUPOPUPSTART, "Ptr", 0, "Ptr", (lpfnWinEventProc := RegisterCallback("OnPopupMenu", "")), "UInt", 0, "UInt", 0, "UInt", WINEVENT_OUTOFCONTEXT := 0x0000 | WINEVENT_SKIPOWNPROCESS := 0x0002)
 ; Turn key blocking ON/OFF
-Global blockKeys := false
-
+Global StopRecursion := False
+Global blockKeys     := False
+Global gExiting      := False
+Global hHookKbd
+Global hHookMouse
 ; --- Config ---
-Global UseWorkArea  := true   ; true = monitor work area (ignores taskbar). false = full monitor.
-Global SnapRange    := 20     ; px: distance from edge to begin snapping
-Global BreakAway    := 60     ; px: while snapped, drag this far further TOWARD the outside to push past edge
-Global ReleaseAway  := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
+Global UseWorkArea   := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+Global SnapRange     := 20     ; px: distance from edge to begin snapping
+Global BreakAway     := 60     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+Global ReleaseAway   := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
 Global skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
@@ -422,7 +423,7 @@ hHookMouse    := DllCall("SetWindowsHookEx"
 if (!hHookKbd || !hHookMouse)
 {
     MsgBox, 16, Error, Failed to install low-level hooks.`nKeyboard: %hHookKbd%`nMouse: %hHookMouse%
-    ExitApp
+    GoSub, Exit_label
 }
 
 OnExit, UnhookHooks
@@ -606,10 +607,6 @@ LL_MouseHook(nCode, wParam, lParam)
     return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 }
 
-OnPopupMenu(hWinEventHook, event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
-    ; tooltip, pop!
-}
-
 MarkKeypressTime:
     TimeOfLastHotkeyTyped := A_TickCount
     lastHotkeyTyped := A_ThisHotkey
@@ -656,10 +653,10 @@ Tray_SingleLclick:
 Return
 
 Reload_label:
-    StopRecursion := True
-    sleep, 1000
+    OnExit
+    Gosub, UnhookHooks
     Reload
-Return
+return
 
 Suspend_label:
     Menu, Tray, Togglecheck, &Suspend
@@ -667,8 +664,10 @@ Suspend_label:
 Return
 
 Exit_label:
-    exitapp
-Return
+    OnExit
+    Gosub, UnhookHooks
+    ExitApp
+return
 
 keyhist_label:
     KeyHistory
@@ -746,6 +745,8 @@ DoNothing() {
     Return
 }
 
+DoNothing:
+    Return
 ; ==========================================================================================================================================
 ; ==========================================================================================================================================
 WhichButton(vPosX, vPosY, hWnd) {
@@ -1122,21 +1123,36 @@ WaitForFadeInStop(hwnd) {
 ; Unhook on exit
 ; --------------------------------------------------
 UnhookHooks:
+    global gExiting
+    global StopRecursion
+    global hActWin, hHookKbd, hHookMouse
+
+    if (gExiting) {
+        return
+    }
+
+    gExiting := True
     StopRecursion := True
     Thread, NoTimers
 
-    if (hActWin)
-        DllCall("UnhookWinEvent", "Ptr", hActWin)
-    if (hHookKbd)
-        DllCall("UnhookWindowsHookEx", "Ptr", hHookKbd)
-    if (hHookMouse)
-        DllCall("UnhookWindowsHookEx", "Ptr", hHookMouse)
-    if (comInitd)
-        DllCall("ole32\CoUninitialize")
-    if (vdaInitd)
-        DllCall("FreeLibrary", "Ptr", hVirtualDesktopAccessor)
+    if (hActWin) {
+        DllCall("user32\UnhookWinEvent", "Ptr", hActWin)
+        hActWin := 0
+    }
 
-    ExitApp
+    if (hHookKbd) {
+        DllCall("user32\UnhookWindowsHookEx", "Ptr", hHookKbd)
+        hHookKbd := 0
+    }
+
+    if (hHookMouse) {
+        DllCall("user32\UnhookWindowsHookEx", "Ptr", hHookMouse)
+        hHookMouse := 0
+    }
+
+    ; IMPORTANT:
+    ; Do NOT call CoUninitialize here (not required for clean process exit)
+    ; Do NOT call FreeLibrary on VirtualDesktopAccessor here (can hang on Win11)
 return
 
 ; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
@@ -1551,7 +1567,7 @@ $*MButton::
         isRbutton := GetKeyState("Rbutton","P")
         If (!isRbutton && isRbutton_last) {
             BlockInput, MouseMove
-            sleep, 250
+            sleep, 150
             BlockInput, MouseMoveOff
             switchingBackToMove := True
         }
@@ -2656,6 +2672,8 @@ Return
 EscTimer:
     tooltip, escaped!
     Send, {Esc}
+    sleep, 1500
+    tooltip,
 Return
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
@@ -7246,30 +7264,8 @@ FrameShadow(HGui) {
     }
 }
 
+; --------------------------------------------------------------------------------
 ; --------------------   ChatGPT -------------------------------------------------
-; Mouse buttons (optional)
-; ForceMouseUp("L")  ; release left button
-; ForceMouseUp("R")  ; release right button
-; ForceMouseUp("M")  ; release middle button
-; ForceMouseUp(btn) {
-    ; static DOWN := { "L":0x0002, "R":0x0008, "M":0x0020 }
-    ; static UP   := { "L":0x0004, "R":0x0010, "M":0x0040 }
-
-    ; ; Send only UP event (even if DOWN wasn't detected)
-    ; flags := UP[btn]
-
-    ; Critical, On
-    ; DllCall("mouse_event", "UInt", flags, "UInt", 0, "UInt", 0, "UInt", 0, "UPtr", 0)
-    ; Critical, Off
-; }
-; Use a low-level key-up in case Send fails
-; ForceKeyUpVK(vk) {
-    ; static KEYEVENTF_KEYUP := 0x2
-    ; Critical, On
-    ; ; keybd_event is old but very dependable for “unsticking”
-    ; DllCall("keybd_event", "UChar", vk, "UChar", 0, "UInt", KEYEVENTF_KEYUP, "UPtr", 0)
-    ; Critical, Off
-; }
 ; --------------------------------------------------------------------------------
 FixModifiers() {
     ; Release all common modifiers (both sides where relevant)
@@ -7304,20 +7300,6 @@ FixModifiers() {
             SendInput, {Blind}{sc15C up}
     }
 }
-
-
-; ForceKeyUpSC(sc, ext := 0) {
-    ; ; KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_SCANCODE = 0x0008, KEYEVENTF_EXTENDEDKEY = 0x0001
-    ; flags := 0x0002 | 0x0008 | (ext ? 0x0001 : 0x0000)
-    ; ; keybd_event wants scancode in the second parameter when SCANCODE flag is used
-    ; DllCall("keybd_event", "UChar", 0, "UChar", sc & 0xFF, "UInt", flags, "UPtr", 0)
-; }
-
-; ForceKeyUpVK(vk, ext := 0) {
-    ; ; KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001
-    ; flags := 0x0002 | (ext ? 0x0001 : 0x0000)
-    ; DllCall("keybd_event", "UChar", vk, "UChar", 0, "UInt", flags, "UPtr", 0)
-; }
 
 keyTrack() {
     global keys, numbers, StopAutoFix, TimeOfLastHotkeyTyped, blockKeys
@@ -7404,38 +7386,6 @@ mouseTrack() {
     }
 
     lastX := x, lastY := y,
-
-    ; If WinActive("ahk_class ZPContentViewWndClass") {
-        ; WinGetPos, x, y, w, h, ahk_class ZPContentViewWndClass
-        ; If (w == currMonWidth && h == currMonHeight) {
-            ; Send, !{f}
-            ; sleep, 1000
-        ; }
-    ; }
-
-    ; If (MonCount == 1
-        ; &&  x <= 3 && y <= 3
-        ; && !taskview
-        ; && !GetKeyState("Lbutton","P")
-        ; && !skipCheck)
-    ; {
-        ; Send {LWin down}{Tab down}{LWin up}{Tab up}
-        ; taskview := True
-        ; sleep 700
-    ; }
-    ; Else If (MonCount == 1) (
-        ; &&  x <= 3 && y <= 3
-        ; && !taskview
-        ; && GetKeyState("Lbutton","P"))
-    ; {
-        ; skipCheck := True
-    ; }
-
-    ; If (MonCount == 1 &&  x > 3 && y > 3 && x < A_ScreenWidth-3 && y < A_ScreenHeight-3)
-    ; {
-        ; taskview  := False
-        ; skipCheck := False
-    ; }
 
     If (MonCount > 1 && !GetKeyState("LButton","P")) {
         currentMon := MWAGetMonitorMouseIsIn(TaskBarHeight)
@@ -7832,157 +7782,9 @@ HasVal(haystack, needle) {
 }
 
 ;========================
-; Copy highlighted text, return it, preserve clipboard
-; Blocks until the clipboard changes to the copied text.
-;========================
-; CopySelection(): copies highlighted text, returns it, preserves clipboard.
-; - Avoids infinite wait in Chrome when no text is selected.
-; - If UIA.ahk is available, uses it to detect empty selection instantly.
-; - Otherwise uses a bounded wait + quick retry (no long fixed timeout).
-CopySelection() {
-    global UIA
-    Critical, On
-
-    ; If Chrome (or Edge/Electron), try UIA to see if there is any selected text:
-    WinGetClass, cls, A
-    if (cls = "Chrome_WidgetWin_1") {
-        sel := __TryGetSelectionViaUIA()
-        if (sel != "__UIA_UNAVAILABLE__") {
-            ; UIA worked: either actual text or ""
-            Critical, Off
-            Return sel
-        }
-        ; else: UIA not available → fall through to clipboard path
-    }
-
-    ; Clipboard path (works for most apps; guarded to avoid hang)
-    ClipBak := ClipboardAll
-    sentinel := "«ahk_sentinel_" A_TickCount "»"
-    Clipboard := sentinel
-
-    SendInput, ^c
-
-    ; Wait until clipboard != sentinel and has text (guard ~300ms total)
-    start := A_TickCount
-    changed := false
-    Loop {
-        if (Clipboard != sentinel) {
-            ; CF_UNICODETEXT = 13
-            if DllCall("IsClipboardFormatAvailable", "UInt", 13) {
-                changed := true
-                break
-            }
-        }
-        if ((A_TickCount - start) > 180)  ; small guard to avoid hang in "no selection" case
-            break
-        Sleep, 10
-    }
-
-    if (!changed) {
-        ; quick retry once (some apps need two ^c's)
-        SendInput, ^c
-        start := A_TickCount
-        Loop {
-            if (Clipboard != sentinel && DllCall("IsClipboardFormatAvailable","UInt",13)) {
-                changed := true
-                break
-            }
-            if ((A_TickCount - start) > 120)
-                break
-            Sleep, 10
-        }
-    }
-
-    if (changed)
-        sel := Clipboard
-    else
-        sel := ""   ; nothing selected
-
-    Clipboard := ClipBak
-    VarSetCapacity(ClipBak, 0)
-    Critical, Off
-    Return sel
-}
-
-; --- UIA helper: returns selected text quickly in Chrome if possible.
-; Requires UIA.ahk (Descolada’s UIA). If not available, returns "__UIA_UNAVAILABLE__".
-__TryGetSelectionViaUIA() {
-    global UIA
-
-    try {
-        if !IsFunc("UIA_Interface")
-            throw Exception("no UIA")
-        UIA := UIA_Interface()
-        el  := UIA.GetFocusedElement()
-        If !IsObject(el)
-            Return ""
-
-        ; If Text pattern is available, get selection range(s)
-        if el.PatternAvailable("Text") {
-            selRanges := el.TextPattern.GetSelection()
-            if (selRanges.Length() = 0) {
-                Return ""   ; definitely no selection
-            } else {
-                ; Combine selection ranges (usually one)
-                out := ""
-                for k, r in selRanges
-                    out .= r.GetText(0)  ; 0 = all text in range
-                Return out
-            }
-        }
-        ; If Value pattern is available but no selection, treat as none
-        if el.PatternAvailable("Value") {
-            ; Value pattern doesn’t give selection; assume none
-            Return ""
-        }
-        Return ""  ; default: assume none if we can talk to UIA but no selection info
-    } catch e {
-        Return "__UIA_UNAVAILABLE__"
-    }
-}
-
-;========================
 ; Paste text and restore the user's clipboard afterward.
 ; Uses a short one-shot timer to avoid paste race conditions.
 ;========================
-PastePreservingClipboard(text, reselect := 0, restoreDelayMs := 200) {
-    global __ClipBakForPaste
-
-    Critical, On
-    __ClipBakForPaste := ClipboardAll
-
-    ; Publish the text to clipboard and wait until it sticks
-    Clipboard := ""
-    Clipboard := text
-    ; Wait until clipboard equals our text (no fixed timeout).
-    Loop {
-        if (Clipboard = text)
-            break
-        Sleep, 10
-    }
-
-    ; Paste
-    SendInput, ^v
-
-    ; Optional: reselect just-pasted text
-    if (reselect && text != "") {
-        len := StrLen(StrReplace(text, "`r"))   ; strip CR so {Left n} matches
-        if (len)
-            SendInput, {Shift Down}{Left %len%}{Shift Up}
-    }
-
-    ; Restore original clipboard slightly AFTER paste completes
-    SetTimer, __RestoreClipboard_AfterPaste, -%restoreDelayMs%
-    Critical, Off
-}
-
-__RestoreClipboard_AfterPaste:
-    global __ClipBakForPaste
-
-    Clipboard := __ClipBakForPaste
-    VarSetCapacity(__ClipBakForPaste, 0)
-Return
-
 ; Clip() - Send and Retrieve Text Using the Clipboard
 ; by berban - updated February 18, 2019
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=62156
@@ -8891,31 +8693,24 @@ GetNameOfIconUnderMouse() {
 ;------------------------------------------------------------------------------
 ; https://github.com/Drugoy/Autohotkey-scripts-.ahk/blob/master/Libraries/Acc.ahk
 InitCOM_STA() {
-    static didInit := False
-    static didCoInit := False
+    global comInitd
 
-    if (didInit) {
-        return didCoInit
+    if (comInitd != "") {
+        return comInitd
     }
 
     ; COINIT_APARTMENTTHREADED = 0x2
     hr := DllCall("ole32\CoInitializeEx", "Ptr", 0, "UInt", 0x2, "Int")
 
-    ; Success cases:
-    ; 0 = S_OK (we initialized COM)
-    ; 1 = S_FALSE (COM was already initialized on this thread)
     if (hr = 0) {
-        didCoInit := True
+        comInitd := 2
     } else if (hr = 1) {
-        didCoInit := False
+        comInitd := 1
     } else {
-        didCoInit := False
+        comInitd := 0
     }
 
-    didInit := True
-
-    ; Return True if COM is usable (S_OK or S_FALSE)
-    return (hr = 0 || hr = 1)
+    return comInitd
 }
 
 Acc_Init() {
