@@ -3750,11 +3750,12 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
+
+        fadeVal  -= opacityInterval
         If !firstDraw
             WinSet, Transparent, %fadeVal%,  ahk_id %black5Hwnd%
 
         transVal += opacityInterval
-        fadeVal  -= opacityInterval
         Sleep, 2   ; purely visual – safe outside Critical
         If (!GetKeyState("LAlt", "P")) {
             WinSet, Transparent, %Opacity%, ahk_id %black1Hwnd%
@@ -5402,14 +5403,14 @@ $~LButton::
             ; Optional if used later
             ; cname := SafeUIA_GetName(pt, "")
             ; Cache risky UIA properties ONCE
-            If (ctype == "" || ctype > 50035 || ctype < 50031) {
+            ; tooltip, % "line4 - " pt.CurrentControlType
+            If (ctype == "" || ctype > 50035 || (ctype > 50008 && ctype < 50031)) {
                 Thread, NoTimers, False
                 Return
             }
 
-            ; tooltip, % "line4 - " pt.CurrentControlType
-            If (ctype  == 50031) && (wmClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
-
+            If (ctype  == 50031 || ctype  == 50008) && (wmClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
+                ; tooltip, adjust
                 EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
                 Send, ^{NumpadAdd}
                 Return
