@@ -3221,9 +3221,7 @@ Cycle()
                             }
                             Else {
                                 Critical, Off
-                                ; GoSub, DrawRect
                                 DrawMasks(hwndID)
-                                ; DrawBlackMonitor(hwndID)
                                 If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
                                     GroupedWindows := []
                                     ValidWindows   := []
@@ -3236,9 +3234,7 @@ Cycle()
                             WinActivate, % "ahk_id " hwndID
                             cycleCount := 3
                             Critical, Off
-                            ; GoSub, DrawRect
                             DrawMasks(hwndID)
-                            ; DrawBlackMonitor(hwndID)
                         }
                         If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
                             GroupedWindows := []
@@ -3291,9 +3287,7 @@ Cycle()
                     WinActivate, % "ahk_id " GroupedWindows[cycleCount]
                     WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                     gwHwnd := GroupedWindows[cycleCount]
-                    ; DrawBlackMonitor(,False, Opacity, 5)
                     DrawMasks(gwHwnd, False)
-                    ; ClearBlackMonitor()
                     WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                     WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
@@ -3724,6 +3718,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     Critical, On
     if !firstDraw
         DrawBlackMonitor(,False, Opacity, 5)
+
     ; TOP panel
     DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
     ; LEFT panel
@@ -3835,7 +3830,7 @@ DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIn
     DrawBlackBar(guiIndex, x, y, w, h)
 
     If !targetHwnd
-        WinSet, AlwaysOnTop, On, ahk_id %targetHwnd%
+        WinSet, AlwaysOnTop,  On, ahk_id %targetHwnd%
 
     If (firstDraw) {
         incrValue     := 15
