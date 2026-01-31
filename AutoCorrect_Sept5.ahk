@@ -653,10 +653,10 @@ Tray_SingleLclick:
 Return
 
 Reload_label:
-    OnExit
+    OnExit,     ; unregister OnExit label
     Gosub, UnhookHooks
     Reload
-return
+Return
 
 Suspend_label:
     Menu, Tray, Togglecheck, &Suspend
@@ -664,7 +664,7 @@ Suspend_label:
 Return
 
 Exit_label:
-    OnExit
+    OnExit,     ; unregister OnExit label
     Gosub, UnhookHooks
     ExitApp
 return
@@ -1150,9 +1150,18 @@ UnhookHooks:
         hHookMouse := 0
     }
 
-    ; IMPORTANT:
-    ; Do NOT call CoUninitialize here (not required for clean process exit)
-    ; Do NOT call FreeLibrary on VirtualDesktopAccessor here (can hang on Win11)
+        ; --- Release UIA/COM objects before COM teardown ---
+    global UIA, comInitd
+    UIA := ""  ; drop UIA COM refs first
+
+    ; --- Balance our manual CoInitializeEx call ---
+    ; InitCOM_STA() sets comInitd := 2 (S_OK) or 1 (S_FALSE) on success.
+    if (comInitd = 1 || comInitd = 2) {
+        DllCall("ole32\CoUninitialize")
+        comInitd := ""  ; prevent double-uninit on repeated exit paths
+    }
+
+    ; (Keep your note about NOT FreeLibrary'ing VDA here.)
 return
 
 ; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
