@@ -94,6 +94,7 @@ Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
 Global detectDoubleClicks                  := True
 Global hActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+Global UIA := UIA_Interface() ; Initialize UIA interface
 ; Turn key blocking ON/OFF
 Global StopRecursion := False
 Global blockKeys     := False
@@ -122,7 +123,6 @@ Global black5Hwnd := ""
 
 Process, Priority,, High
 
-Global UIA := UIA_Interface() ; Initialize UIA interface
 UIA.TransactionTimeout := 2000
 UIA.ConnectionTimeout  := 20000
 
@@ -6478,11 +6478,15 @@ Return
 ***********************************
 */
 VolumeHover() {
-    ControlGetText, toolText,, ahk_class tooltips_class32
-    If (InStr(toolText, "Speakers", False) || InStr(toolText, "Headphones", False))
-        Return True
-    Else
+    If WinExist("ahk_class tooltips_class32") {
+        ControlGetText, toolText,, ahk_class tooltips_class32
+        If (InStr(toolText, "Speakers",False) || InStr(toolText, "Headphones",False) || (InStr(toolText, "Audio",False) && InStr(toolText, "Output",False))) {
+            Return True
+        }
+    }
+    Else {
         Return False
+    }
 }
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
