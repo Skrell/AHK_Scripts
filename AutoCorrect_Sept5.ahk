@@ -919,7 +919,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     If !StopRecursion && !hitTab {
 
         DetectHiddenWindows, Off
-        Thread, NoTimers
+        Thread, NoTimers, True
 
         loop 500 {
             WinGetClass, vWinClass, % "ahk_id " hWnd
@@ -1133,7 +1133,7 @@ UnhookHooks:
 
     gExiting := True
     StopRecursion := True
-    Thread, NoTimers
+    Thread, NoTimers, True
 
     if (hActWin) {
         DllCall("user32\UnhookWinEvent", "Ptr", hActWin)
@@ -1432,7 +1432,7 @@ $*MButton::
     global DraggingWindow
 
     StopRecursion := True
-    Thread, NoTimers
+    Thread, NoTimers, True
     Hotkey, *Rbutton, DoNothing, On
     Hotkey, Mbutton & Rbutton, DoNothing, On
 
@@ -2027,7 +2027,7 @@ Return
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2055,7 +2055,7 @@ Return
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
     ; If there’s no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
@@ -2144,7 +2144,7 @@ Return
 Return
 
 !+':: ;'
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2166,7 +2166,7 @@ Return
 Return
 
 !+[::
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2188,7 +2188,7 @@ Return
 Return
 
 !+]::
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2210,7 +2210,7 @@ Return
 Return
 
 !+<::
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2232,7 +2232,7 @@ Return
 Return
 
 !+>::
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2254,7 +2254,7 @@ Return
 Return
 
 !+(::
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2276,7 +2276,7 @@ Return
 Return
 
 !+)::
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2298,7 +2298,7 @@ Return
 Return
 
 !+b::
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2320,7 +2320,7 @@ Return
 Return
 
 !+5::
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopAutoFix := True
     blockKeys   := True
 
@@ -2441,7 +2441,7 @@ $~Enter::
 Return
 
 $~F2::
-    Thread, NoTimers
+    Thread, NoTimers, True
     LbuttonEnabled := False
     StopRecursion  := True
 
@@ -2536,7 +2536,7 @@ prevChromeTab()
 ; knows whether a combo (with x) is coming. That’s why your 2nd press + hold never reaches your $Esc routine, so GoSub, DrawRect never runs.
 $Esc::
     StopRecursion := True
-    Thread, NoTimers
+    Thread, NoTimers, True
     executedOnce   := False
     escHwndID := FindTopMostWindow()
     WinGetTitle, escTitle, ahk_id %escHwndID%
@@ -2658,7 +2658,7 @@ Return
 
 !1::
     StopRecursion := True
-    Thread, NoTimers
+    Thread, NoTimers, True
     GoSub, SwitchToVD1
     StopRecursion := False
     Thread, NoTimers, False
@@ -2688,7 +2688,7 @@ Return
 
 !2::
     StopRecursion := True
-    Thread, NoTimers
+    Thread, NoTimers, True
     GoSub, SwitchToVD2
     Thread, NoTimers, False
     StopRecursion := False
@@ -2720,7 +2720,7 @@ Return
 
 !3::
     StopRecursion := True
-    Thread, NoTimers
+    Thread, NoTimers, True
     GoSub, SwitchToVD3
     Thread, NoTimers, False
     StopRecursion := False
@@ -2752,7 +2752,7 @@ Return
 
 !4::
     StopRecursion := True
-    Thread, NoTimers
+    Thread, NoTimers, True
     GoSub, SwitchToVD4
     Thread, NoTimers, False
     StopRecursion := False
@@ -2958,7 +2958,7 @@ Return
 $!Tab::
 $!+Tab::
 If !hitTAB {
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopRecursion   := True
 
     firstDraw       := True
@@ -2986,7 +2986,7 @@ FixModifiers()
 Return
 
 !`::
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopRecursion  := True
 
     ActivateTopMostWindow()
@@ -3627,7 +3627,7 @@ ClearMasks(appClosingHwnd := "", initTransVal := 255) {
 DrawMasks(targetHwnd := "", firstDraw := True) {
     global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
 
-    Thread, NoTimers
+    Thread, NoTimers, True
 
     Margin := 0  ; expands the hole around the active window by this many pixels
 
@@ -3856,7 +3856,7 @@ Min(a,b) {
 #If MouseIsOverTaskbarWidgets()
 $~^Lbutton::
     global MonCount
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopRecursion := True
 
     DetectHiddenWindows, Off
@@ -3909,7 +3909,7 @@ $^LButton::
     global currentMon, previousMon, DoubleClickTime, MonCount
     DetectHiddenWindows, Off
     StopRecursion := True
-    Thread, NoTimers
+    Thread, NoTimers, True
 
     MouseGetPos, mx1, my1, actID,
     If !((A_TimeSincePriorHotkey < DoubleClickTime) && (A_PriorHotKey == A_ThisHotKey)) {
@@ -5201,7 +5201,7 @@ GetClassName(hwnd)
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
 $~LButton::
     ; tooltip, START
-    Thread, NoTimers
+    Thread, NoTimers, True
 
     HotString("Reset")
 
@@ -5595,7 +5595,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
 }
 
 SendCtrlAddLabel:
-    SendCtrlAdd(_winIdU, , , , _winCtrlU)
+    SendCtrlAdd(_winIdU, , , wmClassD, _winCtrlU)
 Return
 
 #MaxThreadsPerHotkey 1
@@ -5858,7 +5858,7 @@ SwitchDesktop:
     global movehWndId
     global GoToDesktop := False
 
-    Thread, NoTimers
+    Thread, NoTimers, True
     StopRecursion := True
 
     MouseGetPos, , , movehWndId
