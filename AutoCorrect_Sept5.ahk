@@ -945,6 +945,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                     WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 }
+                Thread, NoTimers, False
                 Return
             }
         }
@@ -967,8 +968,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Critical, On
             prevActiveWindows.push(hWnd)
             Critical, Off
-
-            KeyWait, Lbutton, U T10
 
             WinGet, state, MinMax, ahk_id %hWnd%
             If (state > -1 && vWinTitle != "" && MonCount > 1) {
@@ -993,6 +992,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
                 WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
                 LbuttonEnabled := True
+                Thread, NoTimers, False
                 Return
             }
 
@@ -1004,8 +1004,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 sleep, 1
             }
 
-            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
             LbuttonEnabled := True
+            Thread, NoTimers, False
+            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
 
             DetectHiddenWindows, On
             i := 1
@@ -1019,10 +1020,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                     break
                 }
             }
+            DetectHiddenWindows, Off
         }
+        Thread, NoTimers, False
     }
-    DetectHiddenWindows, Off
-    Thread, NoTimers, False
     LbuttonEnabled := True
     Return
 }
@@ -1150,18 +1151,13 @@ UnhookHooks:
         hHookMouse := 0
     }
 
-        ; --- Release UIA/COM objects before COM teardown ---
+    ; --- Release UIA/COM objects before COM teardown ---
     global UIA, comInitd
     UIA := ""  ; drop UIA COM refs first
 
-    ; --- Balance our manual CoInitializeEx call ---
-    ; InitCOM_STA() sets comInitd := 2 (S_OK) or 1 (S_FALSE) on success.
-    if (comInitd = 1 || comInitd = 2) {
-        DllCall("ole32\CoUninitialize")
-        comInitd := ""  ; prevent double-uninit on repeated exit paths
-    }
-
-    ; (Keep your note about NOT FreeLibrary'ing VDA here.)
+    ; IMPORTANT:
+    ; Do NOT call CoUninitialize here (not required for clean process exit)
+    ; Do NOT call FreeLibrary on VirtualDesktopAccessor here (can hang on Win11)
 return
 
 ; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
@@ -3140,6 +3136,54 @@ FadeOutWindowTitle:
     Gui, WindowTitle: Destroy
 Return
 
+IsWindowElevated(hwnd)
+{
+    WinGet, pid, PID, ahk_id %hwnd%
+    if (!pid)
+    {
+        return false
+    }
+    return IsProcessElevated(pid)
+}
+
+IsProcessElevated(pid)
+{
+    ; Open the process with limited query rights (works more often cross-integrity)
+    hProc := DllCall("OpenProcess", "UInt", 0x1000, "Int", false, "UInt", pid, "Ptr")
+    if (!hProc)
+    {
+        ; If we can't even open it, assume it's elevated (or protected) and skip it
+        return true
+    }
+
+    hToken := 0
+    ok := DllCall("Advapi32.dll\OpenProcessToken", "Ptr", hProc, "UInt", 0x0008, "Ptr*", hToken)  ; TOKEN_QUERY
+    if (!ok)
+    {
+        DllCall("CloseHandle", "Ptr", hProc)
+        return true
+    }
+
+    elevation := 0
+    size := 0
+    ok := DllCall("Advapi32.dll\GetTokenInformation"
+        , "Ptr", hToken
+        , "Int", 20                    ; TokenElevation
+        , "UInt*", elevation
+        , "UInt", 4
+        , "UInt*", size)
+
+    DllCall("CloseHandle", "Ptr", hToken)
+    DllCall("CloseHandle", "Ptr", hProc)
+
+    if (!ok)
+    {
+        return true
+    }
+
+    return (elevation != 0)
+}
+
 Cycle()
 {
     global cycling, ValidWindows, GroupedWindows, MonCount, startHighlight, LclickSelected, firstDraw
@@ -3152,7 +3196,7 @@ Cycle()
     {
         DetectHiddenWindows, Off
         failedSwitch := False
-
+        why := ""
         WinGet, actId, ID, A
         WinGet, allWindows, List
 
@@ -3170,7 +3214,7 @@ Cycle()
             }
 
             If (currentMonHasActWin) {
-                If (IsAltTabWindow(hwndID)) {
+                If (!IsWindowElevated(hwndID) && IsAltTabWindow(hwndID)) {
                     WinGet, state, MinMax, ahk_id %hwndID%
                     ; WinGet, exe, ProcessName, ahk_id %hwndID%
                     ; WinGetClass, cl, ahk_id %hwndID%
@@ -3212,6 +3256,14 @@ Cycle()
                         ; prev_exe := exe
                         ; prev_cl  := cl
                     }
+                }
+                Else {
+                    ; WinGetClass, badClass, ahk_id %hwndID%
+                    ; If (badClass == "#32770") {
+                        ; WinGet, exStyles, ExStyle, ahk_id %hWnd%
+                        ; Msgbox, % why "`nExStyle=" Format("0x{:08X}", exStyles)
+                        ; break
+                    ; }
                 }
             }
         }
@@ -5207,10 +5259,10 @@ $~LButton::
 
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
-    WinGetClass, wmClassD, ahk_id %_winIdD%
+    WinGetClass, _winClassD, ahk_id %_winIdD%
 
-    If (   wmClassD != "CabinetWClass"
-        && wmClassD != "#32770"
+    If (   _winClassD != "CabinetWClass"
+        && _winClassD != "#32770"
         && !InStr(_winCtrlD, "SysListView32", True)
         && !InStr(_winCtrlD, "DirectUIHWND",  True)
         && !InStr(_winCtrlD, "SysTreeView32", True)
@@ -5243,7 +5295,7 @@ $~LButton::
         KeyWait, Lbutton, U T3
         LbuttonEnabled     := False
 
-        If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
+        If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
             ; tooltip, getting path
             currentPath    := ""
             loop 50 {
@@ -5259,7 +5311,7 @@ $~LButton::
             }
             ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
             If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
-                SendCtrlAdd(_winIdD, prevPath, currentPath, wmClassD)
+                SendCtrlAdd(_winIdD, prevPath, currentPath, _winClassD)
             }
 
             Thread, NoTimers, False
@@ -5270,7 +5322,7 @@ $~LButton::
             Return
         }
         Else {
-            SendCtrlAdd(_winIdD,,,wmClassD)
+            SendCtrlAdd(_winIdD,,,_winClassD)
 
             Thread, NoTimers, False
             If isBlankSpaceNonExplorer
@@ -5289,7 +5341,7 @@ $~LButton::
         detectDoubleClicks := True
 
     prevPath := ""
-    If (wmClassD == "CabinetWClass" || wmClassD == "#32770") {
+    If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
         If (InStr(_winCtrlD,"SysHeader32", True)) {
             isColumnHeader := True
         }
@@ -5341,7 +5393,7 @@ $~LButton::
     extra    := ""
 
     ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick() "-" IsModernExplorerActive(_winIdU)
-    ; tooltip, %timeDiff% ms - %detectDoubleClicks% - %isBlankSpaceExplorer% - %wmClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
+    ; tooltip, %timeDiff% ms - %detectDoubleClicks% - %isBlankSpaceExplorer% - %_winClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
 
@@ -5357,7 +5409,7 @@ $~LButton::
             ; ListLines, Off
             ; ListLines, On ; clears history and starts fresh
 
-            If (wmClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
+            If (_winClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
 
                     EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
                     Send, ^{NumpadAdd}
@@ -5375,7 +5427,7 @@ $~LButton::
                 Return
             }
 
-            If (ctype  == 50031 || ctype  == 50008) && (wmClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
+            If (ctype  == 50031 || ctype  == 50008) && (_winClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
                 ; tooltip, adjust
                 EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
                 Send, ^{NumpadAdd}
@@ -5394,7 +5446,7 @@ $~LButton::
                 Return
             }
         }
-        Else If ( (wmClassD == "CabinetWClass" || wmClassD == "#32770")
+        Else If ( (_winClassD == "CabinetWClass" || _winClassD == "#32770")
             && (   InStr(_winCtrlU, "ToolbarWindow32", True)
                 || InStr(_winCtrlU, "ReBarWindow32", True)
                 || InStr(_winCtrlU, "Microsoft.UI.Content.DesktopChildSiteBridge", True)
@@ -5420,7 +5472,7 @@ $~LButton::
             }
 
             If InStr(cname, "Refresh", True) {
-                SendCtrlAdd(_winIdU, , , wmClassD)
+                SendCtrlAdd(_winIdU, , , _winClassD)
             }
             Else If (  (ctype == 50000) ; handles explorer based buttons
                     || (ctype == 50011) ; handles #32770 breadcrumb bar
@@ -5436,11 +5488,11 @@ $~LButton::
                         break
                     sleep, 1
                 }
-                SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD)
+                SendCtrlAdd(_winIdU, prevPath, currentPath, _winClassD)
             }
         }
         Else If (   InStr(_winCtrlU, "SysTreeView32", True)
-                && (wmClassD == "CabinetWClass" || wmClassD == "#32770")
+                && (_winClassD == "CabinetWClass" || _winClassD == "#32770")
                 && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
 
             ; tooltip, here4
@@ -5452,7 +5504,7 @@ $~LButton::
                 sleep, 1
             }
             ; tooltip, sending
-            SendCtrlAdd(_winIdU, prevPath, currentPath, wmClassD, _winCtrlU)
+            SendCtrlAdd(_winIdU, prevPath, currentPath, _winClassD, _winCtrlU)
         }
     }
     Else
@@ -5595,7 +5647,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
 }
 
 SendCtrlAddLabel:
-    SendCtrlAdd(_winIdU, , , wmClassD, _winCtrlU)
+    SendCtrlAdd(_winIdU, , , _winClassD, _winCtrlU)
 Return
 
 #MaxThreadsPerHotkey 1
@@ -6716,14 +6768,14 @@ JEE_WinHasAltTabIcon(hWnd)
 
 IsAltTabWindow_Why(hWnd)
 {
-    static WS_EX_APPWINDOW := 0x40000
-    static WS_EX_TOOLWINDOW := 0x80
-    static DWMWA_CLOAKED := 14
-    static DWM_CLOAKED_SHELL := 2
-    static WS_EX_NOACTIVATE := 0x8000000
-    static GA_PARENT := 1
-    static GW_OWNER := 4
-    static WS_EX_WINDOWEDGE := 0x100
+    static WS_EX_APPWINDOW     := 0x40000
+    static WS_EX_TOOLWINDOW    := 0x80
+    static DWMWA_CLOAKED       := 14
+    static DWM_CLOAKED_SHELL   := 2
+    static WS_EX_NOACTIVATE    := 0x8000000
+    static GA_PARENT           := 1
+    static GW_OWNER            := 4
+    static WS_EX_WINDOWEDGE    := 0x100
     static WS_EX_CONTROLPARENT := 0x10000
     static WS_EX_DLGMODALFRAME := 0x00000001
 
@@ -6773,40 +6825,106 @@ IsAltTabWindow_Why(hWnd)
     }
 }
 
+IsAltTabWindow_Why2(hWnd)
+{
+    static WS_EX_APPWINDOW       := 0x40000
+    static WS_EX_TOOLWINDOW      := 0x80
+    static DWMWA_CLOAKED         := 14
+    static DWM_CLOAKED_SHELL     := 2
+    static WS_EX_NOACTIVATE      := 0x8000000
+    static GA_PARENT             := 1
+    static GW_OWNER              := 4
+    static WS_EX_WINDOWEDGE      := 0x100
+    static WS_EX_CONTROLPARENT   := 0x10000
+
+    WinGetTitle, hasTitle, ahk_id %hWnd%
+    WinGetClass, winClass, ahk_id %hWnd%
+
+    if (!hasTitle && winClass != "CASCADIA_HOSTING_WINDOW_CLASS")
+        return "no title (class=" . winClass . ")"
+
+    isMinimized := DllCall("IsIconic", "uptr", hWnd)
+    if (!DllCall("IsWindowVisible", "uptr", hWnd) && !isMinimized)
+        return "not visible (and not minimized)"
+
+    cloaked := 0
+    DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
+    if (cloaked = DWM_CLOAKED_SHELL)
+        return "cloaked shell"
+
+    if (realHwnd(DllCall("GetAncestor", "uptr", hWnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
+        return "parent not desktop"
+
+    if (winClass = "Windows.UI.Core.CoreWindow"
+        || (InStr(winClass, "Shell", False) && InStr(winClass, "TrayWnd", False))
+        || winClass == "ProgMan"
+        || winClass == "WorkerW")
+        return "blocked class=" . winClass
+
+    WinGet, exStyles, ExStyle, ahk_id %hWnd%
+
+    if (exStyles & WS_EX_APPWINDOW)
+        return "passes: WS_EX_APPWINDOW"
+
+    if (exStyles & WS_EX_TOOLWINDOW)
+        return "fails: WS_EX_TOOLWINDOW"
+
+    if (exStyles & WS_EX_NOACTIVATE)
+        return "fails: WS_EX_NOACTIVATE"
+
+    if (exStyles & (WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT))
+        return "passes: WS_EX_WINDOWEDGE/WS_EX_CONTROLPARENT"
+
+    hWnd2 := hWnd
+    loop
+    {
+        prev := hWnd2
+        hWnd2 := DllCall("GetWindow", "uptr", hWnd2, "uint", GW_OWNER, "ptr")
+        if (!hWnd2)
+            return "owner-walk ended => would pass (prev=" . prev . ")"
+
+        if (DllCall("IsWindowVisible", "uptr", hWnd2))
+            return "fails: visible owner=" . hWnd2 . " (prev=" . prev . ")"
+    }
+}
+
 ; https://www.autohotkey.com/boards/viewtopic.php?t=26700#p176849
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=122399
-IsAltTabWindow(hWnd) {
-    static WS_EX_APPWINDOW := 0x40000
-    static WS_EX_TOOLWINDOW := 0x80
-    static DWMWA_CLOAKED := 14
-    static DWM_CLOAKED_SHELL := 2
-    static WS_EX_NOACTIVATE := 0x8000000
-    static GA_PARENT := 1
-    static GW_OWNER := 4
+IsAltTabWindow(hWnd, ByRef why := "") {
+    static WS_EX_APPWINDOW       := 0x40000
+    static WS_EX_TOOLWINDOW      := 0x80
+    static DWMWA_CLOAKED         := 14
+    static DWM_CLOAKED_SHELL     := 2
+    static WS_EX_NOACTIVATE      := 0x8000000
+    static GA_PARENT             := 1
+    static GW_OWNER              := 4
     static MONITOR_DEFAULTTONULL := 0
     static VirtualDesktopExist
-    static PropEnumProcEx := RegisterCallback("PropEnumProcEx", "Fast", 4)
-    static WS_EX_WINDOWEDGE := 0x100
-    static WS_EX_CONTROLPARENT := 0x10000
-    static WS_EX_DLGMODALFRAME := 0x00000001
+    static PropEnumProcEx        := RegisterCallback("PropEnumProcEx", "Fast", 4)
+    static WS_EX_WINDOWEDGE      := 0x100
+    static WS_EX_CONTROLPARENT   := 0x10000
+    static WS_EX_DLGMODALFRAME   := 0x00000001
+
+    why := ""
 
     WinGetTitle, hasTitle, ahk_id %hWnd%
     WinGetClass, winClass, ahk_id %hWnd%
 
     ; Windows Terminal (WinUI/XAML Island) content window -> use its host window
-    if (winClass = "CASCADIA_HOSTING_WINDOW_CLASS")
-    {
+    if (winClass = "CASCADIA_HOSTING_WINDOW_CLASS") {
         ; GA_ROOT = 2 (top-level window in the parent chain)
         hWnd := DllCall("GetAncestor", "uptr", hWnd, "uint", 2, "ptr")
         WinGetClass, winClass, ahk_id %hWnd%
         WinGetTitle, hasTitle, ahk_id %hWnd%
+        why := "CASCADIA content -> host via GA_ROOT"
     }
 
-    if (!hasTitle && winClass != "CASCADIA_HOSTING_WINDOW_CLASS")
+    if (!hasTitle && winClass != "CASCADIA_HOSTING_WINDOW_CLASS") {
+        why := "no title (class=" . winClass . ")"
         return False
+    }
 
-    if (VirtualDesktopExist = "")
-    {
+    if (VirtualDesktopExist = "") {
         OSbuildNumber := StrSplit(A_OSVersion, ".")[3]
         if (OSbuildNumber < 14393)
             VirtualDesktopExist := 0
@@ -6817,75 +6935,122 @@ IsAltTabWindow(hWnd) {
     ; Key change: treat minimized windows as acceptable even if IsWindowVisible is false.
     isMinimized := DllCall("IsIconic", "uptr", hWnd)
 
-    if (!DllCall("IsWindowVisible", "uptr", hWnd) && !isMinimized)
+    if (!DllCall("IsWindowVisible", "uptr", hWnd) && !isMinimized) {
+        why := "not visible and not minimized"
         return False
+    }
 
+    cloaked := 0
     DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
-    if (cloaked = DWM_CLOAKED_SHELL)
+    if (cloaked = DWM_CLOAKED_SHELL) {
+        why := "cloaked shell"
         return False
+    }
 
-    if (realHwnd(DllCall("GetAncestor", "uptr", hWnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
+    if (realHwnd(DllCall("GetAncestor", "uptr", hWnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr"))) {
+        why := "parent not desktop"
         return False
+    }
 
-    if (winClass = "Windows.UI.Core.CoreWindow"
+    if (   winClass = "Windows.UI.Core.CoreWindow"
         || (InStr(winClass, "Shell", False) && InStr(winClass, "TrayWnd", False))
         || winClass == "ProgMan"
-        || winClass == "WorkerW")
-        return False
+        || winClass == "WorkerW") {
 
-    if (winClass = "ApplicationFrameWindow")
-    {
+        why := "blocked class=" . winClass
+        return False
+    }
+
+    if (winClass = "ApplicationFrameWindow") {
         VarSetCapacity(ApplicationViewCloakType, 4, 0)
         DllCall("EnumPropsEx", "uptr", hWnd, "ptr", PropEnumProcEx, "ptr", &ApplicationViewCloakType)
-        if (NumGet(ApplicationViewCloakType, 0, "int") = 1)
+        if (NumGet(ApplicationViewCloakType, 0, "int") = 1) {
+            why := "ApplicationFrameWindow cloaked (ApplicationViewCloakType=1)"
             return False
+        }
     }
 
     WinGet, exStyles, ExStyle, ahk_id %hWnd%
 
-    if (exStyles & WS_EX_APPWINDOW)
-    {
-        if DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr")
+    if (exStyles & WS_EX_APPWINDOW) {
+        if DllCall("GetProp", "uptr", hWnd, "str", "ITaskList_Deleted", "ptr") {
+            why := "WS_EX_APPWINDOW but ITaskList_Deleted"
             return False
+        }
 
-        if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hWnd)
+        if (VirtualDesktopExist = 0) {
+            why := "passes via WS_EX_APPWINDOW (no virtual desktops)"
             return True
-        else
-            return False
+        }
+
+        if IsWindowOnCurrentVirtualDesktop(hWnd) {
+            why := "passes via WS_EX_APPWINDOW (on current virtual desktop)"
+            return True
+        }
+
+        why := "WS_EX_APPWINDOW but not on current virtual desktop"
+        return False
     }
 
-    if (exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE) or (exStyles & WS_EX_DLGMODALFRAME)
+    if (exStyles & WS_EX_TOOLWINDOW) {
+        why := "toolwindow"
         return False
+    }
 
-    if (exStyles & (WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT))
+    if (exStyles & WS_EX_NOACTIVATE) {
+        why := "noactivate"
+        return False
+    }
+
+    ; leaving this commented out in your original logic:
+    ; if (exStyles & WS_EX_DLGMODALFRAME)
+    ;     ...
+
+    if (exStyles & (WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT)) {
+        why := "passes: WS_EX_WINDOWEDGE/WS_EX_CONTROLPARENT"
         return True
+    }
 
     loop
     {
         hWndPrev := hWnd
         hWnd := DllCall("GetWindow", "uptr", hWnd, "uint", GW_OWNER, "ptr")
 
-        if (!hWnd)
-        {
-            if DllCall("GetProp", "uptr", hWndPrev, "str", "ITaskList_Deleted", "ptr")
+        if (!hWnd) {
+            if DllCall("GetProp", "uptr", hWndPrev, "str", "ITaskList_Deleted", "ptr") {
+                why := "owner-walk end: ITaskList_Deleted on " . hWndPrev
                 return False
+            }
 
-            if (VirtualDesktopExist = 0) or IsWindowOnCurrentVirtualDesktop(hWndPrev)
+            if (VirtualDesktopExist = 0) {
+                why := "owner-walk end: passes (no virtual desktops) prev=" . hWndPrev
                 return True
-            else
-                return False
+            }
+
+            if IsWindowOnCurrentVirtualDesktop(hWndPrev) {
+                why := "owner-walk end: passes (on current virtual desktop) prev=" . hWndPrev
+                return True
+            }
+
+            why := "owner-walk end: not on current virtual desktop prev=" . hWndPrev
+            return False
         }
 
         ; Leave owner logic intact: if an owner is visible, the owned window typically isn't Alt-Tab eligible.
         ; (We do NOT “special-case” minimized owners here.)
-        if DllCall("IsWindowVisible", "uptr", hWnd)
+        if DllCall("IsWindowVisible", "uptr", hWnd) {
+            why := "fails: visible owner=" . hWnd
             return False
+        }
 
         WinGet, exStyles, ExStyle, ahk_id %hWnd%
-        if ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW)
+        if ((exStyles & WS_EX_TOOLWINDOW) or (exStyles & WS_EX_NOACTIVATE)) and !(exStyles & WS_EX_APPWINDOW) {
+            why := "fails: owner is toolwindow/noactivate (owner=" . hWnd . ")"
             return False
+        }
     }
 }
+
 
 GetLastActivePopup(hwnd)
 {
