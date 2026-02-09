@@ -128,13 +128,11 @@ UIA.ConnectionTimeout  := 20000
 
 Menu, Tray, Icon
 Menu, Tray, NoStandard
-Menu, Tray, Add, Menu, Routine
 Menu, Tray, Add, Run at startup, Startup
 Menu, Tray, Add, &Suspend, Suspend_label
 Menu, Tray, Add, Reload, Reload_label
 Menu, Tray, Add, Exit, Exit_label
-; Menu, Tray, Default, &Suspend
-Menu, Tray, Default, Menu
+Menu, Tray, Default, &Suspend
 Menu, Tray, Add
 Menu, Tray, Add, Key History, keyhist_label
 Menu, Tray, Add, List Hotkeys, listHotkeys_label
@@ -234,13 +232,13 @@ GetDesktopEdges(ByRef leftEdge, ByRef topEdge, ByRef rightEdge, ByRef bottomEdge
 totalVirtualDesktops := getTotalDesktops()
 GetDesktopEdges(G_DisplayLeftEdge, G_DisplayTopEdge, G_DisplayRightEdge, G_DisplayBottomEdge)
 
-line1 := "Total Number of Monitors is " MonCount " with Primary being " MonNum
+line1  := "Total Number of Monitors is " MonCount " with Primary being " MonNum
 line1a := "Desktop edges: " leftArrow . "(" . G_DisplayLeftEdge . "," . G_DisplayRightEdge . ")" . rightArrow
 line1b := "Desktop edges: " upArrow . "(" . G_DisplayTopEdge . "," . G_DisplayBottomEdge . ")" . downArrow
-line2 := "Current Mon is     " GetCurrentMonitorIndex()
-line3 := "Win11 is           " isWin11
-line4 := "Modern Explorer is " isModernExplorerInReg
-line5 := "Total # of Desktops " totalVirtualDesktops
+line2  := "Current Mon is     " GetCurrentMonitorIndex()
+line3  := "Win11 is           " isWin11
+line4  := "Modern Explorer is " isModernExplorerInReg
+line5  := "Total # of Desktops " totalVirtualDesktops
 Tooltip, % line1 "`n" line1a "`n" line1b "`n" line2 "`n" line3 "`n" line4 "`n" line5
 Sleep 5000
 Tooltip
@@ -274,11 +272,12 @@ loop % allwindows
     }
 }
 
-Expr =
+WinFindExpr =
 (
     #NoEnv
     #NoTrayIcon
     #KeyHistory 0
+    #SingleInstance, Force
     ; #Persistent ; already the default
     #WinActivateForce
     SetBatchLines -1
@@ -314,27 +313,27 @@ Expr =
     Return
 )
 
-ExprAltUp =
-(
-    #NoEnv
-    #NoTrayIcon
-    #KeyHistory 0
-    ; #Persistent ; already the default
-    #WinActivateForce
-    SetBatchLines -1
-    ListLines Off
-    ; DetectHiddenWindows, Off ; already the default
+; ExprAltUp =
+; (
+    ; #NoEnv
+    ; #NoTrayIcon
+    ; #KeyHistory 0
+    ; ; #Persistent ; already the default
+    ; #WinActivateForce
+    ; SetBatchLines -1
+    ; ListLines Off
+    ; ; DetectHiddenWindows, Off ; already the default
 
-    #IfWinNotActive ahk_class #32770
-    ~Alt Up::
-        If WinExist("ahk_class #32768")
-            Send, {ENTER}
-        If WinExist("ahk_class #32768")
-            WinClose, ahk_class #32768
-        ExitApp
-    Return
-    #IfWinNotActive
-)
+    ; #IfWinNotActive ahk_class #32770
+    ; ~Alt Up::
+        ; If WinExist("ahk_class #32768")
+            ; Send, {ENTER}
+        ; If WinExist("ahk_class #32768")
+            ; WinClose, ahk_class #32768
+        ; ExitApp
+    ; Return
+    ; #IfWinNotActive
+; )
 
 TooltipExpr =
 (
@@ -432,14 +431,20 @@ vdaInitd := InitVDA()
 comInitd := InitCOM_STA()
 accInitd := Acc_Init()
 
-SetTimer mouseTrack, 10
-SetTimer keyTrack, 5
+10_Minutes := 60000*10
+SetTimer MouseTrack, 10
+SetTimer KeyTrack, 5
+SetTimer MasterTimer, %10_Minutes%
 
 Return
 
 ; ==========================================================================================================================================
 ; -----------------------------------------------          START OF APPLICATION           --------------------------------------------------
 ; ==========================================================================================================================================
+MasterTimer:
+    KillOtherAutoHotkeyU64_NotThisScript(true)
+Return
+
 ; Helper to resolve exports
 _gp(name)
 {
@@ -519,6 +524,7 @@ InitVDA()
     return true
 }
 
+; --------------------------------------------------
 ; ---- Low-level hardware key filter ----
 ; --------------------------------------------------
 ; Common filter logic for keyboard - Yes, your hook can create the stuck modifier by swallowing physical KEYUP.
@@ -853,6 +859,56 @@ DetectWin11()
         Return False
 }
 
+KillOtherAutoHotkeyU64_NotThisScript(terminateUnknownTitle := false) {
+    ; Each running AHK script has a hidden main window of class "AutoHotkey".
+    ; We enumerate those windows, filter to AutoHotkeyU64.exe, then compare the title to our script path.
+
+    DetectHiddenWindows, On
+
+    currentPid := A_Pid
+    currentScript := A_ScriptFullPath
+    killed := 0
+
+    WinGet, hwndList, List, ahk_class AutoHotkey
+
+    Loop, %hwndList%
+    {
+        hwnd := hwndList%A_Index%
+
+        WinGet, pid, PID, ahk_id %hwnd%
+        if (pid = currentPid) {
+            continue
+        }
+
+        WinGet, procName, ProcessName, ahk_id %hwnd%
+        if (procName != "AutoHotkeyU64.exe") {
+            continue
+        }
+
+        WinGetTitle, title, ahk_id %hwnd%
+
+        ; Most AHK instances include the script full path in the hidden window title.
+        ; If we can't read a title, only terminate if terminateUnknownTitle := true.
+        if (title != "") {
+            if (InStr(title, currentScript)) {
+                continue
+            }
+        }
+        else {
+            if (!terminateUnknownTitle) {
+                continue
+            }
+        }
+
+        Process, Close, %pid%
+        if (!ErrorLevel) {
+            killed++
+        }
+    }
+
+    return killed
+}
+
 ; Choose the monitor containing the mouse. If none contains it (rare with odd layouts),
 ; pick the nearest monitor by distance.
 ; Summary
@@ -1155,6 +1211,12 @@ UnhookHooks:
     global UIA, comInitd
     UIA := ""  ; drop UIA COM refs first
 
+    ; --- Balance our manual CoInitializeEx call ---
+    ; InitCOM_STA() sets comInitd := 2 (S_OK) or 1 (S_FALSE) on success.
+    if (comInitd = 1 || comInitd = 2) {
+        DllCall("ole32\CoUninitialize")
+        comInitd := ""  ; prevent double-uninit on repeated exit paths
+    }
     ; IMPORTANT:
     ; Do NOT call CoUninitialize here (not required for clean process exit)
     ; Do NOT call FreeLibrary on VirtualDesktopAccessor here (can hang on Win11)
@@ -2061,9 +2123,6 @@ Return
         Return
     }
     Send, {Ctrl Up}
-    ; Your environment hooks
-    ; StopAutoFix := True
-    ; SetTimer, keyTrack, Off
 
     ; 1) Go to absolute start of the line and select it
     Send, {Home}{Home}
@@ -2369,7 +2428,7 @@ Return
 $!^j::
     StopAutoFix := True
     Send, {Left}
-    ; StopAutoFix := False
+    StopAutoFix := False
 Return
 
 $!l::
@@ -2818,8 +2877,8 @@ Altup:
     startHighlight := False
     LclickSelected := False
     Critical, Off
-    SetTimer, mouseTrack, On
-    SetTimer, keyTrack,   On
+    SetTimer, MouseTrack, On
+    SetTimer, KeyTrack,   On
 Return
 
 ;============================================================================================================================
@@ -3096,13 +3155,13 @@ $!Lbutton::
     }
 Return
 
-RunDynaExpr:
-    DynaRun(Expr, Expr_Name)
+RunDynaWinFind:
+    DynaRun(WinFindExpr, Expr_Name)
 Return
 
-RunDynaAltUp:
-    DynaRun(ExprAltUp, ExprAltUp_Name)
-Return
+; RunDynaAltUp:
+    ; DynaRun(ExprAltUp, ExprAltUp_Name)
+; Return
 
 RunDynaExprTimeout:
     DynaRun(TooltipExpr, ExprTimeout_Name)
@@ -5683,11 +5742,11 @@ RegExEscape(s)
 }
 
 LaunchWinFind:
-    If (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (DoubleClickTime/2))
+    If (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (0.75*(DoubleClickTime/2)))
     {
         StopRecursion   := True
-        SetTimer, keyTrack, Off
-        SetTimer, mouseTrack, Off
+        SetTimer, KeyTrack,   Off
+        SetTimer, MouseTrack, Off
 
         UserInputTrimmed :=
         StopCheck        := False
@@ -5700,8 +5759,8 @@ LaunchWinFind:
         {
             StopRecursion    := False
             SearchingWindows := False
-            SetTimer, keyTrack, On
-            SetTimer, mouseTrack, On
+            SetTimer, KeyTrack,   On
+            SetTimer, MouseTrack, On
             Return
         }
         Else
@@ -5741,10 +5800,10 @@ LaunchWinFind:
                 ToolTip, % "No matches found for """ UserInputTrimmed """ out of " totalCount "..."
                 Sleep, 1500
                 Tooltip,
-                StopRecursion := False
 
-                SetTimer, keyTrack, On
-                SetTimer, mouseTrack, On
+                StopRecursion := False
+                SetTimer, KeyTrack, On
+                SetTimer, MouseTrack, On
                 Return
             }
 
@@ -5774,7 +5833,6 @@ LaunchWinFind:
                 splitEntry2    := StrSplit(entry, "↑")
                 desktopEntry   := splitEntry2[1]
                 procEntry      := Trim(splitEntry2[2])
-                ; procEntry      := RTrim(procEntry)
                 titleEntry     := Trim(splitEntry2[3])
 
                 WinGet, Path, ProcessPath, ahk_exe %procEntry%
@@ -5782,9 +5840,6 @@ LaunchWinFind:
                     finalEntry   := % desktopEntry ":  [" titleEntry "] (" procEntry ")"
                 Else
                     finalEntry   := % desktopEntry ":  " titleEntry " (" procEntry ")"
-
-                ; If (!InStr(finalEntry, UserInputTrimmed, false))
-                    ; continue
 
                 If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
                     Menu, windows, Add
@@ -5808,7 +5863,7 @@ LaunchWinFind:
                 GoSub, ActivateWindow
             }
             Else If (totalMenuItemCount > 1) {
-                SetTimer, RunDynaExpr, -1
+                SetTimer, RunDynaWinFind, -1
 
                 CoordMode, Mouse, Screen
                 CoordMode, Menu, Screen
@@ -5836,8 +5891,8 @@ LaunchWinFind:
 
         SearchingWindows := False
         StopRecursion    := False
-        SetTimer, keyTrack,   On
-        SetTimer, mouseTrack, On
+        SetTimer, KeyTrack,   On
+        SetTimer, MouseTrack, On
     }
     KeyWait, Ctrl, U T10
 Return
@@ -7432,7 +7487,7 @@ FixModifiers() {
     }
 }
 
-keyTrack() {
+KeyTrack() {
     global keys, numbers, StopAutoFix, TimeOfLastHotkeyTyped, blockKeys
 
     ListLines, Off
@@ -7456,13 +7511,13 @@ keyTrack() {
                 || A_ThisHotkey == "$CapsLock"
                 || A_ThisHotkey == "$~Backspace") ) {
 
-            SetTimer, keyTrack, Off
+            SetTimer, KeyTrack, Off
 
             blockKeys := true
             Send, ^{NumpadAdd}
             blockKeys := false
 
-            SetTimer, keyTrack, On
+            SetTimer, KeyTrack, On
             TimeOfLastHotkeyTyped :=
         }
         StopAutoFix := False
@@ -7477,7 +7532,7 @@ keyTrack() {
 Return
 }
 
-mouseTrack() {
+MouseTrack() {
     global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, TaskBarHeight
     static x, y, lastX, lastY, taskview
     static LbuttonHeld := False, timeOfLastMove
@@ -7980,7 +8035,7 @@ Clip(Text := "", Reselect := "", Restore := "")
             ; ClipboardAll must be on its own line in v1
             BackUpClip := ClipboardAll
         } else {
-            ; cancel any pending restore (run immediately in v2 code with 0)
+            ; cancel any pendingQ restore (run immediately in v2 code with 0)
             SetTimer, ClipRestore, Off
         }
 
@@ -9254,19 +9309,19 @@ SetTitleMatchMode, 2
 ; Return
 
 
-#If !WinActive("ahk_exe notepad++.exe")
-        && !WinActive("ahk_exe Code.exe")
-        && !WinActive("ahk_exe cmd.exe")
-        && !WinActive("ahk_exe Conhost.exe")
-        && !WinActive("ahk_exe bash.exe")
-        && !WinActive("ahk_exe mintty.exe")
-        && !SearchingWindows
-        && !hitTAB
-        && !GetKeyState("LAlt","P")
-        && !GetKeyState("Control","P")
-        && !StopAutoFix
-        && !IsGoogleDocWindow()
-        && !IsEditCtrl()
+#If    !WinActive("ahk_exe notepad++.exe")
+    && !WinActive("ahk_exe Code.exe")
+    && !WinActive("ahk_exe cmd.exe")
+    && !WinActive("ahk_exe Conhost.exe")
+    && !WinActive("ahk_exe bash.exe")
+    && !WinActive("ahk_exe mintty.exe")
+    && !SearchingWindows
+    && !hitTAB
+    && !GetKeyState("LAlt","P")
+    && !GetKeyState("Control","P")
+    && !StopAutoFix
+    && !IsGoogleDocWindow()
+    && !IsEditCtrl()
 
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 
@@ -9397,6 +9452,9 @@ SetTitleMatchMode, 2
 ::sine::
 ::cosine::
 ::cos::
+::rms::
+::axis::
+::axes::
 ;------------------------------------------------------------------------------
 ; Special Exceptions - File Types
 ;------------------------------------------------------------------------------
