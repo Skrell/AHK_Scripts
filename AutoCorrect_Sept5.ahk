@@ -6481,6 +6481,7 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
     , ByRef wx := "", ByRef wy := "", ByRef ww := "", ByRef wh := ""
     , ByRef zoneW := "")
 {
+    isScrollbar := False
     ; System metric: vertical scrollbar width
     SysGet, sbW, 2  ; SM_CXVSCROLL
     if (sbW <= 0)
@@ -6505,18 +6506,27 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
     WinGetPosEx(hitHwnd, wx, wy, ww, wh)
 
     if (ww <= 0 || wh <= 0)
-        return false
+        isScrollbar := false
 
     right  := wx + ww
     bottom := wy + wh
 
     if (my < wy + zonePadTop || my >= bottom - zonePadBot)
-        return false
+        isScrollbar := false
 
     if (mx >= right - zoneW && mx < right)
-        return true
+        isScrollbar := true
 
-    return false
+    if !isScrollbar {
+        MouseGetPos, mx, my
+        pt := SafeUIA_ElementFromPoint(mx,my)
+        ; ctype := SafeUIA_GetControlType(pt)
+        autoId := SafeUIA_GetAutoId(pt)
+        if InStr(autoId, "DownPage", False) || InStr(autoId, "UpPage", False)
+            return True
+    }
+
+    return isScrollbar
 }
 
 #If MouseIsOverTaskbarBlank()
@@ -8725,7 +8735,7 @@ MouseIsOverTaskbar() {
 }
 
 MouseIsOverTaskbarButtonGroup() {
-    global UIA
+    ; global UIA
     CoordMode, Mouse, Screen
     MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
 
@@ -8750,7 +8760,7 @@ MouseIsOverTaskbarWidgets() {
 }
 
 MouseIsOverTaskbarBlank() {
-    global UIA
+    ; global UIA
 
     if !( GetKeyState("Wheeldown","P") || GetKeyState("Wheelup","P") || GetKeyState("LButton","P") || GetKeyState("RButton","P") || GetKeyState("MButton","P") )
         return False
@@ -9195,6 +9205,16 @@ SafeUIA_GetParent(el) {
         return ""
     try {
         return el.Parent
+    } catch e {
+        return ""
+    }
+}
+
+SafeUIA_GetAutoId(el) {
+    if !IsObject(el)
+        return ""
+    try {
+        return el.AutomationId
     } catch e {
         return ""
     }
