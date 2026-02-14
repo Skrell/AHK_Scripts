@@ -6520,7 +6520,6 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
     if !isScrollbar {
         MouseGetPos, mx, my
         pt := SafeUIA_ElementFromPoint(mx,my)
-        ; ctype := SafeUIA_GetControlType(pt)
         autoId := SafeUIA_GetAutoId(pt)
         if InStr(autoId, "DownPage", False) || InStr(autoId, "UpPage", False)
             return True
@@ -8614,42 +8613,69 @@ GetExplorerPath(hwnd := "" ) {
         activeTab := 0
         ControlGet, activeTab, Hwnd,, ShellTabWindowClass1, % "ahk_id " hwnd
 
-        try {
-            for w in ComObjCreate("Shell.Application").Windows {
-                If (w.hwnd != hwnd)
+        static shellApp := ComObjCreate("Shell.Application")
+
+        try
+        {
+            for w in shellApp.Windows
+            {
+                if (w.hwnd != hwnd)
+                {
                     continue
+                }
 
                 ; Tab gating (noop on Win10)
-                If (activeTab) {
+                if (activeTab)
+                {
                     static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
-                    shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
-                    DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
-                    ObjRelease(shellBrowser)
-                    If (thisTab != activeTab)
-                        continue
+                    shellBrowser := ComObjQuery(w, IID_IShellBrowser)
+                    if (shellBrowser)
+                    {
+                        thisTab := 0
+                        ; NOTE: vtable index/signature must be correct for your build.
+                        DllCall(NumGet(NumGet(shellBrowser+0) + 3*A_PtrSize)
+                            , "Ptr", shellBrowser
+                            , "UInt*", thisTab)
+                        ObjRelease(shellBrowser)
+
+                        if (thisTab != activeTab)
+                        {
+                            continue
+                        }
+                    }
                 }
+
                 ; Prefer COM path
-                path := ""
-                try path := w.Document.Folder.Self.Path
+                path := w.Document.Folder.Self.Path
 
-                If (path == "") {
-                    ; Fallback for virtual folders: read breadcrumb text (brittle but works on Win10)
-                    ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-                    If (dir == "" || !InStr(dir, "address", False))
-                        ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
-                    Return dir
-                } Else {
-                    Return path
+                if (path != "")
+                {
+                    return path
                 }
-            }
-        } catch e {
-            ; Last-chance fallback to breadcrumb on errors
-            ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
-            If (dir == "" || !InStr(dir,"address",False))
-                ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
 
-            Return dir
+                ; Fallback: try reading UI text (brittle on Win11)
+                dir := ""
+                ControlGetText, dir, ToolbarWindow323, % "ahk_id " hwnd
+                if (dir == "")
+                {
+                    ControlGetText, dir, ToolbarWindow324, % "ahk_id " hwnd
+                }
+                return dir
+            }
         }
+        catch e
+        {
+            ; Last-chance fallback
+            dir := ""
+            ControlGetText, dir, ToolbarWindow323, % "ahk_id " hwnd
+            if (dir == "")
+            {
+                ControlGetText, dir, ToolbarWindow324, % "ahk_id " hwnd
+            }
+            return dir
+        }
+
+        return ""  ; no matching window found
     }
     Return ""
 }
@@ -9874,6 +9900,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:noticibl::noticeabl
 :*:ocasion::occasion
 :*:occuranc::occurrence
+:*:occour::occur
+:*:occurr::occur
+:*:occurrance::occurrence
 :*:priveledg::privileg
 :*:recie::recei
 :*:recived::received
@@ -12006,15 +12035,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::occassioned::occasioned
 ::occassions::occasions
 ::occationally::occasionally
-::occour::occur
-::occurr::occur
-::occurrance::occurrence
-::occurrances::occurrences
 ::octohedra::octahedra
 ::octohedral::octahedral
 ::octohedron::octahedron
-::ocurr::occur
-::ocurrance::occurrence
 ::odouriferous::odoriferous
 ::odourous::odorous
 ::offereings::offerings
