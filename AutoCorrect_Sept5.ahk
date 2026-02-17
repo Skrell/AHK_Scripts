@@ -4817,24 +4817,14 @@ IsExplorerItemClick() {
         return False
 
     WinGetClass, cls, ahk_id %winHwnd%
-    if ((!InStr(winCtrl, "DirectUIHWND", True)) || (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770"))
+    if (!InStr(winCtrl, "DirectUIHWND") || (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770"))
         return False
+
+    needQuirkCheck := (cls = "#32770")
 
     acc := Acc_GetObjectAtScreenPoint(mx, my)
     if !IsObject(acc)
         return False
-
-    ; Fast leaf check: reject obvious headers
-    role := Acc_RoleSafe(acc)
-    if (role = ROLE_SYSTEM_COLUMNHEADER || role = ROLE_SYSTEM_ROWHEADER)
-        return False
-
-    ; #32770 header quirk
-    if (cls = "#32770" && (role = ROLE_SYSTEM_MENUPOPUP || role = ROLE_SYSTEM_OUTLINE)) {
-        nm := Acc_NameSafe(acc)
-        if (nm = "Name" || nm = "Date modified" || nm = "Type" || nm = "Size")
-            return False
-    }
 
     cur := acc
     Loop, 15
@@ -4846,19 +4836,25 @@ IsExplorerItemClick() {
         if (!role)
             break
 
-        ; Header roles
+        ; Header roles (fast + reliable)
         if (role = ROLE_SYSTEM_COLUMNHEADER || role = ROLE_SYSTEM_ROWHEADER)
             return False
 
-        ; #32770 header quirk: guard by name
-        if (cls = "#32770" && (role = ROLE_SYSTEM_MENUPOPUP || role = ROLE_SYSTEM_OUTLINE)) {
-            nm := Acc_NameSafe(cur)
-            if (nm = "Name" || nm = "Date modified" || nm = "Type" || nm = "Size")
-                return False
+        ; === INSERT OPTION B RIGHT HERE ===
+        if (cls = "#32770")
+        {
+            if (role = ROLE_SYSTEM_MENUPOPUP || role = ROLE_SYSTEM_OUTLINE)
+            {
+                nm := Acc_NameSafe(cur)
+                if (nm = "Name" || nm = "Date modified" || nm = "Type" || nm = "Size")
+                    return False
+            }
         }
+        ; === END INSERT ===
 
         ; Item roles: ONLY true if the point is inside the item's rect
-        if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM) {
+        if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
+        {
             return Acc_PointInAccRect(cur, mx, my)
         }
 
@@ -4867,6 +4863,65 @@ IsExplorerItemClick() {
 
     return False
 }
+
+Acc_Location(accObj, ByRef x, ByRef y, ByRef w, ByRef h, childId := "")
+{
+    local ia, child, hasAcc, hasChild
+
+    if (!IsObject(accObj))
+    {
+        throw Exception("Acc_Location: accObj is not an object")
+    }
+
+    hasAcc := False
+    hasChild := False
+
+    ; Only AHK objects support HasKey; COM objects will throw here.
+    try
+    {
+        hasAcc := accObj.HasKey("acc")
+        hasChild := accObj.HasKey("child")
+    }
+    catch
+    {
+        hasAcc := False
+        hasChild := False
+    }
+
+    if (hasAcc)
+    {
+        ia := accObj.acc
+        if (hasChild)
+        {
+            child := accObj.child
+        }
+        else
+        {
+            child := 0
+        }
+    }
+    else
+    {
+        ia := accObj
+        if (childId = "")
+        {
+            child := 0
+        }
+        else
+        {
+            child := childId
+        }
+    }
+
+    x := 0
+    y := 0
+    w := 0
+    h := 0
+
+    ia.accLocation(x, y, w, h, ComObjParameter(3, child))
+    return
+}
+
 
 Acc_PointInAccRect(accObj, sx, sy) {
     ; Returns True only if (sx,sy) lies within accObj's screen rectangle.
@@ -4908,13 +4963,21 @@ IsExplorerHeaderClick() {
     static cacheCls := ""
 
     CoordMode, Mouse, Screen
-    MouseGetPos, mx, my, winHwnd
+    MouseGetPos, mx, my, winHwnd, winCtrl
     if (!winHwnd) {
+        return False
+    }
+    ControlGet, directUIHwnd, Hwnd,, %winCtrl%, ahk_id %winHwnd%
+    if (!directUIHwnd) {
         return False
     }
 
     WinGetClass, cls, ahk_id %winHwnd%
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770") {
+        return False
+    }
+
+    if (!winCtrl || !InStr(winCtrl, "DirectUIHWND")) {
         return False
     }
 
@@ -4934,24 +4997,33 @@ IsExplorerHeaderClick() {
     ; ---------- SLOW PATH: single climb to find header, refresh cache ----------
     acc := Acc_GetObjectAtScreenPoint(mx, my)
     if !IsObject(acc) {
-        cacheWin := 0
+        if (winHwnd = cacheWin)
+            cacheWin := 0
         return False
     }
 
-    ; ONE WALK: if we can find the header object, we already know it's a header click
-    hdr := Acc_FindHeaderObject(acc, cls, ROLE_SYSTEM_OUTLINE, ROLE_SYSTEM_COLUMNHEADER, ROLE_SYSTEM_MENUPOPUP)
+    hdr := Acc_FindHeaderObject(acc, cls, ROLE_SYSTEM_OUTLINE, ROLE_SYSTEM_COLUMNHEADER, ROLE_SYSTEM_MENUPOPUP, directUIHwnd)
     if !IsObject(hdr) {
+        if (winHwnd = cacheWin)
+            cacheWin := 0
         return False
     }
 
     ; If we found a header object but can't cache rect, still treat as header click
     try
     {
-        hdr.accLocation(hx, hy, hw, hh, 0)
+        Acc_Location(hdr, hx, hy, hw, hh)
     }
     catch
     {
-        cacheWin := 0
+        if (winHwnd = cacheWin)
+            cacheWin := 0
+        return True
+    }
+
+    if (hw <= 0 || hh <= 0) {
+        if (winHwnd = cacheWin)
+            cacheWin := 0
         return True
     }
 
@@ -4976,110 +5048,122 @@ IsExplorerHeaderClick() {
 ;     Only occasionally: accName() is used to correctly identify headers that masquerade
 ;     as role 10/62 — but only when building the cache.
 ; ------------------------------------------------------------------
-IsExplorerBlankSpaceClick(ByRef isExplorerHeader := False) {
-    static ROLE_SYSTEM_LIST        := 0x21  ; 33
-    static ROLE_SYSTEM_OUTLINE     := 0x3E  ; 62
-    static ROLE_SYSTEM_LISTITEM    := 0x22  ; 34
-    static ROLE_SYSTEM_OUTLINEITEM := 0x24  ; 36
+IsExplorerBlankSpaceClick(ByRef isExplorerHeader := False)
+{
+    static ROLE_SYSTEM_LIST        := 0x21
+    static ROLE_SYSTEM_OUTLINE     := 0x3E
+    static ROLE_SYSTEM_LISTITEM    := 0x22
+    static ROLE_SYSTEM_OUTLINEITEM := 0x24
+    static ROLE_SYSTEM_COLUMNHEADER := 0x19
+    static ROLE_SYSTEM_ROWHEADER    := 0x1A
+    static ROLE_SYSTEM_MENUPOPUP    := 0x0A
+
+    ; ---- micro-cache ----
+    static cacheWin := 0
+    static cacheCtrl := ""
+    static cacheX := -1
+    static cacheY := -1
+    static cacheResult := False
+    static cacheHeader := False
+
+    isExplorerHeader := False
 
     CoordMode, Mouse, Screen
-    MouseGetPos, x, y, winHwnd
+    MouseGetPos, x, y, winHwnd, winCtrl
     if (!winHwnd)
         return False
 
-    ; Only Explorer + common dialogs
+    ; Cache hit: same window/control + same mouse position
+    if (winHwnd = cacheWin && winCtrl = cacheCtrl && x = cacheX && y = cacheY)
+    {
+        isExplorerHeader := cacheHeader
+        return cacheResult
+    }
+
     WinGetClass, cls, ahk_id %winHwnd%
     if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
+    {
+        cacheWin := winHwnd, cacheCtrl := winCtrl, cacheX := x, cacheY := y
+        cacheResult := False, cacheHeader := False
         return False
+    }
 
-    ; MSAA: object under cursor
-    ; If your Acc.ahk uses ByRef child,x,y, you may need: acc := Acc_ObjectFromPoint(, x, y)
+    if (!winCtrl || !InStr(winCtrl, "DirectUIHWND"))
+    {
+        cacheWin := winHwnd, cacheCtrl := winCtrl, cacheX := x, cacheY := y
+        cacheResult := False, cacheHeader := False
+        return False
+    }
+
+    ; Optional: use the dedicated header detector
+    if (IsExplorerHeaderClick())
+    {
+        isExplorerHeader := True
+        cacheWin := winHwnd, cacheCtrl := winCtrl, cacheX := x, cacheY := y
+        cacheResult := False, cacheHeader := True
+        return False
+    }
+
     acc := Acc_ObjectFromPoint(x, y)
     if !IsObject(acc)
-        return False
-
-    ; If you treat header clicks separately, you can short‑circuit here:
-    ; (This calls your IsExplorerHeaderClick that checks for ROLE_SYSTEM_OUTLINE)
-    if (IsExplorerHeaderClick()) {
-        isExplorerHeader := True
+    {
+        cacheWin := winHwnd, cacheCtrl := winCtrl, cacheX := x, cacheY := y
+        cacheResult := False, cacheHeader := False
         return False
     }
 
-    ; ------------------------------------------------------------
-    ; Step 1: Is this click on an item (file/folder/group header)?
-    ; ------------------------------------------------------------
+    sawList := False
     cur := acc
-    Loop 15 {
+    Loop, 15
+    {
         if !IsObject(cur)
             break
 
-        role := ""
-        try role := cur.accRole(0)
-        catch
-            break
-
-        ; Normalize numeric role
-        if role is number
-            role += 0
-        else {
-            ; Normalize common string variants
-            r := role
-            StringLower, r, r
-            r := Trim(r)
-            if (r = "list item" || r = "listitem")
-                role := ROLE_SYSTEM_LISTITEM
-            else if (r = "outline item" || r = "outlineitem")
-                role := ROLE_SYSTEM_OUTLINEITEM
+        role := Acc_RoleSafe(cur)
+        if (!role)
+        {
+            cur := Acc_ParentSafe(cur)
+            continue
         }
 
-        ; Any LISTITEM / OUTLINEITEM on the way up = item / group header → not blank
-        if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
+        if (role = ROLE_SYSTEM_COLUMNHEADER || role = ROLE_SYSTEM_ROWHEADER)
+        {
+            isExplorerHeader := True
+            cacheWin := winHwnd, cacheCtrl := winCtrl, cacheX := x, cacheY := y
+            cacheResult := False, cacheHeader := True
             return False
-
-        parent := ""
-        try parent := cur.accParent
-        cur := parent
-    }
-
-    ; ------------------------------------------------------------
-    ; Step 2: Are we inside a LIST / OUTLINE at all?
-    ;         If yes → blank space within the view.
-    ; ------------------------------------------------------------
-    cur := acc
-    Loop 15 {
-        if !IsObject(cur)
-            break
-
-        role := ""
-        try role := cur.accRole(0)
-        catch
-            break
-
-        if role is number
-            role += 0
-        else {
-            r := role
-            StringLower, r, r
-            r := Trim(r)
-            if (r = "list")
-                role := ROLE_SYSTEM_LIST
-            else if (r = "outline")
-                role := ROLE_SYSTEM_OUTLINE
         }
 
-        if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE) {
-            ; We're in the file view, and we already ruled out items above → blank
-            return true
+        if (cls = "#32770" && role = ROLE_SYSTEM_MENUPOPUP)
+        {
+            if (Acc_NameIsKnownColumn(cur))
+            {
+                isExplorerHeader := True
+                cacheWin := winHwnd, cacheCtrl := winCtrl, cacheX := x, cacheY := y
+                cacheResult := False, cacheHeader := True
+                return False
+            }
         }
 
-        parent := ""
-        try parent := cur.accParent
-        cur := parent
+        if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
+        {
+            cacheWin := winHwnd, cacheCtrl := winCtrl, cacheX := x, cacheY := y
+            cacheResult := False, cacheHeader := False
+            return False
+        }
+
+        if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE)
+            sawList := True
+
+        cur := Acc_ParentSafe(cur)
     }
 
-    ; No list/outline ancestor: not part of the file view
-    return False
+    cacheWin := winHwnd, cacheCtrl := winCtrl, cacheX := x, cacheY := y
+    cacheResult := sawList, cacheHeader := False
+    return sawList
 }
+
+
 
 ; IsExplorerBlankSpaceClick() {
     ; static ROLE_SYSTEM_LIST        := 0x21  ; 33
@@ -9048,21 +9132,34 @@ Acc_FromWindow(hWnd, objID, ByRef acc) {
     return false
 }
 
-Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole) {
+Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole, directUIHwnd := 0) {
+    local cur, role, needQuirkCheck, hostHwnd, checked
+
     if !IsObject(accObj) {
-        return ""
+        return 0
     }
 
+    needQuirkCheck := (cls = "#32770")
+    checked := 0
     cur := accObj
+
     Loop, 10
     {
         if !IsObject(cur) {
             break
         }
 
+        ; Only pay for this check once or twice (it’s a DllCall)
+        if (directUIHwnd && checked < 2) {
+            hostHwnd := Acc_WindowFromObject(cur)
+            checked += 1
+            if (hostHwnd && hostHwnd != directUIHwnd) {
+                break
+            }
+        }
+
         role := Acc_RoleSafe(cur)
 
-        ; If role retrieval fails here, try parent instead of bailing out.
         if (!role) {
             cur := Acc_ParentSafe(cur)
             continue
@@ -9072,7 +9169,7 @@ Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole) {
             return cur
         }
 
-        if (cls = "#32770" && role = menuPopupRole) {
+        if (needQuirkCheck && role = menuPopupRole) {
             if (Acc_NameIsKnownColumn(cur)) {
                 return cur
             }
@@ -9081,8 +9178,40 @@ Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole) {
         cur := Acc_ParentSafe(cur)
     }
 
-    return ""
+    return 0
 }
+
+Acc_WindowFromObject(accObj)
+{
+    local ia, hwnd := 0, hr := 0
+
+    if !IsObject(accObj)
+    {
+        return 0
+    }
+
+    ia := accObj
+    try
+    {
+        ia := accObj.acc
+    }
+    catch
+    {
+        ia := accObj
+    }
+
+    hr := DllCall("oleacc\WindowFromAccessibleObject"
+        , "ptr", ComObjValue(ia)
+        , "ptr*", hwnd
+        , "int")
+
+    if (hr != 0)
+    {
+        return 0
+    }
+    return hwnd
+}
+
 
 Acc_NameIsKnownColumn(accObj) {
     if !IsObject(accObj) {
