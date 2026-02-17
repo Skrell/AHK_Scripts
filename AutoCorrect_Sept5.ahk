@@ -3243,6 +3243,126 @@ IsProcessElevated(pid)
     return (elevation != 0)
 }
 
+; Uses SysGet(SM_CXVSCROLL) to size the right-edge zone.
+; extraW lets you widen beyond the system metric (useful for overlay scrollbars).
+
+; Requires your WinGetPosEx() function to be present.
+
+; Uses SysGet(SM_CXVSCROLL) to size the right-edge zone.
+; extraW lets you widen beyond the system metric (useful for overlay scrollbars).
+IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
+    , extraW := 6
+    , ByRef hitHwnd := 0, useRoot := true
+    , ByRef wx := "", ByRef wy := "", ByRef ww := "", ByRef wh := ""
+    , ByRef zoneW := "")
+{
+    isScrollbar := False
+    ; System metric: vertical scrollbar width
+    SysGet, sbW, 2  ; SM_CXVSCROLL
+    if (sbW <= 0)
+        sbW := 17  ; sane fallback
+
+    ; Make it a bit wider than the metric (Win11 overlay scrollbars feel easier this way)
+    zoneW := sbW + extraW
+
+    MouseGetPos, mx, my, winHwnd
+    if (!winHwnd)
+        return false
+
+    hitHwnd := winHwnd
+
+    if (useRoot)
+    {
+        rootHwnd := DllCall("GetAncestor", "ptr", hitHwnd, "uint", 2, "ptr") ; GA_ROOT=2
+        if (rootHwnd)
+            hitHwnd := rootHwnd
+    }
+
+    WinGetPosEx(hitHwnd, wx, wy, ww, wh)
+
+    if (ww <= 0 || wh <= 0)
+        isScrollbar := false
+
+    right  := wx + ww
+    bottom := wy + wh
+
+    if (my < wy + zonePadTop || my >= bottom - zonePadBot)
+        isScrollbar := false
+
+    if (mx >= right - zoneW && mx < right)
+        isScrollbar := true
+
+    if !isScrollbar {
+        MouseGetPos, mx, my
+        pt := SafeUIA_ElementFromPoint(mx,my)
+        ; ctype := SafeUIA_GetControlType(pt)
+        autoId := SafeUIA_GetAutoId(pt)
+        if InStr(autoId, "DownPage", False) || InStr(autoId, "UpPage", False)
+            return True
+    }
+
+    return isScrollbar
+}
+
+#If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
+RButton & WheelUp::
+    SetTimer, SendCtrlAddLabel, Off
+    WinGetClass, currClass, A
+    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12, h) {
+        If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+            Send, ^+{Home}
+        }
+        Else {
+            Send, ^{Home}
+            Send, {Home}
+        }
+    }
+    Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+        Send, ^+{PgUp}
+    }
+    Else {
+        Send, {PgUp}
+    }
+Return
+
+RButton & WheelDown::
+    SetTimer, SendCtrlAddLabel, Off
+    WinGetClass, currClass, A
+    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12, h) {
+        If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+            Send, ^+{End}
+        }
+        Else {
+            Send, ^{End}
+            Send, {End}
+        }
+    }
+    Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+        Send, ^+{PgDn}
+    }
+    Else {
+        Send, {PgDn}
+    }
+Return
+
+; WheelUp alone → normal wheel scroll
+; WheelUp while RButton is held → combo fires
+; RButton alone → still works normally (due to $RButton::Send {RButton})
+
+; code works because:
+    ; AHK requires the prefix (RButton) to be defined as a hotkey
+    ; $RButton::Send {RButton} creates the hotkey while preserving right-click
+    ; $ prevents infinite recursion
+    ; The prefix being defined allows AHK’s hook engine to detect combos reliably
+
+; WheelUp/WheelDown remain normal unless RButton is held
+$RButton::
+    StopRecursion := True
+    Send, {Rbutton}
+    StopRecursion := False
+Return
+#If
+
 Cycle()
 {
     global cycling, ValidWindows, GroupedWindows, MonCount, startHighlight, LclickSelected, firstDraw
@@ -4693,76 +4813,73 @@ IsExplorerItemClick() {
 
     CoordMode, Mouse, Screen
     MouseGetPos, mx, my, winHwnd, winCtrl
-    if (!winHwnd || !winCtrl) {
+    if (!winHwnd || !winCtrl)
         return False
-    }
 
     WinGetClass, cls, ahk_id %winHwnd%
-    if ((!InStr(winCtrl, "DirectUIHWND", True)) || (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")) {
+    if ((!InStr(winCtrl, "DirectUIHWND", True)) || (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770"))
         return False
-    }
 
     acc := Acc_GetObjectAtScreenPoint(mx, my)
-    if !IsObject(acc) {
+    if !IsObject(acc)
         return False
-    }
 
-    ; ------------------------------------------------------------
-    ; Fast leaf check: reject obvious headers without any parent-walk
-    ; ------------------------------------------------------------
+    ; Fast leaf check: reject obvious headers
     role := Acc_RoleSafe(acc)
-    if (role = ROLE_SYSTEM_COLUMNHEADER || role = ROLE_SYSTEM_ROWHEADER) {
+    if (role = ROLE_SYSTEM_COLUMNHEADER || role = ROLE_SYSTEM_ROWHEADER)
         return False
-    }
 
-    ; Win11 #32770 quirk: Name header is MENUPOPUP (10)
-    ; and other headers can show OUTLINE (62) at the leaf.
+    ; #32770 header quirk
     if (cls = "#32770" && (role = ROLE_SYSTEM_MENUPOPUP || role = ROLE_SYSTEM_OUTLINE)) {
         nm := Acc_NameSafe(acc)
-        if (nm = "Name" || nm = "Date modified" || nm = "Type" || nm = "Size") {
+        if (nm = "Name" || nm = "Date modified" || nm = "Type" || nm = "Size")
             return False
-        }
     }
 
-    ; ------------------------------------------------------------
-    ; Single parent-walk:
-    ; - reject headers (incl. #32770 role-10 quirk) while walking
-    ; - return True immediately when we find an item role
-    ; ------------------------------------------------------------
     cur := acc
     Loop, 15
     {
-        if !IsObject(cur) {
+        if !IsObject(cur)
             break
-        }
 
         role := Acc_RoleSafe(cur)
-        if (!role) {
+        if (!role)
             break
-        }
 
         ; Header roles
-        if (role = ROLE_SYSTEM_COLUMNHEADER || role = ROLE_SYSTEM_ROWHEADER) {
+        if (role = ROLE_SYSTEM_COLUMNHEADER || role = ROLE_SYSTEM_ROWHEADER)
             return False
-        }
 
-        ; #32770 header quirk: guard column headers by name
+        ; #32770 header quirk: guard by name
         if (cls = "#32770" && (role = ROLE_SYSTEM_MENUPOPUP || role = ROLE_SYSTEM_OUTLINE)) {
             nm := Acc_NameSafe(cur)
-            if (nm = "Name" || nm = "Date modified" || nm = "Type" || nm = "Size") {
+            if (nm = "Name" || nm = "Date modified" || nm = "Type" || nm = "Size")
                 return False
-            }
         }
 
-        ; Item roles
+        ; Item roles: ONLY true if the point is inside the item's rect
         if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM) {
-            return True
+            return Acc_PointInAccRect(cur, mx, my)
         }
 
         cur := Acc_ParentSafe(cur)
     }
 
     return False
+}
+
+Acc_PointInAccRect(accObj, sx, sy) {
+    ; Returns True only if (sx,sy) lies within accObj's screen rectangle.
+    ; If we can't get a rectangle, fail closed.
+    try {
+        Acc_Location(accObj, ax, ay, aw, ah)  ; screen coords in the common Acc libs
+    } catch {
+        return False
+    }
+    if (aw <= 0 || ah <= 0)
+        return False
+
+    return (sx >= ax && sx < ax + aw && sy >= ay && sy < ay + ah)
 }
 
 ; ------------------------------------------------------------------
@@ -5392,6 +5509,9 @@ $~LButton::
         }
     }
 
+    LBD_HexColor1           := 0x000000
+    LBD_HexColor2           := 0x000000
+    LBD_HexColor3           := 0x000000
     isBlankSpaceExplorer    := False
     isBlankSpaceNonExplorer := False
     isColumnHeader          := False
@@ -5428,9 +5548,6 @@ $~LButton::
         If (InStr(_winCtrlD,"SysHeader32", True)) {
             isColumnHeader := True
         }
-        LBD_HexColor1 := 0x000000
-        LBD_HexColor2 := 0x000000
-        LBD_HexColor3 := 0x000000
         CoordMode, Pixel, Screen
         lbX1 -= 2
         lbY1 -= 2
@@ -6471,63 +6588,6 @@ IsAlwaysOnTop(hwndID) {
         Return False
 }
 
-; Requires your WinGetPosEx() function to be present.
-
-; Uses SysGet(SM_CXVSCROLL) to size the right-edge zone.
-; extraW lets you widen beyond the system metric (useful for overlay scrollbars).
-IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
-    , extraW := 6
-    , ByRef hitHwnd := 0, useRoot := true
-    , ByRef wx := "", ByRef wy := "", ByRef ww := "", ByRef wh := ""
-    , ByRef zoneW := "")
-{
-    isScrollbar := False
-    ; System metric: vertical scrollbar width
-    SysGet, sbW, 2  ; SM_CXVSCROLL
-    if (sbW <= 0)
-        sbW := 17  ; sane fallback
-
-    ; Make it a bit wider than the metric (Win11 overlay scrollbars feel easier this way)
-    zoneW := sbW + extraW
-
-    MouseGetPos, mx, my, winHwnd
-    if (!winHwnd)
-        return false
-
-    hitHwnd := winHwnd
-
-    if (useRoot)
-    {
-        rootHwnd := DllCall("GetAncestor", "ptr", hitHwnd, "uint", 2, "ptr") ; GA_ROOT=2
-        if (rootHwnd)
-            hitHwnd := rootHwnd
-    }
-
-    WinGetPosEx(hitHwnd, wx, wy, ww, wh)
-
-    if (ww <= 0 || wh <= 0)
-        isScrollbar := false
-
-    right  := wx + ww
-    bottom := wy + wh
-
-    if (my < wy + zonePadTop || my >= bottom - zonePadBot)
-        isScrollbar := false
-
-    if (mx >= right - zoneW && mx < right)
-        isScrollbar := true
-
-    if !isScrollbar {
-        MouseGetPos, mx, my
-        pt := SafeUIA_ElementFromPoint(mx,my)
-        autoId := SafeUIA_GetAutoId(pt)
-        if InStr(autoId, "DownPage", False) || InStr(autoId, "UpPage", False)
-            return True
-    }
-
-    return isScrollbar
-}
-
 #If MouseIsOverTaskbarBlank()
 Lbutton & Rbutton::
     Send, #{r}
@@ -6537,54 +6597,6 @@ Return
 #If VolumeHover()
 $WheelUp::send {Volume_Up}
 $WheelDown::send {Volume_Down}
-#If
-
-#If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
-RButton & WheelUp::
-    SetTimer, SendCtrlAddLabel, Off
-    WinGetClass, currClass, A
-    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12, h) {
-        If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
-            Send, ^+{Home}
-        }
-        Else {
-            Send, ^{Home}
-            Send, {Home}
-        }
-    }
-    Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
-        Send, ^+{PgUp}
-    }
-    Else {
-        Send, {PgUp}
-    }
-Return
-
-RButton & WheelDown::
-    SetTimer, SendCtrlAddLabel, Off
-    WinGetClass, currClass, A
-    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12, h) {
-        If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
-            Send, ^+{End}
-        }
-        Else {
-            Send, ^{End}
-            Send, {End}
-        }
-    }
-    Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
-        Send, ^+{PgDn}
-    }
-    Else {
-        Send, {PgDn}
-    }
-Return
-
-$RButton::
-    StopRecursion := True
-    Send, {Rbutton}
-    StopRecursion := False
-Return
 #If
 
 /* ;
@@ -8613,69 +8625,42 @@ GetExplorerPath(hwnd := "" ) {
         activeTab := 0
         ControlGet, activeTab, Hwnd,, ShellTabWindowClass1, % "ahk_id " hwnd
 
-        static shellApp := ComObjCreate("Shell.Application")
-
-        try
-        {
-            for w in shellApp.Windows
-            {
-                if (w.hwnd != hwnd)
-                {
+        try {
+            for w in ComObjCreate("Shell.Application").Windows {
+                If (w.hwnd != hwnd)
                     continue
-                }
 
                 ; Tab gating (noop on Win10)
-                if (activeTab)
-                {
+                If (activeTab) {
                     static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
-                    shellBrowser := ComObjQuery(w, IID_IShellBrowser)
-                    if (shellBrowser)
-                    {
-                        thisTab := 0
-                        ; NOTE: vtable index/signature must be correct for your build.
-                        DllCall(NumGet(NumGet(shellBrowser+0) + 3*A_PtrSize)
-                            , "Ptr", shellBrowser
-                            , "UInt*", thisTab)
-                        ObjRelease(shellBrowser)
-
-                        if (thisTab != activeTab)
-                        {
-                            continue
-                        }
-                    }
+                    shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
+                    DllCall(NumGet(numGet(shellBrowser+0)+3*A_PtrSize), "Ptr", shellBrowser, "UInt*", thisTab)
+                    ObjRelease(shellBrowser)
+                    If (thisTab != activeTab)
+                        continue
                 }
-
                 ; Prefer COM path
-                path := w.Document.Folder.Self.Path
+                path := ""
+                try path := w.Document.Folder.Self.Path
 
-                if (path != "")
-                {
-                    return path
+                If (path == "") {
+                    ; Fallback for virtual folders: read breadcrumb text (brittle but works on Win10)
+                    ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+                    If (dir == "" || !InStr(dir, "address", False))
+                        ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
+                    Return dir
+                } Else {
+                    Return path
                 }
-
-                ; Fallback: try reading UI text (brittle on Win11)
-                dir := ""
-                ControlGetText, dir, ToolbarWindow323, % "ahk_id " hwnd
-                if (dir == "")
-                {
-                    ControlGetText, dir, ToolbarWindow324, % "ahk_id " hwnd
-                }
-                return dir
             }
-        }
-        catch e
-        {
-            ; Last-chance fallback
-            dir := ""
-            ControlGetText, dir, ToolbarWindow323, % "ahk_id " hwnd
-            if (dir == "")
-            {
-                ControlGetText, dir, ToolbarWindow324, % "ahk_id " hwnd
-            }
-            return dir
-        }
+        } catch e {
+            ; Last-chance fallback to breadcrumb on errors
+            ControlGetText, dir, ToolbarWindow323, ahk_id %hwnd%
+            If (dir == "" || !InStr(dir,"address",False))
+                ControlGetText, dir, ToolbarWindow324, ahk_id %hwnd%
 
-        return ""  ; no matching window found
+            Return dir
+        }
     }
     Return ""
 }
@@ -9161,7 +9146,7 @@ Acc_ParentSafe(accObj) {
 
     return parent
 }
-
+; ChatGPT
 SafeUIA_ElementFromPoint(x, y, default := "") {
     global UIA
 
@@ -9175,7 +9160,7 @@ SafeUIA_ElementFromPoint(x, y, default := "") {
         return default
     }
 }
-
+; ChatGPT
 SafeUIA_GetControlType(el, default := "") {
     if !IsObject(el)
         return default
@@ -9185,7 +9170,7 @@ SafeUIA_GetControlType(el, default := "") {
         return default
     }
 }
-
+; ChatGPT
 SafeUIA_GetLocalizedControlType(el, default := "") {
     if !IsObject(el)
         return default
@@ -9195,7 +9180,7 @@ SafeUIA_GetLocalizedControlType(el, default := "") {
         return default
     }
 }
-
+; ChatGPT
 SafeUIA_GetName(el, default := "") {
     if !IsObject(el)
         return default
@@ -9205,7 +9190,7 @@ SafeUIA_GetName(el, default := "") {
         return default
     }
 }
-
+; ChatGPT
 SafeUIA_GetClassName(el, default := "") {
     if !IsObject(el)
         return default
@@ -9215,7 +9200,7 @@ SafeUIA_GetClassName(el, default := "") {
         return default
     }
 }
-
+; ChatGPT
 SafeUIA_GetOrientation(el, default := 0) {
     if !IsObject(el)
         return default
@@ -9225,7 +9210,7 @@ SafeUIA_GetOrientation(el, default := 0) {
         return default
     }
 }
-
+; ChatGPT
 SafeUIA_GetParent(el) {
     if !IsObject(el)
         return ""
@@ -9235,7 +9220,7 @@ SafeUIA_GetParent(el) {
         return ""
     }
 }
-
+; ChatGPT
 SafeUIA_GetAutoId(el) {
     if !IsObject(el)
         return ""
@@ -9900,9 +9885,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:noticibl::noticeabl
 :*:ocasion::occasion
 :*:occuranc::occurrence
-:*:occour::occur
-:*:occurr::occur
-:*:occurrance::occurrence
 :*:priveledg::privileg
 :*:recie::recei
 :*:recived::received
@@ -12035,9 +12017,15 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::occassioned::occasioned
 ::occassions::occasions
 ::occationally::occasionally
+::occour::occur
+::occurr::occur
+::occurrance::occurrence
+::occurrances::occurrences
 ::octohedra::octahedra
 ::octohedral::octahedral
 ::octohedron::octahedron
+::ocurr::occur
+::ocurrance::occurrence
 ::odouriferous::odoriferous
 ::odourous::odorous
 ::offereings::offerings
