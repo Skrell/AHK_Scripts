@@ -93,6 +93,7 @@ Global TaskBarHeight                       := 0
 Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
 Global detectDoubleClicks                  := True
+Global disableSendCtrlHwnd                 := ""
 Global hActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 Global UIA := UIA_Interface() ; Initialize UIA interface
 ; Turn key blocking ON/OFF
@@ -5163,8 +5164,6 @@ IsExplorerBlankSpaceClick(ByRef isExplorerHeader := False)
     return sawList
 }
 
-
-
 ; IsExplorerBlankSpaceClick() {
     ; static ROLE_SYSTEM_LIST        := 0x21  ; 33
     ; static ROLE_SYSTEM_OUTLINE     := 0x3E  ; 62
@@ -5531,6 +5530,12 @@ $~LButton::
         Thread, NoTimers, False
         Return
     }
+    If (disableSendCtrlHwnd == _winIdD) {
+        Thread, NoTimers, False
+        Return
+    }
+    Else If (!WinExist("ahk_id " . disableSendCtrlHwnd))
+        disableSendCtrlHwnd := ""
 
     initTime := A_TickCount
 
@@ -5539,6 +5544,7 @@ $~LButton::
         && (A_TimeSincePriorHotkey <= DoubleClickTime)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))) {
+
         detectDoubleClicks := False
         ; tooltip, %isBlankSpaceExplorer% - %isBlankSpaceNonExplorer%
         If (isBlankSpaceExplorer || isBlankSpaceNonExplorer) {
@@ -5553,14 +5559,14 @@ $~LButton::
         }
 
         KeyWait, Lbutton, U T3
-        LbuttonEnabled     := False
+        ; LbuttonEnabled     := False
 
         If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
             ; tooltip, getting path
             currentPath    := ""
             loop 50 {
                 If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
-                    LbuttonEnabled     := True
+                    ; LbuttonEnabled     := True
                     Thread, NoTimers, False
                     Return
                 }
@@ -5578,7 +5584,7 @@ $~LButton::
             If isBlankSpaceExplorer
                 isBlankSpaceExplorer := False
 
-            LbuttonEnabled  := True
+            ; LbuttonEnabled  := True
             Return
         }
         Else {
@@ -5588,7 +5594,7 @@ $~LButton::
             If isBlankSpaceNonExplorer
                 isBlankSpaceNonExplorer := False
 
-            LbuttonEnabled  := True
+            ; LbuttonEnabled  := True
             Return
         }
     }
@@ -5617,7 +5623,7 @@ $~LButton::
         If (!isColumnHeader) {
             loop 50 {
                 If (WinExist("A") != _winIdD) {
-                    LbuttonEnabled     := True
+                    ; LbuttonEnabled     := True
                     Thread, NoTimers, False
                     Return
                 }
@@ -5652,8 +5658,9 @@ $~LButton::
     timeDiff := rlsTime - initTime
     extra    := ""
 
+    ; tooltip, %isColumnHeader%
     ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick() "-" IsModernExplorerActive(_winIdU)
-    ; tooltip, %timeDiff% ms - %detectDoubleClicks% - %isBlankSpaceExplorer% - %_winClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
+    ; tooltip, %timeDiff% ms - %detectDoubleClicks% - %isBlankSpaceExplorer% ; - %_winClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
 
@@ -5766,6 +5773,9 @@ $~LButton::
             ; tooltip, sending
             SendCtrlAdd(_winIdU, prevPath, currentPath, _winClassD, _winCtrlU)
         }
+    }
+    Else If (InStr(_winCtrlU, "SysHeader", True) && (abs(lbX1-lbX2) >= 15 || abs(lbY1-lbY2) >= 15)) { ; dragged to size one of the header columns
+        disableSendCtrlHwnd := _winIdU
     }
     Else
         tooltip,
@@ -8566,6 +8576,88 @@ DynaRun(TempScript, pipename="")
    Return PID
 }
 
+DialogHasAddressBar(hwndDlg)
+{
+    local cls, listH, h, hTxt, hasAddress, acc, txt
+
+    if (!hwndDlg || !DllCall("user32\IsWindow", "Ptr", hwndDlg, "Int"))
+        return False
+
+    WinGetClass, cls, ahk_id %hwndDlg%
+    if (cls != "#32770")
+        return False
+
+    ; Quick scan: look for ToolbarWindow32 children
+    WinGet, listH, ControlListHwnd, ahk_id %hwndDlg%
+    hasAddress := False
+
+    Loop, Parse, listH, `n, `r
+    {
+        h := A_LoopField + 0
+        if (!h)
+            continue
+
+        if (GetClassName(h) != "ToolbarWindow32")
+            continue
+
+        ; Fast heuristic: Win11 often labels it "Address Band"
+        hTxt := GetWindowTextTimeout(h, 25)
+        if (hTxt = "Address Band")
+            return True
+
+        ; If text isn't useful, confirm via MSAA subtree (bounded & cheap)
+        acc := Acc_ObjectFromWindow(h)
+        if !IsObject(acc)
+            continue
+
+        txt := Acc_FindLikelyAddressMarker(acc, 60)
+        if (txt)
+            return True
+    }
+
+    return False
+}
+
+Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60)
+{
+    local queue := [], seen := 0, cur, nm, v, kids, k, child
+
+    if !IsObject(rootAcc)
+        return False
+
+    queue.Push(rootAcc)
+
+    while (queue.Length() && seen < maxNodes)
+    {
+        cur := queue.RemoveAt(1)
+        seen += 1
+
+        v := Acc_ValueSafe(cur)
+        if (v != "")
+        {
+            if (InStr(v, ":\") || InStr(v, "\\") || InStr(v, "\"))
+                return True
+        }
+
+        nm := Acc_NameSafe(cur)
+        if (nm != "")
+        {
+            ; Common strings seen around address/breadcrumb UI
+            if (InStr(nm, "Address") || InStr(nm, "Breadcrumb") || InStr(nm, ":\") || InStr(nm, "\\") || InStr(nm, "\"))
+                return True
+        }
+
+        kids := Acc_ChildrenSafe(cur)
+        for k, child in kids
+        {
+            if (IsObject(child))
+                queue.Push(child)
+        }
+    }
+
+    return False
+}
+
 GetDialogBreadcrumbText(hwndDlg)
 {
     static cache := {}   ; hwndDlg -> toolbar hwnd
@@ -8583,51 +8675,32 @@ GetDialogBreadcrumbText(hwndDlg)
     if (!tbHwnd)
         return ""
 
+    ; First try: cheap window text (works on some Win10 dialogs; sometimes Win11 returns "Address Band")
     dir := GetWindowTextTimeout(tbHwnd, 25)
+    if (dir != "" && dir != "Address Band")
+        return dir
 
-    ; Validate we grabbed the right toolbar; if not, rescan once
-    if (dir = "" || !InStr(dir, "address", false))
+    ; Second try: MSAA scan within the Address Band subtree (Win11-friendly)
+    dir2 := Acc_ReadDialogAddressFromToolbar(tbHwnd)
+    if (dir2 != "" && dir2 != "Address Band")
+        return dir2
+
+    ; If still nothing, rescan toolbar once (layout can change per dialog instance)
+    tbHwnd2 := ResolveDialogBreadcrumbToolbar(hwndDlg, tbHwnd)
+    if (tbHwnd2 && tbHwnd2 != tbHwnd)
     {
-        tbHwnd2 := ResolveDialogBreadcrumbToolbar(hwndDlg, tbHwnd)
-        if (tbHwnd2 && tbHwnd2 != tbHwnd)
-        {
-            dir2 := GetWindowTextTimeout(tbHwnd2, 25)
-            if (dir2 != "")
-            {
-                cache[hwndDlg] := tbHwnd2
-                dir := dir2
-            }
-        }
+        cache[hwndDlg] := tbHwnd2
+
+        dir := GetWindowTextTimeout(tbHwnd2, 25)
+        if (dir != "" && dir != "Address Band")
+            return dir
+
+        dir2 := Acc_ReadDialogAddressFromToolbar(tbHwnd2)
+        if (dir2 != "" && dir2 != "Address Band")
+            return dir2
     }
 
-    return dir
-}
-
-ResolveDialogBreadcrumbToolbar(hwndDlg, excludeHwnd := 0)
-{
-    ; Fast path: common ctrlNNs (may vary, but cheap to try)
-    ControlGet, h1, Hwnd,, ToolbarWindow323, ahk_id %hwndDlg%
-    if (h1 && h1 != excludeHwnd)
-        return h1
-
-    ControlGet, h2, Hwnd,, ToolbarWindow324, ahk_id %hwndDlg%
-    if (h2 && h2 != excludeHwnd)
-        return h2
-
-    ; Fallback: find any ToolbarWindow32 child hwnd
-    WinGet, listH, ControlListHwnd, ahk_id %hwndDlg%
-    Loop, Parse, listH, `n, `r
-    {
-        h := A_LoopField + 0
-        if (!h || h = excludeHwnd)
-            continue
-
-        cls := GetClassName(h)
-        if (cls = "ToolbarWindow32")
-            return h
-    }
-
-    return 0
+    return ""
 }
 
 GetWindowTextTimeout(hwndCtl, timeoutMs := 25)
@@ -8666,6 +8739,32 @@ GetWindowTextTimeout(hwndCtl, timeoutMs := 25)
     return StrGet(&buf, "UTF-16")
 }
 
+ResolveDialogBreadcrumbToolbar(hwndDlg, excludeHwnd := 0)
+{
+    ; Fast path: common ctrlNNs (may vary, but cheap to try)
+    ControlGet, h1, Hwnd,, ToolbarWindow323, ahk_id %hwndDlg%
+    if (h1 && h1 != excludeHwnd)
+        return h1
+
+    ControlGet, h2, Hwnd,, ToolbarWindow324, ahk_id %hwndDlg%
+    if (h2 && h2 != excludeHwnd)
+        return h2
+
+    ; Fallback: find any ToolbarWindow32 child hwnd
+    WinGet, listH, ControlListHwnd, ahk_id %hwndDlg%
+    Loop, Parse, listH, `n, `r
+    {
+        h := A_LoopField + 0
+        if (!h || h = excludeHwnd)
+            continue
+
+        cls := GetClassName(h)
+        if (cls = "ToolbarWindow32")
+            return h
+    }
+
+    return 0
+}
 
 ; https://www.reddit.com/r/AutoHotkey/comments/10fmk4h/get_path_of_active_explorer_tab/
 GetExplorerPath(hwnd := "" ) {
@@ -8679,8 +8778,10 @@ GetExplorerPath(hwnd := "" ) {
     WinGetClass, clCheck, ahk_id %hwnd%
 
     If (clCheck == "#32770") {
-
-        return GetDialogBreadcrumbText(hwnd)
+        If DialogHasAddressBar(hwnd)
+            return GetDialogBreadcrumbText(hwnd)
+        Else
+            return ""
     }
     Else If (clCheck == "CabinetWClass" && !isWin11) {
         WinGetTitle, expTitle, ahk_id %hwnd%
@@ -9088,6 +9189,139 @@ Acc_Role(Acc, ChildId=0) {
         return ComObjType(Acc,"Name")="IAccessible"?Acc_GetRoleText(Acc.accRole(ChildId)):"invalid object"
 }
 
+Acc_ReadDialogAddressFromToolbar(tbHwnd)
+{
+    acc := Acc_ObjectFromWindow(tbHwnd)
+    if !IsObject(acc)
+        return ""
+
+    ; Bounded search so it stays quick
+    return Acc_FindLikelyPathText(acc, 140)
+}
+
+Acc_FindLikelyPathText(rootAcc, maxNodes := 140)
+{
+    queue := []
+    seen := 0
+
+    if !IsObject(rootAcc)
+        return ""
+
+    queue.Push(rootAcc)
+
+    while (queue.Length() && seen < maxNodes)
+    {
+        cur := queue.RemoveAt(1)
+        seen += 1
+
+        v := Acc_ValueSafe(cur)
+        if (v != "" && v != "Address Band")
+        {
+            if (Acc_LooksLikePath(v))
+                return v
+        }
+
+        nm := Acc_NameSafe(cur)
+        if (nm != "" && nm != "Address Band")
+        {
+            if (Acc_LooksLikePath(nm))
+                return nm
+        }
+
+        kids := Acc_ChildrenSafe(cur)
+        for k, child in kids
+        {
+            if (IsObject(child))
+                queue.Push(child)
+        }
+    }
+
+    return ""
+}
+
+Acc_LooksLikePath(s)
+{
+    ; Heuristic: accept full paths, UNC, or shell-like breadcrumb with backslashes.
+    ; You can tighten/expand this based on what you see on your system.
+    if (InStr(s, ":\") || InStr(s, "\\"))
+        return True
+    if (InStr(s, "\") && !InStr(s, "Address Band"))
+        return True
+    return False
+}
+
+Acc_ChildrenSafe(accObj)
+{
+    local ia, cChildren := 0, fetched := 0
+    local cbVariant, buf, i, off, vt, childId, pdisp, out := []
+
+    if !IsObject(accObj)
+        return out
+
+    ia := accObj
+    try
+        ia := accObj.acc
+    catch
+        ia := accObj
+
+    try
+        cChildren := ia.accChildCount
+    catch
+        return out
+
+    if (cChildren <= 0)
+        return out
+
+    ; VARIANT is 24 bytes on 64-bit
+    cbVariant := 24
+    VarSetCapacity(buf, cChildren * cbVariant, 0)
+
+    if (DllCall("oleacc\AccessibleChildren"
+        , "Ptr", ComObjValue(ia)
+        , "Int", 0
+        , "Int", cChildren
+        , "Ptr", &buf
+        , "Int*", fetched) != 0)
+    {
+        return out
+    }
+
+    Loop, %fetched%
+    {
+        i := A_Index - 1
+        off := i * cbVariant
+
+        vt := NumGet(buf, off + 0, "UShort")
+
+        ; VT_DISPATCH = 9
+        if (vt = 9)
+        {
+            pdisp := NumGet(buf, off + 8, "Ptr")
+            if (pdisp)
+                out.Push(ComObjEnwrap(9, pdisp, 1))
+            continue
+        }
+
+        ; VT_I4 = 3 (child id)
+        if (vt = 3)
+        {
+            childId := NumGet(buf, off + 8, "Int")
+            out.Push(Acc_MakeChildRef(ia, childId))
+            continue
+        }
+    }
+
+    return out
+}
+
+Acc_MakeChildRef(parentIA, childId)
+{
+    o := {}
+    o.acc := parentIA
+    o.child := childId
+    return o
+}
+
 Acc_GetRoleText(nRole) {
     nSize := DllCall("oleacc\GetRoleText", "Uint", nRole, "Ptr", 0, "Uint", 0)
     VarSetCapacity(sRole, (A_IsUnicode?2:1)*nSize)
@@ -9186,19 +9420,13 @@ Acc_WindowFromObject(accObj)
     local ia, hwnd := 0, hr := 0
 
     if !IsObject(accObj)
-    {
         return 0
-    }
 
     ia := accObj
     try
-    {
         ia := accObj.acc
-    }
     catch
-    {
         ia := accObj
-    }
 
     hr := DllCall("oleacc\WindowFromAccessibleObject"
         , "ptr", ComObjValue(ia)
@@ -9206,9 +9434,8 @@ Acc_WindowFromObject(accObj)
         , "int")
 
     if (hr != 0)
-    {
         return 0
-    }
+
     return hwnd
 }
 
@@ -9231,6 +9458,22 @@ Acc_NameIsKnownColumn(accObj) {
         || nm = "Date created"
         || nm = "Authors"
         || nm = "Title")
+}
+
+Acc_ValueSafe(accObj)
+{
+    local v := ""
+    if !IsObject(accObj)
+        return ""
+    try
+    {
+        v := accObj.accValue(0)
+    }
+    catch
+    {
+        return ""
+    }
+    return v
 }
 
 Acc_NameSafe(accObj) {
