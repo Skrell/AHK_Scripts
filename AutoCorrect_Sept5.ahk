@@ -1486,6 +1486,18 @@ IsMouseOnLeftSide() {
     }
 }
 
+ForceRedrawWindow(hwnd) {
+    static RDW_INVALIDATE := 0x0001
+    static RDW_UPDATENOW  := 0x0100
+    static RDW_ALLCHILDREN := 0x0080
+
+    return DllCall("user32\RedrawWindow"
+        , "Ptr", hwnd
+        , "Ptr", 0
+        , "Ptr", 0
+        , "UInt", RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN)
+}
+
 #If !MbuttonIsEnter && !MouseIsOverTaskbar()
 $*MButton::
     global DraggingWindow
@@ -1916,6 +1928,7 @@ $*MButton::
 
     rlsTime := A_TickCount
     stopMon := MWAGetMonitorMouseIsIn()
+    ForceRedrawWindow(hWnd)
 
     If (rlsTime - initTime < floor(DoubleClickTime/2)
         && isOverTitleBar
@@ -2584,6 +2597,11 @@ prevChromeTab()
 #If WinActive("ahk_exe Chrome.exe")
     ^Tab::
         prevChromeTab()
+    Return
+
+    ^f::
+        Send, {Esc}
+        Send, ^{f}
     Return
 #If
 
