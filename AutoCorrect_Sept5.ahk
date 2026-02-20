@@ -5880,6 +5880,16 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
 
     try {
         exEl := UIA.ElementFromHandle(targetHwndID)
+        shellEl := ""
+        try
+            shellEl := exEl.FindFirstByName("Items View")
+        catch
+            shellEl := ""
+
+        if !IsObject(shellEl) {
+            ; UIA couldn't find it by name; don't explode, just skip the wait/focus part
+            return
+        }
         shellEl := exEl.FindFirstByName("Items View")
         shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
 
