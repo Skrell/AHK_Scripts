@@ -4751,69 +4751,6 @@ DebugRolesUnderMouse() {
     MsgBox, %out%
 }
 
-Acc_GetObjectAtScreenPoint(x, y) {
-
-    acc := Acc_ObjectFromPoint(, x, y)
-    if IsObject(acc) {
-        return acc
-    }
-
-    ; Fallback path: WindowFromPoint -> Acc_ObjectFromWindow -> accHitTest
-    pt64 := (x & 0xFFFF) | (y << 16)
-    hwndUnder := DllCall("user32\WindowFromPoint", "Int64", pt64, "Ptr")
-    if (!hwndUnder) {
-        return ""
-    }
-
-    accRoot := Acc_ObjectFromWindow(hwndUnder)
-    if !IsObject(accRoot) {
-        return ""
-    }
-
-    VarSetCapacity(pt, 8, 0)
-    NumPut(x, pt, 0, "Int")
-    NumPut(y, pt, 4, "Int")
-    if !DllCall("user32\ScreenToClient", "Ptr", hwndUnder, "Ptr", &pt) {
-        return ""
-    }
-    cx := NumGet(pt, 0, "Int")
-    cy := NumGet(pt, 4, "Int")
-
-    hit := ""
-    try
-    {
-        hit := accRoot.accHitTest(cx, cy)
-    }
-    catch
-    {
-        return ""
-    }
-
-    if IsObject(hit) {
-        return hit
-    }
-
-    ; Some MSAA trees return a child-id instead of an object
-    if (hit != "") {
-        childId := hit + 0
-        child := ""
-        try
-        {
-            child := accRoot.accChild(childId)
-        }
-        catch
-        {
-            child := ""
-        }
-
-        if IsObject(child) {
-            return child
-        }
-    }
-
-    return ""
-}
-
 ; ------------------------------------------------------------------
 ; It caches the header bar rectangle (screen coords) per window, and only recomputes it when:
     ; the active window handle changes, or
@@ -4881,79 +4818,6 @@ IsExplorerItemClick() {
     }
 
     return False
-}
-
-Acc_Location(accObj, ByRef x, ByRef y, ByRef w, ByRef h, childId := "")
-{
-    local ia, child, hasAcc, hasChild
-
-    if (!IsObject(accObj))
-    {
-        throw Exception("Acc_Location: accObj is not an object")
-    }
-
-    hasAcc := False
-    hasChild := False
-
-    ; Only AHK objects support HasKey; COM objects will throw here.
-    try
-    {
-        hasAcc := accObj.HasKey("acc")
-        hasChild := accObj.HasKey("child")
-    }
-    catch
-    {
-        hasAcc := False
-        hasChild := False
-    }
-
-    if (hasAcc)
-    {
-        ia := accObj.acc
-        if (hasChild)
-        {
-            child := accObj.child
-        }
-        else
-        {
-            child := 0
-        }
-    }
-    else
-    {
-        ia := accObj
-        if (childId = "")
-        {
-            child := 0
-        }
-        else
-        {
-            child := childId
-        }
-    }
-
-    x := 0
-    y := 0
-    w := 0
-    h := 0
-
-    ia.accLocation(x, y, w, h, ComObjParameter(3, child))
-    return
-}
-
-
-Acc_PointInAccRect(accObj, sx, sy) {
-    ; Returns True only if (sx,sy) lies within accObj's screen rectangle.
-    ; If we can't get a rectangle, fail closed.
-    try {
-        Acc_Location(accObj, ax, ay, aw, ah)  ; screen coords in the common Acc libs
-    } catch {
-        return False
-    }
-    if (aw <= 0 || ah <= 0)
-        return False
-
-    return (sx >= ax && sx < ax + aw && sy >= ay && sy < ay + ah)
 }
 
 ; ------------------------------------------------------------------
@@ -7274,9 +7138,7 @@ realHwnd(hwnd)
    numput(hwnd, var, 0, "uint64")
    Return numget(var, 0, "uint")
 }
-; -----------------------------------------------------------------------
-; https://github.com/Ciantic/VirtualDesktopAccessor/blob/rust/example.ahk
-; -----------------------------------------------------------------------
+
 GetDesktopCount() {
     global GetDesktopCountProc
 
@@ -8646,46 +8508,6 @@ DialogHasAddressBar(hwndDlg)
     return False
 }
 
-Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60)
-{
-    local queue := [], seen := 0, cur, nm, v, kids, k, child
-
-    if !IsObject(rootAcc)
-        return False
-
-    queue.Push(rootAcc)
-
-    while (queue.Length() && seen < maxNodes)
-    {
-        cur := queue.RemoveAt(1)
-        seen += 1
-
-        v := Acc_ValueSafe(cur)
-        if (v != "")
-        {
-            if (InStr(v, ":\") || InStr(v, "\\") || InStr(v, "\"))
-                return True
-        }
-
-        nm := Acc_NameSafe(cur)
-        if (nm != "")
-        {
-            ; Common strings seen around address/breadcrumb UI
-            if (InStr(nm, "Address") || InStr(nm, "Breadcrumb") || InStr(nm, ":\") || InStr(nm, "\\") || InStr(nm, "\"))
-                return True
-        }
-
-        kids := Acc_ChildrenSafe(cur)
-        for k, child in kids
-        {
-            if (IsObject(child))
-                queue.Push(child)
-        }
-    }
-
-    return False
-}
-
 GetDialogBreadcrumbText(hwndDlg)
 {
     static cache := {}   ; hwndDlg -> toolbar hwnd
@@ -9147,6 +8969,145 @@ Acc_Init() {
     return (h != 0)
 }
 
+Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60) {
+    local queue := [], seen := 0, cur, nm, v, kids, k, child
+
+    if !IsObject(rootAcc)
+        return False
+
+    queue.Push(rootAcc)
+
+    while (queue.Length() && seen < maxNodes)
+    {
+        cur := queue.RemoveAt(1)
+        seen += 1
+
+        v := Acc_ValueSafe(cur)
+        if (v != "")
+        {
+            if (InStr(v, ":\") || InStr(v, "\\") || InStr(v, "\"))
+                return True
+        }
+
+        nm := Acc_NameSafe(cur)
+        if (nm != "")
+        {
+            ; Common strings seen around address/breadcrumb UI
+            if (InStr(nm, "Address") || InStr(nm, "Breadcrumb") || InStr(nm, ":\") || InStr(nm, "\\") || InStr(nm, "\"))
+                return True
+        }
+
+        kids := Acc_ChildrenSafe(cur)
+        for k, child in kids
+        {
+            if (IsObject(child))
+                queue.Push(child)
+        }
+    }
+
+    return False
+}
+
+Acc_Location(accObj, ByRef x, ByRef y, ByRef w, ByRef h, childId := "") {
+    local ia, child, hasAcc, hasChild
+
+    if (!IsObject(accObj))
+        return (x:=y:=w:=h:="") , false
+
+    ; Determine whether it's a wrapper {acc:, child:}
+    hasAcc := false, hasChild := false
+    try hasAcc := accObj.HasKey("acc"), hasChild := accObj.HasKey("child")
+
+    if (hasAcc) {
+        ia := accObj.acc
+        child := hasChild ? accObj.child : 0
+    } else {
+        ia := accObj
+        child := (childId = "") ? 0 : childId
+    }
+
+    try {
+        ia.accLocation(x, y, w, h, ComObjParameter(3, child))
+        return true
+    } catch {
+        x := y := w := h := ""
+        return false
+    }
+}
+
+Acc_PointInAccRect(accObj, sx, sy) {
+    ; Returns True only if (sx,sy) lies within accObj's screen rectangle.
+    ; If we can't get a rectangle, fail closed.
+    try {
+        Acc_Location(accObj, ax, ay, aw, ah)  ; screen coords in the common Acc libs
+    } catch {
+        return False
+    }
+    if (aw <= 0 || ah <= 0)
+        return False
+
+    return (sx >= ax && sx < ax + aw && sy >= ay && sy < ay + ah)
+}
+
+Acc_GetObjectAtScreenPoint(x, y) {
+
+    acc := Acc_ObjectFromPoint(, x, y)
+    if IsObject(acc) {
+        return acc
+    }
+
+    ; Fallback path: WindowFromPoint -> Acc_ObjectFromWindow -> accHitTest
+    pt64 := (x & 0xFFFF) | (y << 16)
+    hwndUnder := DllCall("user32\WindowFromPoint", "Int64", pt64, "Ptr")
+    if (!hwndUnder) {
+        return ""
+    }
+
+    accRoot := Acc_ObjectFromWindow(hwndUnder)
+    if !IsObject(accRoot) {
+        return ""
+    }
+
+    VarSetCapacity(pt, 8, 0)
+    NumPut(x, pt, 0, "Int")
+    NumPut(y, pt, 4, "Int")
+    if !DllCall("user32\ScreenToClient", "Ptr", hwndUnder, "Ptr", &pt) {
+        return ""
+    }
+    cx := NumGet(pt, 0, "Int")
+    cy := NumGet(pt, 4, "Int")
+
+    hit := ""
+    try {
+        hit := accRoot.accHitTest(cx, cy)
+    }
+    catch {
+        return ""
+    }
+
+    if IsObject(hit) {
+        return hit
+    }
+
+    ; Some MSAA trees return a child-id instead of an object
+    if (hit != "") {
+        childId := hit + 0
+        child := ""
+        try {
+            child := accRoot.accChild(childId)
+        }
+        catch {
+            child := ""
+        }
+
+        if IsObject(child) {
+            return child
+        }
+    }
+
+    return ""
+}
+
 Acc_ObjectFromPoint(ByRef _idChild_ := "", x := "", y := "") {
     Acc_Init()
 
@@ -9174,7 +9135,7 @@ Acc_ObjectFromPoint(ByRef _idChild_ := "", x := "", y := "") {
     catch
         return
 }
-
+; ChatGPT
 Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) { ; OBJID_CLIENT
     Acc_Init()
 
@@ -9199,7 +9160,7 @@ Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) { ; OBJID_CLIENT
     catch
         return
 }
-
+; ChatGPT
 Acc_Parent(Acc) {
     try
         parent:=Acc.accParent
@@ -9208,13 +9169,13 @@ Acc_Parent(Acc) {
 
 Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=81731&p=509530#509530
     try
-        return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
+        Return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
 }
 
 ; Written by jethrow
 Acc_Role(Acc, ChildId=0) {
     try
-        return ComObjType(Acc,"Name")="IAccessible"?Acc_GetRoleText(Acc.accRole(ChildId)):"invalid object"
+        Return ComObjType(Acc,"Name")="IAccessible"?Acc_GetRoleText(Acc.accRole(ChildId)):"invalid object"
 }
 
 Acc_ReadDialogAddressFromToolbar(tbHwnd)
@@ -9267,8 +9228,7 @@ Acc_FindLikelyPathText(rootAcc, maxNodes := 140)
     return ""
 }
 
-Acc_LooksLikePath(s)
-{
+Acc_LooksLikePath(s) {
     ; Heuristic: accept full paths, UNC, or shell-like breadcrumb with backslashes.
     ; You can tighten/expand this based on what you see on your system.
     if (InStr(s, ":\") || InStr(s, "\\"))
@@ -9278,8 +9238,7 @@ Acc_LooksLikePath(s)
     return False
 }
 
-Acc_ChildrenSafe(accObj)
-{
+Acc_ChildrenSafe(accObj) {
     local ia, cChildren := 0, fetched := 0
     local cbVariant, buf, i, off, vt, childId, pdisp, out := []
 
@@ -9342,8 +9301,7 @@ Acc_ChildrenSafe(accObj)
     return out
 }
 
-Acc_MakeChildRef(parentIA, childId)
-{
+Acc_MakeChildRef(parentIA, childId) {
     o := {}
     o.acc := parentIA
     o.child := childId
@@ -9354,9 +9312,9 @@ Acc_GetRoleText(nRole) {
     nSize := DllCall("oleacc\GetRoleText", "Uint", nRole, "Ptr", 0, "Uint", 0)
     VarSetCapacity(sRole, (A_IsUnicode?2:1)*nSize)
     DllCall("oleacc\GetRoleText", "Uint", nRole, "str", sRole, "Uint", nSize+1)
-    return  sRole
+    Return  sRole
 }
-
+; ChatGPT
 Acc_Focus() {
     static OBJID_CARET  := 0xFFFFFFF8
     static OBJID_CLIENT := 0xFFFFFFFC
@@ -9375,7 +9333,7 @@ Acc_Focus() {
 
     return ""
 }
-
+; ChatGPT
 Acc_FromWindow(hWnd, objID, ByRef acc) {
     VarSetCapacity(iid, 16, 0)
     DllCall("ole32\CLSIDFromString"
@@ -9393,7 +9351,7 @@ Acc_FromWindow(hWnd, objID, ByRef acc) {
     }
     return false
 }
-
+; ChatGPT
 Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole, directUIHwnd := 0) {
     local cur, role, needQuirkCheck, hostHwnd, checked
 
@@ -9466,7 +9424,6 @@ Acc_WindowFromObject(accObj)
 
     return hwnd
 }
-
 
 Acc_NameIsKnownColumn(accObj) {
     if !IsObject(accObj) {
