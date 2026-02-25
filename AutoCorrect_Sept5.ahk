@@ -150,8 +150,8 @@ Else
     Menu, Tray, Uncheck, Run at startup
 
 ; Create 4 mask GUIs (top, left, right, bottom)
-CreateMaskGui(index, ByRef hWndOut) {
-    global BlockClicks, Opacity
+CreateMaskGui(index, ByRef hWndOut, startingTrans := 1) {
+    global BlockClicks
     global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd, black5Hwnd  ; optional, if you want these exact globals
 
     clickStyle := BlockClicks ? "" : "+E0x20"
@@ -163,7 +163,7 @@ CreateMaskGui(index, ByRef hWndOut) {
     ; Create GUI and capture HWND into local variable h
     Gui, %index%: -Caption +ToolWindow %clickStyle% +Hwndh
     Gui, %index%: Color, Black
-    WinSet, Transparent, %Opacity%, ahk_id %h%
+    WinSet, Transparent, %startingTrans%, ahk_id %h%
     Gui, %index%: Hide
 
     ; Populate the ByRef output variable (black1Hwnd/black2Hwnd/etc. as passed by caller)
@@ -187,6 +187,7 @@ CreateMaskGui(1, black1Hwnd)
 CreateMaskGui(2, black2Hwnd)
 CreateMaskGui(3, black3Hwnd)
 CreateMaskGui(4, black4Hwnd)
+CreateMaskGui(5, black5Hwnd)
 
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
@@ -2611,14 +2612,14 @@ prevChromeTab()
 ; knows whether a combo (with x) is coming. That’s why your 2nd press + hold never reaches your $Esc routine, so GoSub, DrawRect never runs.
 $Esc::
     StopRecursion := True
-    Thread, NoTimers, True
-    executedOnce   := False
+    SetTimer, EscTimer, Off
     escHwndID := FindTopMostWindow()
     WinGetTitle, escTitle, ahk_id %escHwndID%
 
     If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey  < DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
 
         DetectHiddenWindows, Off
+        executedOnce   := False
 
         If IsAltTabWindow(escHwndID) {
             WinActivate, ahk_id %escHwndID%
@@ -2642,7 +2643,6 @@ $Esc::
                     sleep, 1500
                     Tooltip,
                     StopRecursion := False
-                    Thread, NoTimers, False
                 }
             }
             Hotkey, x, DoNothing, Off
@@ -2696,7 +2696,6 @@ $Esc::
         }
         tooltip
         StopRecursion := False
-        Thread, NoTimers, False
         Return
     }
 
@@ -2705,7 +2704,6 @@ $Esc::
     escTitle_old  := escTitle
     escHwndID_old := escHwndID
     StopRecursion := False
-    Thread, NoTimers, False
 Return
 
 #If
@@ -3795,7 +3793,52 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 }
 
 ; ------------------  ChatGPT ------------------------------------------------------------------
-DrawBlackBar(guiIndex, x, y, w, h) {
+ClampAlpha(alphaValue) {
+    if (alphaValue < 0)
+        return 0
+    if (alphaValue > 255)
+        return 255
+
+    return alphaValue
+}
+
+Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget)
+{
+    ; alphaPrimary: 0..255 (WinSet alpha for primary window)
+    ; alphaTarget:  0..255 (desired combined opacity of the two stacked windows)
+
+    alphaPrimary := ClampAlpha(alphaPrimary)
+    alphaTarget := ClampAlpha(alphaTarget)
+
+    remainingPrimary255 := 255 - alphaPrimary
+    requiredBackground255 := 255 - alphaTarget  ; how much background must still show through both
+
+    ; If primary is fully opaque, combined opacity is forced to 255 no matter what the other is.
+    if (remainingPrimary255 <= 0)
+    {
+        return (alphaTarget = 255) ? 0 : 0
+    }
+
+    ; backgroundThroughOther = requiredBackground / remainingPrimary
+    remainingOther := requiredBackground255 / (remainingPrimary255 * 1.0)
+
+    ; Clamp to [0,1]
+    if (remainingOther < 0.0)
+    {
+        remainingOther := 0.0
+    }
+    else if (remainingOther > 1.0)
+    {
+        remainingOther := 1.0
+    }
+
+    opacityOther := 1.0 - remainingOther
+    alphaOther := Round(opacityOther * 255.0)
+
+    return ClampAlpha(alphaOther)
+}
+
+DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False) {
     global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd
 
     If (w <= 0 || h <= 0) {
@@ -3819,7 +3862,15 @@ DrawBlackBar(guiIndex, x, y, w, h) {
             CreateMaskGui(guiIndex, black5Hwnd)
     }
 
-    WinSet, Transparent,  1, ahk_id %hwndVarName%
+    If adjustTrans {
+        If startingTrans == -1
+            startVal := 1
+        Else
+            startVal := startingTrans
+
+        Gui, %guiIndex%: Show, Hide
+        WinSet, Transparent,  %startVal%, ahk_id %hwndVarName%
+    }
     ; Showing with new size/position is one atomic operation internally
     Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
     ; Make sure they’re on top exactly once per draw
@@ -3843,7 +3894,7 @@ ClearMasks(appClosingHwnd := "", initTransVal := 255) {
     Loop, %iterations%
     {
         transVal -= opacityInterval
-        currentVal := transVal
+        currentVal := ClampAlpha(transVal)
 
         WinSet, Transparent, %currentVal%, ahk_id %black1Hwnd%
         WinSet, Transparent, %currentVal%, ahk_id %black2Hwnd%
@@ -3880,28 +3931,31 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     Thread, NoTimers, True
 
-    Margin := 0  ; expands the hole around the active window by this many pixels
+    Margin        := 0  ; expands the hole around the active window by this many pixels
 
-    ; If !firstDraw {
-        ; cl_iterations      := 4
-        ; cl_transVal        := Opacity
-        ; cl_opacityInterval := Floor(Opacity / cl_iterations)
+    If !firstDraw {
+        iterations      := 5
+        opacityInterval := Floor(Opacity / iterations)
+        transVal        := Opacity
+        fadeVal         := 0
 
-        ; Loop, %cl_iterations%
-        ; {
-            ; cl_transVal -= cl_opacityInterval
-            ; cl_currentVal := cl_transVal
+        DrawBlackMonitor("", False, 0)
 
-            ; WinSet, Transparent, %cl_currentVal%, ahk_id %black1Hwnd%
-            ; WinSet, Transparent, %cl_currentVal%, ahk_id %black2Hwnd%
-            ; WinSet, Transparent, %cl_currentVal%, ahk_id %black3Hwnd%
-            ; WinSet, Transparent, %cl_currentVal%, ahk_id %black4Hwnd%
+        Loop, %iterations%
+        {
+            transVal -= opacityInterval
 
-            ; ; Short sleep for visual smoothness; not in Critical
-            ; sleep, 2
-        ; }
-    ; }
+            WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
+            WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
+            WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
+            WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
 
+            fadeVal := Get2ndAlphaForTransparencyTarget(transVal, Opacity)
+            SetWindowAlphaTopmost(black5Hwnd, fadeVal, True)
+            ; tooltip, %transVal% - %fadeVal%
+            sleep, 5
+        }
+    }
     ; Resolve target window
     If !targetHwnd
         WinGet, hA, ID, A
@@ -3933,9 +3987,6 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     ; --- CRITICAL SECTION: JUST THE GEOMETRY + SHOWS ---
     Critical, On
-    if !firstDraw
-        DrawBlackMonitor(,False, Opacity, 5)
-
     ; TOP panel
     DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
     ; LEFT panel
@@ -3952,23 +4003,23 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     ; --- FADE / OPACITY (non-critical) ---
     If (firstDraw) {
-        incrValue         := 8
+        iterations         := 8
     } Else {
         ; For subsequent moves, you can skip animation entirely If you want:
-        incrValue         := 1
+        iterations         := 1
     }
-    opacityInterval   := Ceil(Opacity / incrValue)
+    opacityInterval   := Floor(Opacity / iterations)
     transVal          := opacityInterval
     fadeVal           := Opacity
 
-    Loop, %incrValue%
+    Loop, %iterations%
     {
         WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
         WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
 
-        fadeVal  -= opacityInterval
+        fadeVal := Get2ndAlphaForTransparencyTarget(transVal, Opacity)
         If !firstDraw
             WinSet, Transparent, %fadeVal%,  ahk_id %black5Hwnd%
 
@@ -3983,21 +4034,20 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         }
     }
     ClearBlackMonitor()
-
     Return
 }
 
-ClearBlackMonitor(targetOpacity := -1) {
+ClearBlackMonitor(initialOpacity := -1) {
     global black5Hwnd, Opacity
 
-    if (targetOpacity >= 0)
-        startingOpacity := targetOpacity
+    if (initialOpacity >= 0)
+        initTransVal := initialOpacity
     else
-        startingOpacity := Opacity
+        initTransVal := Opacity
 
     iterations := 0
-    transVal   := startingOpacity
-    opacityInterval := Floor(startingOpacity / iterations)
+    transVal   := initTransVal
+    opacityInterval := Floor(initTransVal / iterations)
 
     WinSet, AlwaysOnTop, On, ahk_id %hA%
     ; fade-out loop (non-critical)
@@ -4018,7 +4068,7 @@ ClearBlackMonitor(targetOpacity := -1) {
     Return
 }
 
-DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIndex := 1, useWorkArea := true) {
+DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIndex := 5, useWorkArea := true) {
     global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
     static prevTargetHwnd
 
@@ -4051,23 +4101,29 @@ DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIn
         WinSet, AlwaysOnTop,  On, ahk_id %targetHwnd%
 
     If (firstDraw) {
-        incrValue     := 15
+        iterations     := 15
     } Else {
         ; For subsequent moves, you can skip animation entirely If you want:
-        incrValue     := 5
+        iterations     := 5
     }
-    opacityInterval   := Ceil(finalOpacity / incrValue)
-    transVal          := opacityInterval
 
-    Critical, On
-    WinSet, AlwaysOnTop, Off, ahk_id %hwndVarName%
-    Loop, %incrValue%
-    {
-        WinSet, Transparent, %transVal%, ahk_id %hwndVarName%
-        transVal += opacityInterval
-        Sleep, 2   ; purely visual – safe outside Critical
+    If (finalOpacity >= iterations) {
+        opacityInterval   := Ceil(finalOpacity / iterations)
+        transVal          := opacityInterval
+
+        Critical, On
+        Loop, %iterations%
+        {
+            WinSet, Transparent, %transVal%, ahk_id %hwndVarName%
+            transVal += opacityInterval
+            Sleep, 2   ; purely visual – safe outside Critical
+        }
+        Critical, Off
     }
-    Critical, Off
+    Else
+        WinSet, Transparent, %finalOpacity%, ahk_id %hwndVarName%
+
+    WinSet, AlwaysOnTop, Off, ahk_id %hwndVarName%
 
     If !targetHwnd
         prevTargetHwnd := targetHwnd
@@ -7912,6 +7968,68 @@ getSessionId()
     }
     OutputDebug, Current Session Id: %SessionId%
     Return SessionId
+}
+
+SetWindowAlphaTopmost(guiHwnd, transparencyLevel := 220, isTopmost := true)
+{
+    ; Clamp alpha to 0..255
+    if (transparencyLevel < 0)
+    {
+        transparencyLevel := 0
+    }
+    else if (transparencyLevel > 255)
+    {
+        transparencyLevel := 255
+    }
+
+    ; --- Make sure WS_EX_LAYERED is enabled ---
+    gWlExstyle := -20
+    wsExLayered := 0x00080000
+
+    exstyleValue := DllCall("GetWindowLong"
+        , "Ptr", guiHwnd
+        , "Int", gWlExstyle
+        , "Ptr")
+
+    if ((exstyleValue & wsExLayered) = 0)
+    {
+        DllCall("SetWindowLong"
+            , "Ptr", guiHwnd
+            , "Int", gWlExstyle
+            , "Ptr", (exstyleValue | wsExLayered)
+            , "Ptr")
+    }
+
+    ; --- Set alpha (LWA_ALPHA) ---
+    lwaAlpha := 0x2
+    DllCall("SetLayeredWindowAttributes"
+        , "Ptr", guiHwnd
+        , "UInt", 0
+        , "UChar", transparencyLevel
+        , "UInt", lwaAlpha)
+
+    ; --- Set/clear topmost ---
+    hwndTopmost := -1
+    hwndNoTopmost := -2
+    swpNoMove := 0x0002
+    swpNoSize := 0x0001
+    swpNoActivate := 0x0010
+    swpNoOwnerZOrder := 0x0200
+
+    swpFlags := swpNoMove | swpNoSize | swpNoActivate | swpNoOwnerZOrder
+
+    insertAfterHwnd := isTopmost ? hwndTopmost : hwndNoTopmost
+
+    DllCall("SetWindowPos"
+        , "Ptr", guiHwnd
+        , "Ptr", insertAfterHwnd
+        , "Int", 0
+        , "Int", 0
+        , "Int", 0
+        , "Int", 0
+        , "UInt", swpFlags)
+
+    return true
 }
 
 ActivateTopMostWindow() {
