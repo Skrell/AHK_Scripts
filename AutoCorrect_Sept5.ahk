@@ -3838,7 +3838,7 @@ Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget)
     return ClampAlpha(alphaOther)
 }
 
-DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False) {
+DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False, onTop := False) {
     global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd
 
     If (w <= 0 || h <= 0) {
@@ -3874,7 +3874,8 @@ DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False) {
     ; Showing with new size/position is one atomic operation internally
     Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
     ; Make sure they’re on top exactly once per draw
-    WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
+    If onTop
+        WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
 }
 
 ClearMasks(appClosingHwnd := "", initTransVal := 255) {
@@ -3939,7 +3940,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         transVal        := Opacity
         fadeVal         := 0
 
-        DrawBlackMonitor("", False, 0)
+        DrawBlackMonitor(targetHwnd, False, 0)
 
         Loop, %iterations%
         {
@@ -3951,7 +3952,8 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
             WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
 
             fadeVal := Get2ndAlphaForTransparencyTarget(transVal, Opacity)
-            SetWindowAlphaTopmost(black5Hwnd, fadeVal, True)
+            WinSet, Transparent, %fadeVal%, ahk_id %black5Hwnd%
+            ; SetWindowAlphaTopmost(black5Hwnd, fadeVal, True)
             ; tooltip, %transVal% - %fadeVal%
             sleep, 5
         }
@@ -3988,13 +3990,13 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     ; --- CRITICAL SECTION: JUST THE GEOMETRY + SHOWS ---
     Critical, On
     ; TOP panel
-    DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2))
+    DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2),,,True)
     ; LEFT panel
-    DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT))
+    DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT),,,True)
     ; RIGHT panel
-    DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT))
+    DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT),,,True)
     ; BOTTOM panel
-    DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB))
+    DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB),,,True)
     Critical, Off
     ; --- END CRITICAL SECTION ---
 
@@ -4049,7 +4051,6 @@ ClearBlackMonitor(initialOpacity := -1) {
     transVal   := initTransVal
     opacityInterval := Floor(initTransVal / iterations)
 
-    WinSet, AlwaysOnTop, On, ahk_id %hA%
     ; fade-out loop (non-critical)
     Loop, %iterations%
     {
