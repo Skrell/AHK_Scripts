@@ -114,7 +114,7 @@ Global skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman"
 
 ; === Settings ===
 Global BlockClicks := False    ; true = block clicks outside active window, false = let clicks pass through
-Global Opacity     := 215     ; 255=opaque black; try 200 to "dim" instead of fully black
+Global Opacity     := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 
 ; === Globals ===
 Global black1Hwnd := ""
@@ -3051,6 +3051,7 @@ If !hitTAB {
     GoSub, Altup
 
     ClearMasks(lastHwnd)
+    ClearBlackMonitor()
 
     StopRecursion := False
     Thread, NoTimers, False
@@ -3383,7 +3384,7 @@ Return
 
 Cycle()
 {
-    global cycling, ValidWindows, GroupedWindows, MonCount, startHighlight, LclickSelected, firstDraw
+    global cycling, ValidWindows, GroupedWindows, MonCount, startHighlight, LclickSelected
 
     prev_exe   :=
     prev_cl    :=
@@ -3453,14 +3454,6 @@ Cycle()
                         ; prev_exe := exe
                         ; prev_cl  := cl
                     }
-                }
-                Else {
-                    ; WinGetClass, badClass, ahk_id %hwndID%
-                    ; If (badClass == "#32770") {
-                        ; WinGet, exStyles, ExStyle, ahk_id %hWnd%
-                        ; Msgbox, % why "`nExStyle=" Format("0x{:08X}", exStyles)
-                        ; break
-                    ; }
                 }
             }
         }
@@ -3840,6 +3833,7 @@ Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget)
 
 DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False, onTop := False) {
     global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd
+    startVal := 0
 
     If (w <= 0 || h <= 0) {
         Gui, %guiIndex%: Hide
@@ -3848,7 +3842,7 @@ DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False, on
 
     buildVar := "black" . guiIndex . "Hwnd"
     hwndVarName := %buildVar%
-
+    DetectHiddenWindows, On
     If !WinExist("ahk_id " . hwndVarName) {
         If (guiIndex == 1)
             CreateMaskGui(guiIndex, black1Hwnd)
@@ -3863,19 +3857,24 @@ DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False, on
     }
 
     If adjustTrans {
-        If startingTrans == -1
+        If (startingTrans == -1)
             startVal := 1
         Else
             startVal := startingTrans
 
-        Gui, %guiIndex%: Show, Hide
-        WinSet, Transparent,  %startVal%, ahk_id %hwndVarName%
     }
+    Gui, %guiIndex%: Show, Hide
+    If (startVal > 0)
+        WinSet, Transparent, %startVal%, ahk_id %hwndVarName%
+    Else
+        WinSet, Transparent, 0, ahk_id %hwndVarName%
     ; Showing with new size/position is one atomic operation internally
     Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
     ; Make sure they’re on top exactly once per draw
     If onTop
         WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
+
+    DetectHiddenWindows, Off
 }
 
 ClearMasks(appClosingHwnd := "", initTransVal := 255) {
@@ -3945,17 +3944,16 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         Loop, %iterations%
         {
             transVal -= opacityInterval
+            fadeVal := Get2ndAlphaForTransparencyTarget(transVal, Opacity)
 
             WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
             WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
             WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
             WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
 
-            fadeVal := Get2ndAlphaForTransparencyTarget(transVal, Opacity)
             WinSet, Transparent, %fadeVal%, ahk_id %black5Hwnd%
             ; SetWindowAlphaTopmost(black5Hwnd, fadeVal, True)
-            ; tooltip, %transVal% - %fadeVal%
-            sleep, 5
+            sleep, 2
         }
     }
     ; Resolve target window
@@ -4005,10 +4003,10 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     ; --- FADE / OPACITY (non-critical) ---
     If (firstDraw) {
-        iterations         := 8
+        iterations         := 10
     } Else {
         ; For subsequent moves, you can skip animation entirely If you want:
-        iterations         := 1
+        iterations         := 4
     }
     opacityInterval   := Floor(Opacity / iterations)
     transVal          := opacityInterval
@@ -4016,12 +4014,17 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
 
     Loop, %iterations%
     {
-        WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
-        WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
-        WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
-        WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
-
         fadeVal := Get2ndAlphaForTransparencyTarget(transVal, Opacity)
+
+        WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
+        ; WinSetAlphaTopmost(black1Hwnd, transVal, True)
+        WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
+        ; WinSetAlphaTopmost(black2Hwnd, transVal, True)
+        WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
+        ; WinSetAlphaTopmost(black3Hwnd, transVal, True)
+        WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
+        ; WinSetAlphaTopmost(black4Hwnd, transVal, True)
+
         If !firstDraw
             WinSet, Transparent, %fadeVal%,  ahk_id %black5Hwnd%
 
@@ -4035,7 +4038,8 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
             break
         }
     }
-    ClearBlackMonitor()
+    ; tooltip, %fadeVal% - %transVal% - %Opacity  %
+
     Return
 }
 
@@ -4070,7 +4074,7 @@ ClearBlackMonitor(initialOpacity := -1) {
 }
 
 DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIndex := 5, useWorkArea := true) {
-    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
+    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
     static prevTargetHwnd
 
     currentMon := MWAGetMonitorMouseIsIn()
@@ -4095,10 +4099,12 @@ DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIn
 
     If (prevTargetHwnd != "")
         WinSet, AlwaysOnTop, Off, ahk_id %prevTargetHwnd%
+    If targetHwnd
+        WinSet, AlwaysOnTop,  On, ahk_id %targetHwnd%
 
-    DrawBlackBar(guiIndex, x, y, w, h)
+    DrawBlackBar(guiIndex, x, y, w, h,,,True)
 
-    If !targetHwnd
+    If targetHwnd
         WinSet, AlwaysOnTop,  On, ahk_id %targetHwnd%
 
     If (firstDraw) {
@@ -4117,7 +4123,7 @@ DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIn
         {
             WinSet, Transparent, %transVal%, ahk_id %hwndVarName%
             transVal += opacityInterval
-            Sleep, 2   ; purely visual – safe outside Critical
+            Sleep, 5   ; purely visual – safe outside Critical
         }
         Critical, Off
     }
@@ -4126,7 +4132,7 @@ DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIn
 
     WinSet, AlwaysOnTop, Off, ahk_id %hwndVarName%
 
-    If !targetHwnd
+    If targetHwnd
         prevTargetHwnd := targetHwnd
 }
 ; Finds the monitor + work area rect that contains the center of the given window.
@@ -5836,7 +5842,6 @@ ActivateWindow:
     Process, Close, Expr_Name
     Process, Close, ExprAltUp_Name
 
-    WinSet, AlwaysOnTop, Off, ahk_id %hwndOfTitle%
     If IsAlwaysOnTop(hwndOfTitle)
         WinSet, AlwaysOnTop, Off, ahk_id %hwndOfTitle%
 
@@ -7971,7 +7976,7 @@ getSessionId()
     Return SessionId
 }
 
-SetWindowAlphaTopmost(guiHwnd, transparencyLevel := 220, isTopmost := true)
+WinSetAlphaTopmost(guiHwnd, transparencyLevel := 220, isTopmost := true)
 {
     ; Clamp alpha to 0..255
     if (transparencyLevel < 0)
