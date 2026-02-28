@@ -1065,6 +1065,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
             LbuttonEnabled := True
             Thread, NoTimers, False
+            ; tooltip, sent to %initFocusedCtrl%
             SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
 
             DetectHiddenWindows, On
@@ -3652,10 +3653,10 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     UpdateValidWindows()
 
     currentMon := MWAGetMonitorMouseIsIn()
-    Critical, On
     cycleCount := 2
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
 
+    Critical, On
     loop % windowsListWithSameProcessAndClass
     {
         hwndID := windowsListWithSameProcessAndClass%A_Index%
@@ -3681,6 +3682,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         minHwndID := minimizedWindows[A_Index]
         GroupedWindows.push(minHwndID)
     }
+    Critical, Off
 
     numWindows := GroupedWindows.length()
 
@@ -3702,7 +3704,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
     lastActWinID := GroupedWindows[cycleCount]
 
-    Critical, Off
 
     gwHwndId := GroupedWindows[cycleCount]
     DrawMasks(gwHwndId)
@@ -3795,8 +3796,7 @@ ClampAlpha(alphaValue) {
     return alphaValue
 }
 
-Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget)
-{
+Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget) {
     ; alphaPrimary: 0..255 (WinSet alpha for primary window)
     ; alphaTarget:  0..255 (desired combined opacity of the two stacked windows)
 
@@ -3915,7 +3915,6 @@ ClearMasks(appClosingHwnd := "", initTransVal := 255) {
         Gui, %A_Index%: Hide
     Critical, Off
 
-    Thread, NoTimers, False
     WinSet, AlwaysOnTop, Off, ahk_id %hA%
 
     Return
@@ -3929,8 +3928,6 @@ ClearMasks(appClosingHwnd := "", initTransVal := 255) {
 DrawMasks(targetHwnd := "", firstDraw := True) {
     global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
 
-    Thread, NoTimers, True
-
     Margin        := 0  ; expands the hole around the active window by this many pixels
 
     If !firstDraw {
@@ -3938,9 +3935,9 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         opacityInterval := Floor(Opacity / iterations)
         transVal        := Opacity
         fadeVal         := 0
-
         DrawBlackMonitor(targetHwnd, False, 0)
 
+        Critical, On
         Loop, %iterations%
         {
             transVal -= opacityInterval
@@ -3955,6 +3952,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
             ; SetWindowAlphaTopmost(black5Hwnd, fadeVal, True)
             sleep, 2
         }
+        Critical, Off
     }
     ; Resolve target window
     If !targetHwnd
@@ -4012,6 +4010,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     transVal          := opacityInterval
     fadeVal           := Opacity
 
+    Critical, On
     Loop, %iterations%
     {
         fadeVal := Get2ndAlphaForTransparencyTarget(transVal, Opacity)
@@ -4038,8 +4037,8 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
             break
         }
     }
+    Critical, Off
     ; tooltip, %fadeVal% - %transVal% - %Opacity  %
-
     Return
 }
 
@@ -4063,7 +4062,6 @@ ClearBlackMonitor(initialOpacity := -1) {
 
         WinSet, Transparent, %currentVal%, ahk_id %black5Hwnd%
 
-        ; Short sleep for visual smoothness; not in Critical
         sleep, 10
     }
 
@@ -6207,7 +6205,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             OutputVar8 := InStr(DirectUICtrls, "DirectUIHWND8", false) > 0
         }
 
-        ; tooltip, OutputVar1:%OutputVar1% OutputVar2:%OutputVar2% OutputVar3:%OutputVar3% OutputVar4:%OutputVar4% OutputVar6:%OutputVar6% OutputVar8:%OutputVar8%
+        ; tooltip, target:%lClassCheck% OutputVar1:%OutputVar1% OutputVar2:%OutputVar2% OutputVar3:%OutputVar3% OutputVar4:%OutputVar4% OutputVar6:%OutputVar6% OutputVar8:%OutputVar8%
 
         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
