@@ -113,7 +113,7 @@ Global ReleaseAway   := 24     ; px: while snapped, drag this far AWAY from the 
 Global skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
 ; === Settings ===
-Global BlockClicks := False    ; true = block clicks outside active window, false = let clicks pass through
+Global BlockClicks := False   ; true = block clicks outside active window, false = let clicks pass through
 Global Opacity     := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 
 ; === Globals ===
@@ -316,28 +316,6 @@ WinFindExpr =
     Return
 )
 
-; ExprAltUp =
-; (
-    ; #NoEnv
-    ; #NoTrayIcon
-    ; #KeyHistory 0
-    ; ; #Persistent ; already the default
-    ; #WinActivateForce
-    ; SetBatchLines -1
-    ; ListLines Off
-    ; ; DetectHiddenWindows, Off ; already the default
-
-    ; #IfWinNotActive ahk_class #32770
-    ; ~Alt Up::
-        ; If WinExist("ahk_class #32768")
-            ; Send, {ENTER}
-        ; If WinExist("ahk_class #32768")
-            ; WinClose, ahk_class #32768
-        ; ExitApp
-    ; Return
-    ; #IfWinNotActive
-; )
-
 TooltipExpr =
 (
     #NoEnv
@@ -401,6 +379,9 @@ If (MonCount > 1) {
     previousMon := currentMon
 }
 
+
+hHookKbd   := 1
+hHookMouse := 1
 ; Get module handle for this process (needed by SetWindowsHookEx for LL hooks)
 hMod := DllCall("GetModuleHandle", "Ptr", 0, "Ptr")
 
@@ -414,13 +395,13 @@ hHookKbd   := DllCall("SetWindowsHookEx"
     , "Ptr")
 
 ; Low-level mouse hook: WH_MOUSE_LL = 14
-mouseCallback := RegisterCallback("LL_MouseHook", "Fast")
-hHookMouse    := DllCall("SetWindowsHookEx"
-    , "Int", 14              ; WH_MOUSE_LL
-    , "Ptr", mouseCallback
-    , "Ptr", hMod
-    , "UInt", 0
-    , "Ptr")
+; mouseCallback := RegisterCallback("LL_MouseHook", "Fast")
+; hHookMouse    := DllCall("SetWindowsHookEx"
+    ; , "Int", 14              ; WH_MOUSE_LL
+    ; , "Ptr", mouseCallback
+    ; , "Ptr", hMod
+    ; , "UInt", 0
+    ; , "Ptr")
 
 if (!hHookKbd || !hHookMouse)
 {
@@ -537,13 +518,11 @@ LL_KeyboardHook(nCode, wParam, lParam)
     ; When blockKeys := true, you return 1 for everything physical, including key-up messages.
     ; If the user releases LCtrl while blocking is active, Windows never receives the LCtrl-up → Ctrl stays down.
     global blockKeys, hHookKbd
+    static blockedPressCount = 0
+    static didFixOnEnter = false
 
-    ; If we must pass the event through without processing
+    ; do not process / do not block / do not modify this event
     if (nCode < 0)
-        return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
-
-    ; If not blocking, just pass through
-    if (!blockKeys)
         return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
     ; KBDLLHOOKSTRUCT:
@@ -559,6 +538,41 @@ LL_KeyboardHook(nCode, wParam, lParam)
     ; Allow injected keys (from Send/SendInput)
     if (injected)
         return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+
+    ; If not blocking, just pass through
+    if (!blockKeys)
+    {
+        blockedPressCount := 0
+        didFixOnEnter := false
+        return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+    }
+
+    ; IMPORTANT CHANGE:
+    ; Call FixModifiers() only once when entering the blocking state (not on every hook event),
+    ; otherwise modifiers will feel "broken" because they're constantly being forced up.
+    if (!didFixOnEnter)
+    {
+        didFixOnEnter := true
+        FixModifiers()
+    }
+
+    ; After 10 physical key presses, disable blocking and allow typing again
+    ; (Count only physical KEYDOWN / SYSKEYDOWN so KEYUP events don't inflate the count.)
+    if (wParam = 0x0100 || wParam = 0x0104)  ; WM_KEYDOWN / WM_SYSKEYDOWN
+    {
+        blockedPressCount += 1
+
+        ; After 10 physical key presses, disable blocking and allow typing again
+        if (blockedPressCount >= 20)
+        {
+            blockKeys := false
+            blockedPressCount := 0
+            didFixOnEnter := false
+
+            ; Let this key through so typing resumes immediately
+            return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+        }
+    }
 
     ; Otherwise block physical key
     return 1  ; non-zero = swallow
@@ -578,42 +592,43 @@ LL_MouseHook(nCode, wParam, lParam)
 
     if (!blockKeys)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+    else {
+        ; MSLLHOOKSTRUCT:
+        ; flags offset 12
+        flags    := NumGet(lParam + 0, 12, "UInt")
+        injected := (flags & 0x01)  ; LLMHF_INJECTED
 
-    ; MSLLHOOKSTRUCT:
-    ; flags offset 12
-    flags    := NumGet(lParam + 0, 12, "UInt")
-    injected := (flags & 0x01)  ; LLMHF_INJECTED
+        ; wParam: mouse message:
+        ;   0x0201 WM_LBUTTONDOWN
+        ;   0x0202 WM_LBUTTONUP
+        ;   0x0204 WM_RBUTTONDOWN
+        ;   0x0205 WM_RBUTTONUP
+        ;   0x0207 WM_MBUTTONDOWN
+        ;   0x0208 WM_MBUTTONUP
+        ;   plus dbl-click messages, etc.
+        ;
+        ; MSLLHOOKSTRUCT:
+        ;   pt          (POINT)  offset 0 (8 bytes)
+        ;   mouseData   (DWORD)  offset 8
+        ;   flags       (DWORD)  offset 12
+        ;   time        (DWORD)  offset 16
+        ;   dwExtraInfo (ULONG_PTR) offset 20
 
-    ; wParam: mouse message:
-    ;   0x0201 WM_LBUTTONDOWN
-    ;   0x0202 WM_LBUTTONUP
-    ;   0x0204 WM_RBUTTONDOWN
-    ;   0x0205 WM_RBUTTONUP
-    ;   0x0207 WM_MBUTTONDOWN
-    ;   0x0208 WM_MBUTTONUP
-    ;   plus dbl-click messages, etc.
-    ;
-    ; MSLLHOOKSTRUCT:
-    ;   pt          (POINT)  offset 0 (8 bytes)
-    ;   mouseData   (DWORD)  offset 8
-    ;   flags       (DWORD)  offset 12
-    ;   time        (DWORD)  offset 16
-    ;   dwExtraInfo (ULONG_PTR) offset 20
+        ; Allow injected mouse events (SendInput/Click)
+        if (injected)
+            return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-    ; Allow injected mouse events (SendInput/Click)
-    if (injected)
+        ; Block wheel messages too
+        if (wParam = 0x020A || wParam = 0x020E)  ; WM_MOUSEWHEEL / WM_MOUSEHWHEEL
+            return 1
+
+        ; Block physical mouse button messages
+        if (wParam >= 0x0201 && wParam <= 0x0209)
+            return 1
+
+        ; Otherwise pass through (move, etc.)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
-
-    ; Block wheel messages too
-    if (wParam = 0x020A || wParam = 0x020E)  ; WM_MOUSEWHEEL / WM_MOUSEHWHEEL
-        return 1
-
-    ; Block physical mouse button messages
-    if (wParam >= 0x0201 && wParam <= 0x0209)
-        return 1
-
-    ; Otherwise pass through (move, etc.)
-    return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+    }
 }
 
 MarkKeypressTime:
@@ -765,7 +780,7 @@ WhichButton(vPosX, vPosY, hWnd) {
     ;get role number
     ; vRole := "", try vRole := oAcc.accRole(vChildID)
     ;get role text method 1
-    ; vRoleText1 := Acc_Role(oAcc, vChildID)
+    ; vRoleText1 := Acc_RoleName(oAcc, vChildID)
     ;get role text method 2 (using role number from earlier)
     ; vRoleText2 := (vRole = "") ? "" : Acc_GetRoleText(vRole)
     vName := "",
@@ -1290,7 +1305,6 @@ $~^Enter::
             break
         }
     }
-    FixModifiers()
 Return
 
 $^WheelUp::
@@ -1432,7 +1446,6 @@ $~WheelDown::
     Thread, NoTimers, False
     StopRecursion := False
 Return
-#MaxThreadsPerHotkey 1
 
 AdjustColumns:
     blockKeys := True
@@ -2102,7 +2115,7 @@ Return
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2123,14 +2136,14 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 ^d::
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
     ; If there’s no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
@@ -2171,7 +2184,7 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 #If
 
@@ -2216,7 +2229,7 @@ Return
 Return
 
 !+':: ;'
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2234,11 +2247,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 !+[::
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2256,11 +2269,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 !+]::
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2278,11 +2291,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 !+<::
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2300,11 +2313,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 !+>::
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2322,11 +2335,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 !+(::
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2344,11 +2357,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 !+)::
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2366,11 +2379,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 !+b::
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2388,11 +2401,11 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 !+5::
-    Thread, NoTimers, True
+    Critical, On
     StopAutoFix := True
     blockKeys   := True
 
@@ -2410,7 +2423,7 @@ Return
     StopAutoFix := False
     blockKeys   := False
     FixModifiers()
-    Thread, NoTimers, False
+    Critical, Off
 Return
 
 $!i::
@@ -2436,7 +2449,6 @@ Return
 
 $!+j::
     StopAutoFix := True
-    SendLevel, 1
     Send, ^+{Left}
     Hotstring("Reset")
     StopAutoFix := False
@@ -2513,7 +2525,7 @@ $~Enter::
 Return
 
 $~F2::
-    Thread, NoTimers, True
+    Critical, On
     LbuttonEnabled := False
     StopRecursion  := True
 
@@ -2527,7 +2539,7 @@ $~F2::
 
     LbuttonEnabled := True
     StopRecursion  := False
-    Thread, NoTimers, False
+    Critical, Off
 Return
 #If
 
@@ -2717,8 +2729,6 @@ EscTimer:
 Return
 
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
-; #MaxThreadsPerHotkey 1
-; #MaxThreadsBuffer On
 
 !0::
     DetectHiddenWindows, On
@@ -2731,12 +2741,12 @@ Return
 Return
 
 !1::
+    Critical, On
     StopRecursion := True
-    Thread, NoTimers, True
     GoSub, SwitchToVD1
     StopRecursion := False
-    Thread, NoTimers, False
     FixModifiers()
+    Critical, Off
 Return
 
 SwitchToVD1:
@@ -2761,12 +2771,12 @@ SwitchToVD1:
 Return
 
 !2::
+    Critical, On
     StopRecursion := True
-    Thread, NoTimers, True
     GoSub, SwitchToVD2
-    Thread, NoTimers, False
     StopRecursion := False
     FixModifiers()
+    Critical, Off
 Return
 
 SwitchToVD2:
@@ -2793,12 +2803,12 @@ SwitchToVD2:
 Return
 
 !3::
+    Critical, On
     StopRecursion := True
-    Thread, NoTimers, True
     GoSub, SwitchToVD3
-    Thread, NoTimers, False
-    StopRecursion := False
     FixModifiers()
+    StopRecursion := False
+    Critical, Off
 Return
 
 SwitchToVD3:
@@ -2825,12 +2835,12 @@ SwitchToVD3:
 Return
 
 !4::
+    Critical, On
     StopRecursion := True
-    Thread, NoTimers, True
     GoSub, SwitchToVD4
-    Thread, NoTimers, False
     StopRecursion := False
     FixModifiers()
+    Critical, Off
 Return
 
 SwitchToVD4:
@@ -2856,7 +2866,6 @@ SwitchToVD4:
     }
 Return
 
-; #MaxThreadsBuffer Off
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 Altup:
     global cycling, cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys
@@ -4398,7 +4407,8 @@ Explorer__GetRoleNum(ByRef accObj := "") {
         return
     ; Safely get numeric MSAA role
     role := ""
-    try role := accObj.accRole(0)
+    try
+        role := accObj.accRole(0)
     catch
         return 0
 
@@ -4979,74 +4989,108 @@ IsCaretInEdit(useUIA := true, useMSAA := true) {
 UIA_IsFocusedEditable() {
     global UIA
 
-    try {
-        if !IsObject(UIA)
-            return false    ; or instantiate here if desired
-
-        focus := UIA.GetFocusedElement()
-        if !IsObject(focus)
-            return false
-
-        ct := focus.CurrentControlType  ; 50004 = Edit
-
-        ; Direct Edit control type -> editable
-        if (ct = 50004)
-            return true
-
-        ; More generic: if it supports ValuePattern and is not read-only
-        vp := ""
-        try vp := focus.GetCurrentPatternAs("Value")
-        catch
-            vp := ""
-
-        if (IsObject(vp)) {
-            isRO := ""
-            try isRO := vp.CurrentIsReadOnly
-            catch
-                isRO := ""
-
-            ; If property exists and is false → editable
-            if (isRO = false)
-                return true
-
-            ; If IsReadOnly missing but ValuePattern exists at all,
-            ; we still *suspect* it’s editable.
-            if (isRO = "")
-                return true
-        }
-    } catch e {
+    if !IsObject(UIA)
         return false
+
+    focusEl := ""
+    try
+        focusEl := UIA.GetFocusedElement()
+    catch
+        return false
+
+    if !IsObject(focusEl)
+        return false
+
+    isEnabled := ""
+    try
+        isEnabled := focusEl.CurrentIsEnabled
+    catch
+        isEnabled := ""
+
+    if (isEnabled = false)
+        return false
+
+    controlType := ""
+    try
+        controlType := focusEl.CurrentControlType
+    catch
+        controlType := ""
+
+    ; Direct Edit control type -> editable
+    if (controlType = 50004)
+        return true
+
+    ; ValuePattern: editable if not read-only
+    valuePat := ""
+    try
+        valuePat := focusEl.GetCurrentPatternAs("Value")
+    catch
+        valuePat := ""
+
+    if IsObject(valuePat)
+    {
+        isReadOnly := ""
+        try
+            isReadOnly := valuePat.CurrentIsReadOnly
+        catch
+            isReadOnly := ""
+
+        if (isReadOnly = false)
+            return true
     }
+
+    ; Optional: TextPattern presence is a strong hint for text controls
+    textPat := ""
+    try
+        textPat := focusEl.GetCurrentPatternAs("Text")
+    catch
+        textPat := ""
+
+    if IsObject(textPat)
+        return true
 
     return false
 }
 
 MSAA_IsFocusedEditable() {
-    ; Needs Acc.ahk (Acc_Role, etc.)
-    if !IsFunc("Acc_Role")
+    if !IsFunc("Acc_RoleNameSafe")
         return false
 
-    acc := Acc_Focus()
-    if !acc
+    accRoot := Acc_GetFocusedObject()
+    if !IsObject(accRoot)
         return false
 
-    role := ""
-    try role := acc.accRole(0)
+    accFocus := ""
+    try
+    {
+        accFocus := accRoot.accFocus
+    }
     catch
-        role := ""
+    {
+        accFocus := ""
+    }
 
-    ; Numeric ROLE_SYSTEM_TEXT
-    if (role = 42)
+    accObj := accRoot
+
+    if IsObject(accFocus)
+    {
+        accObj := accFocus
+    }
+    else if (accFocus != "")
+    {
+        childNum := accFocus + 0
+        if !(childNum = 0 && accFocus != 0 && accFocus != "0")
+            accObj := Acc_CreateChildRef(accRoot, childNum)
+    }
+
+    roleId := Acc_RoleIdSafe(accObj)
+    if (roleId = 42) ; ROLE_SYSTEM_TEXT
         return true
 
-    ; String role via Acc_Role()
-    roleStr := ""
-    try roleStr := Acc_Role(acc)
-    catch
-        roleStr := ""
-
-    if (roleStr != "") {
-        StringLower, roleLower, roleStr   ; v1-style lowercase
+    roleStr := Acc_RoleNameSafe(accObj)
+    if (roleStr != "")
+    {
+        StringLower, roleLower, roleStr
         if (InStr(roleLower, "edit")
          || InStr(roleLower, "editable")
          || InStr(roleLower, "text"))
@@ -7522,10 +7566,6 @@ IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
     If (state == -1)
         Return True
 
-    If (state == 1)
-        buffer := 8
-    Else
-        buffer := 0
     ;Get number of monitor
     SysGet, monCount, MonitorCount
 
@@ -7541,7 +7581,6 @@ IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
             ; tooltip, % targetMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom
 
             ;Check If the focus window in on the current monitor index
-            ; If ((A_Index == targetMonNum) && (X >= (workAreaLeft-buffer) && X <= workAreaRight) && (X+W <= (abs(workAreaRight-workAreaLeft) + 2*buffer)) && (Y >= (workAreaTop-buffer) && Y < (workAreaBottom-buffer))) {
             ; https://math.stackexchange.com/questions/2449221/calculating-percentage-of-overlap-between-two-rectangles
             If ((A_Index == targetMonNum) && ((max(X, workAreaLeft) - min(X+W,workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom)))/(W*H) > 0.50 ) {
 
@@ -7553,6 +7592,36 @@ IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
     }
     Critical, Off
     Return False
+}
+
+FindMonNumForWindows(thisWindowHwnd) {
+    X := Y := W := H := 0
+    WinGet, state, MinMax, ahk_id %thisWindowHwnd%
+
+    If (state == -1)
+        Return -1
+
+    ;Get number of monitor
+    SysGet, monCount, MonitorCount
+
+    ; WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
+    WinGetPosEx(thisWindowHwnd, X, Y, W, H)
+    ;Iterate through each monitor
+    Loop %monCount% {
+        Critical, On
+        ;Get Monitor working area
+        SysGet, workArea, Monitor, % A_Index
+
+        ;Check If the focus window in on the current monitor index
+        ; https://math.stackexchange.com/questions/2449221/calculating-percentage-of-overlap-between-two-rectangles
+        If (((max(X, workAreaLeft) - min(X+W,workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom)))/(W*H) > 0.50 ) {
+
+            Critical, Off
+            Return A_Index
+        }
+    }
+    Critical, Off
+    Return 0
 }
 
 ;https://www.autohotkey.com/boards/viewtopic.php?f=6&t=54557
@@ -8374,7 +8443,7 @@ GetDialogBreadcrumbText(hwndDlg)
         return dir
 
     ; Second try: MSAA scan within the Address Band subtree (Win11-friendly)
-    dir2 := Acc_ReadDialogAddressFromToolbar(tbHwnd)
+    dir2 := Acc_GetToolbarAddressPath(tbHwnd)
     if (dir2 != "" && dir2 != "Address Band")
         return dir2
 
@@ -8388,7 +8457,7 @@ GetDialogBreadcrumbText(hwndDlg)
         if (dir != "" && dir != "Address Band")
             return dir
 
-        dir2 := Acc_ReadDialogAddressFromToolbar(tbHwnd2)
+        dir2 := Acc_GetToolbarAddressPath(tbHwnd2)
         if (dir2 != "" && dir2 != "Address Band")
             return dir2
     }
@@ -8658,32 +8727,6 @@ Explorer_GetSelection() {
    Return result
 }
 
-; https://www.autohotkey.com/boards/viewtopic.php?p=547156
-IsPopup(winID) {
-    WinGet, ss, Style, ahk_id %winID%
-    WinGet, sx, ExStyle, ahk_id %winID%
-
-    If(ss & 0x80000000 && sx & 0x00000080)
-        Return True
-    Return False
-}
-; https://www.autohotkey.com/boards/viewtopic.php?t=107842
-; This effectively "eats" all keystrokes while active.
-BlockKeyboard( bAction )
-{
-    ; A_PriorKey will still be up to date before you start blocking the keyboard — but not during or after the keyboard is blocked by the InputHook.
-    ; L0: Zero-length input — this captures no actual characters.
-    ; I: Ignore non-modifier keys.
-    ; Blocker.KeyOpt("{All}", "S"): Suppresses all keys — blocks their input and prevents them from reaching the active window.
-
-    static Blocker := InputHook( "L0 I" )
-    Blocker.KeyOpt( "{All}", "S" )
-    If bAction
-        Blocker.Start()
-    Else
-        Blocker.Stop()
-}
-
 IsGoogleDocWindow() {
     WinGetTitle, title, A
     If InStr(title, "Google Sheets", False) || InStr(title, "Google Docs", False)
@@ -8856,14 +8899,15 @@ Return ( v3>v7 ? [v7, Y, 0x18] : v4>v8 ? [X, v8, 0x24]
 GetNameOfIconUnderMouse() {
    MouseGetPos, , , hwnd, CtrlClass
    WinGetClass, WinClass, ahk_id %hwnd%
-   try If (WinClass = "CabinetWClass" && (CtrlClass = "DirectUIHWND3"|| CtrlClass = "DirectUIHWND2")) {
-      oAcc := Acc_ObjectFromPoint()
-      Name := Acc_Parent(oAcc).accValue(0)
-      Name := Name ? Name : oAcc.accValue(0)
-   } Else If (WinClass = "Progman" || WinClass = "WorkerW") {
-      oAcc := Acc_ObjectFromPoint(ChildID)
-      Name := ChildID ? oAcc.accName(ChildID) : ""
-   }
+   try
+       If (WinClass = "CabinetWClass" && (CtrlClass = "DirectUIHWND3"|| CtrlClass = "DirectUIHWND2")) {
+          oAcc := Acc_ObjectFromPoint()
+          Name := Acc_ParentSafe(oAcc).accValue(0)
+          Name := Name ? Name : oAcc.accValue(0)
+       } Else If (WinClass = "Progman" || WinClass = "WorkerW") {
+          oAcc := Acc_ObjectFromPoint(ChildID)
+          Name := ChildID ? oAcc.accName(ChildID) : ""
+       }
    Return Name
 }
 
@@ -8905,8 +8949,7 @@ Acc_Init() {
     return (h != 0)
 }
 
-Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60)
-{
+Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60) {
     local queueList := []
     local queueIndex := 1
     local seenCount := 0
@@ -8944,7 +8987,7 @@ Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60)
             }
         }
 
-        childrenList := Acc_ChildrenSafe(currentAcc)
+        childrenList := Acc_GetChildrenListSafe(currentAcc)
         for childIndex, childAcc in childrenList
         {
             if (IsObject(childAcc))
@@ -8956,37 +8999,57 @@ Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60)
 
     return False
 }
+Acc_Location(accObj, ByRef xPos, ByRef yPos, ByRef wid, ByRef hei, childId := "") {
+    local iaObj, childVal, hasAcc, hasChild
 
-Acc_Location(accObj, ByRef x, ByRef y, ByRef w, ByRef h, childId := "") {
-    local ia, child, hasAcc, hasChild
+    if (!IsObject(accObj)) {
+        xPos := ""
+        yPos := ""
+        wid := ""
+        hei := ""
+        return false
+    }
 
-    if (!IsObject(accObj))
-        return (x:=y:=w:=h:="") , false
+    hasAcc := false
+    hasChild := false
 
-    hasAcc := False
-    hasChild := False
     try {
         hasAcc := accObj.HasKey("acc")
         hasChild := accObj.HasKey("child")
     }
     catch {
-        hasAcc := False
-        hasChild := False
+        hasAcc := false
+        hasChild := false
     }
 
     if (hasAcc) {
-        ia := accObj.acc
-        child := hasChild ? accObj.child : 0
-    } else {
-        ia := accObj
-        child := (childId = "") ? 0 : childId
+        iaObj := accObj.acc
+        childVal := hasChild ? accObj.child : 0
+    }
+    else {
+        iaObj := accObj
+        childVal := (childId = "") ? 0 : childId
+    }
+
+    ; Ensure child is numeric (VT_I4 expects an integer)
+    childNum := childVal + 0
+    if (childNum = 0 && childVal != 0 && childVal != "0") {
+        xPos := ""
+        yPos := ""
+        wid := ""
+        hei := ""
+        return false
     }
 
     try {
-        ia.accLocation(x, y, w, h, ComObjParameter(3, child))
+        iaObj.accLocation(xPos, yPos, wid, hei, ComObjParameter(3, childNum))
         return true
-    } catch {
-        x := y := w := h := ""
+    }
+    catch {
+        xPos := ""
+        yPos := ""
+        wid := ""
+        hei := ""
         return false
     }
 }
@@ -8994,72 +9057,66 @@ Acc_Location(accObj, ByRef x, ByRef y, ByRef w, ByRef h, childId := "") {
 Acc_PointInAccRect(accObj, sx, sy) {
     ; Returns True only if (sx,sy) lies within accObj's screen rectangle.
     ; If we can't get a rectangle, fail closed.
-    try {
-        Acc_Location(accObj, ax, ay, aw, ah)  ; screen coords in the common Acc libs
-    } catch {
-        return False
-    }
+    local ax, ay, aw, ah
+
+    if (!Acc_Location(accObj, ax, ay, aw, ah))
+        return false
+
     if (aw <= 0 || ah <= 0)
-        return False
+        return false
 
     return (sx >= ax && sx < ax + aw && sy >= ay && sy < ay + ah)
 }
 
-Acc_GetObjectAtScreenPoint(x, y) {
-
-    acc := Acc_ObjectFromPoint(, x, y)
-    if IsObject(acc) {
-        return acc
+Acc_GetObjectAtScreenPoint(xPos, yPos) {
+    accObj := Acc_ObjectFromPoint(, xPos, yPos)
+    if IsObject(accObj)
+    {
+        return accObj
     }
 
     ; Fallback path: WindowFromPoint -> Acc_ObjectFromWindow -> accHitTest
-    ; NEW (32-bit halves, matches how you pack for AccessibleObjectFromPoint)
-    pt64 := (x & 0xFFFFFFFF) | ((y & 0xFFFFFFFF) << 32)
-    hwndUnder := DllCall("user32\WindowFromPoint", "Int64", pt64, "Ptr")
-    if (!hwndUnder) {
+
+    VarSetCapacity(pointStruct, 8, 0)
+    NumPut(xPos, pointStruct, 0, "Int")
+    NumPut(yPos, pointStruct, 4, "Int")
+
+    hwndUnder := DllCall("user32\WindowFromPoint", "Ptr", &pointStruct, "Ptr")
+    if (!hwndUnder)
         return ""
-    }
 
     accRoot := Acc_ObjectFromWindow(hwndUnder)
-    if !IsObject(accRoot) {
+    if !IsObject(accRoot)
         return ""
-    }
 
-    VarSetCapacity(pt, 8, 0)
-    NumPut(x, pt, 0, "Int")
-    NumPut(y, pt, 4, "Int")
-    if !DllCall("user32\ScreenToClient", "Ptr", hwndUnder, "Ptr", &pt) {
+    hitObj := ""
+    hitVal := ""
+
+    ; accHitTest expects SCREEN coordinates
+    try
+        hitVal := accRoot.accHitTest(xPos, yPos)
+    catch
         return ""
-    }
-    cx := NumGet(pt, 0, "Int")
-    cy := NumGet(pt, 4, "Int")
 
-    hit := ""
-    try {
-        hit := accRoot.accHitTest(cx, cy)
-    }
-    catch {
-        return ""
-    }
-
-    if IsObject(hit) {
-        return hit
-    }
+    if IsObject(hitVal)
+        return hitVal
 
     ; Some MSAA trees return a child-id instead of an object
-    if (hit != "") {
-        childId := hit + 0
-        child := ""
-        try {
-            child := accRoot.accChild(childId)
-        }
-        catch {
-            child := ""
-        }
+    if (hitVal != "")
+    {
+        childId := hitVal + 0
+        childObj := ""
 
-        if IsObject(child) {
-            return child
-        }
+        try
+            childObj := accRoot.accChild(childId)
+        catch
+            childObj := ""
+
+        if IsObject(childObj)
+            return childObj
+
+        ; If accChild didn't produce an object, you might want to return a child-ref instead:
+        ; return Acc_CreateChildRef(accRoot, childId)
     }
 
     return ""
@@ -9118,25 +9175,49 @@ Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) { ; OBJID_CLIENT
         return
 }
 ; ChatGPT
-Acc_Parent(Acc) {
+Acc_TryGetIAccessibleSafe(accObj) {
+    if !IsObject(accObj)
+        return 0
+
     try
-        parent:=Acc.accParent
-    return parent ? Acc_Query(parent) : ""
+    {
+        iAccessiblePtr := ComObjQuery(accObj, "{618736e0-3c3d-11cf-810c-00aa00389b71}")
+        return ComObj(9, iAccessiblePtr, 1)
+    }
+    catch
+    {
+        return 0
+    }
 }
 
-Acc_Query(Acc) { ; thanks Lexikos - www.autohotkey.com/forum/viewtopic.php?t=81731&p=509530#509530
-    try
-        Return ComObj(9, ComObjQuery(Acc,"{618736e0-3c3d-11cf-810c-00aa00389b71}"), 1)
-}
-
-; Written by jethrow
-Acc_Role(Acc, ChildId=0) {
-    try
-        Return ComObjType(Acc,"Name")="IAccessible"?Acc_GetRoleText(Acc.accRole(ChildId)):"invalid object"
-}
-
-Acc_ReadDialogAddressFromToolbar(tbHwnd)
+Acc_RoleNameSafe(accObj, childId := 0)
 {
+    isIAccessible := false
+    try
+        isIAccessible := (ComObjType(accObj, "Name") = "IAccessible")
+    catch
+        isIAccessible := false
+
+    if (!isIAccessible)
+        return ""
+
+    roleValue := ""
+    try
+        roleValue := accObj.accRole(childId)
+    catch
+        return ""
+
+    roleNumber := roleValue + 0
+    if (roleNumber = 0 && roleValue != 0 && roleValue != "0")
+        return ""
+
+    try
+        return Acc_GetRoleText(roleNumber)
+    catch
+        return ""
+}
+
+Acc_GetToolbarAddressPath(tbHwnd) {
     acc := Acc_ObjectFromWindow(tbHwnd)
     if !IsObject(acc)
         return ""
@@ -9145,8 +9226,7 @@ Acc_ReadDialogAddressFromToolbar(tbHwnd)
     return Acc_FindLikelyPathText(acc, 140)
 }
 
-Acc_FindLikelyPathText(rootAcc, maxNodes := 140)
-{
+Acc_FindLikelyPathText(rootAcc, maxNodes := 140) {
     local queue := [], queueIndex := 1, seenCount := 0
     local currentAcc, currentValue, currentName, childrenList, childIndex, childAcc
 
@@ -9175,14 +9255,22 @@ Acc_FindLikelyPathText(rootAcc, maxNodes := 140)
                 return currentName
         }
 
-        childrenList := Acc_ChildrenSafe(currentAcc)
+        childrenList := Acc_GetChildrenListSafe(currentAcc)
         for childIndex, childAcc in childrenList
         {
-            if (IsObject(childAcc))
+            if !IsObject(childAcc)
+                continue
+
+            isChildRef := false
+            try
+                isChildRef := childAcc.HasKey("acc") && childAcc.HasKey("child")
+            catch
+                isChildRef := false
+
+            if (isChildRef || ComObjType(childAcc, "Name") = "IAccessible")
                 queue.Push(childAcc)
         }
     }
-
     return ""
 }
 
@@ -9196,8 +9284,7 @@ Acc_LooksLikePath(s) {
     return False
 }
 
-Acc_ChildrenSafe(accObj, maxChildren := 60)
-{
+Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
     local ia, childrenCount := 0, fetchedCount := 0
     local cbVariant, bufferBytes, childIndex, offsetBytes, variantType
     local childId, dispatchPointer, outputList := [], fetchCount
@@ -9207,22 +9294,14 @@ Acc_ChildrenSafe(accObj, maxChildren := 60)
 
     ia := accObj
     try
-    {
         ia := accObj.acc
-    }
     catch
-    {
         ia := accObj
-    }
 
     try
-    {
         childrenCount := ia.accChildCount
-    }
     catch
-    {
         return outputList
-    }
 
     if (childrenCount <= 0)
         return outputList
@@ -9231,7 +9310,7 @@ Acc_ChildrenSafe(accObj, maxChildren := 60)
     if (maxChildren && fetchCount > maxChildren)
         fetchCount := maxChildren
 
-    cbVariant := 24 ; 64-bit VARIANT
+    cbVariant := (A_PtrSize = 8) ? 24 : 16
     bufferBytes := fetchCount * cbVariant
     VarSetCapacity(buf, bufferBytes, 0)
 
@@ -9262,7 +9341,7 @@ Acc_ChildrenSafe(accObj, maxChildren := 60)
         if (variantType = 3) ; VT_I4
         {
             childId := NumGet(buf, offsetBytes + 8, "Int")
-            outputList.Push(Acc_MakeChildRef(ia, childId))
+            outputList.Push(Acc_CreateChildRef(ia, childId))
             continue
         }
     }
@@ -9270,7 +9349,7 @@ Acc_ChildrenSafe(accObj, maxChildren := 60)
     return outputList
 }
 
-Acc_MakeChildRef(parentIA, childId) {
+Acc_CreateChildRef(parentIA, childId) {
     o := {}
     o.acc := parentIA
     o.child := childId
@@ -9278,13 +9357,13 @@ Acc_MakeChildRef(parentIA, childId) {
 }
 
 Acc_GetRoleText(nRole) {
-    nSize := DllCall("oleacc\GetRoleText", "Uint", nRole, "Ptr", 0, "Uint", 0)
-    VarSetCapacity(sRole, (A_IsUnicode?2:1)*nSize)
-    DllCall("oleacc\GetRoleText", "Uint", nRole, "str", sRole, "Uint", nSize+1)
-    Return  sRole
+    nSize := DllCall("oleacc\GetRoleText", "UInt", nRole, "Ptr", 0, "UInt", 0)
+    VarSetCapacity(sRole, (A_IsUnicode ? 2 : 1) * (nSize + 1), 0)
+    DllCall("oleacc\GetRoleText", "UInt", nRole, "Str", sRole, "UInt", nSize + 1)
+    return sRole
 }
 ; ChatGPT
-Acc_Focus() {
+Acc_GetFocusedObject() {
     static OBJID_CARET  := 0xFFFFFFF8
     static OBJID_CLIENT := 0xFFFFFFFC
 
@@ -9340,14 +9419,14 @@ Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole, dir
 
         ; Only pay for this check once or twice (it’s a DllCall)
         if (directUIHwnd && checked < 2) {
-            hostHwnd := Acc_WindowFromObject(cur)
+            hostHwnd := Acc_WindowFromObjectSafe(cur)
             checked += 1
             if (hostHwnd && hostHwnd != directUIHwnd) {
                 break
             }
         }
 
-        role := Acc_RoleSafe(cur)
+        role := Acc_RoleIdSafe(cur)
 
         if (!role) {
             cur := Acc_ParentSafe(cur)
@@ -9370,23 +9449,37 @@ Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole, dir
     return 0
 }
 
-Acc_WindowFromObject(accObj)
-{
-    local ia, hwnd := 0, hr := 0
+Acc_WindowFromObjectSafe(accObj) {
+    local iaObj, hasChildRef, hwnd, hr
 
     if !IsObject(accObj)
         return 0
 
-    ia := accObj
-    try
-        ia := accObj.acc
-    catch
-        ia := accObj
+    iaObj := accObj
+    hasChildRef := false
 
-    hr := DllCall("oleacc\WindowFromAccessibleObject"
-        , "ptr", ComObjValue(ia)
-        , "ptr*", hwnd
-        , "int")
+    try
+        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
+    catch
+        hasChildRef := false
+
+    if (hasChildRef)
+        iaObj := accObj.acc
+
+    hwnd := 0
+    hr := 0
+
+    try
+    {
+        hr := DllCall("oleacc\WindowFromAccessibleObject"
+            , "Ptr", ComObjValue(iaObj)
+            , "Ptr*", hwnd
+            , "Int")
+    }
+    catch
+    {
+        return 0
+    }
 
     if (hr != 0)
         return 0
@@ -9414,64 +9507,139 @@ Acc_NameIsKnownColumn(accObj) {
         || nm = "Title")
 }
 
-Acc_ValueSafe(accObj)
+Acc_NameSafe(accObj)
 {
-    local v := ""
+    local hasChildRef, parentAcc, childId, nameStr
+
     if !IsObject(accObj)
         return ""
+
+    hasChildRef := false
     try
-    {
-        v := accObj.accValue(0)
-    }
+        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
     catch
+        hasChildRef := false
+
+    if (hasChildRef)
     {
-        return ""
+        parentAcc := accObj.acc
+        childId := accObj.child
+        nameStr := ""
+        try
+            nameStr := parentAcc.accName(childId)
+        catch
+            return ""
+        return nameStr
     }
-    return v
+
+    nameStr := ""
+    try
+        nameStr := accObj.accName(0)
+    catch
+        return ""
+
+    return nameStr
 }
 
-Acc_NameSafe(accObj) {
-    if !IsObject(accObj) {
+Acc_ValueSafe(accObj)
+{
+    local hasChildRef, parentAcc, childId, valueStr
+
+    if !IsObject(accObj)
         return ""
-    }
-    nm := ""
+
+    hasChildRef := false
     try
-        nm := accObj.accName(0)
+        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
+    catch
+        hasChildRef := false
+
+    if (hasChildRef)
+    {
+        parentAcc := accObj.acc
+        childId := accObj.child
+        valueStr := ""
+        try
+            valueStr := parentAcc.accValue(childId)
+        catch
+            return ""
+        return valueStr
+    }
+
+    valueStr := ""
+    try
+        valueStr := accObj.accValue(0)
     catch
         return ""
 
-    return nm
+    return valueStr
 }
 
-Acc_RoleSafe(accObj) {
-    if !IsObject(accObj) {
-        return ""
-    }
-    role := ""
-    try
-        role := accObj.accRole(0)
-    catch
+Acc_RoleIdSafe(accObj)
+{
+    local hasChildRef, parentAcc, childId, roleVal, roleNum
+
+    if !IsObject(accObj)
         return 0
 
-    n := role + 0
-    if (n = 0 && role != 0 && role != "0") {
-        return 0
+    hasChildRef := false
+    try
+        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
+    catch
+        hasChildRef := false
+
+    roleVal := ""
+
+    if (hasChildRef)
+    {
+        parentAcc := accObj.acc
+        childId := accObj.child
+        try
+            roleVal := parentAcc.accRole(childId)
+        catch
+            return 0
     }
-    return n
+    else
+    {
+        try
+            roleVal := accObj.accRole(0)
+        catch
+            return 0
+    }
+
+    roleNum := roleVal + 0
+    if (roleNum = 0 && roleVal != 0 && roleVal != "0")
+        return 0
+
+    return roleNum
 }
 
-Acc_ParentSafe(accObj) {
-    if !IsObject(accObj) {
+Acc_ParentSafe(accObj)
+{
+    local hasChildRef, parentObj
+
+    if !IsObject(accObj)
         return ""
-    }
-    parent := ""
+
+    hasChildRef := false
     try
-        parent := accObj.accParent
+        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
+    catch
+        hasChildRef := false
+
+    ; Child ref object: { acc: parentIA, child: childId }
+    if (hasChildRef)
+        return accObj.acc
+
+    parentObj := ""
+    try
+        parentObj := accObj.accParent
     catch
         return ""
 
-    return parent
+    return parentObj
 }
+
 ; ChatGPT
 SafeUIA_ElementFromPoint(x, y, default := "") {
     global UIA
@@ -9685,6 +9853,7 @@ SetTitleMatchMode, 2
 ; Return
 
 
+#InputLevel 10
 #If    !WinActive("ahk_exe notepad++.exe")
     && !WinActive("ahk_exe Code.exe")
     && !WinActive("ahk_exe cmd.exe")
