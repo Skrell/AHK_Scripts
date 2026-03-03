@@ -2209,7 +2209,13 @@ Return
 
 !+;::
     StopAutoFix := True
-    Send, +{End}
+    If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < DoubleClickTime) {
+        Send, {Home}
+        Send, +{End}
+    }
+    Else {
+        Send, +{End}
+    }
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -6431,7 +6437,7 @@ VolumeHover() {
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 IsOverException(hWnd := "") {
     If (hWnd == "")
-        MouseGetPos, , , hwndID
+        MouseGetPos, , , hwndID, ctrlNN
     Else
         hwndID := hWnd
 
@@ -6443,6 +6449,7 @@ IsOverException(hWnd := "") {
         || proc == "SndVol.exe"
         || ((InStr("File Explorer", tit, True) || proc == "explorer.exe") && (InStr("Home", tit, True) || InStr("This PC", tit, True) || InStr("Gallery", tit, True)))
         || (InStr("InstallShield", tit, True))
+        || InStr(ctrlNN, "SysTabControl", True)
         || cl == "#32768"
         || cl == "Autohotkey"
         || cl == "AutohotkeyGUI"
@@ -8999,53 +9006,46 @@ Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60) {
 
     return False
 }
-Acc_Location(accObj, ByRef xPos, ByRef yPos, ByRef wid, ByRef hei, childId := "") {
-    local iaObj, childVal, hasAcc, hasChild
 
-    if (!IsObject(accObj)) {
-        xPos := ""
-        yPos := ""
-        wid := ""
-        hei := ""
+Acc_LocationSafe(accObj, ByRef xPos, ByRef yPos, ByRef wid, ByRef hei, childId := "") {
+    local iaObj, childVal, hasChildRef, childNum
+
+    xPos := ""
+    yPos := ""
+    wid := ""
+    hei := ""
+
+    if !IsObject(accObj)
         return false
-    }
 
-    hasAcc := false
-    hasChild := false
+    hasChildRef := false
+    try
+        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
+    catch
+        hasChildRef := false
 
-    try {
-        hasAcc := accObj.HasKey("acc")
-        hasChild := accObj.HasKey("child")
-    }
-    catch {
-        hasAcc := false
-        hasChild := false
-    }
-
-    if (hasAcc) {
+    if (hasChildRef)
+    {
         iaObj := accObj.acc
-        childVal := hasChild ? accObj.child : 0
+        childVal := accObj.child
     }
-    else {
+    else
+    {
         iaObj := accObj
         childVal := (childId = "") ? 0 : childId
     }
 
-    ; Ensure child is numeric (VT_I4 expects an integer)
     childNum := childVal + 0
-    if (childNum = 0 && childVal != 0 && childVal != "0") {
-        xPos := ""
-        yPos := ""
-        wid := ""
-        hei := ""
+    if (childNum = 0 && childVal != 0 && childVal != "0")
         return false
-    }
 
-    try {
+    try
+    {
         iaObj.accLocation(xPos, yPos, wid, hei, ComObjParameter(3, childNum))
         return true
     }
-    catch {
+    catch
+    {
         xPos := ""
         yPos := ""
         wid := ""
@@ -9059,7 +9059,7 @@ Acc_PointInAccRect(accObj, sx, sy) {
     ; If we can't get a rectangle, fail closed.
     local ax, ay, aw, ah
 
-    if (!Acc_Location(accObj, ax, ay, aw, ah))
+    if (!Acc_LocationSafe(accObj, ax, ay, aw, ah))
         return false
 
     if (aw <= 0 || ah <= 0)
@@ -9071,9 +9071,7 @@ Acc_PointInAccRect(accObj, sx, sy) {
 Acc_GetObjectAtScreenPoint(xPos, yPos) {
     accObj := Acc_ObjectFromPoint(, xPos, yPos)
     if IsObject(accObj)
-    {
         return accObj
-    }
 
     ; Fallback path: WindowFromPoint -> Acc_ObjectFromWindow -> accHitTest
 
@@ -9507,8 +9505,7 @@ Acc_NameIsKnownColumn(accObj) {
         || nm = "Title")
 }
 
-Acc_NameSafe(accObj)
-{
+Acc_NameSafe(accObj) {
     local hasChildRef, parentAcc, childId, nameStr
 
     if !IsObject(accObj)
@@ -9541,8 +9538,7 @@ Acc_NameSafe(accObj)
     return nameStr
 }
 
-Acc_ValueSafe(accObj)
-{
+Acc_ValueSafe(accObj) {
     local hasChildRef, parentAcc, childId, valueStr
 
     if !IsObject(accObj)
@@ -9575,8 +9571,7 @@ Acc_ValueSafe(accObj)
     return valueStr
 }
 
-Acc_RoleIdSafe(accObj)
-{
+Acc_RoleIdSafe(accObj) {
     local hasChildRef, parentAcc, childId, roleVal, roleNum
 
     if !IsObject(accObj)
@@ -9614,8 +9609,7 @@ Acc_RoleIdSafe(accObj)
     return roleNum
 }
 
-Acc_ParentSafe(accObj)
-{
+Acc_ParentSafe(accObj) {
     local hasChildRef, parentObj
 
     if !IsObject(accObj)
