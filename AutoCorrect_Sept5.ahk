@@ -6377,16 +6377,19 @@ Return
 
 #If MouseIsOverTitleBar()
 ~Lbutton & Rbutton::
-    ; ComboActive := True
     HotKey, Rbutton, DoNothing, On
     MouseGetPos, , , hwndId
     WinGetTitle, winTitle, ahk_id %hwndId%
     BlockInput, MouseMove
     WinGet, ExStyle, ExStyle, ahk_id %hwndId%
-    If IsAlwaysOnTop(hwndID)
+    If IsAlwaysOnTop(hwndID) {
         Gui, GUI4Boarder: Color, 0x00FF00
-    Else
+        WinSet, Transparent, Off, ahk_id %hwndId%
+    }
+    Else {
         Gui, GUI4Boarder: Color, 0xFF0000
+        WinSet, Transparent, %Opacity%, ahk_id %hwndId%
+    }
     GoSub, DrawRect
     sleep, 200
     ClearRect()
@@ -8918,9 +8921,6 @@ GetNameOfIconUnderMouse() {
    Return Name
 }
 
-;------------------------------------------------------------------------------
-;------------------------------------------------------------------------------
-; https://github.com/Drugoy/Autohotkey-scripts-.ahk/blob/master/Libraries/Acc.ahk
 InitCOM_STA() {
     global comInitd
 
@@ -8942,20 +8942,47 @@ InitCOM_STA() {
     return comInitd
 }
 
+;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+; https://github.com/Drugoy/Autohotkey-scripts-.ahk/blob/master/Libraries/Acc.ahk
+;------------------------------------------------------------------------------
 Acc_Init() {
-    static h := 0
+    static hMod := 0
 
-    ; Already loaded
-    if (h) {
-        return True
-    }
+    if (hMod)
+        return true
 
-    h := DllCall("LoadLibrary", "Str", "oleacc", "Ptr")
-
-    ; Return success/failure
-    return (h != 0)
+    hMod := DllCall("kernel32\LoadLibrary", "Str", "oleacc.dll", "Ptr")
+    return (hMod != 0)
 }
+; ChatGPT
+Acc_IsChildRef(accObj) {
+    local isRef := false
+    if !IsObject(accObj)
+        return false
 
+    try
+        isRef := accObj.HasKey("acc") && accObj.HasKey("child")
+    catch
+        isRef := false
+
+    return isRef
+}
+; ChatGPT
+Acc_CreateChildRef(parentIA, childId) {
+    o := {}
+    o.acc := parentIA
+    o.child := childId
+    return o
+}
+; ChatGPT
+Acc_GetRoleText(nRole) {
+    nSize := DllCall("oleacc\GetRoleText", "UInt", nRole, "Ptr", 0, "UInt", 0)
+    VarSetCapacity(sRole, (A_IsUnicode ? 2 : 1) * (nSize + 1), 0)
+    DllCall("oleacc\GetRoleText", "UInt", nRole, "Str", sRole, "UInt", nSize + 1)
+    return sRole
+}
+; ChatGPT
 Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60) {
     local queueList := []
     local queueIndex := 1
@@ -8964,9 +8991,7 @@ Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60) {
     local childrenList, childIndex, childAcc
 
     if !IsObject(rootAcc)
-    {
-        return False
-    }
+        return false
 
     queueList.Push(rootAcc)
 
@@ -8980,35 +9005,49 @@ Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60) {
         if (currentValue != "")
         {
             if (InStr(currentValue, ":\") || InStr(currentValue, "\\") || InStr(currentValue, "\"))
-            {
-                return True
-            }
+                return true
         }
 
         currentName := Acc_NameSafe(currentAcc)
         if (currentName != "")
         {
-            if (InStr(currentName, "Address") || InStr(currentName, "Breadcrumb") || InStr(currentName, ":\") || InStr(currentName, "\\") || InStr(currentName, "\"))
+            if (InStr(currentName, "Address")
+             || InStr(currentName, "Breadcrumb")
+             || InStr(currentName, ":\")
+             || InStr(currentName, "\\")
+             || InStr(currentName, "\"))
             {
-                return True
+                return true
             }
         }
 
         childrenList := Acc_GetChildrenListSafe(currentAcc)
         for childIndex, childAcc in childrenList
         {
-            if (IsObject(childAcc))
+            if !IsObject(childAcc)
+                continue
+
+            isChildRef := Acc_IsChildRef(childAcc)
+
+            isIAccessible := false
+            if (!isChildRef)
             {
-                queueList.Push(childAcc)
+                try
+                    isIAccessible := (ComObjType(childAcc, "Name") = "IAccessible")
+                catch
+                    isIAccessible := false
             }
+
+            if (isChildRef || isIAccessible)
+                queueList.Push(childAcc)
         }
     }
 
-    return False
+    return false
 }
-
+; ChatGPT
 Acc_LocationSafe(accObj, ByRef xPos, ByRef yPos, ByRef wid, ByRef hei, childId := "") {
-    local iaObj, childVal, hasChildRef, childNum
+    local iaObj, childVal, childNum
 
     xPos := ""
     yPos := ""
@@ -9018,13 +9057,7 @@ Acc_LocationSafe(accObj, ByRef xPos, ByRef yPos, ByRef wid, ByRef hei, childId :
     if !IsObject(accObj)
         return false
 
-    hasChildRef := false
-    try
-        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
-    catch
-        hasChildRef := false
-
-    if (hasChildRef)
+    if (Acc_IsChildRef(accObj))
     {
         iaObj := accObj.acc
         childVal := accObj.child
@@ -9053,7 +9086,7 @@ Acc_LocationSafe(accObj, ByRef xPos, ByRef yPos, ByRef wid, ByRef hei, childId :
         return false
     }
 }
-
+; ChatGPT
 Acc_PointInAccRect(accObj, sx, sy) {
     ; Returns True only if (sx,sy) lies within accObj's screen rectangle.
     ; If we can't get a rectangle, fail closed.
@@ -9067,7 +9100,7 @@ Acc_PointInAccRect(accObj, sx, sy) {
 
     return (sx >= ax && sx < ax + aw && sy >= ay && sy < ay + ah)
 }
-
+; ChatGPT
 Acc_GetObjectAtScreenPoint(xPos, yPos) {
     accObj := Acc_ObjectFromPoint(, xPos, yPos)
     if IsObject(accObj)
@@ -9087,7 +9120,6 @@ Acc_GetObjectAtScreenPoint(xPos, yPos) {
     if !IsObject(accRoot)
         return ""
 
-    hitObj := ""
     hitVal := ""
 
     ; accHitTest expects SCREEN coordinates
@@ -9119,58 +9151,70 @@ Acc_GetObjectAtScreenPoint(xPos, yPos) {
 
     return ""
 }
+; ChatGPT
+Acc_ObjectFromPoint(ByRef childIdOut := "", xPos := "", yPos := "") {
+    local pointStruct, xVal, yVal, pt64, hr, pacc, vt
 
-Acc_ObjectFromPoint(ByRef _idChild_ := "", x := "", y := "") {
     Acc_Init()
 
-    VarSetCapacity(varChild, 8 + 2*A_PtrSize, 0)
+    VarSetCapacity(varChild, (A_PtrSize = 8) ? 24 : 16, 0)
 
-    if (x = "" || y = "") {
-        DllCall("GetCursorPos", "Int64*", pt64)
-        pt := pt64
-    } else {
-        pt := (x & 0xFFFFFFFF) | ((y & 0xFFFFFFFF) << 32)
+    if (xPos = "" || yPos = "")
+    {
+        VarSetCapacity(pointStruct, 8, 0)
+        if !DllCall("user32\GetCursorPos", "Ptr", &pointStruct)
+        {
+            childIdOut := 0
+            return
+        }
+        xVal := NumGet(pointStruct, 0, "Int")
+        yVal := NumGet(pointStruct, 4, "Int")
+    }
+    else
+    {
+        xVal := xPos
+        yVal := yPos
     }
 
+    ; Pack POINT into 64-bit: low DWORD = x, high DWORD = y
+    pt64 := (xVal & 0xFFFFFFFF) | ((yVal & 0xFFFFFFFF) << 32)
+
     hr := DllCall("oleacc\AccessibleObjectFromPoint"
-        , "Int64", pt
+        , "Int64", pt64
         , "Ptr*", pacc
-        , "Ptr",  &varChild)
+        , "Ptr", &varChild
+        , "Int")
 
     if (hr != 0 || !pacc)
+    {
+        childIdOut := 0
         return
+    }
 
-    _idChild_ := NumGet(varChild, 8, "UInt")
+    vt := NumGet(varChild, 0, "UShort")
+    if (vt = 3) ; VT_I4
+        childIdOut := NumGet(varChild, 8, "Int")
+    else
+        childIdOut := 0
 
     try
         return ComObjEnwrap(9, pacc, 1)
     catch
+    {
+        childIdOut := 0
         return
+    }
 }
 ; ChatGPT
-Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) { ; OBJID_CLIENT
+Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) {
+    local accObj := ""
+
     Acc_Init()
 
-    VarSetCapacity(IID, 16, 0)
-    ; IID_IAccessible = {618736E0-3C3D-11CF-810C-00AA00389B71}
-    NumPut(0x618736E0, IID, 0, "UInt")
-    NumPut(0x11CF3C3D, IID, 4, "UInt")
-    NumPut(0x00AA0C81, IID, 8, "UInt")
-    NumPut(0x719B8B38, IID, 12, "UInt")
+    if (Acc_FromWindow(hWnd, idObject, accObj))
+        return accObj
 
-    hr := DllCall("oleacc\AccessibleObjectFromWindow"
-        , "ptr", hWnd
-        , "uint", idObject
-        , "ptr", &IID
-        , "ptr*", pacc)
-
-    if (hr != 0 || !pacc)
-        return
-
-    try
-        return ComObjEnwrap(9, pacc, 1)
-    catch
-        return
+    return ""
 }
 ; ChatGPT
 Acc_TryGetIAccessibleSafe(accObj) {
@@ -9183,11 +9227,9 @@ Acc_TryGetIAccessibleSafe(accObj) {
         return ComObj(9, iAccessiblePtr, 1)
     }
     catch
-    {
         return 0
-    }
 }
-
+; ChatGPT
 Acc_RoleNameSafe(accObj, childId := 0)
 {
     isIAccessible := false
@@ -9214,7 +9256,7 @@ Acc_RoleNameSafe(accObj, childId := 0)
     catch
         return ""
 }
-
+; ChatGPT
 Acc_GetToolbarAddressPath(tbHwnd) {
     acc := Acc_ObjectFromWindow(tbHwnd)
     if !IsObject(acc)
@@ -9223,7 +9265,7 @@ Acc_GetToolbarAddressPath(tbHwnd) {
     ; Bounded search so it stays quick
     return Acc_FindLikelyPathText(acc, 140)
 }
-
+; ChatGPT
 Acc_FindLikelyPathText(rootAcc, maxNodes := 140) {
     local queue := [], queueIndex := 1, seenCount := 0
     local currentAcc, currentValue, currentName, childrenList, childIndex, childAcc
@@ -9259,19 +9301,24 @@ Acc_FindLikelyPathText(rootAcc, maxNodes := 140) {
             if !IsObject(childAcc)
                 continue
 
-            isChildRef := false
-            try
-                isChildRef := childAcc.HasKey("acc") && childAcc.HasKey("child")
-            catch
-                isChildRef := false
+            isChildRef := Acc_IsChildRef(childAcc)
 
-            if (isChildRef || ComObjType(childAcc, "Name") = "IAccessible")
+            isIAccessible := false
+            if (!isChildRef)
+            {
+                try
+                    isIAccessible := (ComObjType(childAcc, "Name") = "IAccessible")
+                catch
+                    isIAccessible := false
+            }
+
+            if (isChildRef || isIAccessible)
                 queue.Push(childAcc)
         }
     }
     return ""
 }
-
+; ChatGPT
 Acc_LooksLikePath(s) {
     ; Heuristic: accept full paths, UNC, or shell-like breadcrumb with backslashes.
     ; You can tighten/expand this based on what you see on your system.
@@ -9281,23 +9328,27 @@ Acc_LooksLikePath(s) {
         return True
     return False
 }
-
-Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
-    local ia, childrenCount := 0, fetchedCount := 0
-    local cbVariant, bufferBytes, childIndex, offsetBytes, variantType
-    local childId, dispatchPointer, outputList := [], fetchCount
+; ChatGPT
+Acc_GetChildrenListSafe(accObj, maxChildren := 60)
+{
+    local iaObj, childrenCount, fetchedCount
+    local fetchCount, cbVariant, bufferBytes
+    local childIndex, offsetBytes, variantType
+    local childId, dispatchPointer, outputList := []
+    local resultCode
 
     if !IsObject(accObj)
         return outputList
 
-    ia := accObj
+    iaObj := accObj
     try
-        ia := accObj.acc
+        iaObj := accObj.acc
     catch
-        ia := accObj
+        iaObj := accObj
 
+    childrenCount := 0
     try
-        childrenCount := ia.accChildCount
+        childrenCount := iaObj.accChildCount
     catch
         return outputList
 
@@ -9312,15 +9363,24 @@ Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
     bufferBytes := fetchCount * cbVariant
     VarSetCapacity(buf, bufferBytes, 0)
 
-    if (DllCall("oleacc\AccessibleChildren"
-        , "Ptr", ComObjValue(ia)
-        , "Int", 0
-        , "Int", fetchCount
-        , "Ptr", &buf
-        , "Int*", fetchedCount) != 0)
+    fetchedCount := 0
+    resultCode := 0
+
+    try
     {
-        return outputList
+        resultCode := DllCall("oleacc\AccessibleChildren"
+            , "Ptr", ComObjValue(iaObj)
+            , "Int", 0
+            , "Int", fetchCount
+            , "Ptr", &buf
+            , "Int*", fetchedCount
+            , "Int")
     }
+    catch
+        return outputList
+
+    if (resultCode != 0)
+        return outputList
 
     Loop, %fetchedCount%
     {
@@ -9332,33 +9392,21 @@ Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
         {
             dispatchPointer := NumGet(buf, offsetBytes + 8, "Ptr")
             if (dispatchPointer)
+            {
                 outputList.Push(ComObjEnwrap(9, dispatchPointer, 1))
+            }
             continue
         }
 
         if (variantType = 3) ; VT_I4
         {
             childId := NumGet(buf, offsetBytes + 8, "Int")
-            outputList.Push(Acc_CreateChildRef(ia, childId))
+            outputList.Push(Acc_CreateChildRef(iaObj, childId))
             continue
         }
     }
 
     return outputList
-}
-
-Acc_CreateChildRef(parentIA, childId) {
-    o := {}
-    o.acc := parentIA
-    o.child := childId
-    return o
-}
-
-Acc_GetRoleText(nRole) {
-    nSize := DllCall("oleacc\GetRoleText", "UInt", nRole, "Ptr", 0, "UInt", 0)
-    VarSetCapacity(sRole, (A_IsUnicode ? 2 : 1) * (nSize + 1), 0)
-    DllCall("oleacc\GetRoleText", "UInt", nRole, "Str", sRole, "UInt", nSize + 1)
-    return sRole
 }
 ; ChatGPT
 Acc_GetFocusedObject() {
@@ -9436,32 +9484,25 @@ Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole, dir
         }
 
         if (needQuirkCheck && role = menuPopupRole) {
-            if (Acc_NameIsKnownColumn(cur)) {
+            if (Acc_NameIsKnownColumnSafe(cur)) {
                 return cur
             }
         }
 
         cur := Acc_ParentSafe(cur)
     }
-
     return 0
 }
-
+; ChatGPT
 Acc_WindowFromObjectSafe(accObj) {
-    local iaObj, hasChildRef, hwnd, hr
+    local iaObj, hwnd, hr
 
     if !IsObject(accObj)
         return 0
 
     iaObj := accObj
-    hasChildRef := false
 
-    try
-        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
-    catch
-        hasChildRef := false
-
-    if (hasChildRef)
+    if (Acc_IsChildRef(accObj))
         iaObj := accObj.acc
 
     hwnd := 0
@@ -9475,49 +9516,41 @@ Acc_WindowFromObjectSafe(accObj) {
             , "Int")
     }
     catch
-    {
         return 0
-    }
 
     if (hr != 0)
         return 0
 
     return hwnd
 }
+; ChatGPT
+Acc_NameIsKnownColumnSafe(accObj) {
+    local nameStr
 
-Acc_NameIsKnownColumn(accObj) {
-    if !IsObject(accObj) {
-        return ""
-    }
-    nm := ""
-    try
-        nm := accObj.accName(0)
-    catch
-        return False
+    if !IsObject(accObj)
+        return 0
+
+    nameStr := Acc_NameSafe(accObj)
+    if (nameStr = "")
+        return 0
 
     ; Tighten/adjust this list to your locale and expected columns
-    return (nm = "Name"
-        || nm = "Date modified"
-        || nm = "Type"
-        || nm = "Size"
-        || nm = "Date created"
-        || nm = "Authors"
-        || nm = "Title")
+    return (nameStr = "Name"
+        || nameStr = "Date modified"
+        || nameStr = "Type"
+        || nameStr = "Size"
+        || nameStr = "Date created"
+        || nameStr = "Authors"
+        || nameStr = "Title")
 }
-
+; ChatGPT
 Acc_NameSafe(accObj) {
-    local hasChildRef, parentAcc, childId, nameStr
+    local parentAcc, childId, nameStr
 
     if !IsObject(accObj)
         return ""
 
-    hasChildRef := false
-    try
-        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
-    catch
-        hasChildRef := false
-
-    if (hasChildRef)
+    if (Acc_IsChildRef(accObj))
     {
         parentAcc := accObj.acc
         childId := accObj.child
@@ -9537,20 +9570,14 @@ Acc_NameSafe(accObj) {
 
     return nameStr
 }
-
+; ChatGPT
 Acc_ValueSafe(accObj) {
-    local hasChildRef, parentAcc, childId, valueStr
+    local parentAcc, childId, valueStr
 
     if !IsObject(accObj)
         return ""
 
-    hasChildRef := false
-    try
-        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
-    catch
-        hasChildRef := false
-
-    if (hasChildRef)
+    if (Acc_IsChildRef(accObj))
     {
         parentAcc := accObj.acc
         childId := accObj.child
@@ -9570,22 +9597,16 @@ Acc_ValueSafe(accObj) {
 
     return valueStr
 }
-
+; ChatGPT
 Acc_RoleIdSafe(accObj) {
-    local hasChildRef, parentAcc, childId, roleVal, roleNum
+    local parentAcc, childId, roleVal, roleNum
 
     if !IsObject(accObj)
         return 0
 
-    hasChildRef := false
-    try
-        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
-    catch
-        hasChildRef := false
-
     roleVal := ""
 
-    if (hasChildRef)
+    if (Acc_IsChildRef(accObj))
     {
         parentAcc := accObj.acc
         childId := accObj.child
@@ -9608,21 +9629,15 @@ Acc_RoleIdSafe(accObj) {
 
     return roleNum
 }
-
+; ChatGPT
 Acc_ParentSafe(accObj) {
-    local hasChildRef, parentObj
+    local parentObj
 
     if !IsObject(accObj)
         return ""
 
-    hasChildRef := false
-    try
-        hasChildRef := accObj.HasKey("acc") && accObj.HasKey("child")
-    catch
-        hasChildRef := false
-
     ; Child ref object: { acc: parentIA, child: childId }
-    if (hasChildRef)
+    if (Acc_IsChildRef(accObj))
         return accObj.acc
 
     parentObj := ""
@@ -9633,7 +9648,6 @@ Acc_ParentSafe(accObj) {
 
     return parentObj
 }
-
 ; ChatGPT
 SafeUIA_ElementFromPoint(x, y, default := "") {
     global UIA
@@ -9931,6 +9945,7 @@ SetTitleMatchMode, 2
 ::cases::
 ::tick::
 ::rake::
+::resets::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -10323,7 +10338,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:ioins::ions
 :?:ceis::cies
 :?:eses::esses
-:?:ases::asses
 :?:tn::nt
 ;------------------------------------------------------------------------------
 ; Word beginnings
