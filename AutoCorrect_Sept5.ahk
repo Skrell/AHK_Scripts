@@ -1519,7 +1519,7 @@ $*MButton::
     global DraggingWindow
 
     StopRecursion := True
-    Thread, NoTimers, True
+    ; Thread, NoTimers, True
     Hotkey, *Rbutton, DoNothing, On
     Hotkey, Mbutton & Rbutton, DoNothing, On
 
@@ -1547,7 +1547,7 @@ $*MButton::
     isRbutton             := False
     switchingBackToMove   := False
     switchingBacktoResize := False
-    skipAlwaysOnTop       := False
+    startedAlwaysOnTop       := False
 
     If (!hWnd || !JEE_WinHasAltTabIcon(hWnd))
         return
@@ -1598,7 +1598,9 @@ $*MButton::
     Else If (mx0 >  leftWinEdge + floor(ww/2) && my0 >  wy0 + floor(wh/2))
         BR := True
 
-    WinSet, Transparent, 255, ahk_id %hWnd%
+    startedAlwaysOnTop := IsAlwaysOnTop(hWnd)
+    If !startedAlwaysOnTop
+        WinSet, Transparent, 255, ahk_id %hWnd%
 
     If (wh/abs(monB-monT) > 0.95) {
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
@@ -1610,8 +1612,6 @@ $*MButton::
     }
 
     BlockInput, MouseMoveOff
-
-    skipAlwaysOnTop := IsAlwaysOnTop(hWnd)
 
     Critical, On
     while GetKeyState("MButton", "P") {
@@ -1715,18 +1715,26 @@ $*MButton::
         dx := mx - mx0
         dy := my - my0
 
-        WinGet, trans, Transparent, ahk_id %hWnd%
-        If (trans == 255 && (abs(dx) > 5 || abs(dy) > 5)) {
-            WinSet, Transparent, 225, ahk_id %hWnd%
-            sleep, 8
-            WinSet, Transparent, 200, ahk_id %hWnd%
-            sleep, 8
-            WinSet, Transparent, 185, ahk_id %hWnd%
+        If !startedAlwaysOnTop {
+            WinGet, trans, Transparent, ahk_id %hWnd%
+            If (trans == 255 && (abs(dx) > 3 || abs(dy) > 3)) {
+                targetTrans := 180
+                WinSet, Transparent, %targetTrans%, ahk_id %hWnd%
+                ; iterations := round((trans-targetTrans)/5)
+                ; currTrans := 255
+                ; currTrans -= 5
+                ; loop %iterations%
+                ; {
+                    ; WinSet, Transparent, %currTrans%, ahk_id %hWnd%
+                    ; sleep, 1
+                    ; currTrans -= 5
+                ; }
+            }
         }
 
         GetMonitorRectForMouse(mx, my, UseWorkArea, monL, monT, monR, monB)
-        monW := monR-monL
-        monH := monB-monT
+        monW  := monR-monL
+        monH  := monB-monT
         ; Vertical allowable range for current monitor
         minX  := monL
         minY  := monT
@@ -1944,7 +1952,8 @@ $*MButton::
 
     rlsTime := A_TickCount
     stopMon := MWAGetMonitorMouseIsIn()
-    ForceRedrawWindow(hWnd)
+    If (!startedAlwaysOnTop)
+        ForceRedrawWindow(hWnd)
 
     If (rlsTime - initTime < SingleClickTime
         && isOverTitleBar
@@ -1962,10 +1971,10 @@ $*MButton::
     Else If (wh/abs(monB-monT) > 0.95)
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
 
-    If !skipAlwaysOnTop
+    If !startedAlwaysOnTop {
         WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
-
-    WinSet, Transparent, Off, ahk_id %hWnd%
+        WinSet, Transparent, Off, ahk_id %hWnd%
+    }
 
     If (GetKeyState("Ctrl","P") && startMon != stopMon && MonCount > 1) { ; mouse dragged window
         WinSet, AlwaysOnTop, On, ahk_id %hWnd%
@@ -2004,7 +2013,7 @@ $*MButton::
     }
 
     StopRecursion := False
-    Thread, NoTimers, False
+    ; Thread, NoTimers, False
     Hotkey, *Rbutton, DoNothing, Off
     Hotkey, Mbutton & Rbutton, DoNothing, Off
     DraggingWindow := False
@@ -2460,12 +2469,6 @@ $!+j::
     StopAutoFix := False
 Return
 
-$!^j::
-    StopAutoFix := True
-    Send, {Left}
-    StopAutoFix := False
-Return
-
 $!l::
     StopAutoFix := True
     Send, ^{Right}
@@ -2481,7 +2484,7 @@ $!+l::
 Return
 
 $!h::
-    Send, {Backspace}
+    Send, {Left}
 Return
 
 #If disableEnter
@@ -4057,7 +4060,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
     Return
 }
 
-ClearBlackMonitor(initialOpacity := -1) {
+ClearBlackMonitor(initialOpacity := -1, iterations := 0) {
     global black5Hwnd, Opacity
 
     if (initialOpacity >= 0)
@@ -4065,7 +4068,6 @@ ClearBlackMonitor(initialOpacity := -1) {
     else
         initTransVal := Opacity
 
-    iterations := 0
     transVal   := initTransVal
     opacityInterval := Floor(initTransVal / iterations)
 
@@ -5885,7 +5887,7 @@ ActivateWindow:
         sleep, 125
 
     sleep, 500
-    ClearMasks()
+    ClearBlackMonitor(, 10)
 
     Process, Close, Expr_Name
     Process, Close, ExprAltUp_Name
