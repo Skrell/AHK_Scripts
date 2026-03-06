@@ -10492,7 +10492,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::requiremts::requirement
 ::requireement::requirement
 ::termainl::terminal
-::SO::So
 ::onesself::oneself
 ::violance::violence
 ::stuats::status
