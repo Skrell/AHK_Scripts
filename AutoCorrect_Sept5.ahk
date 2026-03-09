@@ -100,6 +100,7 @@ Global UIA := UIA_Interface() ; Initialize UIA interface
 ; Turn key blocking ON/OFF
 Global StopRecursion := False
 Global blockKeys     := False
+Global blockMouse    := False
 Global gExiting      := False
 Global hHookKbd
 Global hHookMouse
@@ -395,13 +396,13 @@ hHookKbd   := DllCall("SetWindowsHookEx"
     , "Ptr")
 
 ; Low-level mouse hook: WH_MOUSE_LL = 14
-; mouseCallback := RegisterCallback("LL_MouseHook", "Fast")
-; hHookMouse    := DllCall("SetWindowsHookEx"
-    ; , "Int", 14              ; WH_MOUSE_LL
-    ; , "Ptr", mouseCallback
-    ; , "Ptr", hMod
-    ; , "UInt", 0
-    ; , "Ptr")
+mouseCallback := RegisterCallback("LL_MouseHook", "Fast")
+hHookMouse    := DllCall("SetWindowsHookEx"
+    , "Int", 14              ; WH_MOUSE_LL
+    , "Ptr", mouseCallback
+    , "Ptr", hMod
+    , "UInt", 0
+    , "Ptr")
 
 if (!hHookKbd || !hHookMouse)
 {
@@ -585,12 +586,12 @@ LL_MouseHook(nCode, wParam, lParam)
 {
     ; When blockKeys := true, you return 1 for everything physical, including key-up messages.
     ; If the user releases LCtrl while blocking is active, Windows never receives the LCtrl-up → Ctrl stays down.
-    global blockKeys, hHookMouse
+    global blockMouse, hHookMouse
 
     if (nCode < 0)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-    if (!blockKeys)
+    if (!blockMouse)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
     else {
         ; MSLLHOOKSTRUCT:
@@ -1349,16 +1350,7 @@ Mbutton::
 Return
 #If
 
-; ===========================
-    ; Auto-execute section
-; ===========================
-WU_lastZoomTime  := 0   ; last time we sent ^{NumpadAdd}
-WU_lastWheelTime := 0   ; last time any WheelDown happened
-WU_burstGap      := 250 ; ms: gap that defines a "new burst"
-WU_zoomInterval  := 200 ; ms: min time between zooms *within* a burst
-
 $~WheelUp::
-    global WU_lastZoomTime, WU_lastWheelTime, WU_burstGap, WU_zoomInterval
     StopRecursion := True
     Critical, Off
     Sleep, -1
@@ -1392,16 +1384,7 @@ $~WheelUp::
     StopRecursion := False
 Return
 
-; ===========================
-; Auto-execute section
-; ===========================
-WD_lastZoomTime  := 0   ; last time we sent ^{NumpadAdd}
-WD_lastWheelTime := 0   ; last time any WheelDown happened
-WD_burstGap      := 250 ; ms: gap that defines a "new burst"
-WD_zoomInterval  := 200 ; ms: min time between zooms *within* a burst
-
 $~WheelDown::
-    global WD_lastZoomTime, WD_lastWheelTime, WD_burstGap, WD_zoomInterval
     StopRecursion := True
     Critical, Off
     Sleep, -1
@@ -1428,14 +1411,14 @@ $~WheelDown::
     }
     Else If (MouseIsOverTitleBar()) {
         ; In this branch we swallow the wheel
-        blockKeys := True
+        blockMouse := True
         MouseGetPos,,, winHwnd, ctrlHwnd, 2
 
         rootHwnd := DllCall("GetAncestor", "ptr", winHwnd, "uint", 2, "ptr") ; GA_ROOT
 
         WinMinimize, ahk_id %rootHwnd%
         Sleep, 500
-        blockKeys := False
+        blockMouse := False
         Return
     }
     Else If MouseIsOverTaskbarBlank() {
@@ -2913,6 +2896,7 @@ Altup:
     GroupedWindows := []
     startHighlight := False
     LclickSelected := False
+    lastActWinID   :=
     Critical, Off
     SetTimer, MouseTrack, On
     SetTimer, KeyTrack,   On
@@ -2923,81 +2907,23 @@ SortAllWins:
     Critical, On
 
     WinSet, AlwaysOnTop, Off, ahk_id %_winIdD%
-    WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-
     WinSet, AlwaysOnTop, On, ahk_id %_winIdD%
-    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
-
-    ; If (_winIdD != ValidWindows[1] && ValidWindows.MaxIndex() >= 1)
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
-    ; If (_winIdD != ValidWindows[2] && ValidWindows.MaxIndex() >= 2)
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
-    ; If (_winIdD != ValidWindows[3] && ValidWindows.MaxIndex() >= 3)
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
-    ; If (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4)
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
 
     If (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4) {
-            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[4]
-            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[4]
-            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+            WinActivate, % "ahk_id " ValidWindows[4]
     }
     If (_winIdD != ValidWindows[3] && ValidWindows.MaxIndex() >= 3) {
-            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[3]
-            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[3]
-            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+            WinActivate, % "ahk_id " ValidWindows[3]
     }
     If (_winIdD != ValidWindows[2] && ValidWindows.MaxIndex() >= 2) {
-            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[2]
-            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[2]
-            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+            WinActivate, % "ahk_id " ValidWindows[2]
     }
     If (_winIdD != ValidWindows[1] && ValidWindows.MaxIndex() >= 1) {
-            WinSet, AlwaysOnTop, On, % "ahk_id " ValidWindows[1]
-            WinSet, AlwaysOnTop, Off, % "ahk_id " ValidWindows[1]
-            WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+            WinActivate, % "ahk_id " ValidWindows[1]
     }
 
     WinSet, AlwaysOnTop, On, ahk_id %_winIdD%
-    WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, % "ahk_id " _winIdD
-
-    ; If (ValidWindows.MaxIndex() >= 1 && _winIdD != ValidWindows[1]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[1]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[1]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[1]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[1]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 2 && _winIdD != ValidWindows[2]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[2]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[2]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[2]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[2]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 3 && _winIdD != ValidWindows[3]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[3]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[3]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[3]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[3]
-    ; }
-    ; If (ValidWindows.MaxIndex() >= 4 && _winIdD != ValidWindows[4]) {
-        ; WinSet, Transparent, 50,  % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 100, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 200, % "ahk_id " ValidWindows[4]
-        ; sleep 10
-        ; WinSet, Transparent, 255, % "ahk_id " ValidWindows[4]
-    ; }
 
     WinSet, AlwaysOnTop, Off , % "ahk_id " _winIdD
     Critical, Off
@@ -3005,31 +2931,23 @@ Return
 
 SortGroupedWins:
     Critical, On
-    WinSet, AlwaysOnTop, Off ,% "ahk_id " GroupedWindows[cycleCount]
-    ; WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-
-    WinSet, AlwaysOnTop, On ,% "ahk_id " GroupedWindows[cycleCount]
-    ; WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
+    WinSet, AlwaysOnTop, Off, % "ahk_id " GroupedWindows[cycleCount]
+    WinSet, AlwaysOnTop, On,  % "ahk_id " GroupedWindows[cycleCount]
 
     If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) {
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[4]
         WinActivate, % "ahk_id " ValidWindows[4]
     }
     If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) {
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[3]
         WinActivate, % "ahk_id " ValidWindows[3]
     }
     If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) {
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[2]
         WinActivate, % "ahk_id " ValidWindows[2]
     }
     If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) {
-        ; WinSet, Transparent, 0, % "ahk_id " ValidWindows[1]
         WinActivate, % "ahk_id " ValidWindows[1]
     }
 
     WinSet, AlwaysOnTop, On, % "ahk_id " GroupedWindows[cycleCount]
-    ; WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, % "ahk_id " GroupedWindows[cycleCount]
 
     WinSet, AlwaysOnTop, Off, % "ahk_id " GroupedWindows[cycleCount]
@@ -3161,7 +3079,7 @@ $!Lbutton::
             KeyWait, Lbutton, D T0.1
             If (!ErrorLevel) {
                 Gui, WindowTitle: Destroy
-                ClearMasks()
+
                 MouseGetPos, , , _winIdD,
                 WinActivate, ahk_id %_winIdD%
                 WinGetTitle, actTitle, ahk_id %_winIdD%
@@ -3169,15 +3087,20 @@ $!Lbutton::
 
                 lastActWinID := _winIdD
 
-                DrawMasks(_winIdD)
+                DrawMasks(_winIdD, False)
                 DrawWindowTitlePopup(actTitle, pp)
             }
 
-            ; KeyWait, LAlt, U T5
             If (!GetKeyState("Lbutton","P") && !GetKeyState("LAlt","P")) {
-                GoSub, FadeOutWindowTitle
+                WinSet, Transparent, 255, ahk_id %black1Hwnd%
+                WinSet, Transparent, 255, ahk_id %black2Hwnd%
+                WinSet, Transparent, 255, ahk_id %black3Hwnd%
+                WinSet, Transparent, 255, ahk_id %black4Hwnd%
+
                 GoSub, Altup
+
                 ClearMasks()
+                ClearBlackMonitor()
                 Return
             }
         }
