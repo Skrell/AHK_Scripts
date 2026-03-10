@@ -46,12 +46,11 @@ SetControlDelay,  1 ;
 
 Global CurrentDesktop                      := 1
 Global mouseMoving                         := False
-Global skipCheck                           := False
-Global cycling                             := False
+Global CanceledWinSwap                     := False
 Global ValidWindows                        := []
 Global GroupedWindows                      := []
+Global MinimizedWindows                    := []
 Global PrevActiveWindows                   := []
-Global minWinArray                         := []
 Global allWinArray                         := []
 Global cycleCount                          := 1
 Global startHighlight                      := False
@@ -2618,6 +2617,7 @@ prevChromeTab()
 $Esc::
     StopRecursion := True
     SetTimer, EscTimer, Off
+
     escHwndID := FindTopMostWindow()
     WinGetTitle, escTitle, ahk_id %escHwndID%
 
@@ -2860,43 +2860,35 @@ Return
 
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 Altup:
-    global cycling, cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys
+    global cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys, CanceledWinSwap
 
     Critical, On
-    cycling        := False
-    hitTAB         := False
-    hitTilde       := False
 
-    WinGet, actWndID, ID, A
-    If (LclickSelected && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
-        If (startHighlight) {
+    If startHighlight && !CanceledWinSwap {
+        WinGet, actWndID, ID, A
+        If (LclickSelected && hitTAB && !hitTilde && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
             blockKeys := True
             GoSub, SortAllWins
             blockKeys := False
         }
-    }
-    Else {
-        If (GetKeyState("x","P") || actWndID == ValidWindows[1] || GroupedWindows.length() <= 1) {
-            ; canceled!
-            If (GetKeyState("x","P")) {
-                blockKeys := True
-                GoSub, ResetWins
-                blockKeys := False
-            }
-        } ; this condition is attempting to account for the user starting with alt+tab then switching to alt+`
-        Else If (startHighlight && (GroupedWindows.length() > 2)  && actWndID != ValidWindows[1]) {
+        Else If ((GroupedWindows.length() > 2)  && actWndID != ValidWindows[1]) {
             blockKeys := True
             GoSub, SortGroupedWins ; currently, GroupedWindows == ValidWindows for alt+tab but not for alt+`
             blockKeys := False
         }
     }
 
-    cycleCount     := 1
-    ValidWindows   := []
-    GroupedWindows := []
-    startHighlight := False
-    LclickSelected := False
-    lastActWinID   :=
+    hitTAB          := False
+    hitTilde        := False
+    cycleCount      := 1
+    ValidWindows    := []
+    GroupedWindows  := []
+    startHighlight  := False
+    LclickSelected  := False
+    CanceledWinSwap := False
+    lastActWinID    :=
+    StopRecursion   := False
+    Thread, NoTimers, False
     Critical, Off
     SetTimer, MouseTrack, On
     SetTimer, KeyTrack,   On
@@ -2955,6 +2947,13 @@ SortGroupedWins:
 Return
 
 ResetWins:
+    If MinimizedWindows.length() > 0 {
+        loop % MinimizedWindows.length()
+        {
+            minHwndID := MinimizedWindows[A_Index]
+            WinMinimize, ahk_id %minHwndID%
+        }
+    }
     If (ValidWindows.MaxIndex() >= 4)
         WinActivate, % "ahk_id " ValidWindows[4]
     If (ValidWindows.MaxIndex() >= 3)
@@ -2967,106 +2966,110 @@ Return
 
 $!Tab::
 $!+Tab::
-If !hitTAB {
-    Thread, NoTimers, True
-    StopRecursion   := True
+    If !hitTAB {
+        Thread, NoTimers, True
+        StopRecursion   := True
 
-    firstDraw       := True
-    hitTAB          := True
+        firstDraw       := True
+        hitTAB          := True
 
-    cycleCount := Cycle()
+        cycleCount := Cycle()
 
-    lastHwnd := GroupedWindows[cycleCount]
+        If !CanceledWinSwap {
+            If cycleCount > 2
+                startHighlight := True
 
-    If (cycleCount > 2) {
-        WinSet, Transparent, 255, ahk_id %black1Hwnd%
-        WinSet, Transparent, 255, ahk_id %black2Hwnd%
-        WinSet, Transparent, 255, ahk_id %black3Hwnd%
-        WinSet, Transparent, 255, ahk_id %black4Hwnd%
+            If !LclickSelected
+                lastActWinID := GroupedWindows[cycleCount]
+
+            If (cycleCount > 2) {
+                WinSet, Transparent, 255, ahk_id %black1Hwnd%
+                WinSet, Transparent, 255, ahk_id %black2Hwnd%
+                WinSet, Transparent, 255, ahk_id %black3Hwnd%
+                WinSet, Transparent, 255, ahk_id %black4Hwnd%
+            }
+
+            GoSub, Altup
+
+            ClearMasks(lastActWinID)
+            ClearBlackMonitor()
+        }
     }
-
-    GoSub, Altup
-
-    ClearMasks(lastHwnd)
-    ClearBlackMonitor()
-
-    StopRecursion := False
-    Thread, NoTimers, False
-}
-FixModifiers()
+    FixModifiers()
 Return
 
 !`::
-    Thread, NoTimers, True
-    StopRecursion  := True
+    If !hitTilde {
+        Thread, NoTimers, True
+        StopRecursion  := True
 
-    ActivateTopMostWindow()
+        tildeHwndID := FindTopMostWindow()
+        WinGet, activeProcessName, ProcessName, ahk_id %tildeHwndID%
+        WinGetClass, activeClassName, ahk_id %tildeHwndID%
 
-    DetectHiddenWindows, Off
-    WinGet, activeProcessName, ProcessName, A
-    WinGetClass, activeClassName, A
+        WinGet, allWindows, List
+        loop % allWindows
+        {
+            hwndID := allWindows%A_Index%
 
-    WinGet, allWindows, List
-    loop % allWindows
-    {
-        hwndID := allWindows%A_Index%
+            If (MonCount > 1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
+            }
+            Else {
+                currentMonHasActWin := True
+            }
 
-        If (MonCount > 1) {
-            currentMon := MWAGetMonitorMouseIsIn()
-            currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
-        }
-        Else {
-            currentMonHasActWin := True
-        }
-
-        If (currentMonHasActWin) {
-            If (IsAltTabWindow(hwndID)) {
-                WinGet, state, MinMax, ahk_id %hwndID%
-                If (state > -1) {
-                    ValidWindows.push(hwndID)
+            If (currentMonHasActWin) {
+                If (IsAltTabWindow(hwndID)) {
+                    WinGet, state, MinMax, ahk_id %hwndID%
+                    If (state > -1) {
+                        ValidWindows.push(hwndID)
+                    }
                 }
             }
         }
+
+        cycleCount := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
+
+        If !CanceledWinSwap {
+            If cycleCount > 2
+                startHighlight := True
+
+            If !LclickSelected
+                lastActWinID := GroupedWindows[cycleCount]
+
+            WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
+
+            If (cycleCount > 2) {
+                WinSet, Transparent, 255, ahk_id %black1Hwnd%
+                WinSet, Transparent, 255, ahk_id %black2Hwnd%
+                WinSet, Transparent, 255, ahk_id %black4Hwnd%
+                WinSet, Transparent, 255, ahk_id %black3Hwnd%
+            }
+
+            GoSub, Altup
+
+            ClearMasks(lastActWinID)
+
+            WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
+            WinActivate, ahk_id %lastActWinID%
+        }
     }
-
-    cycleCount := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
-
-    If !LclickSelected
-        lastActWinID := GroupedWindows[cycleCount]
-    Else
-        LclickSelected := False
-
-    WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
-
-    ; cycleCount is global here because above we return tempWinActID whereas cycle() returns the cycleCount itself
-    If (cycleCount > 2) {
-        WinSet, Transparent, 255, ahk_id %black1Hwnd%
-        WinSet, Transparent, 255, ahk_id %black2Hwnd%
-        WinSet, Transparent, 255, ahk_id %black4Hwnd%
-        WinSet, Transparent, 255, ahk_id %black3Hwnd%
-        GoSub, SortGroupedWins
-    }
-    ClearMasks()
-
-    WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
-    WinActivate, ahk_id %lastActWinID%
-
-    ValidWindows   := []
-    GroupedWindows := []
-
-    StopRecursion := False
-    Thread, NoTimers, False
+    FixModifiers()
 Return
 
-#If hitTAB
+#If hitTAB || hitTilde
 $!x::
     tooltip, Canceled Operation!
+    CanceledWinSwap := True
     Gui, GUI4Boarder: Hide
     Gui, WindowTitle: Destroy
     GoSub, ResetWins
     ClearMasks()
     sleep, 1000
     tooltip,
+    GoSub, Altup
     FixModifiers()
 Return
 #If
@@ -3078,8 +3081,6 @@ $!Lbutton::
         {
             KeyWait, Lbutton, D T0.1
             If (!ErrorLevel) {
-                Gui, WindowTitle: Destroy
-
                 MouseGetPos, , , _winIdD,
                 WinActivate, ahk_id %_winIdD%
                 WinGetTitle, actTitle, ahk_id %_winIdD%
@@ -3097,6 +3098,7 @@ $!Lbutton::
                 WinSet, Transparent, 255, ahk_id %black3Hwnd%
                 WinSet, Transparent, 255, ahk_id %black4Hwnd%
 
+                Gui, WindowTitle: Destroy
                 GoSub, Altup
 
                 ClearMasks()
@@ -3326,14 +3328,12 @@ Return
 
 Cycle()
 {
-    global cycling, ValidWindows, GroupedWindows, MonCount, startHighlight, LclickSelected
+    global ValidWindows, GroupedWindows, MonCount, LclickSelected
 
     prev_exe   :=
     prev_cl    :=
     cycleCount := 1
 
-    If !cycling
-    {
         DetectHiddenWindows, Off
         failedSwitch := False
         why := ""
@@ -3400,7 +3400,6 @@ Cycle()
             }
         }
         Critical, Off
-    }
 
     If (GroupedWindows.length() == 1) {
         tooltip, % "Only " GroupedWindows.length() " Window to Show..."
@@ -3410,49 +3409,49 @@ Cycle()
     }
 
     KeyWait, Tab, U
-    cycling := True
 
-    If cycling {
-        loop
+    loop
+    {
+        If LclickSelected
+            break
+
+        If (GroupedWindows.length() >= 2)
         {
-            If (GroupedWindows.length() >= 2 && cycling)
+            KeyWait, Tab, D T0.1
+            If !ErrorLevel
             {
-                KeyWait, Tab, D T0.1
-                If !ErrorLevel
-                {
-                    If !GetKeyState("LShift","P") {
-                        If (cycleCount == GroupedWindows.MaxIndex())
-                            cycleCount := 1
-                        Else
-                            cycleCount += 1
-                    }
-                    Else If GetKeyState("LShift","P") {
-                        If (cycleCount == 1)
-                            cycleCount := GroupedWindows.MaxIndex()
-                        Else
-                            cycleCount -= 1
-                    }
-
-                    ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
-                    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
-                    WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
-                    gwHwnd := GroupedWindows[cycleCount]
-                    DrawMasks(gwHwnd, False)
-                    WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
-                    WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
-
-                    DrawWindowTitlePopup(tits, pp)
-                    KeyWait, Tab, U
-
-                    If (cycleCount > 2)
-                        startHighlight := True
+                If !GetKeyState("LShift","P") {
+                    If (cycleCount == GroupedWindows.MaxIndex())
+                        cycleCount := 1
+                    Else
+                        cycleCount += 1
                 }
+                Else If GetKeyState("LShift","P") {
+                    If (cycleCount == 1)
+                        cycleCount := GroupedWindows.MaxIndex()
+                    Else
+                        cycleCount -= 1
+                }
+
+                ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
+                WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+                WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
+                gwHwnd := GroupedWindows[cycleCount]
+                DrawMasks(gwHwnd, False)
+                WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
+                WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
+
+                DrawWindowTitlePopup(tits, pp)
+                KeyWait, Tab, U
             }
-        } until (!GetKeyState("LAlt", "P") || GetKeyState("q","P"))
-        If !LclickSelected {
-            GoSub, FadeOutWindowTitle
         }
     }
+    until (!GetKeyState("LAlt", "P") || GetKeyState("q","P"))
+
+    If !LclickSelected {
+        GoSub, FadeOutWindowTitle
+    }
+
     Return cycleCount
 }
 
@@ -3584,10 +3583,9 @@ Return
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    global MonCount, Highlighter, hitTAB, hitTilde, GroupedWindows, LclickSelected
+    global MonCount, hitTAB, hitTilde, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight
 
     windowsToMinimize := []
-    minimizedWindows  := []
     hitTAB            := False
     hitTilde          := True
 
@@ -3614,13 +3612,13 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             GroupedWindows.push(hwndID)
         }
         Else If (mmState == -1) {
-            minimizedWindows.push(hwndID)
+            MinimizedWindows.push(hwndID)
         }
     }
     ; add minimized windows to the end of the GroupedWindows array so they can be selected too but afterwards
-    loop % minimizedWindows.length()
+    loop % MinimizedWindows.length()
     {
-        minHwndID := minimizedWindows[A_Index]
+        minHwndID := MinimizedWindows[A_Index]
         GroupedWindows.push(minHwndID)
     }
     Critical, Off
@@ -3679,31 +3677,32 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             DrawWindowTitlePopup(actTitle, pp, True)
 
             KeyWait, ``, U
-            If !ErrorLevel
+
+            cycleCount++
+            If (cycleCount > numWindows) {
+                cycleCount := 1
+            }
+            loop
             {
-                cycleCount++
-                If (cycleCount > numWindows)
-                {
-                    cycleCount := 1
-                }
-                loop {
-                    gwHwndId := GroupedWindows[cycleCount]
-                    If !IsWindowOnMonNum(gwHwndId, currentMon) {
-                        cycleCount++
-                        If (cycleCount > numWindows)
-                        {
-                            cycleCount := 1
-                        }
-                        gwHwndId := GroupedWindows[cycleCount]
+                gwHwndId := GroupedWindows[cycleCount]
+                If !IsWindowOnMonNum(gwHwndId, currentMon) {
+                    cycleCount++
+                    If (cycleCount > numWindows)
+                    {
+                        cycleCount := 1
                     }
-                    Else
-                        break
+                    gwHwndId := GroupedWindows[cycleCount]
                 }
+                Else
+                    break
             }
         }
-    } until (!GetKeyState("LAlt", "P"))
+    }
+    until (!GetKeyState("LAlt", "P"))
 
-    GoSub, FadeOutWindowTitle
+    If !LclickSelected {
+        GoSub, FadeOutWindowTitle
+    }
 
     loop % windowsToMinimize.length()
     {
