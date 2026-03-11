@@ -2907,6 +2907,10 @@ Altup:
             blockKeys := False
         }
     }
+Return
+
+AltupCleanup:
+    global cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys, CanceledWinSwap
 
     Critical, On
     hitTAB          := False
@@ -2914,6 +2918,7 @@ Altup:
     cycleCount      := 1
     ValidWindows    := []
     GroupedWindows  := []
+    lastActWinID    :=
     startHighlight  := False
     LclickSelected  := False
     CanceledWinSwap := False
@@ -2923,7 +2928,6 @@ Altup:
     SetTimer, MouseTrack, On
     SetTimer, KeyTrack,   On
 Return
-
 ;============================================================================================================================
 SortAllWins:
     Critical, On
@@ -3003,9 +3007,6 @@ $!+Tab::
         firstDraw       := True
         hitTAB          := True
 
-        If (lastActWinID)
-            WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
-
         cycleCount := Cycle()
 
         If !LclickSelected
@@ -3027,7 +3028,9 @@ $!+Tab::
 
             ClearBlackMonitor()
             ClearMasks_not(lastActWinID)
-            tooltip, cleared!
+
+            GoSub, AltupCleanup
+
             FixModifiers()
         }
     }
@@ -3038,10 +3041,13 @@ Return
         Thread, NoTimers, True
         StopRecursion  := True
 
+        firstDraw       := True
+        hitTilde        := True
+        hitTab          := False
+
         tildeHwndID := FindTopMostWindow()
         WinGet, activeProcessName, ProcessName, ahk_id %tildeHwndID%
         WinGetClass, activeClassName, ahk_id %tildeHwndID%
-        tooltip, proc is %activeProcessName%
         WinGet, allWindows, List
         loop % allWindows
         {
@@ -3086,6 +3092,9 @@ Return
 
             ClearBlackMonitor()
             ClearMasks_not(lastActWinID)
+
+            GoSub, AltupCleanup
+
             FixModifiers()
         }
     }
@@ -3627,11 +3636,9 @@ Return
 
 ; Switch "App" open windows based on the same process and class
 HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    global MonCount, hitTAB, hitTilde, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight
+    global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight
 
     windowsToMinimize := []
-    hitTAB            := False
-    hitTilde          := True
 
     UpdateValidWindows()
 
