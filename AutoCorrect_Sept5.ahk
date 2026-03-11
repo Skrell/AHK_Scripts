@@ -82,6 +82,7 @@ Global currentPath                         := ""
 Global prevPath                            := ""
 Global _winCtrlD                           := ""
 Global MbuttonIsEnter                      := False
+Global lastActWinID                        :=
 Global WindowTitleID                       :=
 Global keys                                := "abcdefghijklmnopqrstuvwxyz"
 Global numbers                             := "0123456789"
@@ -2611,6 +2612,26 @@ prevChromeTab()
     Return
 #If
 
+GetVisibleHwndByPartialClass(classPart) {
+    WinGet, idList, List
+    Loop, %idList%
+    {
+        hWnd := idList%A_Index%
+
+        WinGet, isMin, MinMax, ahk_id %hWnd%
+        if (isMin = -1)  ; -1 = minimized (skip)
+            continue
+
+        WinGet, styleNum, Style, ahk_id %hWnd%
+        if !(styleNum & 0x10000000) ; WS_VISIBLE
+            continue
+
+        WinGetClass, winClass, ahk_id %hWnd%
+        if InStr(winClass, classPart)
+            return hWnd
+    }
+    return
+}
 #If !SearchingWindows && !hitTAB
 ; Defining Esc & x:: turns Esc into a prefix key. While a prefix is held, AHK delays (or suppresses) the Esc down hotkey until it
 ; knows whether a combo (with x) is coming. That’s why your 2nd press + hold never reaches your $Esc routine, so GoSub, DrawRect never runs.
@@ -2631,7 +2652,7 @@ $Esc::
             WinGet, pp, ProcessPath , ahk_id %escHwndID%
             Hotkey, x, DoNothing, On
             ; GoSub, DrawRect
-            DrawMasks(escHwndID)
+            DrawMasks_aot(escHwndID)
             DrawWindowTitlePopup("Close?", pp, False, escHwndID)
 
             loop {
@@ -2642,7 +2663,7 @@ $Esc::
                 If GetKeyState("x","P") {
                     Tooltip, Canceled!
                     ; ClearRect()
-                    ClearMasks(, Opacity)
+                    ClearMasks_not(, Opacity)
                     GoSub, FadeOutWindowTitle
                     CancelClose := True
                     sleep, 1500
@@ -2656,27 +2677,33 @@ $Esc::
 
                 loop 10 {
                     ; tooltip, Waiting for `"%escTitle%`" to close... ; "
-                    If !WinExist("ahk_id " . escHwndID) {
+                    If (!WinExist("ahk_id " . escHwndID)) {
                         ; ClearRect(escHwndID)
-                        ClearMasks(escHwndID, Opacity)
+                        ClearMasks_not(escHwndID, Opacity)
                         GoSub, FadeOutWindowTitle
                         ActivateTopMostWindow()
                         break
                     }
-                    sleep, 100
+                    sleep, 125
 
-                    WinGetClass, actClass, A
+                    testhwndID := GetVisibleHwndByPartialClass("Dialog")
+                    If ((WinExist("ahk_class #32770") || WinExist("ahk_class NUIDialog") || testhwndID) && !executedOnce) {
+                        If (testhwndID)
+                            WinGet, dialog_hwndID, ID, ahk_id %testhwndID%
+                        Else If (WinExist("ahk_class NUIDialog"))
+                            WinGet, dialog_hwndID, ID, ahk_class NUIDialog
+                        Else
+                            WinGet, dialog_hwndID, ID, ahk_class #32770
 
-                    If ((WinActive("ahk_class #32770") || InStr(actClass, "dialog", False)) && !executedOnce) {
-                        WinGet, dialog_hwndID, ID, A
                         executedOnce := True
-                        WinSet, AlwaysOnTop, On, ahk_class #32770
-                        SendCtrlAdd(escHwndID)
+                        WinSet, AlwaysOnTop, On, ahk_id %dialog_hwndID%
+                        ; tooltip, waiting...
                         WinWaitClose, ahk_id %dialog_hwndID%
                         break
                     }
                 }
-                If !executedOnce && WinExist("ahk_id " . escHwndID) {
+                sleep, 125
+                If (WinExist("ahk_id " . escHwndID) && !executedOnce) {
                     WinGet, kill_pid, PID, ahk_id %escHwndID%
                     Process, Close, %kill_pid%
                 }
@@ -2685,8 +2712,7 @@ $Esc::
                     WinKill , ahk_id %escHwndID%
                     loop 50 {
                         If !WinExist("ahk_id " . escHwndID) {
-                            ; ClearRect(escHwndID)
-                            ClearMasks(escHwndID, Opacity)
+                            ClearMasks_not(escHwndID, Opacity)
                             GoSub, FadeOutWindowTitle
                             ActivateTopMostWindow()
                             break
@@ -2694,6 +2720,12 @@ $Esc::
                         sleep 125
                         WinKill , ahk_id %escHwndID%
                     }
+                }
+                Else {
+                    ; tooltip, tried to clear
+                    ClearMasks_not(escHwndID, Opacity)
+                    GoSub, FadeOutWindowTitle
+                    ActivateTopMostWindow()
                 }
             }
             Else
@@ -2975,12 +3007,13 @@ $!+Tab::
 
         cycleCount := Cycle()
 
+        If !LclickSelected
+            lastActWinID := GroupedWindows[cycleCount]
+
         If !CanceledWinSwap {
             If cycleCount > 2
                 startHighlight := True
 
-            If !LclickSelected
-                lastActWinID := GroupedWindows[cycleCount]
 
             If (cycleCount > 2) {
                 WinSet, Transparent, 255, ahk_id %black1Hwnd%
@@ -2991,11 +3024,12 @@ $!+Tab::
 
             GoSub, Altup
 
-            ClearMasks(lastActWinID)
             ClearBlackMonitor()
+            ClearMasks_not(lastActWinID)
+
+            FixModifiers()
         }
     }
-    FixModifiers()
 Return
 
 !`::
@@ -3032,12 +3066,13 @@ Return
 
         cycleCount := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
 
+        If !LclickSelected
+            lastActWinID := GroupedWindows[cycleCount]
+
         If !CanceledWinSwap {
             If cycleCount > 2
                 startHighlight := True
 
-            If !LclickSelected
-                lastActWinID := GroupedWindows[cycleCount]
 
             WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
 
@@ -3050,13 +3085,15 @@ Return
 
             GoSub, Altup
 
-            ClearMasks(lastActWinID)
+            ClearBlackMonitor()
+            ClearMasks_not(lastActWinID)
 
             WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
             WinActivate, ahk_id %lastActWinID%
+
+            FixModifiers()
         }
     }
-    FixModifiers()
 Return
 
 #If hitTAB || hitTilde
@@ -3065,8 +3102,13 @@ $!x::
     CanceledWinSwap := True
     Gui, GUI4Boarder: Hide
     Gui, WindowTitle: Destroy
+
+    lastActWinID := GroupedWindows[cycleCount]
+    WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
+
     GoSub, ResetWins
-    ClearMasks()
+    ClearBlackMonitor()
+    ClearMasks_not(lastActWinID)
     sleep, 1000
     tooltip,
     GoSub, Altup
@@ -3088,7 +3130,7 @@ $!Lbutton::
 
                 lastActWinID := _winIdD
 
-                DrawMasks(_winIdD, False)
+                DrawMasks_aot(_winIdD, False)
                 DrawWindowTitlePopup(actTitle, pp)
             }
 
@@ -3101,8 +3143,8 @@ $!Lbutton::
                 Gui, WindowTitle: Destroy
                 GoSub, Altup
 
-                ClearMasks()
                 ClearBlackMonitor()
+                ClearMasks_not()
                 Return
             }
         }
@@ -3282,9 +3324,11 @@ RButton & WheelUp::
     }
     Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
         Send, ^+{PgUp}
+        sleep, 100
     }
     Else {
         Send, {PgUp}
+        sleep, 100
     }
 Return
 
@@ -3302,9 +3346,11 @@ RButton & WheelDown::
     }
     Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
         Send, ^+{PgDn}
+        sleep, 100
     }
     Else {
         Send, {PgDn}
+        sleep, 100
     }
 Return
 
@@ -3328,7 +3374,7 @@ Return
 
 Cycle()
 {
-    global ValidWindows, GroupedWindows, MonCount, LclickSelected
+    global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap
 
     prev_exe   :=
     prev_cl    :=
@@ -3371,7 +3417,7 @@ Cycle()
                             }
                             Else {
                                 Critical, Off
-                                DrawMasks(hwndID)
+                                DrawMasks_aot()
                                 If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
                                     GroupedWindows := []
                                     ValidWindows   := []
@@ -3384,7 +3430,7 @@ Cycle()
                             WinActivate, % "ahk_id " hwndID
                             cycleCount := 3
                             Critical, Off
-                            DrawMasks(hwndID)
+                            DrawMasks_aot()
                         }
                         If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
                             GroupedWindows := []
@@ -3415,6 +3461,9 @@ Cycle()
         If LclickSelected
             break
 
+        If CanceledWinSwap
+            break
+
         If (GroupedWindows.length() >= 2)
         {
             KeyWait, Tab, D T0.1
@@ -3434,10 +3483,10 @@ Cycle()
                 }
 
                 ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
-                WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+                WinActivate,   % "ahk_id " GroupedWindows[cycleCount]
                 WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                 gwHwnd := GroupedWindows[cycleCount]
-                DrawMasks(gwHwnd, False)
+                DrawMasks_aot(gwHwnd,False)
                 WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                 WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
@@ -3645,7 +3694,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
 
     gwHwndId := GroupedWindows[cycleCount]
-    DrawMasks(gwHwndId)
+    DrawMasks_aot()
     DrawWindowTitlePopup(actTitle, pp, True)
 
     KeyWait, ``, U T1
@@ -3673,7 +3722,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             WinGetTitle, actTitle, ahk_id %gwHwndId%
             WinGet, pp, ProcessPath , ahk_id %gwHwndId%
 
-            DrawMasks(gwHwndId, False)
+            DrawMasks_aot(gwHwndId, False)
             DrawWindowTitlePopup(actTitle, pp, True)
 
             KeyWait, ``, U
@@ -3817,20 +3866,18 @@ DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False, on
     DetectHiddenWindows, Off
 }
 
-ClearMasks(appClosingHwnd := "", initTransVal := 255) {
+ClearMasks_not(targetHwnd := "", initTransVal := 255) {
     global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
 
-    If !appClosingHwnd
+    If (!targetHwnd || !WinExist("ahk_id " . targetHwnd))
         WinGet, hA, ID, A
     Else
-        hA := appClosingHwnd
+        hA := targetHwnd
 
     iterations := 10
     transVal   := initTransVal
     opacityInterval := Floor(initTransVal / iterations)
 
-    WinSet, AlwaysOnTop, On, ahk_id %hA%
-    ; fade-out loop (non-critical)
     Loop, %iterations%
     {
         transVal -= opacityInterval
@@ -3855,7 +3902,8 @@ ClearMasks(appClosingHwnd := "", initTransVal := 255) {
         Gui, %A_Index%: Hide
     Critical, Off
 
-    WinSet, AlwaysOnTop, Off, ahk_id %hA%
+    If (targetHwnd != "" && WinExist("ahk_id " . targetHwnd))
+        WinSet, AlwaysOnTop, Off, ahk_id %targetHwnd%
 
     Return
 }
@@ -3865,7 +3913,7 @@ ClearMasks(appClosingHwnd := "", initTransVal := 255) {
         ; No Sleep inside Critical.
         ; No other thread can sneak in and change these GUIs mid-update.
     ; The visual fade (the transparent WinSet calls) happens after the bars are in their final positions and already visible. So even If a timer/hotkey interrupts, it doesn’t cause a half-drawn layout—only an intermediate opacity.
-DrawMasks(targetHwnd := "", firstDraw := True) {
+DrawMasks_aot(targetHwnd := "", firstDraw := True) {
     global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
 
     Margin        := 0  ; expands the hole around the active window by this many pixels
@@ -3875,7 +3923,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         opacityInterval := Floor(Opacity / iterations)
         transVal        := Opacity
         fadeVal         := 0
-        DrawBlackMonitor(targetHwnd, False, 0)
+        DrawBlackMonitor_aot(targetHwnd, False, 0)
 
         Critical, On
         Loop, %iterations%
@@ -3895,7 +3943,7 @@ DrawMasks(targetHwnd := "", firstDraw := True) {
         Critical, Off
     }
     ; Resolve target window
-    If !targetHwnd
+    If (!targetHwnd || !WinExist("ahk_id " . targetHwnd))
         WinGet, hA, ID, A
     Else
         hA := targetHwnd
@@ -4010,7 +4058,7 @@ ClearBlackMonitor(initialOpacity := -1, iterations := 0) {
     Return
 }
 
-DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIndex := 5, useWorkArea := true) {
+DrawBlackMonitor_aot(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIndex := 5, useWorkArea := true) {
     global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
     static prevTargetHwnd
 
@@ -4034,14 +4082,18 @@ DrawBlackMonitor(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIn
     w := monRight - monLeft
     h := monBottom - monTop
 
-    If (prevTargetHwnd != "")
+    If (prevTargetHwnd != "" && WinExist("ahk_id " . prevTargetHwnd))
         WinSet, AlwaysOnTop, Off, ahk_id %prevTargetHwnd%
-    If targetHwnd
+    Else
+        prevTargetHwnd := ""
+
+
+    If (targetHwnd && WinExist("ahk_id " . targetHwnd))
         WinSet, AlwaysOnTop,  On, ahk_id %targetHwnd%
 
     DrawBlackBar(guiIndex, x, y, w, h,,,True)
 
-    If targetHwnd
+    If (targetHwnd && WinExist("ahk_id " . targetHwnd))
         WinSet, AlwaysOnTop,  On, ahk_id %targetHwnd%
 
     If (firstDraw) {
@@ -5802,7 +5854,7 @@ ActivateWindow:
     Else
         WinGet, hwndOfTitle, ID, %fulltitle%
 
-    DrawBlackMonitor(hwndOfTitle)
+    DrawBlackMonitor_aot(hwndOfTitle)
 
     WinGet, actWinState, MinMax, %fulltitle%
     If (actWinState == -1)
