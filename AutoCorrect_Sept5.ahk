@@ -2894,8 +2894,6 @@ Return
 Altup:
     global cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys, CanceledWinSwap
 
-    Critical, On
-
     If startHighlight && !CanceledWinSwap {
         WinGet, actWndID, ID, A
         If (LclickSelected && hitTAB && !hitTilde && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
@@ -2910,6 +2908,7 @@ Altup:
         }
     }
 
+    Critical, On
     hitTAB          := False
     hitTilde        := False
     cycleCount      := 1
@@ -2918,7 +2917,6 @@ Altup:
     startHighlight  := False
     LclickSelected  := False
     CanceledWinSwap := False
-    lastActWinID    :=
     StopRecursion   := False
     Thread, NoTimers, False
     Critical, Off
@@ -3005,6 +3003,9 @@ $!+Tab::
         firstDraw       := True
         hitTAB          := True
 
+        If (lastActWinID)
+            WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
+
         cycleCount := Cycle()
 
         If !LclickSelected
@@ -3026,7 +3027,7 @@ $!+Tab::
 
             ClearBlackMonitor()
             ClearMasks_not(lastActWinID)
-
+            tooltip, cleared!
             FixModifiers()
         }
     }
@@ -3040,7 +3041,7 @@ Return
         tildeHwndID := FindTopMostWindow()
         WinGet, activeProcessName, ProcessName, ahk_id %tildeHwndID%
         WinGetClass, activeClassName, ahk_id %tildeHwndID%
-
+        tooltip, proc is %activeProcessName%
         WinGet, allWindows, List
         loop % allWindows
         {
@@ -3065,16 +3066,14 @@ Return
         }
 
         cycleCount := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
-
         If !LclickSelected
             lastActWinID := GroupedWindows[cycleCount]
 
+        WinGetTitle, testID, ahk_id %lastActWinID%
+        ; tooltip, title is %testID%
         If !CanceledWinSwap {
             If cycleCount > 2
                 startHighlight := True
-
-
-            WinSet, AlwaysOnTop, On, ahk_id %lastActWinID%
 
             If (cycleCount > 2) {
                 WinSet, Transparent, 255, ahk_id %black1Hwnd%
@@ -3087,10 +3086,6 @@ Return
 
             ClearBlackMonitor()
             ClearMasks_not(lastActWinID)
-
-            WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
-            WinActivate, ahk_id %lastActWinID%
-
             FixModifiers()
         }
     }
@@ -3710,6 +3705,9 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         If LclickSelected
             break
 
+        If CanceledWinSwap
+            break
+
         KeyWait, ``, D T0.1
         If !ErrorLevel
         {
@@ -3902,8 +3900,11 @@ ClearMasks_not(targetHwnd := "", initTransVal := 255) {
         Gui, %A_Index%: Hide
     Critical, Off
 
-    If (targetHwnd != "" && WinExist("ahk_id " . targetHwnd))
+    If (targetHwnd != "" && WinExist("ahk_id " . targetHwnd)) {
         WinSet, AlwaysOnTop, Off, ahk_id %targetHwnd%
+        WinGetTitle, tit, ahk_id %targetHwnd%
+        tooltip, not on top %tit%
+    }
 
     Return
 }
