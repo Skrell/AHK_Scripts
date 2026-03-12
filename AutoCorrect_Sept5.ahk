@@ -265,6 +265,23 @@ Gui, GUI4Boarder: +HwndHighlighter
 Gui, GUI4Boarder: +AlwaysOnTop +Toolwindow -Caption +Owner +Lastfound
 Gui, GUI4Boarder: Color, %border_color%
 
+; --- Auto-execute example (create once) ---
+global overlayFadeToken := 0
+global overlayAlphaCurrent := 0
+global overlayHwnd := 0
+global overlayKeyColor := "FF00FF"      ; RGB hex string
+global overlayHoleCtrl := "OverlayHole"
+global overlayIsReady := False
+
+Gui, Overlay:New, +AlwaysOnTop -Caption +ToolWindow +E0x20 +HwndoverlayHwnd
+Gui, Overlay:Color, 000000
+
+; Solid filled rectangle in key color
+Gui, Overlay:Add, Text, x0 y0 w1 h1 v%overlayHoleCtrl% Background%overlayKeyColor%
+
+Overlay_Hide()
+overlayIsReady := True
+
 WinGet, allwindows, List
 loop % allwindows
 {
@@ -1290,6 +1307,10 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
         return False
     }
 }
+
+; Hotkeys for demo
+F9::Overlay_ShowHole(500, 300, 400, 300, Opacity)  ; show again
+F10::Overlay_Hide()                             ; hide
 
 $~^Enter::
     DetectHiddenWindows, Off
@@ -2913,16 +2934,17 @@ AltupCleanup:
     global cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys, CanceledWinSwap
 
     Critical, On
-    hitTAB          := False
-    hitTilde        := False
-    cycleCount      := 1
-    ValidWindows    := []
-    GroupedWindows  := []
-    lastActWinID    :=
-    startHighlight  := False
-    LclickSelected  := False
-    CanceledWinSwap := False
-    StopRecursion   := False
+    hitTAB           := False
+    hitTilde         := False
+    cycleCount       := 1
+    ValidWindows     := []
+    GroupedWindows   := []
+    MinimizedWindows := []
+    lastActWinID     :=
+    startHighlight   := False
+    LclickSelected   := False
+    CanceledWinSwap  := False
+    StopRecursion    := False
     Thread, NoTimers, False
     Critical, Off
     SetTimer, MouseTrack, On
@@ -3018,16 +3040,18 @@ $!+Tab::
 
 
             If (cycleCount > 2) {
-                WinSet, Transparent, 255, ahk_id %black1Hwnd%
-                WinSet, Transparent, 255, ahk_id %black2Hwnd%
-                WinSet, Transparent, 255, ahk_id %black3Hwnd%
-                WinSet, Transparent, 255, ahk_id %black4Hwnd%
+                ; WinSet, Transparent, 255, ahk_id %black1Hwnd%
+                ; WinSet, Transparent, 255, ahk_id %black2Hwnd%
+                ; WinSet, Transparent, 255, ahk_id %black3Hwnd%
+                ; WinSet, Transparent, 255, ahk_id %black4Hwnd%
+                Overlay_FadeTo(overlayHwnd, 255, 80)
             }
 
             GoSub, Altup
 
-            ClearBlackMonitor()
-            ClearMasks_not(lastActWinID)
+            ; ClearBlackMonitor()
+            ; ClearMasks_not(lastActWinID)
+            Overlay_Hide(180)
 
             GoSub, AltupCleanup
 
@@ -3378,7 +3402,7 @@ Return
 
 Cycle()
 {
-    global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap
+    global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, Opacity
 
     prev_exe   :=
     prev_cl    :=
@@ -3394,6 +3418,7 @@ Cycle()
         {
             Critical On
             hwndID := allWindows%A_Index%
+            WinGetPosEx(hwndID, wx, wy, ww, wh, null, null)
 
             If (MonCount > 1) {
                 currentMon := MWAGetMonitorMouseIsIn()
@@ -3421,7 +3446,8 @@ Cycle()
                             }
                             Else {
                                 Critical, Off
-                                DrawMasks_aot()
+                                ; DrawMasks_aot()
+                                Overlay_ShowHole(wx, wy, ww, wh, Opacity)
                                 If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
                                     GroupedWindows := []
                                     ValidWindows   := []
@@ -3434,7 +3460,8 @@ Cycle()
                             WinActivate, % "ahk_id " hwndID
                             cycleCount := 3
                             Critical, Off
-                            DrawMasks_aot()
+                            ; DrawMasks_aot()
+                            Overlay_ShowHole(wx, wy, ww, wh, Opacity)
                         }
                         If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
                             GroupedWindows := []
@@ -3486,11 +3513,12 @@ Cycle()
                         cycleCount -= 1
                 }
 
-                ; WinSet, AlwaysOnTop, On, ahk_class tooltips_class32
-                WinActivate,   % "ahk_id " GroupedWindows[cycleCount]
-                WinWaitActive, % "ahk_id " GroupedWindows[cycleCount], , 2
                 gwHwnd := GroupedWindows[cycleCount]
-                DrawMasks_aot(gwHwnd,False)
+                WinActivate,   ahk_id %gwHwnd%
+                WinWaitActive, ahk_id %gwHwnd%, , 2
+                WinGetPosEx(gwHwnd, wx, wy, ww, wh, null, null)
+                ; DrawMasks_aot(gwHwnd,False)
+                Overlay_MoveHole(wx, wy, ww, wh)
                 WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                 WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
 
@@ -3667,15 +3695,20 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         }
     }
     ; add minimized windows to the end of the GroupedWindows array so they can be selected too but afterwards
-    loop % MinimizedWindows.length()
-    {
-        minHwndID := MinimizedWindows[A_Index]
-        GroupedWindows.push(minHwndID)
+    for idx, minHwndID in MinimizedWindows {
+        found := False
+        for jdx, grpHwndID in GroupedWindows {
+            if (grpHwndID = minHwndID) {
+                found := True
+                break
+            }
+        }
+        if (!found)
+            GroupedWindows.push(minHwndID)
     }
     Critical, Off
 
     numWindows := GroupedWindows.length()
-
     If (numWindows <= 1) {
         loop 100 {
             Tooltip, Only %numWindows% Window(s) found!
@@ -3823,6 +3856,244 @@ Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget) {
     alphaOther := Round(opacityOther * 255.0)
 
     return ClampAlpha(alphaOther)
+}
+
+; ------------------------------------------------------------
+; Shows an existing (already-created) Overlay GUI and updates
+; the hole rectangle + transparency without recreating the GUI.
+;
+; Notes:
+; - Assumes the GUI and the Progress control already exist.
+; - Changing clickThrough is supported via ExStyle toggling.
+; - If you need to change overlayColor dynamically, we set it here.
+; ------------------------------------------------------------
+Overlay_SetAlpha(overlayHwnd, alphaVal)
+{
+    global overlayAlphaCurrent
+
+    ; Ensures WS_EX_LAYERED is present (required for alpha)
+    WinSet, ExStyle, +0x80000, ahk_id %overlayHwnd%  ; WS_EX_LAYERED
+
+    ; LWA_ALPHA = 0x2
+    DllCall("user32\SetLayeredWindowAttributes"
+        , "ptr", overlayHwnd
+        , "uint", 0
+        , "uchar", alphaVal
+        , "uint", 0x2)
+
+    overlayAlphaCurrent := alphaVal
+}
+
+Overlay_CancelFade()
+{
+    global overlayFadeToken
+    overlayFadeToken++
+    return overlayFadeToken
+}
+
+Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 180, alphaStart := "")
+{
+    global overlayFadeToken, overlayAlphaCurrent
+
+    localFadeToken := Overlay_CancelFade()
+
+    if (alphaStart = "")
+        alphaStart := overlayAlphaCurrent
+
+    startTick := A_TickCount
+
+    ; Guard: avoid divide-by-zero and negative durations
+    if (fadeMs < 1)
+        fadeMs := 1
+
+    loop
+    {
+        elapsed := A_TickCount - startTick
+        if (elapsed >= fadeMs) {
+            Overlay_SetAlpha(overlayHwnd, alphaTarget)
+            break
+        }
+
+        progress := elapsed / fadeMs
+        ; Linear interpolation from alphaStart -> alphaTarget
+        alphaNow := Floor(alphaStart + (alphaTarget - alphaStart) * progress)
+
+        if (alphaNow < 0)
+            alphaNow := 0
+        else if (alphaNow > 255)
+            alphaNow := 255
+
+        Overlay_SetAlpha(overlayHwnd, alphaNow)
+
+        ; If a newer fade started, stop immediately
+        loop 10 {
+            if (localFadeToken != overlayFadeToken)
+                return
+            Sleep, 1
+        }
+    }
+}
+
+Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH
+                , overlayAlpha := 180
+                , clickThrough := True
+                , fadeMs := 180)
+{
+    global overlayHwnd, overlayIsReady, overlayAlphaCurrent
+
+    if (!overlayIsReady || !overlayHwnd)
+        return 0
+
+    ; Cancel any in-progress fade immediately
+    Overlay_CancelFade()
+
+    ; Click-through toggle (WS_EX_TRANSPARENT = 0x20)
+    if (clickThrough)
+        WinSet, ExStyle, +0x20, ahk_id %overlayHwnd%
+    else
+        WinSet, ExStyle, -0x20, ahk_id %overlayHwnd%
+
+    ; Show fullscreen without activating
+    Gui, Overlay:Show, % "x0 y0 w" A_ScreenWidth " h" A_ScreenHeight " NA"
+
+    ; If currently hidden/transparent, ensure we start from 0
+    if (overlayAlphaCurrent < 1)
+        Overlay_SetAlpha(overlayHwnd, 0)
+
+    ; Apply donut region (screen minus hole)
+    Overlay_SetHoleRegion(overlayHwnd, holePosX, holePosY, holeSizeW, holeSizeH)
+
+    ; Force repaint
+    WinSet, Redraw,, ahk_id %overlayHwnd%
+
+    ; Fade from current alpha to target alpha
+    Overlay_FadeTo(overlayHwnd, overlayAlpha, fadeMs, overlayAlphaCurrent)
+
+    return overlayHwnd
+}
+
+Overlay_SetOpacity(alphaVal, fadeMs := 0)
+{
+    global overlayHwnd, overlayIsReady, overlayAlphaCurrent
+
+    if (!overlayIsReady || !overlayHwnd)
+        return 0
+
+    if (alphaVal < 0)
+        alphaVal := 0
+    else if (alphaVal > 255)
+        alphaVal := 255
+
+    ; Cancel any in-progress fade (reuses your existing fade-cancel logic)
+    Overlay_CancelFade()
+
+    if (fadeMs > 0) {
+        ; Fade from current alpha to the requested alpha
+        Overlay_FadeTo(overlayHwnd, alphaVal, fadeMs, overlayAlphaCurrent)
+    } else {
+        ; Set immediately
+        Overlay_SetAlpha(overlayHwnd, alphaVal)
+    }
+
+    return 1
+}
+
+Overlay_SetHoleRegion(overlayHwnd, holeX, holeY, holeW, holeH)
+{
+    ; Creates region = full screen
+    regFull := DllCall("gdi32\CreateRectRgn"
+        , "int", 0
+        , "int", 0
+        , "int", A_ScreenWidth
+        , "int", A_ScreenHeight
+        , "ptr")
+
+    ; Creates region = hole rectangle
+    regHole := DllCall("gdi32\CreateRectRgn"
+        , "int", holeX
+        , "int", holeY
+        , "int", holeX + holeW
+        , "int", holeY + holeH
+        , "ptr")
+
+    ; Subtract hole from full: RGN_DIFF = 4
+    DllCall("gdi32\CombineRgn"
+        , "ptr", regFull
+        , "ptr", regFull
+        , "ptr", regHole
+        , "int", 4)
+
+    ; Apply region to window (system owns regFull after this call)
+    DllCall("user32\SetWindowRgn"
+        , "ptr", overlayHwnd
+        , "ptr", regFull
+        , "int", True)
+
+    ; We must delete regHole; regFull is now owned by the window
+    DllCall("gdi32\DeleteObject", "ptr", regHole)
+}
+
+Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "", doRedraw := True)
+{
+    global overlayHwnd, overlayIsReady
+
+    static lastHolePosX  := 0
+    static lastHolePosY  := 0
+    static lastHoleSizeW := 0
+    static lastHoleSizeH := 0
+    static hasLastHole   := False
+
+    if (!overlayIsReady || !overlayHwnd)
+        return 0
+
+    ; If any values are omitted, reuse prior ones (requires one full set at least once)
+    if (holePosX = "" || holePosY = "" || holeSizeW = "" || holeSizeH = "") {
+        if (!hasLastHole)
+            return 0
+        if (holePosX = "")
+            holePosX := lastHolePosX
+        if (holePosY = "")
+            holePosY := lastHolePosY
+        if (holeSizeW = "")
+            holeSizeW := lastHoleSizeW
+        if (holeSizeH = "")
+            holeSizeH := lastHoleSizeH
+    } else {
+        lastHolePosX  := holePosX
+        lastHolePosY  := holePosY
+        lastHoleSizeW := holeSizeW
+        lastHoleSizeH := holeSizeH
+        hasLastHole   := True
+    }
+
+    ; Apply the updated donut region
+    Overlay_SetHoleRegion(overlayHwnd, holePosX, holePosY, holeSizeW, holeSizeH)
+
+    if (doRedraw)
+        WinSet, Redraw,, ahk_id %overlayHwnd%
+
+    return 1
+}
+
+Overlay_Hide(fadeMs := 120)
+{
+    global overlayHwnd, overlayIsReady, overlayAlphaCurrent
+
+    if (!overlayIsReady || !overlayHwnd)
+        return
+
+    ; Cancel any in-progress fade, then fade out
+    Overlay_CancelFade()
+    Overlay_FadeTo(overlayHwnd, 0, fadeMs, overlayAlphaCurrent)
+
+    ; Reset to full region (no hole)
+    regFull := DllCall("gdi32\CreateRectRgn"
+        , "int", 0, "int", 0
+        , "int", A_ScreenWidth, "int", A_ScreenHeight
+        , "ptr")
+    DllCall("user32\SetWindowRgn", "ptr", overlayHwnd, "ptr", regFull, "int", True)
+    Overlay_SetAlpha(overlayHwnd, 0)
+    Gui, Overlay:Hide
 }
 
 DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False, onTop := False) {
