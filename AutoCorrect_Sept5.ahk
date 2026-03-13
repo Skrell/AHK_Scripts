@@ -151,44 +151,11 @@ Else
     Menu, Tray, Uncheck, Run at startup
 
 ; Create 4 mask GUIs (top, left, right, bottom)
-CreateMaskGui(index, ByRef hWndOut, startingTrans := 1) {
-    global BlockClicks
-    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd, black5Hwnd  ; optional, if you want these exact globals
-
-    clickStyle := BlockClicks ? "" : "+E0x20"
-
-    if (!index) {
-        return
-    }
-
-    ; Create GUI and capture HWND into local variable h
-    Gui, %index%: -Caption +ToolWindow %clickStyle% +Hwndh
-    Gui, %index%: Color, Black
-    WinSet, Transparent, %startingTrans%, ahk_id %h%
-    Gui, %index%: Hide
-
-    ; Populate the ByRef output variable (black1Hwnd/black2Hwnd/etc. as passed by caller)
-    hWndOut := h
-
-    ; Also store into globals by index (so they're always available globally)
-    if (index = 1) {
-        black1Hwnd := h
-    } else if (index = 2) {
-        black2Hwnd := h
-    } else if (index = 3) {
-        black3Hwnd := h
-    } else if (index = 4) {
-        black4Hwnd := h
-    } else if (index = 5) {
-        black5Hwnd := h
-    }
-}
-
-CreateMaskGui(1, black1Hwnd)
-CreateMaskGui(2, black2Hwnd)
-CreateMaskGui(3, black3Hwnd)
-CreateMaskGui(4, black4Hwnd)
-CreateMaskGui(5, black5Hwnd)
+; CreateMaskGui(1, black1Hwnd)
+; CreateMaskGui(2, black2Hwnd)
+; CreateMaskGui(3, black3Hwnd)
+; CreateMaskGui(4, black4Hwnd)
+; CreateMaskGui(5, black5Hwnd)
 
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
@@ -3035,23 +3002,14 @@ $!+Tab::
             lastActWinID := GroupedWindows[cycleCount]
 
         If !CanceledWinSwap {
-            If cycleCount > 2
-                startHighlight := True
-
-
             If (cycleCount > 2) {
-                ; WinSet, Transparent, 255, ahk_id %black1Hwnd%
-                ; WinSet, Transparent, 255, ahk_id %black2Hwnd%
-                ; WinSet, Transparent, 255, ahk_id %black3Hwnd%
-                ; WinSet, Transparent, 255, ahk_id %black4Hwnd%
+                startHighlight := True
                 Overlay_FadeTo(overlayHwnd, 255, 80)
             }
 
             GoSub, Altup
 
-            ; ClearBlackMonitor()
-            ; ClearMasks_not(lastActWinID)
-            Overlay_Hide(180)
+            Overlay_Hide()
 
             GoSub, AltupCleanup
 
@@ -3099,23 +3057,15 @@ Return
         If !LclickSelected
             lastActWinID := GroupedWindows[cycleCount]
 
-        WinGetTitle, testID, ahk_id %lastActWinID%
-        ; tooltip, title is %testID%
         If !CanceledWinSwap {
-            If cycleCount > 2
-                startHighlight := True
-
             If (cycleCount > 2) {
-                WinSet, Transparent, 255, ahk_id %black1Hwnd%
-                WinSet, Transparent, 255, ahk_id %black2Hwnd%
-                WinSet, Transparent, 255, ahk_id %black4Hwnd%
-                WinSet, Transparent, 255, ahk_id %black3Hwnd%
+                startHighlight := True
+                Overlay_FadeTo(overlayHwnd, 255, 80)
             }
 
             GoSub, Altup
 
-            ClearBlackMonitor()
-            ClearMasks_not(lastActWinID)
+            Overlay_Hide()
 
             GoSub, AltupCleanup
 
@@ -3157,22 +3107,23 @@ $!Lbutton::
                 WinGet, pp, ProcessPath , ahk_id %_winIdD%
 
                 lastActWinID := _winIdD
+                startHighlight := True
 
-                DrawMasks_aot(_winIdD, False)
+                WinGetPosEx(_winIdD, wx, wy, ww, wh, null, null)
+                Overlay_MoveHole(wx, wy, ww, wh)
                 DrawWindowTitlePopup(actTitle, pp)
             }
 
             If (!GetKeyState("Lbutton","P") && !GetKeyState("LAlt","P")) {
-                WinSet, Transparent, 255, ahk_id %black1Hwnd%
-                WinSet, Transparent, 255, ahk_id %black2Hwnd%
-                WinSet, Transparent, 255, ahk_id %black3Hwnd%
-                WinSet, Transparent, 255, ahk_id %black4Hwnd%
+                Overlay_FadeTo(overlayHwnd, 255, 80)
 
-                Gui, WindowTitle: Destroy
                 GoSub, Altup
 
-                ClearBlackMonitor()
-                ClearMasks_not()
+                Overlay_Hide()
+
+                GoSub, AltupCleanup
+
+                FixModifiers()
                 Return
             }
         }
@@ -3400,8 +3351,8 @@ $RButton::
 Return
 #If
 
-Cycle()
-{
+Cycle() {
+
     global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, Opacity
 
     prev_exe   :=
@@ -3536,6 +3487,166 @@ Cycle()
     Return cycleCount
 }
 
+; Switch "App" open windows based on the same process and class
+HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
+
+    global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, Opacity
+
+    windowsToMinimize := []
+
+    UpdateValidWindows()
+
+    currentMon := MWAGetMonitorMouseIsIn()
+    cycleCount := 2
+    WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
+
+    Critical, On
+    loop % windowsListWithSameProcessAndClass
+    {
+        hwndID := windowsListWithSameProcessAndClass%A_Index%
+        WinGetTitle, tit, ahk_id %hwndID%
+        WinGet, mmState, MinMax, ahk_id %hwndID%
+        If (MonCount > 1 && mmState > -1) {
+            currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+        }
+        Else If (mmState > -1) {
+            currentMonHasActWin := True
+        }
+
+        If (currentMonHasActWin && tit != ""  && mmState > -1) {
+            GroupedWindows.push(hwndID)
+        }
+        Else If (mmState == -1) {
+            MinimizedWindows.push(hwndID)
+        }
+    }
+    ; add minimized windows to the end of the GroupedWindows array so they can be selected too but afterwards
+    for idx, minHwndID in MinimizedWindows {
+        found := False
+        for jdx, grpHwndID in GroupedWindows {
+            if (grpHwndID = minHwndID) {
+                found := True
+                break
+            }
+        }
+        if (!found)
+            GroupedWindows.push(minHwndID)
+    }
+    Critical, Off
+
+    numWindows := GroupedWindows.length()
+    If (numWindows <= 1) {
+        loop 100 {
+            Tooltip, Only %numWindows% Window(s) found!
+            sleep, 10
+        }
+        Tooltip,
+        Return
+    }
+
+    WinGet, mmState, MinMax, % "ahk_id " GroupedWindows[cycleCount]
+    If (MonCount > 1 && mmState == -1) {
+        windowsToMinimize.push(GroupedWindows[cycleCount])
+    }
+    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+    WinGetTitle, actTitle, % "ahk_id " GroupedWindows[cycleCount]
+    WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
+    lastActWinID := GroupedWindows[cycleCount]
+
+
+    gwHwndId := GroupedWindows[cycleCount]
+    ; DrawMasks_aot()
+    WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
+    Overlay_ShowHole(wx, wy, ww, wh, Opacity)
+    DrawWindowTitlePopup(actTitle, pp, True)
+
+    KeyWait, ``, U T1
+
+    cycleCount++
+    If (cycleCount > numWindows) {
+        cycleCount := 1
+    }
+    gwHwndId := GroupedWindows[cycleCount] ; get ready to activate next window
+
+    loop
+    {
+        If LclickSelected
+            break
+
+        If CanceledWinSwap
+            break
+
+        KeyWait, ``, D T0.1
+        If !ErrorLevel
+        {
+            WinGet, mmState, MinMax, ahk_id %gwHwndId%
+            If (MonCount > 1 && mmState == -1) {
+                windowsToMinimize.push(gwHwndId)
+            }
+            WinActivate, ahk_id %gwHwndId%
+            lastActWinID := gwHwndId
+            WinGetTitle, actTitle, ahk_id %gwHwndId%
+            WinGet, pp, ProcessPath , ahk_id %gwHwndId%
+
+            WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
+            Overlay_MoveHole(wx, wy, ww, wh)
+            ; DrawMasks_aot(gwHwndId, False)
+            DrawWindowTitlePopup(actTitle, pp, True)
+
+            KeyWait, ``, U
+
+            cycleCount++
+            If (cycleCount > numWindows) {
+                cycleCount := 1
+            }
+            loop
+            {
+                gwHwndId := GroupedWindows[cycleCount]
+                If !IsWindowOnMonNum(gwHwndId, currentMon) {
+                    cycleCount++
+                    If (cycleCount > numWindows)
+                    {
+                        cycleCount := 1
+                    }
+                    gwHwndId := GroupedWindows[cycleCount]
+                }
+                Else
+                    break
+            }
+        }
+    }
+    until (!GetKeyState("LAlt", "P"))
+
+    If !LclickSelected {
+        GoSub, FadeOutWindowTitle
+    }
+
+    loop % windowsToMinimize.length()
+    {
+        tempId := windowsToMinimize[A_Index]
+        If (tempId != lastActWinID) {
+            WinMinimize, ahk_id %tempId%
+            sleep, 100
+        }
+        Else {
+            If !IsWindowOnMonNum(tempId, currentMon) {
+                WinActivate, ahk_id %tempId%
+                Send, #+{Left}
+            }
+        }
+    }
+
+    cycleCount := cycleCount - 1 ; correct for final increment of cycleCount++
+    If (cycleCount <= 0)
+        cycleCount := GroupedWindows.MaxIndex()
+
+    Return cycleCount
+}
+
+; ========================================================================================================
+; ------------------------------------  Drawing Functions ------------------------------------------------
+; ========================================================================================================
+
 ClearRect(hwnd := "") {
     global DrawingRect, Highlighter, GUI4Boarder
 
@@ -3661,158 +3772,6 @@ DrawRect:
     WinWaitActive, ahk_id %activeWin%, , 2
     Critical, Off
 Return
-
-; Switch "App" open windows based on the same process and class
-HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
-    global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight
-
-    windowsToMinimize := []
-
-    UpdateValidWindows()
-
-    currentMon := MWAGetMonitorMouseIsIn()
-    cycleCount := 2
-    WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
-
-    Critical, On
-    loop % windowsListWithSameProcessAndClass
-    {
-        hwndID := windowsListWithSameProcessAndClass%A_Index%
-        WinGetTitle, tit, ahk_id %hwndID%
-        WinGet, mmState, MinMax, ahk_id %hwndID%
-        If (MonCount > 1 && mmState > -1) {
-            currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
-        }
-        Else If (mmState > -1) {
-            currentMonHasActWin := True
-        }
-
-        If (currentMonHasActWin && tit != ""  && mmState > -1) {
-            GroupedWindows.push(hwndID)
-        }
-        Else If (mmState == -1) {
-            MinimizedWindows.push(hwndID)
-        }
-    }
-    ; add minimized windows to the end of the GroupedWindows array so they can be selected too but afterwards
-    for idx, minHwndID in MinimizedWindows {
-        found := False
-        for jdx, grpHwndID in GroupedWindows {
-            if (grpHwndID = minHwndID) {
-                found := True
-                break
-            }
-        }
-        if (!found)
-            GroupedWindows.push(minHwndID)
-    }
-    Critical, Off
-
-    numWindows := GroupedWindows.length()
-    If (numWindows <= 1) {
-        loop 100 {
-            Tooltip, Only %numWindows% Window(s) found!
-            sleep, 10
-        }
-        Tooltip,
-        Return
-    }
-
-    WinGet, mmState, MinMax, % "ahk_id " GroupedWindows[cycleCount]
-    If (MonCount > 1 && mmState == -1) {
-        windowsToMinimize.push(GroupedWindows[cycleCount])
-    }
-    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
-    WinGetTitle, actTitle, % "ahk_id " GroupedWindows[cycleCount]
-    WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
-    lastActWinID := GroupedWindows[cycleCount]
-
-
-    gwHwndId := GroupedWindows[cycleCount]
-    DrawMasks_aot()
-    DrawWindowTitlePopup(actTitle, pp, True)
-
-    KeyWait, ``, U T1
-
-    cycleCount++
-    If (cycleCount > numWindows) {
-        cycleCount := 1
-    }
-    gwHwndId := GroupedWindows[cycleCount] ; get ready to activate next window
-
-    loop
-    {
-        If LclickSelected
-            break
-
-        If CanceledWinSwap
-            break
-
-        KeyWait, ``, D T0.1
-        If !ErrorLevel
-        {
-            WinGet, mmState, MinMax, ahk_id %gwHwndId%
-            If (MonCount > 1 && mmState == -1) {
-                windowsToMinimize.push(gwHwndId)
-            }
-            WinActivate, ahk_id %gwHwndId%
-            lastActWinID := gwHwndId
-            WinGetTitle, actTitle, ahk_id %gwHwndId%
-            WinGet, pp, ProcessPath , ahk_id %gwHwndId%
-
-            DrawMasks_aot(gwHwndId, False)
-            DrawWindowTitlePopup(actTitle, pp, True)
-
-            KeyWait, ``, U
-
-            cycleCount++
-            If (cycleCount > numWindows) {
-                cycleCount := 1
-            }
-            loop
-            {
-                gwHwndId := GroupedWindows[cycleCount]
-                If !IsWindowOnMonNum(gwHwndId, currentMon) {
-                    cycleCount++
-                    If (cycleCount > numWindows)
-                    {
-                        cycleCount := 1
-                    }
-                    gwHwndId := GroupedWindows[cycleCount]
-                }
-                Else
-                    break
-            }
-        }
-    }
-    until (!GetKeyState("LAlt", "P"))
-
-    If !LclickSelected {
-        GoSub, FadeOutWindowTitle
-    }
-
-    loop % windowsToMinimize.length()
-    {
-        tempId := windowsToMinimize[A_Index]
-        If (tempId != lastActWinID) {
-            WinMinimize, ahk_id %tempId%
-            sleep, 100
-        }
-        Else {
-            If !IsWindowOnMonNum(tempId, currentMon) {
-                WinActivate, ahk_id %tempId%
-                Send, #+{Left}
-            }
-        }
-    }
-
-    cycleCount := cycleCount - 1 ; correct for final increment of cycleCount++
-    If (cycleCount <= 0)
-        cycleCount := GroupedWindows.MaxIndex()
-
-    Return cycleCount
-}
-
 ; ------------------  ChatGPT ------------------------------------------------------------------
 ClampAlpha(alphaValue) {
     if (alphaValue < 0)
@@ -3900,6 +3859,16 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 180, alphaStart := "")
     if (alphaStart = "")
         alphaStart := overlayAlphaCurrent
 
+    if (alphaStart < 0)
+        alphaStart := 0
+    else if (alphaStart > 255)
+        alphaStart := 255
+
+    if (alphaTarget < 0)
+        alphaTarget := 0
+    else if (alphaTarget > 255)
+        alphaTarget := 255
+
     startTick := A_TickCount
 
     ; Guard: avoid divide-by-zero and negative durations
@@ -3908,16 +3877,46 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 180, alphaStart := "")
 
     loop
     {
+        ; If a newer fade started, stop ASAP
+        if (localFadeToken != overlayFadeToken)
+            return
+
         elapsed := A_TickCount - startTick
         if (elapsed >= fadeMs) {
             Overlay_SetAlpha(overlayHwnd, alphaTarget)
             break
         }
 
+        ; progress is a normalized time value from 0.0 to 1.0:
+        ;   - at the start of the fade, elapsed ~= 0, so progress ~= 0.0
+        ;   - at the end of the fade,   elapsed ~= fadeMs, so progress ~= 1.0
         progress := elapsed / fadeMs
-        ; Linear interpolation from alphaStart -> alphaTarget
+
+        ; alphaNow is computed by *linear interpolation* (“lerp”) between the starting alpha
+        ; and the target alpha, based on progress:
+        ;
+        ;   alphaNow = alphaStart + (alphaTarget - alphaStart) * progress
+        ;
+        ; Why this formula?
+        ;   - (alphaTarget - alphaStart) is the total change we want over the whole fade.
+        ;   - Multiplying that change by progress gives “how much of the total change should
+        ;     have happened by now”.
+        ;   - Adding alphaStart shifts it so:
+        ;       progress=0  -> alphaNow = alphaStart  (start value)
+        ;       progress=1  -> alphaNow = alphaTarget (end value)
+        ;
+        ; Example:
+        ;   alphaStart=0, alphaTarget=180
+        ;   progress=0.5 -> alphaNow = 0 + (180-0)*0.5 = 90
+        ;
+        ; Floor() converts the result to an integer because the Windows layered-alpha call
+        ; ultimately uses an 8-bit integer (0..255). Without Floor(), AHK would still end up
+        ; converting to an integer implicitly, but Floor() makes it explicit/predictable.
         alphaNow := Floor(alphaStart + (alphaTarget - alphaStart) * progress)
 
+        ; Clamp alphaNow to valid 8-bit range for layered transparency.
+        ; (Even if alphaStart/alphaTarget were valid, rounding and edge timing can produce
+        ; slight over/under values.)
         if (alphaNow < 0)
             alphaNow := 0
         else if (alphaNow > 255)
@@ -4075,7 +4074,7 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     return 1
 }
 
-Overlay_Hide(fadeMs := 120)
+Overlay_Hide(fadeMs := 180)
 {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
 
@@ -4094,6 +4093,39 @@ Overlay_Hide(fadeMs := 120)
     DllCall("user32\SetWindowRgn", "ptr", overlayHwnd, "ptr", regFull, "int", True)
     Overlay_SetAlpha(overlayHwnd, 0)
     Gui, Overlay:Hide
+}
+
+CreateMaskGui(index, ByRef hWndOut, startingTrans := 1) {
+    global BlockClicks
+    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd, black5Hwnd  ; optional, if you want these exact globals
+
+    clickStyle := BlockClicks ? "" : "+E0x20"
+
+    if (!index) {
+        return
+    }
+
+    ; Create GUI and capture HWND into local variable h
+    Gui, %index%: -Caption +ToolWindow %clickStyle% +Hwndh
+    Gui, %index%: Color, Black
+    WinSet, Transparent, %startingTrans%, ahk_id %h%
+    Gui, %index%: Hide
+
+    ; Populate the ByRef output variable (black1Hwnd/black2Hwnd/etc. as passed by caller)
+    hWndOut := h
+
+    ; Also store into globals by index (so they're always available globally)
+    if (index = 1) {
+        black1Hwnd := h
+    } else if (index = 2) {
+        black2Hwnd := h
+    } else if (index = 3) {
+        black3Hwnd := h
+    } else if (index = 4) {
+        black4Hwnd := h
+    } else if (index = 5) {
+        black5Hwnd := h
+    }
 }
 
 DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False, onTop := False) {
