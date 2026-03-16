@@ -3885,52 +3885,8 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "")
         if (localFadeToken != overlayFadeToken)
             return
 
-        ; elapsed := A_TickCount - startTick
-        ; if (elapsed >= fadeMs) {
-            ; Overlay_SetAlpha(overlayHwnd, alphaTarget)
-            ; break
-        ; }
-        ; ; progress is a normalized time value from 0.0 to 1.0:
-        ; ;   - at the start of the fade, elapsed ~= 0, so progress ~= 0.0
-        ; ;   - at the end of the fade,   elapsed ~= fadeMs, so progress ~= 1.0
-        ; progress := elapsed / fadeMs
-        ; ; alphaNow is computed by *linear interpolation* (“lerp”) between the starting alpha
-        ; ; and the target alpha, based on progress:
-        ; ;
-        ; ;   alphaNow = alphaStart + (alphaTarget - alphaStart) * progress
-        ; ;
-        ; ; Why this formula?
-        ; ;   - (alphaTarget - alphaStart) is the total change we want over the whole fade.
-        ; ;   - Multiplying that change by progress gives “how much of the total change should
-        ; ;     have happened by now”.
-        ; ;   - Adding alphaStart shifts it so:
-        ; ;       progress=0  -> alphaNow = alphaStart  (start value)
-        ; ;       progress=1  -> alphaNow = alphaTarget (end value)
-        ; ;
-        ; ; Example:
-        ; ;   alphaStart=0, alphaTarget=180
-        ; ;   progress=0.5 -> alphaNow = 0 + (180-0)*0.5 = 90
-        ; ;
-        ; ; Floor() converts the result to an integer because the Windows layered-alpha call
-        ; ; ultimately uses an 8-bit integer (0..255). Without Floor(), AHK would still end up
-        ; ; converting to an integer implicitly, but Floor() makes it explicit/predictable.
-        ; alphaNow := Floor(alphaStart + (alphaTarget - alphaStart) * progress)
-        ; ; Clamp alphaNow to valid 8-bit range for layered transparency.
-        ; ; (Even if alphaStart/alphaTarget were valid, rounding and edge timing can produce
-        ; ; slight over/under values.)
-        ; if (alphaNow < 0)
-            ; alphaNow := 0
-        ; else if (alphaNow > 255)
-            ; alphaNow := 255
-
         Overlay_SetAlpha(overlayHwnd, alphaNow)
 
-        ; If a newer fade started, stop immediately
-        ; loop 5 {
-            ; if (localFadeToken != overlayFadeToken)
-                ; return
-            ; Sleep, 1
-        ; }
         sleep, 5
 
         alphaNow += transIncr
