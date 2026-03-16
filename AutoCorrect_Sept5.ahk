@@ -3000,16 +3000,16 @@ $!+Tab::
 
         If !LclickSelected
             lastActWinID := GroupedWindows[cycleCount]
-
+        ; tooltip, %cycleCount%
         If !CanceledWinSwap {
             If (cycleCount > 2) {
                 startHighlight := True
-                Overlay_FadeTo(overlayHwnd, 255, 80)
+                Overlay_FadeTo(overlayHwnd, 255, 30)
             }
 
             GoSub, Altup
 
-            Overlay_Hide()
+            Overlay_Hide(40)
 
             GoSub, AltupCleanup
 
@@ -3060,12 +3060,12 @@ Return
         If !CanceledWinSwap {
             If (cycleCount > 2) {
                 startHighlight := True
-                Overlay_FadeTo(overlayHwnd, 255, 80)
+                Overlay_FadeTo(overlayHwnd, 255, 30)
             }
 
             GoSub, Altup
 
-            Overlay_Hide()
+            Overlay_Hide(40)
 
             GoSub, AltupCleanup
 
@@ -3303,11 +3303,11 @@ RButton & WheelUp::
     }
     Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
         Send, ^+{PgUp}
-        sleep, 100
+        sleep, 50
     }
     Else {
         Send, {PgUp}
-        sleep, 100
+        sleep, 50
     }
 Return
 
@@ -3325,11 +3325,11 @@ RButton & WheelDown::
     }
     Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
         Send, ^+{PgDn}
-        sleep, 100
+        sleep, 50
     }
     Else {
         Send, {PgDn}
-        sleep, 100
+        sleep, 50
     }
 Return
 
@@ -3398,7 +3398,7 @@ Cycle() {
                             Else {
                                 Critical, Off
                                 ; DrawMasks_aot()
-                                Overlay_ShowHole(wx, wy, ww, wh, Opacity)
+                                Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
                                 If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
                                     GroupedWindows := []
                                     ValidWindows   := []
@@ -3412,7 +3412,7 @@ Cycle() {
                             cycleCount := 3
                             Critical, Off
                             ; DrawMasks_aot()
-                            Overlay_ShowHole(wx, wy, ww, wh, Opacity)
+                            Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
                         }
                         If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
                             GroupedWindows := []
@@ -3557,7 +3557,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     gwHwndId := GroupedWindows[cycleCount]
     ; DrawMasks_aot()
     WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
-    Overlay_ShowHole(wx, wy, ww, wh, Opacity)
+    Overlay_ShowHole(wx, wy, ww, wh, Opacity,,60)
     DrawWindowTitlePopup(actTitle, pp, True)
 
     KeyWait, ``, U T1
@@ -3850,7 +3850,7 @@ Overlay_CancelFade()
     return overlayFadeToken
 }
 
-Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 180, alphaStart := "")
+Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "")
 {
     global overlayFadeToken, overlayAlphaCurrent
 
@@ -3875,68 +3875,81 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 180, alphaStart := "")
     if (fadeMs < 1)
         fadeMs := 1
 
-    loop
+    iterations := fadeMs/5
+    transIncr  := (alphaTarget - alphaStart)/iterations
+    alphaNow   := alphaStart + transIncr
+
+    loop %iterations%
     {
         ; If a newer fade started, stop ASAP
         if (localFadeToken != overlayFadeToken)
             return
 
-        elapsed := A_TickCount - startTick
-        if (elapsed >= fadeMs) {
-            Overlay_SetAlpha(overlayHwnd, alphaTarget)
-            break
-        }
-
-        ; progress is a normalized time value from 0.0 to 1.0:
-        ;   - at the start of the fade, elapsed ~= 0, so progress ~= 0.0
-        ;   - at the end of the fade,   elapsed ~= fadeMs, so progress ~= 1.0
-        progress := elapsed / fadeMs
-
-        ; alphaNow is computed by *linear interpolation* (“lerp”) between the starting alpha
-        ; and the target alpha, based on progress:
-        ;
-        ;   alphaNow = alphaStart + (alphaTarget - alphaStart) * progress
-        ;
-        ; Why this formula?
-        ;   - (alphaTarget - alphaStart) is the total change we want over the whole fade.
-        ;   - Multiplying that change by progress gives “how much of the total change should
-        ;     have happened by now”.
-        ;   - Adding alphaStart shifts it so:
-        ;       progress=0  -> alphaNow = alphaStart  (start value)
-        ;       progress=1  -> alphaNow = alphaTarget (end value)
-        ;
-        ; Example:
-        ;   alphaStart=0, alphaTarget=180
-        ;   progress=0.5 -> alphaNow = 0 + (180-0)*0.5 = 90
-        ;
-        ; Floor() converts the result to an integer because the Windows layered-alpha call
-        ; ultimately uses an 8-bit integer (0..255). Without Floor(), AHK would still end up
-        ; converting to an integer implicitly, but Floor() makes it explicit/predictable.
-        alphaNow := Floor(alphaStart + (alphaTarget - alphaStart) * progress)
-
-        ; Clamp alphaNow to valid 8-bit range for layered transparency.
-        ; (Even if alphaStart/alphaTarget were valid, rounding and edge timing can produce
-        ; slight over/under values.)
-        if (alphaNow < 0)
-            alphaNow := 0
-        else if (alphaNow > 255)
-            alphaNow := 255
+        ; elapsed := A_TickCount - startTick
+        ; if (elapsed >= fadeMs) {
+            ; Overlay_SetAlpha(overlayHwnd, alphaTarget)
+            ; break
+        ; }
+        ; ; progress is a normalized time value from 0.0 to 1.0:
+        ; ;   - at the start of the fade, elapsed ~= 0, so progress ~= 0.0
+        ; ;   - at the end of the fade,   elapsed ~= fadeMs, so progress ~= 1.0
+        ; progress := elapsed / fadeMs
+        ; ; alphaNow is computed by *linear interpolation* (“lerp”) between the starting alpha
+        ; ; and the target alpha, based on progress:
+        ; ;
+        ; ;   alphaNow = alphaStart + (alphaTarget - alphaStart) * progress
+        ; ;
+        ; ; Why this formula?
+        ; ;   - (alphaTarget - alphaStart) is the total change we want over the whole fade.
+        ; ;   - Multiplying that change by progress gives “how much of the total change should
+        ; ;     have happened by now”.
+        ; ;   - Adding alphaStart shifts it so:
+        ; ;       progress=0  -> alphaNow = alphaStart  (start value)
+        ; ;       progress=1  -> alphaNow = alphaTarget (end value)
+        ; ;
+        ; ; Example:
+        ; ;   alphaStart=0, alphaTarget=180
+        ; ;   progress=0.5 -> alphaNow = 0 + (180-0)*0.5 = 90
+        ; ;
+        ; ; Floor() converts the result to an integer because the Windows layered-alpha call
+        ; ; ultimately uses an 8-bit integer (0..255). Without Floor(), AHK would still end up
+        ; ; converting to an integer implicitly, but Floor() makes it explicit/predictable.
+        ; alphaNow := Floor(alphaStart + (alphaTarget - alphaStart) * progress)
+        ; ; Clamp alphaNow to valid 8-bit range for layered transparency.
+        ; ; (Even if alphaStart/alphaTarget were valid, rounding and edge timing can produce
+        ; ; slight over/under values.)
+        ; if (alphaNow < 0)
+            ; alphaNow := 0
+        ; else if (alphaNow > 255)
+            ; alphaNow := 255
 
         Overlay_SetAlpha(overlayHwnd, alphaNow)
 
         ; If a newer fade started, stop immediately
-        loop 10 {
-            if (localFadeToken != overlayFadeToken)
-                return
-            Sleep, 1
-        }
+        ; loop 5 {
+            ; if (localFadeToken != overlayFadeToken)
+                ; return
+            ; Sleep, 1
+        ; }
+        sleep, 5
+
+        alphaNow += transIncr
     }
+}
+
+Overlay_GetWorkArea(monNum, ByRef areaLeft, ByRef areaTop, ByRef areaRight, ByRef areaBottom) {
+    ; SysGet MonitorWorkArea returns variables: MonLeft/Top/Right/Bottom
+    SysGet, monArea, MonitorWorkArea, %monNum%
+    areaLeft   := monAreaLeft
+    areaTop    := monAreaTop
+    areaRight  := monAreaRight
+    areaBottom := monAreaBottom
 }
 
 Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH
                 , overlayAlpha := 180
                 , clickThrough := True
-                , fadeMs := 180)
+                , fadeMs := 100)
 {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
 
@@ -3952,15 +3965,25 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH
     else
         WinSet, ExStyle, -0x20, ahk_id %overlayHwnd%
 
-    ; Show fullscreen without activating
-    Gui, Overlay:Show, % "x0 y0 w" A_ScreenWidth " h" A_ScreenHeight " NA"
+    monNum := MWAGetMonitorMouseIsIn()
+    Overlay_GetWorkArea(monNum, areaLeft, areaTop, areaRight, areaBottom)
+
+    areaWidth  := areaRight - areaLeft
+    areaHeight := areaBottom - areaTop
+
+    ; Show overlay only in the work area (taskbar excluded)
+    Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
 
     ; If currently hidden/transparent, ensure we start from 0
     if (overlayAlphaCurrent < 1)
         Overlay_SetAlpha(overlayHwnd, 0)
 
-    ; Apply donut region (screen minus hole)
-    Overlay_SetHoleRegion(overlayHwnd, holePosX, holePosY, holeSizeW, holeSizeH)
+    ; IMPORTANT: hole coords must be relative to the overlay's origin now.
+    ; If holePosX/holePosY are screen coords, convert them:
+    holeRelX := holePosX - areaLeft
+    holeRelY := holePosY - areaTop
+
+    Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeRelX, holeRelY, holeSizeW, holeSizeH)
 
     ; Force repaint
     WinSet, Redraw,, ahk_id %overlayHwnd%
@@ -3995,6 +4018,35 @@ Overlay_SetOpacity(alphaVal, fadeMs := 0)
     }
 
     return 1
+}
+
+Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeX, holeY, holeW, holeH) {
+    regFull := DllCall("gdi32\CreateRectRgn"
+        , "int", 0
+        , "int", 0
+        , "int", areaWidth
+        , "int", areaHeight
+        , "ptr")
+
+    regHole := DllCall("gdi32\CreateRectRgn"
+        , "int", holeX
+        , "int", holeY
+        , "int", holeX + holeW
+        , "int", holeY + holeH
+        , "ptr")
+
+    DllCall("gdi32\CombineRgn"
+        , "ptr", regFull
+        , "ptr", regFull
+        , "ptr", regHole
+        , "int", 4) ; RGN_DIFF
+
+    DllCall("user32\SetWindowRgn"
+        , "ptr", overlayHwnd
+        , "ptr", regFull
+        , "int", True)
+
+    DllCall("gdi32\DeleteObject", "ptr", regHole)
 }
 
 Overlay_SetHoleRegion(overlayHwnd, holeX, holeY, holeW, holeH)
@@ -4074,7 +4126,7 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     return 1
 }
 
-Overlay_Hide(fadeMs := 180)
+Overlay_Hide(fadeMs := 100)
 {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
 
@@ -6165,14 +6217,17 @@ ActivateWindow:
     Else
         WinGet, hwndOfTitle, ID, %fulltitle%
 
-    DrawBlackMonitor_aot(hwndOfTitle)
+    ; DrawBlackMonitor_aot(hwndOfTitle)
+    WinGetPosEx(hwndOfTitle, wx, wy, ww, wh, null, null)
+    Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
 
     WinGet, actWinState, MinMax, %fulltitle%
     If (actWinState == -1)
         sleep, 125
 
-    sleep, 500
-    ClearBlackMonitor(, 10)
+    sleep, 400
+    ; ClearBlackMonitor(, 10)
+    Overlay_Hide(40)
 
     Process, Close, Expr_Name
     Process, Close, ExprAltUp_Name
@@ -9243,31 +9298,37 @@ Acc_Init() {
     return (hMod != 0)
 }
 ; ChatGPT
+Acc_CreateChildRef(parentIA, childId) {
+    local childRef := {}
+    childRef.__accChildRef := true
+    childRef.acc := parentIA
+    childRef.child := childId
+    return childRef
+}
+
 Acc_IsChildRef(accObj) {
-    local isRef := false
     if !IsObject(accObj)
         return false
 
     try
-        isRef := accObj.HasKey("acc") && accObj.HasKey("child")
+        return accObj.__accChildRef = true
     catch
-        isRef := false
-
-    return isRef
-}
-; ChatGPT
-Acc_CreateChildRef(parentIA, childId) {
-    o := {}
-    o.acc := parentIA
-    o.child := childId
-    return o
+        return false
 }
 ; ChatGPT
 Acc_GetRoleText(nRole) {
-    nSize := DllCall("oleacc\GetRoleText", "UInt", nRole, "Ptr", 0, "UInt", 0)
-    VarSetCapacity(sRole, (A_IsUnicode ? 2 : 1) * (nSize + 1), 0)
-    DllCall("oleacc\GetRoleText", "UInt", nRole, "Str", sRole, "UInt", nSize + 1)
-    return sRole
+    static roleCache := {}
+    local textSize, roleText
+
+    if (roleCache.HasKey(nRole))
+        return roleCache[nRole]
+
+    textSize := DllCall("oleacc\GetRoleText", "UInt", nRole, "Ptr", 0, "UInt", 0)
+    VarSetCapacity(roleText, (A_IsUnicode ? 2 : 1) * (textSize + 1), 0)
+    DllCall("oleacc\GetRoleText", "UInt", nRole, "Str", roleText, "UInt", textSize + 1)
+
+    roleCache[nRole] := roleText
+    return roleText
 }
 ; ChatGPT
 Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60) {
@@ -9311,21 +9372,7 @@ Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60) {
         childrenList := Acc_GetChildrenListSafe(currentAcc)
         for childIndex, childAcc in childrenList
         {
-            if !IsObject(childAcc)
-                continue
-
-            isChildRef := Acc_IsChildRef(childAcc)
-
-            isIAccessible := false
-            if (!isChildRef)
-            {
-                try
-                    isIAccessible := (ComObjType(childAcc, "Name") = "IAccessible")
-                catch
-                    isIAccessible := false
-            }
-
-            if (isChildRef || isIAccessible)
+            if IsObject(childAcc)
                 queueList.Push(childAcc)
         }
     }
@@ -9505,6 +9552,8 @@ Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) {
 }
 ; ChatGPT
 Acc_TryGetIAccessibleSafe(accObj) {
+    local iAccessiblePtr
+
     if !IsObject(accObj)
         return 0
 
@@ -9517,20 +9566,14 @@ Acc_TryGetIAccessibleSafe(accObj) {
         return 0
 }
 ; ChatGPT
-Acc_RoleNameSafe(accObj, childId := 0)
-{
-    isIAccessible := false
-    try
-        isIAccessible := (ComObjType(accObj, "Name") = "IAccessible")
-    catch
-        isIAccessible := false
+Acc_RoleNameSafe(accObj) {
+    local iaObj, childId, roleValue := "", roleNumber
 
-    if (!isIAccessible)
+    if !Acc_ResolveTarget(accObj, iaObj, childId)
         return ""
 
-    roleValue := ""
     try
-        roleValue := accObj.accRole(childId)
+        roleValue := iaObj.accRole(childId)
     catch
         return ""
 
@@ -9538,10 +9581,7 @@ Acc_RoleNameSafe(accObj, childId := 0)
     if (roleNumber = 0 && roleValue != 0 && roleValue != "0")
         return ""
 
-    try
-        return Acc_GetRoleText(roleNumber)
-    catch
-        return ""
+    return Acc_GetRoleText(roleNumber)
 }
 ; ChatGPT
 Acc_GetToolbarAddressPath(tbHwnd) {
@@ -9554,17 +9594,20 @@ Acc_GetToolbarAddressPath(tbHwnd) {
 }
 ; ChatGPT
 Acc_FindLikelyPathText(rootAcc, maxNodes := 140) {
-    local queue := [], queueIndex := 1, seenCount := 0
-    local currentAcc, currentValue, currentName, childrenList, childIndex, childAcc
+    local queueList := []
+    local queueIndex := 1
+    local seenCount := 0
+    local currentAcc, currentName, currentValue
+    local childrenList, childIndex, childAcc
 
     if !IsObject(rootAcc)
         return ""
 
-    queue.Push(rootAcc)
+    queueList.Push(rootAcc)
 
-    while (queueIndex <= queue.Length() && seenCount < maxNodes)
+    while (queueIndex <= queueList.Length() && seenCount < maxNodes)
     {
-        currentAcc := queue[queueIndex]
+        currentAcc := queueList[queueIndex]
         queueIndex += 1
         seenCount += 1
 
@@ -9585,22 +9628,8 @@ Acc_FindLikelyPathText(rootAcc, maxNodes := 140) {
         childrenList := Acc_GetChildrenListSafe(currentAcc)
         for childIndex, childAcc in childrenList
         {
-            if !IsObject(childAcc)
-                continue
-
-            isChildRef := Acc_IsChildRef(childAcc)
-
-            isIAccessible := false
-            if (!isChildRef)
-            {
-                try
-                    isIAccessible := (ComObjType(childAcc, "Name") = "IAccessible")
-                catch
-                    isIAccessible := false
-            }
-
-            if (isChildRef || isIAccessible)
-                queue.Push(childAcc)
+            if IsObject(childAcc)
+                queueList.Push(childAcc)
         }
     }
     return ""
@@ -9616,8 +9645,7 @@ Acc_LooksLikePath(s) {
     return False
 }
 ; ChatGPT
-Acc_GetChildrenListSafe(accObj, maxChildren := 60)
-{
+Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
     local iaObj, childrenCount, fetchedCount
     local fetchCount, cbVariant, bufferBytes
     local childIndex, offsetBytes, variantType
@@ -9627,13 +9655,13 @@ Acc_GetChildrenListSafe(accObj, maxChildren := 60)
     if !IsObject(accObj)
         return outputList
 
-    iaObj := accObj
-    try
+    if (Acc_IsChildRef(accObj))
         iaObj := accObj.acc
-    catch
+    else
         iaObj := accObj
 
     childrenCount := 0
+
     try
         childrenCount := iaObj.accChildCount
     catch
@@ -9716,20 +9744,29 @@ Acc_GetFocusedObject() {
 }
 ; ChatGPT
 Acc_FromWindow(hWnd, objID, ByRef acc) {
-    VarSetCapacity(iid, 16, 0)
-    DllCall("ole32\CLSIDFromString"
-        , "wstr", "{618736E0-3C3D-11CF-810C-00AA00389B71}"
-        , "ptr", &iid)
+    static iid
+    static iidReady := false
+    local pacc := 0
+
+    if (!iidReady) {
+        VarSetCapacity(iid, 16, 0)
+        DllCall("ole32\CLSIDFromString"
+            , "WStr", "{618736E0-3C3D-11CF-810C-00AA00389B71}"
+            , "Ptr", &iid)
+        iidReady := true
+    }
 
     if (DllCall("oleacc\AccessibleObjectFromWindow"
-        , "ptr", hWnd
-        , "uint", objID
-        , "ptr", &iid
-        , "ptr*", pacc) = 0)
+        , "Ptr", hWnd
+        , "UInt", objID
+        , "Ptr", &iid
+        , "Ptr*", pacc
+        , "Int") = 0)
     {
         acc := ComObjEnwrap(9, pacc, 1)
         return true
     }
+
     return false
 }
 ; ChatGPT
@@ -9812,6 +9849,14 @@ Acc_WindowFromObjectSafe(accObj) {
 }
 ; ChatGPT
 Acc_NameIsKnownColumnSafe(accObj) {
+    static knownNames := { "Name": true
+        , "Date modified": true
+        , "Type": true
+        , "Size": true
+        , "Date created": true
+        , "Authors": true
+        , "Title": true }
+
     local nameStr
 
     if !IsObject(accObj)
@@ -9821,37 +9866,32 @@ Acc_NameIsKnownColumnSafe(accObj) {
     if (nameStr = "")
         return 0
 
-    ; Tighten/adjust this list to your locale and expected columns
-    return (nameStr = "Name"
-        || nameStr = "Date modified"
-        || nameStr = "Type"
-        || nameStr = "Size"
-        || nameStr = "Date created"
-        || nameStr = "Authors"
-        || nameStr = "Title")
+    return knownNames.HasKey(nameStr)
+}
+; ChatGPT
+Acc_ResolveTarget(accObj, ByRef iaObj, ByRef childId) {
+    if !IsObject(accObj)
+        return false
+
+    if (Acc_IsChildRef(accObj)) {
+        iaObj := accObj.acc
+        childId := accObj.child
+        return true
+    }
+
+    iaObj := accObj
+    childId := 0
+    return true
 }
 ; ChatGPT
 Acc_NameSafe(accObj) {
-    local parentAcc, childId, nameStr
+    local iaObj, childId, nameStr := ""
 
-    if !IsObject(accObj)
+    if !Acc_ResolveTarget(accObj, iaObj, childId)
         return ""
 
-    if (Acc_IsChildRef(accObj))
-    {
-        parentAcc := accObj.acc
-        childId := accObj.child
-        nameStr := ""
-        try
-            nameStr := parentAcc.accName(childId)
-        catch
-            return ""
-        return nameStr
-    }
-
-    nameStr := ""
     try
-        nameStr := accObj.accName(0)
+        nameStr := iaObj.accName(childId)
     catch
         return ""
 
@@ -9859,55 +9899,36 @@ Acc_NameSafe(accObj) {
 }
 ; ChatGPT
 Acc_ValueSafe(accObj) {
-    local parentAcc, childId, valueStr
+    local iaObj, childId, valueStr := ""
 
-    if !IsObject(accObj)
+    if !Acc_ResolveTarget(accObj, iaObj, childId)
         return ""
 
-    if (Acc_IsChildRef(accObj))
-    {
-        parentAcc := accObj.acc
-        childId := accObj.child
-        valueStr := ""
-        try
-            valueStr := parentAcc.accValue(childId)
-        catch
-            return ""
-        return valueStr
-    }
-
-    valueStr := ""
     try
-        valueStr := accObj.accValue(0)
+    {
+        valueStr := iaObj.accValue(childId)
+    }
     catch
+    {
         return ""
+    }
 
     return valueStr
 }
 ; ChatGPT
 Acc_RoleIdSafe(accObj) {
-    local parentAcc, childId, roleVal, roleNum
+    local iaObj, childId, roleVal := "", roleNum
 
-    if !IsObject(accObj)
+    if !Acc_ResolveTarget(accObj, iaObj, childId)
         return 0
 
-    roleVal := ""
-
-    if (Acc_IsChildRef(accObj))
+    try
     {
-        parentAcc := accObj.acc
-        childId := accObj.child
-        try
-            roleVal := parentAcc.accRole(childId)
-        catch
-            return 0
+        roleVal := iaObj.accRole(childId)
     }
-    else
+    catch
     {
-        try
-            roleVal := accObj.accRole(0)
-        catch
-            return 0
+        return 0
     }
 
     roleNum := roleVal + 0
@@ -9918,16 +9939,14 @@ Acc_RoleIdSafe(accObj) {
 }
 ; ChatGPT
 Acc_ParentSafe(accObj) {
-    local parentObj
+    local parentObj := ""
 
     if !IsObject(accObj)
         return ""
 
-    ; Child ref object: { acc: parentIA, child: childId }
     if (Acc_IsChildRef(accObj))
         return accObj.acc
 
-    parentObj := ""
     try
         parentObj := accObj.accParent
     catch
