@@ -161,10 +161,6 @@ SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
 SysGet, MonCount, MonitorCount
 
-; leftArrow  := "←"
-; rightArrow := "→"
-; upArrow    := "↑"
-; downArrow  := "↓"
 leftArrow  := Chr(0x2190)  ; ←
 rightArrow := Chr(0x2192)  ; →
 upArrow    := Chr(0x2191)  ; ↑
@@ -250,7 +246,7 @@ Overlay_Hide()
 overlayIsReady := True
 
 WinGet, allwindows, List
-loop % allwindows
+Loop, %allwindows%
 {
     winID := allWindows%A_Index%
     WinGet, minState, MinMax, ahk_id %winID%
@@ -932,7 +928,8 @@ GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) 
     SysGet, count, MonitorCount
     bestDist := 0x7FFFFFFF, found := false
 
-    Loop, %count% {
+    Loop, %count%
+    {
         idx := A_Index
         if (useWorkArea)
             SysGet, r, MonitorWorkArea, %idx%
@@ -980,7 +977,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         DetectHiddenWindows, Off
         Thread, NoTimers, True
 
-        loop 500 {
+        Loop, 500 {
             WinGetClass, vWinClass, % "ahk_id " hWnd
             WinGetTitle, vWinTitle, % "ahk_id " hWnd
             WinGet, vWinProc, ProcessName, ahk_id %hWnd%
@@ -1056,7 +1053,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
 
             initFocusedCtrl := ""
-            loop, 100 {
+            Loop, 100 {
                 ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
                 If (initFocusedCtrl != "")
                     break
@@ -1163,7 +1160,8 @@ WaitForFadeInStop(hwnd) {
     sampleX := (sx + sw)/2
     sampleY := (sy + 13)
     CoordMode, Pixel, Screen
-    loop 500 {
+    Loop, 500
+    {
         PixelGetColor, HexColor%A_Index%, %sampleX%, %sampleY%, RGB
         If (A_Index >= 5) {
             If (HexColor%A_Index% == HexColorLast1 && HexColorLast1 == HexColorLast2 && HexColorLast2 == HexColorLast3 && HexColorLast3 == HexColorLast4 && HexColorLast4 == HexColorLast5)
@@ -1282,7 +1280,7 @@ F10::Overlay_Hide()                             ; hide
 $~^Enter::
     DetectHiddenWindows, Off
     WinGet, myWindow, List
-    Loop % myWindow
+    Loop, %myWindow%
     {
         ControlGet, myOkay, Hwnd,, OK, % "ahk_id " myWindow%A_Index%
         If (myOkay) {
@@ -1691,15 +1689,6 @@ $*MButton::
             If (trans == 255 && (abs(dx) > 3 || abs(dy) > 3)) {
                 targetTrans := 180
                 WinSet, Transparent, %targetTrans%, ahk_id %hWnd%
-                ; iterations := round((trans-targetTrans)/5)
-                ; currTrans := 255
-                ; currTrans -= 5
-                ; loop %iterations%
-                ; {
-                    ; WinSet, Transparent, %currTrans%, ahk_id %hWnd%
-                    ; sleep, 1
-                    ; currTrans -= 5
-                ; }
             }
         }
 
@@ -1961,7 +1950,8 @@ $*MButton::
         Critical, On
         SetWinDelay, -1
 
-        Loop %windowsFromProc% {
+        Loop, %windowsFromProc%
+        {
             thisId := windowsFromProc%A_Index%
 
             ; Skip windows that aren't on the start monitor
@@ -1994,7 +1984,8 @@ Return
 WaitForStableWindow(hwnd, delay := 30, timeout := 1000) {
     lastW := lastH := 0
     elapsed := 0
-    Loop {
+    Loop
+    {
         WinGetPos,,, w, h, ahk_id %hwnd%
         if (w = lastW && h = lastH)
             return true
@@ -2511,7 +2502,8 @@ $~F2::
 
     KeyWait, F2, U T3
 
-    loop 10000 {
+    Loop, 10000
+    {
         If (GetKeyState("Enter") || GetKeyState("Lbutton") || GetKeyState("Esc"))
             break
         sleep, 1
@@ -2558,10 +2550,10 @@ prevChromeTab()
     StopRecursion := True
     DetectHiddenWindows, Off
     Send, ^+{a}
-    loop 100
+    Loop, 100
     {
         WinGet, allChromeWindows, List, ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe
-        loop % allChromeWindows
+        Loop, %allChromeWindows%
         {
             this_id := allChromeWindows%A_Index%
             WinGetTitle, titID, ahk_id %this_id%
@@ -2643,7 +2635,8 @@ $Esc::
             DrawMasks_aot(escHwndID)
             DrawWindowTitlePopup("Close?", pp, False, escHwndID)
 
-            loop {
+            Loop
+            {
                 ; tooltip Close `"%escTitle%`" ? ;"
                 sleep, 1
                 If !GetKeyState("Esc","P")
@@ -2663,7 +2656,8 @@ $Esc::
             If !CancelClose {
                 Winclose, ahk_id %escHwndID%
 
-                loop 10 {
+                Loop, 10
+                {
                     ; tooltip, Waiting for `"%escTitle%`" to close... ; "
                     If (!WinExist("ahk_id " . escHwndID)) {
                         ; ClearRect(escHwndID)
@@ -2698,7 +2692,8 @@ $Esc::
 
                 If (WinExist("ahk_id " . escHwndID) && !executedOnce) {
                     WinKill , ahk_id %escHwndID%
-                    loop 50 {
+                    Loop, 50
+                    {
                         If !WinExist("ahk_id " . escHwndID) {
                             ClearMasks_not(escHwndID, Opacity)
                             GoSub, FadeOutWindowTitle
@@ -2922,7 +2917,7 @@ SortAllWins:
     Critical, On
 
     WinSet, AlwaysOnTop, Off, ahk_id %_winIdD%
-    WinSet, AlwaysOnTop, On, ahk_id %_winIdD%
+    WinSet, AlwaysOnTop, On,  ahk_id %_winIdD%
 
     If (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4) {
             WinActivate, % "ahk_id " ValidWindows[4]
@@ -2971,7 +2966,7 @@ Return
 
 ResetWins:
     If MinimizedWindows.length() > 0 {
-        loop % MinimizedWindows.length()
+        Loop, % MinimizedWindows.length()
         {
             minHwndID := MinimizedWindows[A_Index]
             WinMinimize, ahk_id %minHwndID%
@@ -3031,7 +3026,7 @@ Return
         WinGet, activeProcessName, ProcessName, ahk_id %tildeHwndID%
         WinGetClass, activeClassName, ahk_id %tildeHwndID%
         WinGet, allWindows, List
-        loop % allWindows
+        Loop, %allWindows%
         {
             hwndID := allWindows%A_Index%
 
@@ -3097,7 +3092,7 @@ Return
 $!Lbutton::
     If (hitTab || hitTilde) {
         LclickSelected := True
-        loop
+        Loop
         {
             KeyWait, Lbutton, D T0.1
             If (!ErrorLevel) {
@@ -3365,7 +3360,7 @@ Cycle() {
         WinGet, actId, ID, A
         WinGet, allWindows, List
 
-        loop % allWindows
+        Loop, %allWindows%
         {
             Critical On
             hwndID := allWindows%A_Index%
@@ -3438,7 +3433,7 @@ Cycle() {
 
     KeyWait, Tab, U
 
-    loop
+    Loop
     {
         If LclickSelected
             break
@@ -3501,7 +3496,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
 
     Critical, On
-    loop % windowsListWithSameProcessAndClass
+    Loop, %windowsListWithSameProcessAndClass%
     {
         hwndID := windowsListWithSameProcessAndClass%A_Index%
         WinGetTitle, tit, ahk_id %hwndID%
@@ -3536,7 +3531,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     numWindows := GroupedWindows.length()
     If (numWindows <= 1) {
-        loop 100 {
+        Loop, 100
+        {
             Tooltip, Only %numWindows% Window(s) found!
             sleep, 10
         }
@@ -3568,7 +3564,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     }
     gwHwndId := GroupedWindows[cycleCount] ; get ready to activate next window
 
-    loop
+    Loop
     {
         If LclickSelected
             break
@@ -3599,7 +3595,8 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
             If (cycleCount > numWindows) {
                 cycleCount := 1
             }
-            loop
+
+            Loop
             {
                 gwHwndId := GroupedWindows[cycleCount]
                 If !IsWindowOnMonNum(gwHwndId, currentMon) {
@@ -3621,7 +3618,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         GoSub, FadeOutWindowTitle
     }
 
-    loop % windowsToMinimize.length()
+    Loop, % windowsToMinimize.length()
     {
         tempId := windowsToMinimize[A_Index]
         If (tempId != lastActWinID) {
@@ -3652,7 +3649,8 @@ ClearRect(hwnd := "") {
 
     If DrawingRect {
         Critical, On
-        loop 5 {
+        Loop, 5
+        {
             DrawingRect := False
             If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 Critical, Off
@@ -3666,7 +3664,7 @@ ClearRect(hwnd := "") {
         }
 
         decrement_amount := 15
-        loop % floor(255/decrement_amount)
+        Loop, % floor(255/decrement_amount)
         {
             current_trans := 255-(decrement_amount * A_Index)
             WinSet, Transparent, %current_trans%, ahk_id %Highlighter%
@@ -3879,7 +3877,7 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "")
     transIncr  := (alphaTarget - alphaStart)/iterations
     alphaNow   := alphaStart + transIncr
 
-    loop %iterations%
+    Loop, %iterations%
     {
         ; If a newer fade started, stop ASAP
         if (localFadeToken != overlayFadeToken)
@@ -4255,7 +4253,7 @@ DrawMasks_aot(targetHwnd := "", firstDraw := True) {
             WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
             WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
 
-            WinSet, Transparent, %fadeVal%, ahk_id %black5Hwnd%
+            WinSet, Transparent, %fadeVal%,  ahk_id %black5Hwnd%
             ; SetWindowAlphaTopmost(black5Hwnd, fadeVal, True)
             sleep, 2
         }
@@ -4360,7 +4358,7 @@ ClearBlackMonitor(initialOpacity := -1, iterations := 0) {
     transVal   := initTransVal
     opacityInterval := Floor(initTransVal / iterations)
 
-    ; fade-out loop (non-critical)
+    ; fade-out Loop (non-critical)
     Loop, %iterations%
     {
         transVal -= opacityInterval
@@ -4493,7 +4491,7 @@ $~^Lbutton::
     If (targetClass != "Windows.UI.Core.CoreWindow" && targetClass != "TaskListThumbnailWnd" && targetClass != "XamlExplorerHostIslandWindow") {
         WinGet, targetProcess, ProcessName, ahk_id %targetID%
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-        loop % windowsFromProc
+        Loop, %windowsFromProc%
         {
             hwndID := windowsFromProc%A_Index%
             WinGet, isMin, MinMax, ahk_id %hwndId%
@@ -4553,7 +4551,7 @@ $^LButton::
         WinGet, targetProcess, ProcessName, ahk_id %actID%
         WinGetClass, targetClass, ahk_id %actID%
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-        loop % windowsFromProc
+        Loop, %windowsFromProc%
         {
             hwndID := windowsFromProc%A_Index%
             WinGet, isMin, MinMax, ahk_id %hwndId%
@@ -4644,7 +4642,7 @@ ExplorerHitTestType() {
     roles := []
     cur := acc
 
-    loop, 8 {
+    Loop, 8 {
         if !IsObject(cur)
             break
         r := Explorer__GetRoleNum(cur)
@@ -5106,7 +5104,8 @@ DebugRolesUnderMouse() {
 
     out := ""
     cur := acc
-    Loop 20 {
+    Loop, 20
+    {
         if !IsObject(cur)
             break
 
@@ -5496,12 +5495,12 @@ EnsureFocusedHwnd(hwndTarget, totalMs := 60, refocusEveryMs := 15)
 ; Why that’s faster
     ; One-time ControlGet and minimal focus calls
     ; Verification is a single API call (GetGUIThreadInfo) + IsChild, rather than a higher-level AHK command and repeated focus attempts
-    ; The total work is bounded by a time budget (e.g., 35–60ms), not a huge loop count
+    ; The total work is bounded by a time budget (e.g., 35–60ms), not a huge Loop count
 ; Why it’s more reliable
     ; It doesn’t require the focused thing to equal your exact ClassNN string.
     ; It treats “focus is within the target control subtree” as success, which is what you actually want before sending keys (especially for DirectUIHWND*).
 ; When not to use it
-    ; For simple, same-process Win32 apps where ControlGetFocus is perfectly reliable, your old loop isn’t necessary anyway; one ControlFocus is enough.
+    ; For simple, same-process Win32 apps where ControlGetFocus is perfectly reliable, your old Loop isn’t necessary anyway; one ControlFocus is enough.
 EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15)
 {
     ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hwndTop%
@@ -5511,7 +5510,7 @@ EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15)
 }
 ;You can use WinGetClass, cls, ahk_id %hwnd%, but it’s heavier in tight loops because it’s a higher-
 ; level AHK command. The direct DllCall("GetClassNameW") version is typically faster and easier
-; to use in a parent-walk loop.
+; to use in a parent-walk Loop.
 GetClassName(hwnd)
 {
     VarSetCapacity(buf, 256 * 2, 0)
@@ -5577,7 +5576,7 @@ $~LButton::
         If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
             ; tooltip, getting path
             currentPath    := ""
-            loop 20 {
+            Loop,20 {
                 If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
                     SetTimer, MouseTrack, On
                     SetTimer, KeyTrack,   On
@@ -5632,7 +5631,7 @@ $~LButton::
             ; tooltip, %result%
 
             If (!isColumnHeader && (isBlankSpaceExplorer || isItemClick)) {
-                loop 20 {
+                Loop,20 {
                     If (WinExist("A") != _winIdD) {
                         SetTimer, MouseTrack, On
                         SetTimer, KeyTrack,   On
@@ -5654,7 +5653,7 @@ $~LButton::
         CoordMode, Pixel, Screen
         lbX1 -= 2
         lbY1 -= 2
-        loop 5 {
+        Loop,5 {
             PixelGetColor, LBD_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
             lbX1 += 1
             lbY1 += 1
@@ -5758,7 +5757,7 @@ $~LButton::
 
                     ; tooltip, here3
                     currentPath := ""
-                    loop 20 {
+                    Loop,20 {
                         currentPath := GetExplorerPath(_winIdU)
                         If (currentPath != "" && currentPath != prevPath)
                             break
@@ -5774,7 +5773,7 @@ $~LButton::
 
             ; tooltip, here4
             currentPath := ""
-            loop 20 {
+            Loop,20 {
                 currentPath := GetExplorerPath(_winIdU)
                 If (currentPath != "" && currentPath != prevPath)
                     break
@@ -6111,7 +6110,7 @@ LaunchWinFind:
                 Menu, windows, deleteAll
             }
             Else {
-                loop 100 {
+                Loop,100 {
                     tooltip, No windows found!
                     sleep, 10
                 }
@@ -6205,7 +6204,7 @@ SwitchDesktop:
     CurrentDesktop := GetCurrentDesktopNumber() + 1
     Menu, vdeskMenu, Add
     Menu, vdeskMenu, DeleteAll
-    loop % getTotalDesktops()
+    Loop,% getTotalDesktops()
     {
         If (CurrentDesktop != A_Index)
         {
@@ -6686,7 +6685,21 @@ Return
     }
     Else {
         Gui, GUI4Boarder: Color, 0xFF0000
-        WinSet, Transparent, %Opacity%, ahk_id %hwndId%
+        transDelta  := 5
+        iterations   := (255 - Opacity) / transDelta
+        transVal     := 255
+        transVal     -= transDelta
+
+        Critical, On
+        Loop, %iterations%
+        {
+            WinSet, Transparent, %transVal%, ahk_id %hwndId%
+            transVal -= transDelta
+            Sleep, 20   ; purely visual – safe outside Critical
+        }
+        Critical, Off
+
+        ; WinSet, Transparent, %Opacity%, ahk_id %hwndId%
     }
     GoSub, DrawRect
     sleep, 200
@@ -6887,7 +6900,7 @@ GetCurrentMonitorIndex(){
     MouseGetPos, mx, my
     SysGet, monitorsCount, 80
 
-    Loop %monitorsCount%{
+    Loop, %monitorsCount% {
         SysGet, monitor, Monitor, %A_Index%
         If (monitorLeft <= mx && mx <= monitorRight && monitorTop <= my && my <= monitorBottom){
             Return A_Index
@@ -7008,7 +7021,7 @@ IsAltTabWindow_Why(hWnd)
         return "passes via edge/controlparent"
 
     hwnd2 := hWnd
-    loop
+    Loop
     {
         prev := hwnd2
         hwnd2 := DllCall("GetWindow", "uptr", hwnd2, "uint", GW_OWNER, "ptr")
@@ -7071,7 +7084,7 @@ IsAltTabWindow_Why2(hWnd)
         return "passes: WS_EX_WINDOWEDGE/WS_EX_CONTROLPARENT"
 
     hWnd2 := hWnd
-    loop
+    Loop
     {
         prev := hWnd2
         hWnd2 := DllCall("GetWindow", "uptr", hWnd2, "uint", GW_OWNER, "ptr")
@@ -7206,7 +7219,7 @@ IsAltTabWindow(hWnd, ByRef why := "") {
         return True
     }
 
-    loop
+    Loop
     {
         hWndPrev := hWnd
         hWnd := DllCall("GetWindow", "uptr", hWnd, "uint", GW_OWNER, "ptr")
@@ -7513,7 +7526,7 @@ getForemostWindowIdOnDesktop(n)
 
     ; winIDList contains a list of windows IDs ordered from the top to the bottom for each desktop.
     WinGet winIDList, list
-    Loop % winIDList {
+    Loop, %winIDList% {
         windowID := winIDList%A_Index%
         windowIsOnDesktop := DllCall(IsWindowOnDesktopNumberProc, "Ptr", windowID, "UInt", n, "Int")
         ; Select the first (and foremost) window which is in the specified desktop.
@@ -7528,7 +7541,7 @@ findDesktopWindowIsOn(hwnd)
     global IsWindowOnDesktopNumberProc
 
     hwnd := hwnd + 0  ; force numeric
-    Loop % getTotalDesktops()
+    Loop, % getTotalDesktops()
     {
         desktop := A_Index - 1
         ret := DllCall(IsWindowOnDesktopNumberProc, "Ptr", hwnd, "Int", desktop, "Int")
@@ -7553,7 +7566,7 @@ UpdateValidWindows() {
 
     currentMon := MWAGetMonitorMouseIsIn()
     WinGet, allWindows, List
-    loop % allWindows
+    Loop, %allWindows%
     {
         hwndID := allWindows%A_Index%
 
@@ -7635,8 +7648,8 @@ KeyTrack() {
     If (currCtrl == "Edit1" && InStr(currClass, "EVERYTHING", True)) {
         StopAutoFix := True
         ; A_PriorKey and Loops — How It Works
-        ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a loop.
-        ; You can read A_PriorKey at any point in the loop, and it will show the most recent key pressed up to that moment.
+        ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a Loop.
+        ; You can read A_PriorKey at any point in the Loop, and it will show the most recent key pressed up to that moment.
         ; tooltip, % "lastKey- " . A_PriorKey . " - " . A_TickCount-TimeOfLastHotkeyTyped
         If (   TimeOfLastHotkeyTyped
             && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
@@ -7880,7 +7893,7 @@ IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
     ; WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
     WinGetPosEx(thisWindowHwnd, X, Y, W, H)
     ;Iterate through each monitor
-    Loop %monCount% {
+    Loop, %monCount% {
         Critical, On
         ;Get Monitor working area
         If (A_Index == targetMonNum) {
@@ -7915,7 +7928,7 @@ FindMonNumForWindows(thisWindowHwnd) {
     ; WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
     WinGetPosEx(thisWindowHwnd, X, Y, W, H)
     ;Iterate through each monitor
-    Loop %monCount% {
+    Loop, %monCount% {
         Critical, On
         ;Get Monitor working area
         SysGet, workArea, Monitor, % A_Index
@@ -8430,7 +8443,7 @@ FindTopMostWindow() {
     DetectHiddenWindows, Off
     Critical, On
     WinGet, winList, List,
-    loop % winList
+    Loop, %winList%
     {
         hwndID := winList%A_Index%
         If IsAltTabWindow(hwndId) {
@@ -8462,7 +8475,7 @@ FindSecondMostWindow(ref_hwndID := "") {
     DetectHiddenWindows, Off
     Critical, On
     WinGet, winList, List,
-    loop % winList
+    Loop, %winList%
     {
         hwndID := winList%A_Index%
         If IsAltTabWindow(hwndId) {
@@ -8883,7 +8896,7 @@ GetExplorerPath(hwnd := "")
         }
 
         loopCount := 0
-        loop, 100
+        Loop, 100
         {
             loopCount := A_Index
             if RegExMatch(expTitle, "^\w\:")
@@ -8913,7 +8926,7 @@ GetExplorerPath(hwnd := "")
     if (cacheMap.HasKey(hwnd))
         cacheItem := cacheMap[hwnd]
 
-    ; Cheap throttle: if called repeatedly in a tight loop, return cached value briefly
+    ; Cheap throttle: if called repeatedly in a tight Loop, return cached value briefly
     if (IsObject(cacheItem))
     {
         if (A_TickCount - cacheItem.lastTick < 10)
@@ -9197,7 +9210,7 @@ Local    ; This modfied version to be passed as parameter to ShowMenu() @ tiny.c
   DllCall("SubtractRect", "Ptr",v+52, "Ptr",v+4, "Ptr",v+68)
   DllCall("GetWindowRect", "Ptr",WinExist("ahk_class Shell_TrayWnd"), "Ptr",v+36)
   DllCall("SubtractRect", "Ptr",v+20, "Ptr",v+52, "Ptr",v+36)
-  Loop % (8, offset:=0)
+  Loop,% (8, offset:=0)
     v%A_Index% := NumGet(v+0, offset+=4, "Int")
 Return ( v3>v7 ? [v7, Y, 0x18] : v4>v8 ? [X, v8, 0x24]
        : v5>v1 ? [v5, Y, 0x10] : v6>v2 ? [X, v6, 0x04] : [0,0,0] )
@@ -10208,6 +10221,7 @@ SetTitleMatchMode, 2
 ::tick::
 ::rake::
 ::resets::
+::arming::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -12445,6 +12459,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its complicated::it's complicated
 ::its developed::it's developed
 ::its difficult:: it's difficult
+::its doing::it's doing
 ::its done::it's done
 ::its down::it's down
 ::its easy:: it's easy
@@ -12492,6 +12507,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its time::it's time
 ::its true::it's true
 ::its up::it's up
+::its using::it's using
 ::its very::it's very
 ::its working::it's working
 ::its your::it's your
