@@ -3427,7 +3427,6 @@ Return
 #If
 
 Cycle() {
-
     global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, Opacity
 
     prev_exe   :=
@@ -3472,11 +3471,12 @@ Cycle() {
                             }
                             Else {
                                 Critical, Off
-                                ; DrawMasks_aot()
                                 Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
-                                If !GetKeyState("LAlt","P") || GetKeyState("q","P") {
-                                    GroupedWindows := []
-                                    ValidWindows   := []
+
+                                WinGetTitle, tits, % "ahk_id " hwndID
+                                WinGet, pp, ProcessPath , % "ahk_id " hwndID
+                                DrawWindowTitlePopup(tits, pp, True)
+                                If !GetKeyState("LAlt","P") {
                                     Critical, Off
                                     Return 0
                                 }
@@ -3486,12 +3486,13 @@ Cycle() {
                             WinActivate, % "ahk_id " hwndID
                             cycleCount := 3
                             Critical, Off
-                            ; DrawMasks_aot()
                             Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
+
+                            WinGetTitle, tits, % "ahk_id " hwndID
+                            WinGet, pp, ProcessPath , % "ahk_id " hwndID
+                            DrawWindowTitlePopup(tits, pp, True)
                         }
-                        If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P") || GetKeyState("q","P"))) {
-                            GroupedWindows := []
-                            ValidWindows   := []
+                        If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P"))) {
                             Critical, Off
                             Return 0
                         }
@@ -3512,6 +3513,11 @@ Cycle() {
     }
 
     KeyWait, Tab, U
+
+    If !GetKeyState("LAlt","P") {
+        Critical, Off
+        Return 0
+    }
 
     Loop
     {
@@ -3543,17 +3549,16 @@ Cycle() {
                 WinActivate,   ahk_id %gwHwnd%
                 WinWaitActive, ahk_id %gwHwnd%, , 2
                 WinGetPosEx(gwHwnd, wx, wy, ww, wh, null, null)
-                ; DrawMasks_aot(gwHwnd,False)
                 Overlay_MoveHole(wx, wy, ww, wh)
+
                 WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                 WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
-
                 DrawWindowTitlePopup(tits, pp)
                 KeyWait, Tab, U
             }
         }
     }
-    until (!GetKeyState("LAlt", "P") || GetKeyState("q","P"))
+    until (!GetKeyState("LAlt", "P"))
 
     If !LclickSelected {
         GoSub, FadeOutWindowTitle
@@ -3631,7 +3636,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
 
     gwHwndId := GroupedWindows[cycleCount]
-    ; DrawMasks_aot()
     WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
     Overlay_ShowHole(wx, wy, ww, wh, Opacity,,60)
     DrawWindowTitlePopup(actTitle, pp, True)
@@ -3666,7 +3670,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
             WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
             Overlay_MoveHole(wx, wy, ww, wh)
-            ; DrawMasks_aot(gwHwndId, False)
             DrawWindowTitlePopup(actTitle, pp, True)
 
             KeyWait, ``, U
@@ -3723,7 +3726,6 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 ; ========================================================================================================
 ; ------------------------------------  Drawing Functions ------------------------------------------------
 ; ========================================================================================================
-
 ClearRect(hwnd := "") {
     global DrawingRect, Highlighter, GUI4Boarder
 
@@ -3904,8 +3906,7 @@ Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget) {
 ; - Changing clickThrough is supported via ExStyle toggling.
 ; - If you need to change overlayColor dynamically, we set it here.
 ; ------------------------------------------------------------
-Overlay_SetAlpha(overlayHwnd, alphaVal)
-{
+Overlay_SetAlpha(overlayHwnd, alphaVal) {
     global overlayAlphaCurrent
 
     ; Ensures WS_EX_LAYERED is present (required for alpha)
@@ -3921,15 +3922,13 @@ Overlay_SetAlpha(overlayHwnd, alphaVal)
     overlayAlphaCurrent := alphaVal
 }
 
-Overlay_CancelFade()
-{
+Overlay_CancelFade() {
     global overlayFadeToken
     overlayFadeToken++
     return overlayFadeToken
 }
 
-Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "")
-{
+Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "") {
     global overlayFadeToken, overlayAlphaCurrent
 
     localFadeToken := Overlay_CancelFade()
@@ -3978,58 +3977,95 @@ Overlay_GetWorkArea(monNum, ByRef areaLeft, ByRef areaTop, ByRef areaRight, ByRe
     areaTop    := monAreaTop
     areaRight  := monAreaRight
     areaBottom := monAreaBottom
+
+    ; SysGet, monFull, Monitor, %monNum%
+    ; MsgBox, % "Full Left: " monFullLeft
+        ; . "`nFull Top: " monFullTop
+        ; . "`nFull Right: " monFullRight
+        ; . "`nFull Bottom: " monFullBottom
+        ; . "`nWork Left: " monAreaLeft
+        ; . "`nWork Top: " monAreaTop
+        ; . "`nWork Right: " monAreaRight
+        ; . "`nWork Bottom: " monAreaBottom
 }
 
-Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH
-                , overlayAlpha := 180
-                , clickThrough := True
-                , fadeMs := 100)
-{
+Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, clickThrough := True, fadeMs := 100) {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
 
     if (!overlayIsReady || !overlayHwnd)
         return 0
 
-    ; Cancel any in-progress fade immediately
+    ; Cancel any in-progress fade immediately.
     Overlay_CancelFade()
 
-    ; Click-through toggle (WS_EX_TRANSPARENT = 0x20)
+    ; Toggle click-through.
     if (clickThrough)
         WinSet, ExStyle, +0x20, ahk_id %overlayHwnd%
     else
         WinSet, ExStyle, -0x20, ahk_id %overlayHwnd%
 
+    ; Pick the monitor from the mouse position.
     monNum := MWAGetMonitorMouseIsIn()
     Overlay_GetWorkArea(monNum, areaLeft, areaTop, areaRight, areaBottom)
 
-    areaWidth  := areaRight - areaLeft
+    areaWidth := areaRight - areaLeft
     areaHeight := areaBottom - areaTop
 
-    ; Show overlay only in the work area (taskbar excluded)
+    ; Reject invalid work area.
+    if (areaWidth <= 0 || areaHeight <= 0) {
+        Gui, Overlay:Hide
+        overlayAlphaCurrent := 0
+        return 0
+    }
+
+    ; Incoming hole rectangle is in screen coordinates.
+    holeLeft     := holePosX
+    holeTop      := holePosY
+    holeRight    := holePosX + holeSizeW
+    holeBottom   := holePosY + holeSizeH
+
+    ; Intersect the hole rectangle with the selected monitor's work area.
+    ; This is what makes non-zero monitor origins and negative coords safe.
+    clipLeft     := (holeLeft > areaLeft) ? holeLeft : areaLeft
+    clipTop      := (holeTop > areaTop) ? holeTop : areaTop
+    clipRight    := (holeRight < areaRight) ? holeRight : areaRight
+    clipBottom   := (holeBottom < areaBottom) ? holeBottom : areaBottom
+
+    clippedHoleW := clipRight - clipLeft
+    clippedHoleH := clipBottom - clipTop
+
+    ; If the window does not overlap the mouse monitor's work area,
+    ; hide the overlay instead of covering the window.
+    if (clippedHoleW <= 0 || clippedHoleH <= 0) {
+        Gui, Overlay:Hide
+        overlayAlphaCurrent := 0
+        return 0
+    }
+
+    ; Show overlay exactly over the selected monitor's work area.
     Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
 
-    ; If currently hidden/transparent, ensure we start from 0
+    ; If currently transparent, reset alpha baseline.
     if (overlayAlphaCurrent < 1)
         Overlay_SetAlpha(overlayHwnd, 0)
 
-    ; IMPORTANT: hole coords must be relative to the overlay's origin now.
-    ; If holePosX/holePosY are screen coords, convert them:
-    holeRelX := holePosX - areaLeft
-    holeRelY := holePosY - areaTop
+    ; Convert clipped screen coords to overlay-relative coords.
+    ; This correctly handles monitors whose origin is not 0,0.
+    holeRelX := clipLeft - areaLeft
+    holeRelY := clipTop - areaTop
 
-    Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeRelX, holeRelY, holeSizeW, holeSizeH)
+    Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeRelX, holeRelY, clippedHoleW, clippedHoleH)
 
-    ; Force repaint
+    ; Force repaint.
     WinSet, Redraw,, ahk_id %overlayHwnd%
 
-    ; Fade from current alpha to target alpha
+    ; Fade from current alpha to target alpha.
     Overlay_FadeTo(overlayHwnd, overlayAlpha, fadeMs, overlayAlphaCurrent)
 
     return overlayHwnd
 }
 
-Overlay_SetOpacity(alphaVal, fadeMs := 0)
-{
+Overlay_SetOpacity(alphaVal, fadeMs := 0) {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
 
     if (!overlayIsReady || !overlayHwnd)
@@ -4055,6 +4091,37 @@ Overlay_SetOpacity(alphaVal, fadeMs := 0)
 }
 
 Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeX, holeY, holeW, holeH) {
+    local regFull
+    local regHole
+    local holeRight
+    local holeBottom
+
+    ; Clamp overlay bounds.
+    if (areaWidth < 1 || areaHeight < 1)
+        return 0
+
+    ; Clamp hole origin.
+    if (holeX < 0)
+        holeX := 0
+    if (holeY < 0)
+        holeY := 0
+
+    ; Clamp hole size.
+    if (holeW < 0)
+        holeW := 0
+    if (holeH < 0)
+        holeH := 0
+
+    holeRight := holeX + holeW
+    holeBottom := holeY + holeH
+
+    ; Clamp hole extents to overlay bounds.
+    if (holeRight > areaWidth)
+        holeRight := areaWidth
+    if (holeBottom > areaHeight)
+        holeBottom := areaHeight
+
+    ; Create region covering the full overlay.
     regFull := DllCall("gdi32\CreateRectRgn"
         , "int", 0
         , "int", 0
@@ -4062,29 +4129,35 @@ Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeX, holeY,
         , "int", areaHeight
         , "ptr")
 
+    ; Create the hole region.
     regHole := DllCall("gdi32\CreateRectRgn"
         , "int", holeX
         , "int", holeY
-        , "int", holeX + holeW
-        , "int", holeY + holeH
+        , "int", holeRight
+        , "int", holeBottom
         , "ptr")
 
+    ; Subtract the hole from the full region.
     DllCall("gdi32\CombineRgn"
         , "ptr", regFull
         , "ptr", regFull
         , "ptr", regHole
         , "int", 4) ; RGN_DIFF
 
+    ; Apply the region to the overlay.
+    ; Windows takes ownership of regFull after SetWindowRgn succeeds.
     DllCall("user32\SetWindowRgn"
         , "ptr", overlayHwnd
         , "ptr", regFull
         , "int", True)
 
+    ; We still own regHole and must delete it.
     DllCall("gdi32\DeleteObject", "ptr", regHole)
+
+    return 1
 }
 
-Overlay_SetHoleRegion(overlayHwnd, holeX, holeY, holeW, holeH)
-{
+Overlay_SetHoleRegion(overlayHwnd, holeX, holeY, holeW, holeH) {
     ; Creates region = full screen
     regFull := DllCall("gdi32\CreateRectRgn"
         , "int", 0
@@ -4118,23 +4191,23 @@ Overlay_SetHoleRegion(overlayHwnd, holeX, holeY, holeW, holeH)
     DllCall("gdi32\DeleteObject", "ptr", regHole)
 }
 
-Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "", doRedraw := True)
-{
+Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "", doRedraw := True) {
     global overlayHwnd, overlayIsReady
 
-    static lastHolePosX  := 0
-    static lastHolePosY  := 0
+    static lastHolePosX := 0
+    static lastHolePosY := 0
     static lastHoleSizeW := 0
     static lastHoleSizeH := 0
-    static hasLastHole   := False
+    static hasLastHole := False
 
     if (!overlayIsReady || !overlayHwnd)
         return 0
 
-    ; If any values are omitted, reuse prior ones (requires one full set at least once)
+    ; If any values are omitted, reuse prior ones.
     if (holePosX = "" || holePosY = "" || holeSizeW = "" || holeSizeH = "") {
         if (!hasLastHole)
             return 0
+
         if (holePosX = "")
             holePosX := lastHolePosX
         if (holePosY = "")
@@ -4151,8 +4224,47 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
         hasLastHole   := True
     }
 
-    ; Apply the updated donut region
-    Overlay_SetHoleRegion(overlayHwnd, holePosX, holePosY, holeSizeW, holeSizeH)
+    ; Pick the monitor from the mouse position.
+    monNum := MWAGetMonitorMouseIsIn()
+    Overlay_GetWorkArea(monNum, areaLeft, areaTop, areaRight, areaBottom)
+
+    areaWidth    := areaRight - areaLeft
+    areaHeight   := areaBottom - areaTop
+
+    if (areaWidth <= 0 || areaHeight <= 0)
+        return 0
+
+    ; Treat incoming hole rect as screen coordinates.
+    holeLeft     := holePosX
+    holeTop      := holePosY
+    holeRight    := holePosX + holeSizeW
+    holeBottom   := holePosY + holeSizeH
+
+    ; Intersect hole rect with the selected monitor's work area.
+    clipLeft     := (holeLeft > areaLeft) ? holeLeft : areaLeft
+    clipTop      := (holeTop > areaTop) ? holeTop : areaTop
+    clipRight    := (holeRight < areaRight) ? holeRight : areaRight
+    clipBottom   := (holeBottom < areaBottom) ? holeBottom : areaBottom
+
+    clippedHoleW := clipRight - clipLeft
+    clippedHoleH := clipBottom - clipTop
+
+    ; If the target rect does not overlap this monitor's work area,
+    ; hide the overlay instead of covering the window.
+    if (clippedHoleW <= 0 || clippedHoleH <= 0) {
+        Gui, Overlay:Hide
+        return 0
+    }
+
+    ; Make sure the overlay is positioned on the selected monitor's work area.
+    Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
+
+    ; Convert screen coords to overlay-relative coords.
+    holeRelX := clipLeft - areaLeft
+    holeRelY := clipTop - areaTop
+
+    ; Apply the updated donut region using overlay-relative coordinates.
+    Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeRelX, holeRelY, clippedHoleW, clippedHoleH)
 
     if (doRedraw)
         WinSet, Redraw,, ahk_id %overlayHwnd%
@@ -4160,8 +4272,7 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     return 1
 }
 
-Overlay_Hide(fadeMs := 100)
-{
+Overlay_Hide(fadeMs := 100) {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
 
     if (!overlayIsReady || !overlayHwnd)
@@ -9261,6 +9372,9 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
         lastIdx  := strArray.MaxIndex()
         vtext := Trim(strArray[lastIdx])
     }
+
+    If !GetKeyState("LAlt", "P")
+        Return
 
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
