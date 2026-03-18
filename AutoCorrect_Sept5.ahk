@@ -145,17 +145,15 @@ Menu, Tray, Click, 1
 
 link := A_Startup . "\AutoCorrect.lnk"
 runAtStartup := FileExist(link) ? 1 : 0
-If (runAtStartup)
+if (runAtStartup)
     Menu, Tray, Check, Run at startup
-Else
+else
     Menu, Tray, Uncheck, Run at startup
-
-; Create 4 mask GUIs (top, left, right, bottom)
-; CreateMaskGui(1, black1Hwnd)
-; CreateMaskGui(2, black2Hwnd)
-; CreateMaskGui(3, black3Hwnd)
-; CreateMaskGui(4, black4Hwnd)
-; CreateMaskGui(5, black5Hwnd)
+; listens for tray icon notifications
+; - watch for message 0x404
+; - sent to your script window
+; - from your script’s tray icon registration
+OnMessage(0x404, "HandleTrayIconMessage")
 
 SysGet, MonNum, MonitorPrimary
 SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
@@ -409,6 +407,74 @@ Return
 MasterTimer:
     KillOtherAutoHotkeyU64_NotThisScript(true)
 Return
+
+HandleTrayIconMessage(wParam, lParam, msg, hwnd) {
+    static WM_RBUTTONUP := 0x205
+    ; filters for right-click only
+    if (lParam = WM_RBUTTONUP) {
+        ShowTrayMenuAtTaskbar()
+        return 0
+    }
+}
+
+ShowTrayMenuAtTaskbar() {
+    local trayPosX
+    local trayPosY
+    local trayWidth
+    local trayHeight
+    local clickPosX
+    local clickPosY
+    local menuPosX
+    local menuPosY
+    local menuFlags
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, clickPosX, clickPosY
+
+    WinGetPos, trayPosX, trayPosY, trayWidth, trayHeight, ahk_class Shell_TrayWnd
+    if (ErrorLevel) {
+        ShowMenuX("Tray", clickPosX, clickPosY)
+        return
+    }
+
+    ; Bottom taskbar:
+    ; bottom of menu touches top of taskbar
+    if (trayPosY + trayHeight >= A_ScreenHeight) {
+        trayIconLeftOffset := 12
+        menuPosX := clickPosX - trayIconLeftOffset
+        menuPosY := trayPosY
+        menuFlags := 0x20
+        ShowMenuX("Tray", menuPosX, menuPosY, menuFlags)
+        return
+    }
+
+    ; Top taskbar:
+    ; top of menu touches bottom of taskbar
+    if (trayPosY <= 0) {
+        menuPosX := clickPosX
+        menuPosY := trayPosY + trayHeight
+        menuFlags := 0x00    ; TPM_TOPALIGN | TPM_LEFTALIGN
+        ShowMenuX("Tray", menuPosX, menuPosY, menuFlags)
+        return
+    }
+
+    ; Left taskbar:
+    ; left edge of menu touches right edge of taskbar
+    if (trayPosX <= 0) {
+        menuPosX := trayPosX + trayWidth
+        menuPosY := clickPosY
+        menuFlags := 0x00    ; TPM_LEFTALIGN | TPM_TOPALIGN
+        ShowMenuX("Tray", menuPosX, menuPosY, menuFlags)
+        return
+    }
+
+    ; Right taskbar:
+    ; right edge of menu touches left edge of taskbar
+    menuPosX := trayPosX
+    menuPosY := clickPosY
+    menuFlags := 0x08       ; TPM_RIGHTALIGN
+    ShowMenuX("Tray", menuPosX, menuPosY, menuFlags)
+}
 
 ; Helper to resolve exports
 _gp(name)
@@ -2463,10 +2529,24 @@ $WheelDown::Send {Volume_Down}
 #If   ; end of context-sensitive block
 ;=============== KILL WINDOWS SHORTCUT KEYS =============
 ; Block bare Win keys
-*LWin::Return
-*RWin::Return
-*LWin up::Return
-*RWin up::Return
+; *LWin::Return
+; *RWin::Return
+; *LWin up::Return
+; *RWin up::Return
+
+; Block bare Win release so Start menu does not open
+~LWin Up::
+    if (A_PriorKey = "LWin")
+    {
+        Send, {Blind}{vk07}
+    }
+return
+~RWin Up::
+    if (A_PriorKey = "LWin")
+    {
+        Send, {Blind}{vk07}
+    }
+return
 
 ; Optionally block specific Windows shortcuts
 #d::Return      ; Block Win+D (Show desktop)
@@ -2747,7 +2827,7 @@ Return
     FixModifiers()
 Return
 
-!1::
+#1::
     Critical, On
     StopRecursion := True
     GoSub, SwitchToVD1
@@ -2777,7 +2857,7 @@ SwitchToVD1:
     }
 Return
 
-!2::
+#2::
     Critical, On
     StopRecursion := True
     GoSub, SwitchToVD2
@@ -2809,7 +2889,7 @@ SwitchToVD2:
     }
 Return
 
-!3::
+#3::
     Critical, On
     StopRecursion := True
     GoSub, SwitchToVD3
@@ -2841,7 +2921,7 @@ SwitchToVD3:
     }
 Return
 
-!4::
+#4::
     Critical, On
     StopRecursion := True
     GoSub, SwitchToVD4
@@ -6789,54 +6869,76 @@ IsOverException(hWnd := "") {
         Return False
 }
 
-;-----------------------------------------------------------------
-; Check whether the target window is activation target
-;-----------------------------------------------------------------
-; https://www.autohotkey.com/boards/viewtopic.php?t=81064
-ShowMenu(hMenu, MenuLoop:=0, X:=0, Y:=0, Flags:=0) {            ; Ver 0.61 by SKAN on D39F/D39G
-    Local                                                           ;            @ tiny.cc/showmenu
-      If (hMenu="WM_ENTERMENULOOP")
-        Return True
-      Fn := Func("ShowMenu").Bind("WM_ENTERMENULOOP"), n := MenuLoop=0 ? 0 : OnMessage(0x211,Fn,-1)
-      DllCall("SetForegroundWindow","Ptr",A_ScriptHwnd)
-      R := DllCall("TrackPopupMenu", "Ptr",hMenu, "Int",Flags, "Int",X, "Int",Y, "Int",0
-                 , "Ptr",A_ScriptHwnd, "Ptr",0, "UInt"),                     OnMessage(0x211,Fn, 0)
-      DllCall("PostMessage", "Ptr",A_ScriptHwnd, "Int",0, "Ptr",0, "Ptr",0)
+; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=81064#p533551
+ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ; Show popup menu by handle or by AHK menu name.
+                                                   ; Based on ShowMenu v0.63 by SKAN.
+    Local
+
+    ; If hMenu is not already a numeric HMENU handle,
+    ; assume it is an AutoHotkey menu name like "Tray" or "windows"
+    ; and convert it to the underlying Win32 menu handle.
+    If hMenu Is Not Integer
+        hMenu := MenuGetHandle(hMenu)
+
+    ; If X or Y was not provided, use the current mouse position.
+    ; Temporarily switch mouse CoordMode to Screen so the popup
+    ; position is based on absolute screen coordinates.
+    If (X = "" Or Y = "") {
+        CMM := A_CoordModeMouse
+        CoordMode, Mouse, Screen
+        MouseGetPos, XX, YY
+        CoordMode, Mouse, %CMM%
+
+        ; Only fill in whichever coordinate was omitted.
+        X := X = "" ? XX : X
+        Y := Y = "" ? YY : Y
+    }
+
+    ; Strip out flags this wrapper does not want the caller using:
+    ; 0x100 = TPM_RETURNCMD
+    ; 0x080 = TPM_NONOTIFY
+    ; This function expects normal menu command handling instead.
+    Flags &= ~0x180
+
+    ; Remember the window that currently has focus so it can be restored later.
+    pWnd := DllCall("User32\GetForegroundWindow", "Ptr")
+
+    ; Set the script window as foreground.
+    ; This is important for proper popup-menu behavior and dismissal.
+    DllCall("User32\SetForegroundWindow", "Ptr", mWnd := A_ScriptHwnd)
+
+    ; These were likely considered to prevent interruption while the menu is shown.
+    ; Old_IsCritical := A_IsCritical
+    ; Critical On
+
+    ; Show the popup menu at screen position X,Y using the requested flags.
+    ; hMenu must be a real HMENU handle at this point.
+    ; mWnd is used as the owner window for the popup.
+    R := DllCall("User32\TrackPopupMenuEx"
+        , "Ptr", hMenu
+        , "UInt", Flags
+        , "Int", X
+        , "Int", Y
+        , "Ptr", mWnd
+        , "Ptr", 0
+        , "UInt")
+
+    ; Give AutoHotkey a moment to receive/process the WM_COMMAND
+    ; generated by the selected menu item.
+    Sleep, 50
+
+    ; Post a null message to help the popup menu fully close/settle.
+    DllCall("User32\PostMessage", "Ptr", mWnd, "Int", 0, "Ptr", 0, "Ptr", 0)
+
+    ; If the script window is still foreground but not actually active,
+    ; restore the previously focused window.
+    If DllCall("User32\GetForegroundWindow", "Ptr") = mWnd And Not WinActive("ahk_id " mWnd)
+        DllCall("User32\SetForegroundWindow", "Ptr", pWnd)
+
+    ; Restore previous Critical state if you decide to enable it above.
+    ; Critical %Old_IsCritical%
 
     Return R
-}
-
-; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=81064#p533551
-ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ;  ShowMenu v0.63 by SKAN on D39F/D689 @ autohotkey.com/r?t=81064
-  Local
-  If   hMenu Is Not Integer
-       hMenu := MenuGetHandle(hMenu)
-
-  If ( X=""  Or  Y="" ) {
-       CMM := A_CoordModeMouse
-       CoordMode, Mouse, Screen
-       MouseGetPos, XX, YY
-       CoordMode, Mouse, %CMM%
-       X := X="" ? XX : X
-       Y := Y="" ? YY : Y
-  }
-
-  Flags    &= ~0x180                              ;  disallow flags TPM_RETURNCMD (0x100), TPM_NONOTIFY (0x80)
-  pWnd     := DllCall("User32\GetForegroundWindow", "Ptr")
-  DllCall("User32\SetForegroundWindow","Ptr",mWnd := A_ScriptHwnd)
-
-  ; Old_IsCritical := A_IsCritical
-  ; Critical On
-
-  R := DllCall("User32\TrackPopupMenuEx", "Ptr",hMenu, "UInt",Flags, "Int",X, "Int",Y, "Ptr",mWnd, "Ptr",0, "UInt")
-  Sleep, 50                                       ;  wait for WM_COMMAND... DllCall("WaitMessage") too late, sucks!
-  DllCall("User32\PostMessage", "Ptr",mWnd, "Int",0, "Ptr",0, "Ptr",0)
-
-  If DllCall("User32\GetForegroundWindow", "Ptr") = mWnd  And Not  WinActive("ahk_id " mWnd)
-     DllCall("User32\SetForegroundWindow","Ptr",pWnd)
-
-  ; Critical %Old_IsCritical%
-Return R
 }
 
 IsWindow(hWnd) {
@@ -9196,25 +9298,6 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
     Return WindowTitleID
 }
 
-Routine:
-  ShowMenu(MenuGetHandle("Tray"), False, TrayMenuParams()*)
-Return
-
-TrayMenuParams() {      ; Original function is TaskbarEdge() by SKAN @ tiny.cc/taskbaredge
-Local    ; This modfied version to be passed as parameter to ShowMenu() @ tiny.cc/showmenu
-  VarSetCapacity(var,84,0), v:=&var,   DllCall("GetCursorPos","Ptr",v+76)
-  X:=NumGet(v+76,"Int"), Y:=NumGet(v+80,"Int"),  NumPut(40,v+0,"Int64")
-  hMonitor := DllCall("MonitorFromPoint", "Int64",NumGet(v+76,"Int64"), "Int",0, "Ptr")
-  DllCall("GetMonitorInfo", "Ptr",hMonitor, "Ptr",v)
-  DllCall("GetWindowRect", "Ptr",WinExist("ahk_class Shell_SecondaryTrayWnd"), "Ptr",v+68)
-  DllCall("SubtractRect", "Ptr",v+52, "Ptr",v+4, "Ptr",v+68)
-  DllCall("GetWindowRect", "Ptr",WinExist("ahk_class Shell_TrayWnd"), "Ptr",v+36)
-  DllCall("SubtractRect", "Ptr",v+20, "Ptr",v+52, "Ptr",v+36)
-  Loop,% (8, offset:=0)
-    v%A_Index% := NumGet(v+0, offset+=4, "Int")
-Return ( v3>v7 ? [v7, Y, 0x18] : v4>v8 ? [X, v8, 0x24]
-       : v5>v1 ? [v5, Y, 0x10] : v6>v2 ? [X, v6, 0x04] : [0,0,0] )
-}
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=51788
 GetNameOfIconUnderMouse() {
