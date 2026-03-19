@@ -821,7 +821,6 @@ DoNothing:
 ; ==========================================================================================================================================
 ; ==========================================================================================================================================
 WhichButton(vPosX, vPosY, hWnd) {
-
     errorFound := False
 
     ;get role number
@@ -900,8 +899,7 @@ WhichButton(vPosX, vPosY, hWnd) {
     Return vOutput
 }
 
-DetectWin11()
-{
+DetectWin11() {
     ; Get version via WMI to capture the build number
     version := ""
     buildNumber := ""
@@ -2711,8 +2709,8 @@ $Esc::
             WinActivate, ahk_id %escHwndID%
             WinGet, pp, ProcessPath , ahk_id %escHwndID%
             Hotkey, x, DoNothing, On
-            ; GoSub, DrawRect
-            DrawMasks_aot(escHwndID)
+            WinGetPosEx(escHwndID, wx, wy, ww, wh, null, null)
+            Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
             DrawWindowTitlePopup("Close?", pp, False, escHwndID)
 
             Loop
@@ -2723,8 +2721,7 @@ $Esc::
                     break
                 If GetKeyState("x","P") {
                     Tooltip, Canceled!
-                    ; ClearRect()
-                    ClearMasks_not(, Opacity)
+                    Overlay_Hide(40)
                     GoSub, FadeOutWindowTitle
                     CancelClose := True
                     sleep, 1500
@@ -2740,8 +2737,7 @@ $Esc::
                 {
                     ; tooltip, Waiting for `"%escTitle%`" to close... ; "
                     If (!WinExist("ahk_id " . escHwndID)) {
-                        ; ClearRect(escHwndID)
-                        ClearMasks_not(escHwndID, Opacity)
+                        Overlay_Hide(40)
                         GoSub, FadeOutWindowTitle
                         ActivateTopMostWindow()
                         break
@@ -2775,7 +2771,7 @@ $Esc::
                     Loop, 50
                     {
                         If !WinExist("ahk_id " . escHwndID) {
-                            ClearMasks_not(escHwndID, Opacity)
+                            Overlay_Hide(40)
                             GoSub, FadeOutWindowTitle
                             ActivateTopMostWindow()
                             break
@@ -2786,7 +2782,7 @@ $Esc::
                 }
                 Else {
                     ; tooltip, tried to clear
-                    ClearMasks_not(escHwndID, Opacity)
+                    Overlay_Hide(40)
                     GoSub, FadeOutWindowTitle
                     ActivateTopMostWindow()
                 }
@@ -3172,35 +3168,37 @@ Return
 $!Lbutton::
     If (hitTab || hitTilde) {
         LclickSelected := True
+            ; KeyWait, Lbutton, D T0.1
+            ; If (!ErrorLevel) {
+        MouseGetPos, , , _winIdD,
+        WinActivate, ahk_id %_winIdD%
+        WinGetTitle, actTitle, ahk_id %_winIdD%
+        WinGet, pp, ProcessPath , ahk_id %_winIdD%
+
+        lastActWinID := _winIdD
+        startHighlight := True
+
+        WinGetPosEx(_winIdD, wx, wy, ww, wh, null, null)
+        Overlay_MoveHole(wx, wy, ww, wh)
+        DrawWindowTitlePopup(actTitle, pp)
+            ; }
+
         Loop
         {
-            KeyWait, Lbutton, D T0.1
-            If (!ErrorLevel) {
-                MouseGetPos, , , _winIdD,
-                WinActivate, ahk_id %_winIdD%
-                WinGetTitle, actTitle, ahk_id %_winIdD%
-                WinGet, pp, ProcessPath , ahk_id %_winIdD%
-
-                lastActWinID := _winIdD
-                startHighlight := True
-
-                WinGetPosEx(_winIdD, wx, wy, ww, wh, null, null)
-                Overlay_MoveHole(wx, wy, ww, wh)
-                DrawWindowTitlePopup(actTitle, pp)
-            }
-
             If (!GetKeyState("Lbutton","P") && !GetKeyState("LAlt","P")) {
-                Overlay_FadeTo(overlayHwnd, 255, 80)
+                Overlay_FadeTo(overlayHwnd, 255, 30)
+                GoSub, FadeOutWindowTitle
 
                 GoSub, Altup
 
-                Overlay_Hide()
+                Overlay_Hide(40)
 
                 GoSub, AltupCleanup
 
                 FixModifiers()
-                Return
+                break
             }
+            sleep, 5
         }
     }
     Else If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550)) {
@@ -9373,7 +9371,7 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
         vtext := Trim(strArray[lastIdx])
     }
 
-    If !GetKeyState("LAlt", "P")
+    If !GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")
         Return
 
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
