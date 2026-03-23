@@ -2710,7 +2710,7 @@ $Esc::
             WinGet, pp, ProcessPath , ahk_id %escHwndID%
             Hotkey, x, DoNothing, On
             WinGetPosEx(escHwndID, wx, wy, ww, wh, null, null)
-            Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
+            Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
             DrawWindowTitlePopup("Close?", pp, False, escHwndID)
 
             Loop
@@ -2721,8 +2721,8 @@ $Esc::
                     break
                 If GetKeyState("x","P") {
                     Tooltip, Canceled!
-                    Overlay_Hide(40)
-                    GoSub, FadeOutWindowTitle
+                    Overlay_Hide(30)
+                    ClearWindowTitlePopup()
                     CancelClose := True
                     sleep, 1500
                     Tooltip,
@@ -2737,8 +2737,8 @@ $Esc::
                 {
                     ; tooltip, Waiting for `"%escTitle%`" to close... ; "
                     If (!WinExist("ahk_id " . escHwndID)) {
-                        Overlay_Hide(40)
-                        GoSub, FadeOutWindowTitle
+                        Overlay_Hide(30)
+                        ClearWindowTitlePopup()
                         ActivateTopMostWindow()
                         break
                     }
@@ -2771,8 +2771,8 @@ $Esc::
                     Loop, 50
                     {
                         If !WinExist("ahk_id " . escHwndID) {
-                            Overlay_Hide(40)
-                            GoSub, FadeOutWindowTitle
+                            Overlay_Hide(30)
+                            ClearWindowTitlePopup()
                             ActivateTopMostWindow()
                             break
                         }
@@ -2782,8 +2782,8 @@ $Esc::
                 }
                 Else {
                     ; tooltip, tried to clear
-                    Overlay_Hide(40)
-                    GoSub, FadeOutWindowTitle
+                    Overlay_Hide(30)
+                    ClearWindowTitlePopup()
                     ActivateTopMostWindow()
                 }
             }
@@ -2985,6 +2985,7 @@ AltupCleanup:
     StopRecursion    := False
     Thread, NoTimers, False
     Critical, Off
+    Gui, WindowTitle: Destroy
     SetTimer, MouseTrack, On
     SetTimer, KeyTrack,   On
 Return
@@ -3075,12 +3076,12 @@ $!+Tab::
         If !CanceledWinSwap {
             If (cycleCount > 2) {
                 startHighlight := True
-                Overlay_FadeTo(overlayHwnd, 255, 30)
+                Overlay_FadeTo(overlayHwnd, 255, 10)
             }
 
             GoSub, Altup
 
-            Overlay_Hide(40)
+            Overlay_Hide(30)
 
             GoSub, AltupCleanup
 
@@ -3131,12 +3132,12 @@ Return
         If !CanceledWinSwap {
             If (cycleCount > 2) {
                 startHighlight := True
-                Overlay_FadeTo(overlayHwnd, 255, 30)
+                Overlay_FadeTo(overlayHwnd, 255, 10)
             }
 
             GoSub, Altup
 
-            Overlay_Hide(40)
+            Overlay_Hide(30)
 
             GoSub, AltupCleanup
 
@@ -3186,12 +3187,12 @@ $!Lbutton::
         Loop
         {
             If (!GetKeyState("Lbutton","P") && !GetKeyState("LAlt","P")) {
-                Overlay_FadeTo(overlayHwnd, 255, 30)
-                GoSub, FadeOutWindowTitle
+                Overlay_FadeTo(overlayHwnd, 255, 10)
+                ClearWindowTitlePopup()
 
                 GoSub, Altup
 
-                Overlay_Hide(40)
+                Overlay_Hide(30)
 
                 GoSub, AltupCleanup
 
@@ -3226,30 +3227,6 @@ Return
 
 RunDynaExprCenter:
     DynaRun(CenterExpr, CenterTimeout_Name)
-Return
-
-FadeOutWindowTitle:
-    global WindowTitleID
-
-    delayTime := 80
-
-    WinSet, Transparent, 200, ahk_id %WindowTitleID%
-    sleep, %delayTime%
-    WinSet, Transparent, 175, ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 150, ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 125, ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 100, ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 75,  ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 50,  ahk_id %WindowTitleID%
-    sleep, %delayTime%
-    WinSet, Transparent, 25,  ahk_id %WindowTitleID%
-    sleep, %delayTime%
-    Gui, WindowTitle: Destroy
 Return
 
 IsWindowElevated(hwnd)
@@ -3469,7 +3446,7 @@ Cycle() {
                             }
                             Else {
                                 Critical, Off
-                                Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
+                                Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
 
                                 WinGetTitle, tits, % "ahk_id " hwndID
                                 WinGet, pp, ProcessPath , % "ahk_id " hwndID
@@ -3484,7 +3461,7 @@ Cycle() {
                             WinActivate, % "ahk_id " hwndID
                             cycleCount := 3
                             Critical, Off
-                            Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
+                            Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
 
                             WinGetTitle, tits, % "ahk_id " hwndID
                             WinGet, pp, ProcessPath , % "ahk_id " hwndID
@@ -3559,7 +3536,7 @@ Cycle() {
     until (!GetKeyState("LAlt", "P"))
 
     If !LclickSelected {
-        GoSub, FadeOutWindowTitle
+        ClearWindowTitlePopup()
     }
 
     Return cycleCount
@@ -3635,7 +3612,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
 
     gwHwndId := GroupedWindows[cycleCount]
     WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
-    Overlay_ShowHole(wx, wy, ww, wh, Opacity,,60)
+    Overlay_ShowHole(wx, wy, ww, wh, Opacity,,40)
     DrawWindowTitlePopup(actTitle, pp, True)
 
     KeyWait, ``, U T1
@@ -3696,7 +3673,7 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
     until (!GetKeyState("LAlt", "P"))
 
     If !LclickSelected {
-        GoSub, FadeOutWindowTitle
+        ClearWindowTitlePopup()
     }
 
     Loop, % windowsToMinimize.length()
@@ -3907,6 +3884,11 @@ Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget) {
 Overlay_SetAlpha(overlayHwnd, alphaVal) {
     global overlayAlphaCurrent
 
+    if (alphaVal < 0)
+        alphaVal := 0
+    else if (alphaVal > 255)
+        alphaVal := 255
+
     ; Ensures WS_EX_LAYERED is present (required for alpha)
     WinSet, ExStyle, +0x80000, ahk_id %overlayHwnd%  ; WS_EX_LAYERED
 
@@ -3950,21 +3932,23 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "") {
     if (fadeMs < 1)
         fadeMs := 1
 
-    iterations := fadeMs/5
-    transIncr  := (alphaTarget - alphaStart)/iterations
-    alphaNow   := alphaStart + transIncr
+    iterations := ceil(fadeMs/5)
+    if (iterations > 0) {
+        transIncr  := (alphaTarget - alphaStart)/iterations
+        alphaNow   := alphaStart + transIncr
 
-    Loop, %iterations%
-    {
-        ; If a newer fade started, stop ASAP
-        if (localFadeToken != overlayFadeToken)
-            return
+        Loop, %iterations%
+        {
+            ; If a newer fade started, stop ASAP
+            if (localFadeToken != overlayFadeToken)
+                return
 
-        Overlay_SetAlpha(overlayHwnd, alphaNow)
+            Overlay_SetAlpha(overlayHwnd, alphaNow)
 
-        sleep, 5
+            sleep, 5
 
-        alphaNow += transIncr
+            alphaNow += transIncr
+        }
     }
 }
 
@@ -6371,7 +6355,7 @@ ActivateWindow:
 
     sleep, 400
     ; ClearBlackMonitor(, 10)
-    Overlay_Hide(40)
+    Overlay_Hide(30)
 
     Process, Close, Expr_Name
     Process, Close, ExprAltUp_Name
@@ -9343,8 +9327,34 @@ MouseIsOverTaskbarBlank() {
     }
 }
 
+ClearWindowTitlePopup() {
+    global WindowTitleID, WindowTitle
+
+    delayTime := 80
+
+    WinSet, Transparent, 200, ahk_id %WindowTitleID%
+    sleep, %delayTime%
+    WinSet, Transparent, 175, ahk_id %WindowTitleID%
+    sleep, %delayTime%,
+    WinSet, Transparent, 150, ahk_id %WindowTitleID%
+    sleep, %delayTime%,
+    WinSet, Transparent, 125, ahk_id %WindowTitleID%
+    sleep, %delayTime%,
+    WinSet, Transparent, 100, ahk_id %WindowTitleID%
+    sleep, %delayTime%,
+    WinSet, Transparent, 75,  ahk_id %WindowTitleID%
+    sleep, %delayTime%,
+    WinSet, Transparent, 50,  ahk_id %WindowTitleID%
+    sleep, %delayTime%
+    WinSet, Transparent, 25,  ahk_id %WindowTitleID%
+    sleep, %delayTime%
+    Gui, WindowTitle: Destroy
+
+    Return
+}
+
 DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, centerOnHwnd := "") {
-    global Opacity, WindowTitleID
+    global Opacity, WindowTitleID, WindowTitle
     static IsWindowTitleGuiInitialized := False
 
     strArray := []
@@ -9371,7 +9381,7 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
         vtext := Trim(strArray[lastIdx])
     }
 
-    If !GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")
+    If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
 
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
@@ -12663,6 +12673,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its false::it's false
 ::its fine::it's fine
 ::its finished::it's finished
+::its given::it's given
 ::its gone::it's gone
 ::its grown::it's grown
 ::its happened::it's happened
