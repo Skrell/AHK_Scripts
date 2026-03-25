@@ -3133,7 +3133,7 @@ Return
             }
         }
 
-        cycleCount := HandleWindowsWithSameProcessAndClass(activeProcessName, activeClassName)
+        cycleCount := CycleAppWindows(activeProcessName, activeClassName)
         If !LclickSelected
             lastActWinID := GroupedWindows[cycleCount]
 
@@ -3536,8 +3536,8 @@ Cycle() {
 
                 WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                 WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
-                DrawWindowTitlePopup(tits, pp)
                 KeyWait, Tab, U
+                DrawWindowTitlePopup(tits, pp)
             }
         }
     }
@@ -3551,7 +3551,7 @@ Cycle() {
 }
 
 ; Switch "App" open windows based on the same process and class
-HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
+CycleAppWindows(activeProcessName, activeClass) {
 
     global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, Opacity
 
@@ -3608,28 +3608,29 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
         Return
     }
 
-    WinGet, mmState, MinMax, % "ahk_id " GroupedWindows[cycleCount]
+    gwHwndId     := GroupedWindows[cycleCount] ; get ready to activate next window
+    WinGet, mmState, MinMax, ahk_id %gwHwndId%
     If (MonCount > 1 && mmState == -1) {
         windowsToMinimize.push(GroupedWindows[cycleCount])
     }
-    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
-    WinGetTitle, actTitle, % "ahk_id " GroupedWindows[cycleCount]
-    WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
-    lastActWinID := GroupedWindows[cycleCount]
+    WinActivate, ahk_id %gwHwndId%
+    WinGetTitle, actTitle, ahk_id %gwHwndId%
+    WinGet, pp, ProcessPath , ahk_id %gwHwndId%
 
-
-    gwHwndId := GroupedWindows[cycleCount]
     WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
     Overlay_ShowHole(wx, wy, ww, wh, Opacity,,40)
-    DrawWindowTitlePopup(actTitle, pp, True)
+
+    lastActWinID := gwHwndId
 
     KeyWait, ``, U T1
+
+    DrawWindowTitlePopup(actTitle, pp, True)
 
     cycleCount++
     If (cycleCount > numWindows) {
         cycleCount := 1
     }
-    gwHwndId := GroupedWindows[cycleCount] ; get ready to activate next window
+    gwHwndId   := GroupedWindows[cycleCount]
 
     Loop
     {
@@ -3647,30 +3648,30 @@ HandleWindowsWithSameProcessAndClass(activeProcessName, activeClass) {
                 windowsToMinimize.push(gwHwndId)
             }
             WinActivate, ahk_id %gwHwndId%
-            lastActWinID := gwHwndId
             WinGetTitle, actTitle, ahk_id %gwHwndId%
             WinGet, pp, ProcessPath , ahk_id %gwHwndId%
 
             WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
             Overlay_MoveHole(wx, wy, ww, wh)
-            DrawWindowTitlePopup(actTitle, pp, True)
+
+            lastActWinID := gwHwndId
 
             KeyWait, ``, U
+
+            DrawWindowTitlePopup(actTitle, pp, True)
 
             cycleCount++
             If (cycleCount > numWindows) {
                 cycleCount := 1
             }
+            gwHwndId   := GroupedWindows[cycleCount]
 
             Loop
             {
-                gwHwndId := GroupedWindows[cycleCount]
                 If !IsWindowOnMonNum(gwHwndId, currentMon) {
                     cycleCount++
                     If (cycleCount > numWindows)
-                    {
                         cycleCount := 1
-                    }
                     gwHwndId := GroupedWindows[cycleCount]
                 }
                 Else
@@ -9390,7 +9391,7 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
         vtext := Trim(strArray[lastIdx])
     }
 
-    If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
+    If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
         Return
 
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
