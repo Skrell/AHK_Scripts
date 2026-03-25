@@ -2719,7 +2719,7 @@ $Esc::
             Hotkey, x, DoNothing, On
             WinGetPosEx(escHwndID, wx, wy, ww, wh, null, null)
             Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
-            DrawWindowTitlePopup("Close?", pp, False, escHwndID)
+            DrawWindowTitlePopup(escHwndID, "Close?", pp, False, True)
 
             Loop
             {
@@ -3177,8 +3177,7 @@ Return
 $!Lbutton::
     If (hitTab || hitTilde) {
         LclickSelected := True
-            ; KeyWait, Lbutton, D T0.1
-            ; If (!ErrorLevel) {
+
         MouseGetPos, , , _winIdD,
         WinActivate, ahk_id %_winIdD%
         WinGetTitle, actTitle, ahk_id %_winIdD%
@@ -3189,8 +3188,7 @@ $!Lbutton::
 
         WinGetPosEx(_winIdD, wx, wy, ww, wh, null, null)
         Overlay_MoveHole(wx, wy, ww, wh)
-        DrawWindowTitlePopup(actTitle, pp)
-            ; }
+        DrawWindowTitlePopup(_winIdD, actTitle, pp)
 
         Loop
         {
@@ -3500,7 +3498,7 @@ Cycle() {
 
     WinGetTitle, tits, ahk_id %gwHwndId%
     WinGet, pp, ProcessPath , ahk_id %gwHwndId%
-    DrawWindowTitlePopup(tits, pp, True)
+    DrawWindowTitlePopup(gwHwndId, tits, pp)
 
     Loop
     {
@@ -3534,9 +3532,9 @@ Cycle() {
 
                 KeyWait, Tab, U
 
-                WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
-                WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
-                DrawWindowTitlePopup(tits, pp)
+                WinGetTitle, tits,ahk_id %gwHwnd%
+                WinGet, pp, ProcessPath , ahk_id %gwHwnd%
+                DrawWindowTitlePopup(gwHwnd, tits, pp)
             }
         }
     }
@@ -3625,9 +3623,9 @@ CycleAppWindows(activeProcessName, activeClass) {
     If !GetKeyState("LAlt","P")
         Return 0
 
-    WinGetTitle, actTitle, ahk_id %gwHwndId%
+    WinGetTitle, tits, ahk_id %gwHwndId%
     WinGet, pp, ProcessPath , ahk_id %gwHwndId%
-    DrawWindowTitlePopup(actTitle, pp, True)
+    DrawWindowTitlePopup(gwHwndId, tits, pp, True)
 
     cycleCount++
     If (cycleCount > numWindows) {
@@ -3657,9 +3655,9 @@ CycleAppWindows(activeProcessName, activeClass) {
 
             KeyWait, ``, U
 
-            WinGetTitle, actTitle, ahk_id %gwHwndId%
+            WinGetTitle, tits, ahk_id %gwHwndId%
             WinGet, pp, ProcessPath , ahk_id %gwHwndId%
-            DrawWindowTitlePopup(actTitle, pp, True)
+            DrawWindowTitlePopup(gwHwndId, tits, pp, True)
 
             cycleCount++
             If (cycleCount > numWindows) {
@@ -9364,32 +9362,31 @@ ClearWindowTitlePopup() {
     Return
 }
 
-DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, centerOnHwnd := "") {
+DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", showFullTitle := False, centerOnWin := False) {
     global Opacity, WindowTitleID, WindowTitle
     static IsWindowTitleGuiInitialized := False
 
     strArray := []
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
+    fullTitle := showFullTitle
 
     If (WindowTitleID && WinExist("ahk_id " . WindowTitleID)) {
         Gui, WindowTitle: Destroy
     }
 
-    If (!vtext)
+    If (!vtext || ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P")))
         Return
 
-    If !InStr(vtext, " - ", False)
-        showFullTitle := True
+    If (InStr(vtext, " - ", False) && !showFullTitle)
+        fullTitle := False
 
-    If showFullTitle {
+    If fullTitle {
         If (StrLen(vtext) > 60) {
             vtext := SubStr(vtext, 1, 60) . "..."
         }
     }
     Else {
-        strArray := StrSplit(vtext, "-")
-        lastIdx  := strArray.MaxIndex()
-        vtext := Trim(strArray[lastIdx])
+        vtext := GetAppDisplayNameFromHwnd(hwnd)
     }
 
     If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
@@ -9408,29 +9405,93 @@ DrawWindowTitlePopup(vtext := "", pathToExe := "", showFullTitle := False, cente
     }
     Gui, WindowTitle: Add, Text, xp+64 yp+8 cWhite, %vtext%  ; XX & YY serve to auto-size the window.
     Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
+    WinSet, Transparent, 1, ahk_id %WindowTitleID%
 
-    If (centerOnHwnd) {
-        WinGetPos, xc, yc, wc, hc, ahk_id %centerOnHwnd%
-        drawX := round(xc+(wc/2))
-        drawY := round(yc+(hc/2))
+    If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
+        Return
+
+    If (centerOnWin) {
+        WinGetPos, xc, yc, w, h, ahk_id %hwnd%
+        drawX := round(xc+(w/2))
+        drawY := round(yc+(h/2))
     }
     Else {
+        WinGetPos,  ,  , w, h,  ahk_id %WindowTitleID%
         drawX := CoordXCenterScreen()
         drawY := CoordYCenterScreen()
     }
 
-    WinGetPos,  ,  , w, h,  ahk_id %WindowTitleID%
-    WinSet, Transparent, 1, ahk_id %WindowTitleID%
+    If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
+        Return
+
     WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
     WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
-    ; WinSet, Transparent, 25, ahk_id %WindowTitleID%
-    ; sleep, 3
-    ; WinSet, Transparent, 125, ahk_id %WindowTitleID%
-    ; sleep, 3
     WinSet, Transparent, %Opacity%, ahk_id %WindowTitleID%
+
     Return WindowTitleID
 }
 
+GetAppDisplayNameFromHwnd(windowHwnd) {
+    local processPath
+    local appName
+
+    WinGet, processPath, ProcessPath, ahk_id %windowHwnd%
+    if (!processPath)
+        return ""
+
+    ; Prefer FileDescription
+    appName := GetFileVersionString(processPath, "FileDescription")
+    if (appName != "")
+        return appName
+
+    ; Fallback to ProductName
+    appName := GetFileVersionString(processPath, "ProductName")
+    if (appName != "")
+        return appName
+
+    ; Final fallback: executable file name without extension
+    SplitPath, processPath, fileName, dirName, extName, fileNameNoExt
+    return fileNameNoExt
+}
+
+GetFileVersionString(filePath, stringName) {
+    local dummyHandle
+    local infoSize
+    local infoBuffer
+    local translatePtr
+    local translateLen
+    local langCode
+    local codePage
+    local queryBlock
+    local valuePtr
+    local valueLen
+    local resultText
+
+    dummyHandle := 0
+    infoSize := DllCall("Version\GetFileVersionInfoSize", "Str", filePath, "UInt*", dummyHandle, "UInt")
+    if (!infoSize)
+        return ""
+
+    VarSetCapacity(infoBuffer, infoSize, 0)
+    if !DllCall("Version\GetFileVersionInfo", "Str", filePath, "UInt", 0, "UInt", infoSize, "Ptr", &infoBuffer)
+        return ""
+
+    ; Read translation table
+    if !DllCall("Version\VerQueryValue", "Ptr", &infoBuffer, "Str", "\VarFileInfo\Translation", "Ptr*", translatePtr, "UInt*", translateLen)
+        return ""
+
+    ; First language/codepage pair
+    langCode := NumGet(translatePtr + 0, 0, "UShort")
+    codePage := NumGet(translatePtr + 0, 2, "UShort")
+
+    queryBlock := Format("\StringFileInfo\{1:04X}{2:04X}\{3}", langCode, codePage, stringName)
+
+    if !DllCall("Version\VerQueryValue", "Ptr", &infoBuffer, "Str", queryBlock, "Ptr*", valuePtr, "UInt*", valueLen)
+        return ""
+
+    resultText := StrGet(valuePtr, valueLen, "UTF-16")
+    return RTrim(resultText, "`0")
+}
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=51788
 GetNameOfIconUnderMouse() {
