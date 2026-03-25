@@ -3416,103 +3416,101 @@ Cycle() {
     prev_cl    :=
     cycleCount := 1
 
-        DetectHiddenWindows, Off
-        failedSwitch := False
-        why := ""
-        WinGet, actId, ID, A
-        WinGet, allWindows, List
+    DetectHiddenWindows, Off
+    failedSwitch := False
+    why := ""
+    WinGet, actId, ID, A
+    WinGet, allWindows, List
 
-        Loop, %allWindows%
-        {
-            Critical On
-            hwndID := allWindows%A_Index%
+    Loop, %allWindows%
+    {
+        Critical On
+        hwndID := allWindows%A_Index%
+
+        If (MonCount > 1) {
+            currentMon := MWAGetMonitorMouseIsIn()
+            currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
+        }
+        Else {
+            currentMonHasActWin := True
+        }
+
+        If (currentMonHasActWin) {
             WinGetPosEx(hwndID, wx, wy, ww, wh, null, null)
 
-            If (MonCount > 1) {
-                currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
-            }
-            Else {
-                currentMonHasActWin := True
-            }
+            If (!IsWindowElevated(hwndID) && IsAltTabWindow(hwndID)) {
+                WinGet, state, MinMax, ahk_id %hwndID%
+                ; WinGet, exe, ProcessName, ahk_id %hwndID%
+                ; WinGetClass, cl, ahk_id %hwndID%
+                If (state > -1) {
+                    ValidWindows.push(hwndID)
+                    ; If (prev_cl != cl || prev_exe != exe) {
+                    GroupedWindows.push(hwndID)
 
-            If (currentMonHasActWin) {
-                If (!IsWindowElevated(hwndID) && IsAltTabWindow(hwndID)) {
-                    WinGet, state, MinMax, ahk_id %hwndID%
-                    ; WinGet, exe, ProcessName, ahk_id %hwndID%
-                    ; WinGetClass, cl, ahk_id %hwndID%
-                    If (state > -1) {
-                        ValidWindows.push(hwndID)
-                        ; If (prev_cl != cl || prev_exe != exe) {
-                        GroupedWindows.push(hwndID)
-
-                        If (GroupedWindows.MaxIndex() == 2) {
-                            WinActivate, % "ahk_id " hwndID
-                            cycleCount := 2
-                            If (hwndID == actId) {
-                                failedSwitch := True
-                            }
-                            Else {
-                                Critical, Off
-                                Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
-
-                                WinGetTitle, tits, % "ahk_id " hwndID
-                                WinGet, pp, ProcessPath , % "ahk_id " hwndID
-                                DrawWindowTitlePopup(tits, pp, True)
-                                If !GetKeyState("LAlt","P") {
-                                    Critical, Off
-                                    Return 0
-                                }
-                            }
+                    If (GroupedWindows.MaxIndex() == 2) {
+                        WinActivate, % "ahk_id " hwndID
+                        cycleCount := 2
+                        If (hwndID == actId) {
+                            failedSwitch := True
                         }
-                        If (GroupedWindows.MaxIndex() == 3 && failedSwitch) {
-                            WinActivate, % "ahk_id " hwndID
-                            cycleCount := 3
+                        Else {
                             Critical, Off
+
                             Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
 
-                            WinGetTitle, tits, % "ahk_id " hwndID
-                            WinGet, pp, ProcessPath , % "ahk_id " hwndID
-                            DrawWindowTitlePopup(tits, pp, True)
+                            If !GetKeyState("LAlt","P")
+                                Return 0
                         }
-                        If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P"))) {
-                            Critical, Off
-                            Return 0
-                        }
-                        ; }
-                        ; prev_exe := exe
-                        ; prev_cl  := cl
                     }
+                    If (GroupedWindows.MaxIndex() == 3 && failedSwitch) {
+                        WinActivate, % "ahk_id " hwndID
+                        cycleCount := 3
+                        Critical, Off
+
+                        Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
+
+                        If !GetKeyState("LAlt","P")
+                            Return 0
+                    }
+                    If ((GroupedWindows.MaxIndex() > 3) && (!GetKeyState("LAlt","P"))) {
+                        Critical, Off
+                        Return 0
+                    }
+                    ; }
+                    ; prev_exe := exe
+                    ; prev_cl  := cl
                 }
             }
         }
-        Critical, Off
+    }
+    Critical, Off
 
-    If (GroupedWindows.length() == 1) {
+    If (GroupedWindows.length() <= 1) {
         tooltip, % "Only " GroupedWindows.length() " Window to Show..."
         sleep, 1000
         tooltip,
         Return 1
     }
+    gwHwndId   := GroupedWindows[cycleCount]
 
     KeyWait, Tab, U
 
-    If !GetKeyState("LAlt","P") {
-        Critical, Off
+    If !GetKeyState("LAlt","P")
         Return 0
-    }
+
+    WinGetTitle, tits, ahk_id %gwHwndId%
+    WinGet, pp, ProcessPath , ahk_id %gwHwndId%
+    DrawWindowTitlePopup(tits, pp, True)
 
     Loop
     {
-        If LclickSelected
-            break
-
-        If CanceledWinSwap
+        If LclickSelected || CanceledWinSwap
             break
 
         If (GroupedWindows.length() >= 2)
         {
             KeyWait, Tab, D T0.1
+
             If !ErrorLevel
             {
                 If !GetKeyState("LShift","P") {
@@ -3534,9 +3532,10 @@ Cycle() {
                 WinGetPosEx(gwHwnd, wx, wy, ww, wh, null, null)
                 Overlay_MoveHole(wx, wy, ww, wh)
 
+                KeyWait, Tab, U
+
                 WinGetTitle, tits, % "ahk_id " GroupedWindows[cycleCount]
                 WinGet, pp, ProcessPath , % "ahk_id " GroupedWindows[cycleCount]
-                KeyWait, Tab, U
                 DrawWindowTitlePopup(tits, pp)
             }
         }
@@ -3608,22 +3607,26 @@ CycleAppWindows(activeProcessName, activeClass) {
         Return
     }
 
-    gwHwndId     := GroupedWindows[cycleCount] ; get ready to activate next window
+    gwHwndId := GroupedWindows[cycleCount] ; get ready to activate next window
+
     WinGet, mmState, MinMax, ahk_id %gwHwndId%
     If (MonCount > 1 && mmState == -1) {
         windowsToMinimize.push(GroupedWindows[cycleCount])
     }
     WinActivate, ahk_id %gwHwndId%
-    WinGetTitle, actTitle, ahk_id %gwHwndId%
-    WinGet, pp, ProcessPath , ahk_id %gwHwndId%
 
     WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
     Overlay_ShowHole(wx, wy, ww, wh, Opacity,,40)
 
     lastActWinID := gwHwndId
 
-    KeyWait, ``, U T1
+    KeyWait, ``, U
 
+    If !GetKeyState("LAlt","P")
+        Return 0
+
+    WinGetTitle, actTitle, ahk_id %gwHwndId%
+    WinGet, pp, ProcessPath , ahk_id %gwHwndId%
     DrawWindowTitlePopup(actTitle, pp, True)
 
     cycleCount++
@@ -3634,13 +3637,11 @@ CycleAppWindows(activeProcessName, activeClass) {
 
     Loop
     {
-        If LclickSelected
-            break
-
-        If CanceledWinSwap
+        If LclickSelected || CanceledWinSwap
             break
 
         KeyWait, ``, D T0.1
+
         If !ErrorLevel
         {
             WinGet, mmState, MinMax, ahk_id %gwHwndId%
@@ -3648,8 +3649,6 @@ CycleAppWindows(activeProcessName, activeClass) {
                 windowsToMinimize.push(gwHwndId)
             }
             WinActivate, ahk_id %gwHwndId%
-            WinGetTitle, actTitle, ahk_id %gwHwndId%
-            WinGet, pp, ProcessPath , ahk_id %gwHwndId%
 
             WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
             Overlay_MoveHole(wx, wy, ww, wh)
@@ -3658,6 +3657,8 @@ CycleAppWindows(activeProcessName, activeClass) {
 
             KeyWait, ``, U
 
+            WinGetTitle, actTitle, ahk_id %gwHwndId%
+            WinGet, pp, ProcessPath , ahk_id %gwHwndId%
             DrawWindowTitlePopup(actTitle, pp, True)
 
             cycleCount++
