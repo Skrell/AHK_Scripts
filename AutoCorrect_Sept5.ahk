@@ -3078,8 +3078,10 @@ $!+Tab::
 
         cycleCount := Cycle()
 
-        If !LclickSelected
+        If !LclickSelected {
             lastActWinID := GroupedWindows[cycleCount]
+            ClearWindowTitlePopup()
+        }
         ; tooltip, %cycleCount%
         If !CanceledWinSwap {
             If (cycleCount > 2) {
@@ -3092,6 +3094,7 @@ $!+Tab::
             Overlay_Hide(30)
 
             GoSub, AltupCleanup
+
 
             FixModifiers()
         }
@@ -3134,8 +3137,10 @@ Return
         }
 
         cycleCount := CycleAppWindows(activeProcessName, activeClassName)
-        If !LclickSelected
+        If !LclickSelected {
             lastActWinID := GroupedWindows[cycleCount]
+            ClearWindowTitlePopup()
+        }
 
         If !CanceledWinSwap {
             If (cycleCount > 2) {
@@ -3540,10 +3545,6 @@ Cycle() {
     }
     until (!GetKeyState("LAlt", "P"))
 
-    If !LclickSelected {
-        ClearWindowTitlePopup()
-    }
-
     Return cycleCount
 }
 
@@ -3679,10 +3680,6 @@ CycleAppWindows(activeProcessName, activeClass) {
         }
     }
     until (!GetKeyState("LAlt", "P"))
-
-    If !LclickSelected {
-        ClearWindowTitlePopup()
-    }
 
     Loop, % windowsToMinimize.length()
     {
@@ -6858,7 +6855,6 @@ Return
     HotKey, Rbutton, DoNothing, On
     MouseGetPos, , , hwndId
     WinGetTitle, winTitle, ahk_id %hwndId%
-    BlockInput, MouseMove
     WinGet, ExStyle, ExStyle, ahk_id %hwndId%
     If IsAlwaysOnTop(hwndID) {
         Gui, GUI4Boarder: Color, 0x00FF00
@@ -6879,15 +6875,14 @@ Return
             Sleep, 20   ; purely visual – safe outside Critical
         }
         Critical, Off
-
-        ; WinSet, Transparent, %Opacity%, ahk_id %hwndId%
     }
+    BlockInput, MouseMove
     GoSub, DrawRect
     sleep, 200
     ClearRect()
+    BlockInput, MouseMoveOff
     Gui, GUI4Boarder: Color, %border_color%
     WinSet, AlwaysOnTop, toggle, ahk_id %hwndId%
-    BlockInput, MouseMoveOff
     HotKey, Rbutton, DoNothing, Off
 Return
 #If
@@ -9310,56 +9305,61 @@ MouseIsOverTaskbarWidgets() {
 }
 
 MouseIsOverTaskbarBlank() {
-    ; global UIA
+    local xPos, yPos, windowUnderMouseId, controlUnderMouseHwnd
+    local windowClass, controlClass, pt, controlType
 
-    if !( GetKeyState("Wheeldown","P") || GetKeyState("Wheelup","P") || GetKeyState("LButton","P") || GetKeyState("RButton","P") || GetKeyState("MButton","P") )
+    if !(GetKeyState("WheelDown", "P") || GetKeyState("WheelUp", "P") || GetKeyState("LButton", "P") || GetKeyState("RButton", "P") || GetKeyState("MButton", "P"))
         return False
 
-    MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
-    WinGetClass, cl, ahk_id %WindowUnderMouseID%
+    MouseGetPos, xPos, yPos, windowUnderMouseId, controlUnderMouseHwnd, 2
+    WinGetClass, windowClass, ahk_id %windowUnderMouseId%
+
     try {
-        If (InStr(cl, "Shell",False) && InStr(cl, "TrayWnd",False) && !InStr(CtrlUnderMouseId, "TrayNotifyWnd", False)) {
-            If WinExist("ahk_class TaskListThumbnailWnd") {
-                Return False
-            }
-            Else {
-                pt := SafeUIA_ElementFromPoint(x,y)
-                ctype := SafeUIA_GetControlType(pt)
-                ; tooltip, % "val is " pt.CurrentControlType
-                Return (ctype == 50033)
-            }
+        if (InStr(windowClass, "Shell", False) && InStr(windowClass, "TrayWnd", False)) {
+            controlClass := ""
+            if (controlUnderMouseHwnd)
+                WinGetClass, controlClass, ahk_id %controlUnderMouseHwnd%
+
+            ; Reject obvious interactive taskbar regions first.
+            if (controlClass = "TrayNotifyWnd"
+             || controlClass = "ToolbarWindow32"
+             || controlClass = "MSTaskListWClass"
+             || controlClass = "MSTaskSwWClass"
+             || controlClass = "ReBarWindow32")
+                return False
+
+            if WinExist("ahk_class TaskListThumbnailWnd")
+                return False
+
+            pt := SafeUIA_ElementFromPoint(xPos, yPos)
+            controlType := SafeUIA_GetControlType(pt)
+            return (controlType = 50033)
         }
-        Else
-            Return False
+        else
+            return False
     } catch e {
-        Return False
+        return False
     }
 }
 
 ClearWindowTitlePopup() {
     global WindowTitleID, WindowTitle
 
-    delayTime := 80
+    delayTime  := 20
+    alphaStart := 200
+    alphaStep  := 25
+    alphaStop  := 25
+    alphaNow   := alphaStart
 
-    WinSet, Transparent, 200, ahk_id %WindowTitleID%
-    sleep, %delayTime%
-    WinSet, Transparent, 175, ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 150, ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 125, ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 100, ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 75,  ahk_id %WindowTitleID%
-    sleep, %delayTime%,
-    WinSet, Transparent, 50,  ahk_id %WindowTitleID%
-    sleep, %delayTime%
-    WinSet, Transparent, 25,  ahk_id %WindowTitleID%
-    sleep, %delayTime%
-    Gui, WindowTitle: Destroy
+    while (alphaNow >= alphaStop)
+    {
+        WinSet, Transparent, %alphaNow%, ahk_id %WindowTitleID%
+        Sleep, %delayTime%
+        alphaNow -= alphaStep
+    }
 
-    Return
+    Gui, WindowTitle:Destroy
+    return
 }
 
 DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", showFullTitle := False, centerOnWin := False) {
@@ -12716,6 +12716,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's texture::its texture
 ::it's users::its users
 ::it's value::its value
+::it's values::its values
 ::it's weight::its weight
 ::it's wings::its wings
 ::it's young::its young
