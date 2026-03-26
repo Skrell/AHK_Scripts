@@ -9306,40 +9306,57 @@ MouseIsOverTaskbarWidgets() {
 
 MouseIsOverTaskbarBlank() {
     local xPos, yPos, windowUnderMouseId, controlUnderMouseHwnd
-    local windowClass, controlClass, pt, controlType
+    local windowClass
+    local accObj
+    local childIdOut
+    local hitAcc
+    local accPosX, accPosY, accWidth, accHeight
+    local taskbarPosX, taskbarPosY, taskbarWidth, taskbarHeight
 
     if !(GetKeyState("WheelDown", "P") || GetKeyState("WheelUp", "P") || GetKeyState("LButton", "P") || GetKeyState("RButton", "P") || GetKeyState("MButton", "P"))
         return False
 
     MouseGetPos, xPos, yPos, windowUnderMouseId, controlUnderMouseHwnd, 2
-    WinGetClass, windowClass, ahk_id %windowUnderMouseId%
-
-    try {
-        if (InStr(windowClass, "Shell", False) && InStr(windowClass, "TrayWnd", False)) {
-            controlClass := ""
-            if (controlUnderMouseHwnd)
-                WinGetClass, controlClass, ahk_id %controlUnderMouseHwnd%
-
-            ; Reject obvious interactive taskbar regions first.
-            if (controlClass = "TrayNotifyWnd"
-             || controlClass = "ToolbarWindow32"
-             || controlClass = "MSTaskListWClass"
-             || controlClass = "MSTaskSwWClass"
-             || controlClass = "ReBarWindow32")
-                return False
-
-            if WinExist("ahk_class TaskListThumbnailWnd")
-                return False
-
-            pt := SafeUIA_ElementFromPoint(xPos, yPos)
-            controlType := SafeUIA_GetControlType(pt)
-            return (controlType = 50033)
-        }
-        else
-            return False
-    } catch e {
+    if (!windowUnderMouseId)
         return False
-    }
+
+    WinGetClass, windowClass, ahk_id %windowUnderMouseId%
+    if !(InStr(windowClass, "Shell", False) && InStr(windowClass, "TrayWnd", False))
+        return False
+
+    if WinExist("ahk_class TaskListThumbnailWnd")
+        return False
+
+    ; Get the top-level taskbar rectangle.
+    WinGetPos, taskbarPosX, taskbarPosY, taskbarWidth, taskbarHeight, ahk_id %windowUnderMouseId%
+
+    childIdOut := 0
+    accObj := Acc_ObjectFromPoint(childIdOut, xPos, yPos)
+    if !IsObject(accObj)
+        return True
+
+    if (childIdOut)
+        hitAcc := Acc_CreateChildRef(accObj, childIdOut)
+    else
+        hitAcc := accObj
+
+    ; If we cannot get a location, assume blank rather than blocking it.
+    if !Acc_LocationSafe(hitAcc, accPosX, accPosY, accWidth, accHeight)
+        return True
+
+    ; Degenerate rects are not useful for button detection.
+    if (accWidth <= 1 || accHeight <= 1)
+        return True
+
+    ; If the accessible rect is much smaller than the taskbar itself,
+    ; we are probably over a button/icon/widget rather than blank surface.
+    ;
+    ; Blank taskbar surface often resolves to a large host rect,
+    ; while taskbar buttons resolve to smaller hit rects.
+    if (accWidth < taskbarWidth || accHeight < taskbarHeight)
+        return False
+
+    return True
 }
 
 ClearWindowTitlePopup() {
