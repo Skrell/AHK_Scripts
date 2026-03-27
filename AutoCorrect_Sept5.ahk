@@ -8645,7 +8645,7 @@ FindTopMostWindow() {
     Loop, %winList%
     {
         hwndID := winList%A_Index%
-        If IsAltTabWindow(hwndId) {
+        If IsAltTabWindow(hwndId) && !IsAlwaysOnTop(hwndId) {
             WinGet, mmState, MinMax, ahk_id %hwndId%
             WinGet, procName, ProcessName, ahk_id %hwndId%
             WinGet, ExStyle, ExStyle, ahk_id %hwndId%
@@ -9305,18 +9305,21 @@ MouseIsOverTaskbarWidgets() {
 }
 
 MouseIsOverTaskbarBlank() {
-    local xPos, yPos, windowUnderMouseId, controlUnderMouseHwnd
+    local mousePosX
+    local mousePosY
+    local windowUnderMouseId
+    local controlUnderMouseHwnd
     local windowClass
-    local accObj
-    local childIdOut
-    local hitAcc
-    local accPosX, accPosY, accWidth, accHeight
-    local taskbarPosX, taskbarPosY, taskbarWidth, taskbarHeight
+    local controlClass
 
-    if !(GetKeyState("WheelDown", "P") || GetKeyState("WheelUp", "P") || GetKeyState("LButton", "P") || GetKeyState("RButton", "P") || GetKeyState("MButton", "P"))
+    if !(GetKeyState("WheelDown", "P")
+      || GetKeyState("WheelUp", "P")
+      || GetKeyState("LButton", "P")
+      || GetKeyState("RButton", "P")
+      || GetKeyState("MButton", "P"))
         return False
 
-    MouseGetPos, xPos, yPos, windowUnderMouseId, controlUnderMouseHwnd, 2
+    MouseGetPos, mousePosX, mousePosY, windowUnderMouseId, controlUnderMouseHwnd, 2
     if (!windowUnderMouseId)
         return False
 
@@ -9327,34 +9330,106 @@ MouseIsOverTaskbarBlank() {
     if WinExist("ahk_class TaskListThumbnailWnd")
         return False
 
-    ; Get the top-level taskbar rectangle.
-    WinGetPos, taskbarPosX, taskbarPosY, taskbarWidth, taskbarHeight, ahk_id %windowUnderMouseId%
+    controlClass := ""
+    if (controlUnderMouseHwnd)
+        WinGetClass, controlClass, ahk_id %controlUnderMouseHwnd%
 
-    childIdOut := 0
-    accObj := Acc_ObjectFromPoint(childIdOut, xPos, yPos)
-    if !IsObject(accObj)
-        return True
-
-    if (childIdOut)
-        hitAcc := Acc_CreateChildRef(accObj, childIdOut)
-    else
-        hitAcc := accObj
-
-    ; If we cannot get a location, assume blank rather than blocking it.
-    if !Acc_LocationSafe(hitAcc, accPosX, accPosY, accWidth, accHeight)
-        return True
-
-    ; Degenerate rects are not useful for button detection.
-    if (accWidth <= 1 || accHeight <= 1)
-        return True
-
-    ; If the accessible rect is much smaller than the taskbar itself,
-    ; we are probably over a button/icon/widget rather than blank surface.
-    ;
-    ; Blank taskbar surface often resolves to a large host rect,
-    ; while taskbar buttons resolve to smaller hit rects.
-    if (accWidth < taskbarWidth || accHeight < taskbarHeight)
+    if (controlClass = "TrayNotifyWnd")
         return False
+
+    return TaskbarPixelAreaLooksBlank(mousePosX, mousePosY, 2, 18)
+}
+
+TaskbarPixelAreaLooksBlank(centerPosX, centerPosY, sampleRadius := 2, tolerance := 18) {
+
+    sampleSize := (sampleRadius * 2) + 1
+    startPosX := centerPosX - sampleRadius
+    startPosY := centerPosY - sampleRadius
+
+    screenDc := DllCall("user32\GetDC", "Ptr", 0, "Ptr")
+    if (!screenDc)
+        return False
+
+    memoryDc := DllCall("gdi32\CreateCompatibleDC", "Ptr", screenDc, "Ptr")
+    if (!memoryDc) {
+        DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
+        return False
+    }
+
+    VarSetCapacity(bitmapInfo, 40, 0)
+    NumPut(40, bitmapInfo, 0, "UInt")
+    NumPut(sampleSize, bitmapInfo, 4, "Int")
+    NumPut(-sampleSize, bitmapInfo, 8, "Int") ; top-down DIB
+    NumPut(1, bitmapInfo, 12, "UShort")
+    NumPut(32, bitmapInfo, 14, "UShort")
+    NumPut(0, bitmapInfo, 16, "UInt")
+
+    dibBitmap := DllCall("gdi32\CreateDIBSection"
+        , "Ptr", memoryDc
+        , "Ptr", &bitmapInfo
+        , "UInt", 0
+        , "Ptr*", pixelBuffer
+        , "Ptr", 0
+        , "UInt", 0
+        , "Ptr")
+
+    if (!dibBitmap || !pixelBuffer) {
+        if (dibBitmap)
+            DllCall("gdi32\DeleteObject", "Ptr", dibBitmap)
+        DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
+        DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
+        return False
+    }
+
+    oldBitmap := DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", dibBitmap, "Ptr")
+
+    DllCall("gdi32\BitBlt"
+        , "Ptr", memoryDc
+        , "Int", 0
+        , "Int", 0
+        , "Int", sampleSize
+        , "Int", sampleSize
+        , "Ptr", screenDc
+        , "Int", startPosX
+        , "Int", startPosY
+        , "UInt", 0x00CC0020) ; SRCCOPY
+
+    rowStride := sampleSize * 4
+    centerOffset := (sampleRadius * rowStride) + (sampleRadius * 4)
+
+    centerBlue := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
+    centerGreen := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
+    centerRed := NumGet(pixelBuffer + 0, centerOffset + 2, "UChar")
+
+    Loop, %sampleSize%
+    {
+        rowIndex := A_Index - 1
+
+        Loop, %sampleSize%
+        {
+            colIndex := A_Index - 1
+            pixelOffset := (rowIndex * rowStride) + (colIndex * 4)
+
+            blueValue := NumGet(pixelBuffer + 0, pixelOffset + 0, "UChar")
+            greenValue := NumGet(pixelBuffer + 0, pixelOffset + 1, "UChar")
+            redValue := NumGet(pixelBuffer + 0, pixelOffset + 2, "UChar")
+
+            if (Abs(redValue - centerRed) > tolerance
+             || Abs(greenValue - centerGreen) > tolerance
+             || Abs(blueValue - centerBlue) > tolerance) {
+                DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", oldBitmap)
+                DllCall("gdi32\DeleteObject", "Ptr", dibBitmap)
+                DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
+                DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
+                return False
+            }
+        }
+    }
+
+    DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", oldBitmap)
+    DllCall("gdi32\DeleteObject", "Ptr", dibBitmap)
+    DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
+    DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
 
     return True
 }
@@ -10519,6 +10594,7 @@ SetTitleMatchMode, 2
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
+::stdio::
 ::yt::
 ::git::
 ::fats::
