@@ -5771,6 +5771,17 @@ $~LButton::
             }
         }
         Else {
+            If InStr(_winCtrlD, "SysListView32", True) {
+                ControlGet, controlHwnd, Hwnd,, SysListView321, ahk_id %_winIdD%
+                listViewKind := GetListViewFlavor(controlHwnd)
+                If (listViewKind = "classic_report") {
+                    SetTimer, MouseTrack, On
+                    SetTimer, KeyTrack,   On
+                    If isBlankSpaceNonExplorer
+                        isBlankSpaceNonExplorer := False
+                    Return
+                }
+            }
             SendCtrlAdd(_winIdD,,,_winClassD)
         }
 
@@ -5794,7 +5805,6 @@ $~LButton::
 
     prevPath := ""
     If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
-
         If (InStr(_winCtrlD, "SysHeader32", True)) {
             isColumnHeader := True
         }
@@ -5824,23 +5834,15 @@ $~LButton::
             }
         }
     }
-    Else {
+
+    KeyWait, LButton, U T5
+
+    If !(_winClassD == "CabinetWClass" || _winClassD == "#32770")  {
         If (InStr(_winCtrlD,"SysHeader32", True)) {
             isColumnHeader := True
         }
-        CoordMode, Pixel, Screen
-        lbX1 -= 2
-        lbY1 -= 2
-        Loop,5 {
-            PixelGetColor, LBD_HexColor%A_Index%, %lbX1%, %lbY1%, RGB
-            lbX1 += 1
-            lbY1 += 1
-        }
-        CoordMode, Mouse, Screen
-        isBlankSpaceNonExplorer := (LBD_HexColor1 == 0xFFFFFF && LBD_HexColor2 == 0xFFFFFF && LBD_HexColor3  == 0xFFFFFF)
+        isBlankSpaceExplorer := AreaLooksUniformFast(lbX1, lbY1, 0xFFFFFF)
     }
-
-    KeyWait, LButton, U T5
 
     MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU
 
@@ -5858,6 +5860,17 @@ $~LButton::
 
         If (   (InStr(_winCtrlU, "SysListView32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
             && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
+
+
+            If InStr(_winCtrlU, "SysListView32", True) {
+                ControlGet, controlHwnd, Hwnd,, SysListView321, ahk_id %_winIdU%
+                listViewKind := GetListViewFlavor(controlHwnd)
+                If (listViewKind = "classic_report") {
+                    SetTimer, MouseTrack, On
+                    SetTimer, KeyTrack,   On
+                    Return
+                }
+            }
 
             SetTimer, SendCtrlAddLabel, -125
             SetTimer, MouseTrack, On
@@ -6965,6 +6978,35 @@ IsOverException(hWnd := "") {
         Return False
 }
 
+GetListViewFlavor(controlHwnd)
+{
+    WinGet, controlStyle, Style, ahk_id %controlHwnd%
+    WinGet, controlExStyle, ExStyle, ahk_id %controlHwnd%
+
+    isReport := (controlStyle & 0x0003) = 0x0001
+    hasShowSelAlways := (controlStyle & 0x0008) != 0
+    hasNoSortHeader := (controlStyle & 0x0200) != 0
+    hasBorder := (controlStyle & 0x00800000) != 0
+    hasHorizontalScroll := (controlStyle & 0x00100000) != 0
+    hasFlatScrollBars := (controlExStyle & 0x00000200) != 0
+
+    if (isReport && hasNoSortHeader && hasFlatScrollBars)
+    {
+        return "managed_report"
+    }
+
+    if (isReport && hasShowSelAlways && hasBorder && !hasFlatScrollBars)
+    {
+        return "classic_report"
+    }
+
+    if (isReport)
+    {
+        return "other_report"
+    }
+
+    return "not_report"
+}
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=81064#p533551
 ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ; Show popup menu by handle or by AHK menu name.
                                                    ; Based on ShowMenu v0.63 by SKAN.
@@ -9337,32 +9379,38 @@ MouseIsOverTaskbarBlank() {
     if (controlClass = "TrayNotifyWnd")
         return False
 
-    return TaskbarPixelAreaLooksBlank(mousePosX, mousePosY, 2, 18)
+    return AreaLooksUniformFast(mousePosX, mousePosY, 0x1C1C1C, 2, 18)
 }
 
-TaskbarPixelAreaLooksBlank(centerPosX, centerPosY, sampleRadius := 2, tolerance := 18) {
+AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 2, tolerance := 18) {
 
+    ; Compute the width/height of the square sample region.
     sampleSize := (sampleRadius * 2) + 1
+
+    ; Top-left corner of the sampled square in screen coordinates.
     startPosX := centerPosX - sampleRadius
     startPosY := centerPosY - sampleRadius
 
+    ; Get a DC for the full screen.
     screenDc := DllCall("user32\GetDC", "Ptr", 0, "Ptr")
     if (!screenDc)
         return False
 
+    ; Create a compatible memory DC.
     memoryDc := DllCall("gdi32\CreateCompatibleDC", "Ptr", screenDc, "Ptr")
     if (!memoryDc) {
         DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
         return False
     }
 
+    ; Create a top-down 32-bit DIB section so copied pixels can be read directly.
     VarSetCapacity(bitmapInfo, 40, 0)
-    NumPut(40, bitmapInfo, 0, "UInt")
-    NumPut(sampleSize, bitmapInfo, 4, "Int")
-    NumPut(-sampleSize, bitmapInfo, 8, "Int") ; top-down DIB
-    NumPut(1, bitmapInfo, 12, "UShort")
-    NumPut(32, bitmapInfo, 14, "UShort")
-    NumPut(0, bitmapInfo, 16, "UInt")
+    NumPut(40, bitmapInfo, 0, "UInt")         ; biSize
+    NumPut(sampleSize, bitmapInfo, 4, "Int")  ; biWidth
+    NumPut(-sampleSize, bitmapInfo, 8, "Int") ; biHeight (negative = top-down)
+    NumPut(1, bitmapInfo, 12, "UShort")       ; biPlanes
+    NumPut(32, bitmapInfo, 14, "UShort")      ; biBitCount
+    NumPut(0, bitmapInfo, 16, "UInt")         ; BI_RGB
 
     dibBitmap := DllCall("gdi32\CreateDIBSection"
         , "Ptr", memoryDc
@@ -9383,6 +9431,7 @@ TaskbarPixelAreaLooksBlank(centerPosX, centerPosY, sampleRadius := 2, tolerance 
 
     oldBitmap := DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", dibBitmap, "Ptr")
 
+    ; Copy the sample square from the screen into the memory bitmap.
     DllCall("gdi32\BitBlt"
         , "Ptr", memoryDc
         , "Int", 0
@@ -9394,13 +9443,23 @@ TaskbarPixelAreaLooksBlank(centerPosX, centerPosY, sampleRadius := 2, tolerance 
         , "Int", startPosY
         , "UInt", 0x00CC0020) ; SRCCOPY
 
+    ; Each pixel is 4 bytes (BGRA).
     rowStride := sampleSize * 4
-    centerOffset := (sampleRadius * rowStride) + (sampleRadius * 4)
 
-    centerBlue := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
-    centerGreen := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
-    centerRed := NumGet(pixelBuffer + 0, centerOffset + 2, "UChar")
+    ; If no target color was provided, use the center pixel as the reference.
+    if (targetColor = "") {
+        centerOffset := (sampleRadius * rowStride) + (sampleRadius * 4)
+        targetBlue := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
+        targetGreen := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
+        targetRed := NumGet(pixelBuffer + 0, centerOffset + 2, "UChar")
+    } else {
+        ; Otherwise use the caller-provided RGB target color.
+        targetRed := (targetColor >> 16) & 0xFF
+        targetGreen := (targetColor >> 8) & 0xFF
+        targetBlue := targetColor & 0xFF
+    }
 
+    ; Compare every sampled pixel against the chosen reference color.
     Loop, %sampleSize%
     {
         rowIndex := A_Index - 1
@@ -9414,9 +9473,9 @@ TaskbarPixelAreaLooksBlank(centerPosX, centerPosY, sampleRadius := 2, tolerance 
             greenValue := NumGet(pixelBuffer + 0, pixelOffset + 1, "UChar")
             redValue := NumGet(pixelBuffer + 0, pixelOffset + 2, "UChar")
 
-            if (Abs(redValue - centerRed) > tolerance
-             || Abs(greenValue - centerGreen) > tolerance
-             || Abs(blueValue - centerBlue) > tolerance) {
+            if (Abs(redValue - targetRed) > tolerance
+             || Abs(greenValue - targetGreen) > tolerance
+             || Abs(blueValue - targetBlue) > tolerance) {
                 DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", oldBitmap)
                 DllCall("gdi32\DeleteObject", "Ptr", dibBitmap)
                 DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
@@ -9431,6 +9490,128 @@ TaskbarPixelAreaLooksBlank(centerPosX, centerPosY, sampleRadius := 2, tolerance 
     DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
     DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
 
+    return True
+}
+
+AreaLooksUniformFast9(centerPosX, centerPosY, targetColor := "", sampleRadius := 3, tolerance := 18) {
+
+    ; Compute the width/height of the sampled square.
+    ; sampleRadius := 3 means a 7x7 captured area.
+    sampleSize := (sampleRadius * 2) + 1
+
+    ; Top-left corner of the captured square in screen coordinates.
+    startPosX := centerPosX - sampleRadius
+    startPosY := centerPosY - sampleRadius
+
+    ; Get a DC for the screen.
+    screenDc := DllCall("user32\GetDC", "Ptr", 0, "Ptr")
+    if (!screenDc)
+        return False
+
+    ; Create a memory DC for the off-screen bitmap.
+    memoryDc := DllCall("gdi32\CreateCompatibleDC", "Ptr", screenDc, "Ptr")
+    if (!memoryDc) {
+        DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
+        return False
+    }
+
+    ; Create a top-down 32-bit DIB section so the copied pixels can be read
+    ; directly from memory in normal top-to-bottom order.
+    VarSetCapacity(bitmapInfo, 40, 0)
+    NumPut(40, bitmapInfo, 0, "UInt")         ; biSize
+    NumPut(sampleSize, bitmapInfo, 4, "Int")  ; biWidth
+    NumPut(-sampleSize, bitmapInfo, 8, "Int") ; biHeight (negative = top-down)
+    NumPut(1, bitmapInfo, 12, "UShort")       ; biPlanes
+    NumPut(32, bitmapInfo, 14, "UShort")      ; biBitCount
+    NumPut(0, bitmapInfo, 16, "UInt")         ; biCompression = BI_RGB
+
+    ; Create the bitmap and get a pointer to its pixel memory.
+    dibBitmap := DllCall("gdi32\CreateDIBSection"
+        , "Ptr", memoryDc
+        , "Ptr", &bitmapInfo
+        , "UInt", 0
+        , "Ptr*", pixelBuffer
+        , "Ptr", 0
+        , "UInt", 0
+        , "Ptr")
+
+    if (!dibBitmap || !pixelBuffer) {
+        if (dibBitmap)
+            DllCall("gdi32\DeleteObject", "Ptr", dibBitmap)
+        DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
+        DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
+        return False
+    }
+
+    ; Select the bitmap into the memory DC so BitBlt writes into it.
+    oldBitmap := DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", dibBitmap, "Ptr")
+
+    ; Copy the square around the target point from the screen into memory.
+    DllCall("gdi32\BitBlt"
+        , "Ptr", memoryDc
+        , "Int", 0
+        , "Int", 0
+        , "Int", sampleSize
+        , "Int", sampleSize
+        , "Ptr", screenDc
+        , "Int", startPosX
+        , "Int", startPosY
+        , "UInt", 0x00CC0020) ; SRCCOPY
+
+    ; Each 32-bit pixel takes 4 bytes (BGRA).
+    rowStride := sampleSize * 4
+
+    ; If no target color was provided, use the center pixel as the reference.
+    if (targetColor = "") {
+        centerOffset := (sampleRadius * rowStride) + (sampleRadius * 4)
+        targetBlue := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
+        targetGreen := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
+        targetRed := NumGet(pixelBuffer + 0, centerOffset + 2, "UChar")
+    } else {
+        ; Otherwise use the caller-provided RGB target color.
+        targetRed := (targetColor >> 16) & 0xFF
+        targetGreen := (targetColor >> 8) & 0xFF
+        targetBlue := targetColor & 0xFF
+    }
+
+    ; Sample only 9 points:
+    ; center, left, right, top, bottom, and the 4 corners.
+    ; This is faster than scanning every pixel in the square while still giving
+    ; a useful measure of whether the area is visually uniform.
+    pointList := [[0,0], [-sampleRadius,0], [sampleRadius,0], [0,-sampleRadius], [0,sampleRadius]
+                , [-sampleRadius,-sampleRadius], [sampleRadius,-sampleRadius], [-sampleRadius,sampleRadius], [sampleRadius,sampleRadius]]
+
+    for pointIndex, pointPair in pointList
+    {
+        pointPosX := sampleRadius + pointPair[1]
+        pointPosY := sampleRadius + pointPair[2]
+        pixelOffset := (pointPosY * rowStride) + (pointPosX * 4)
+
+        blueValue := NumGet(pixelBuffer + 0, pixelOffset + 0, "UChar")
+        greenValue := NumGet(pixelBuffer + 0, pixelOffset + 1, "UChar")
+        redValue := NumGet(pixelBuffer + 0, pixelOffset + 2, "UChar")
+
+        ; If any sampled point differs from the reference pixel/color by more
+        ; than the allowed tolerance on any RGB channel, the area is not
+        ; uniform enough.
+        if (Abs(redValue - targetRed) > tolerance
+         || Abs(greenValue - targetGreen) > tolerance
+         || Abs(blueValue - targetBlue) > tolerance) {
+            DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", oldBitmap)
+            DllCall("gdi32\DeleteObject", "Ptr", dibBitmap)
+            DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
+            DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
+            return False
+        }
+    }
+
+    ; Clean up GDI objects.
+    DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", oldBitmap)
+    DllCall("gdi32\DeleteObject", "Ptr", dibBitmap)
+    DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
+    DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
+
+    ; All 9 sampled points were close enough to the reference color.
     return True
 }
 
