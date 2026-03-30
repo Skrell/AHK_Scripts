@@ -5772,17 +5772,14 @@ $~LButton::
         }
         Else {
             If InStr(_winCtrlD, "SysListView32", True) {
-                ControlGet, controlHwnd, Hwnd,, SysListView321, ahk_id %_winIdD%
+                ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
                 listViewKind := GetListViewFlavor(controlHwnd)
-                If (listViewKind = "classic_report") {
-                    SetTimer, MouseTrack, On
-                    SetTimer, KeyTrack,   On
-                    If isBlankSpaceNonExplorer
-                        isBlankSpaceNonExplorer := False
-                    Return
-                }
+
+                If (listViewKind != "classic_report")
+                    SendCtrlAdd(_winIdD, , , _winClassD)
             }
-            SendCtrlAdd(_winIdD,,,_winClassD)
+            Else
+                SendCtrlAdd(_winIdD, , , _winClassD)
         }
 
         SetTimer, MouseTrack, On
@@ -5865,16 +5862,11 @@ $~LButton::
             If InStr(_winCtrlU, "SysListView32", True) {
                 ControlGet, controlHwnd, Hwnd,, SysListView321, ahk_id %_winIdU%
                 listViewKind := GetListViewFlavor(controlHwnd)
-                If (listViewKind = "classic_report") {
-                    SetTimer, MouseTrack, On
-                    SetTimer, KeyTrack,   On
-                    Return
-                }
+                If (listViewKind != "classic_report")
+                    SetTimer, SendCtrlAddLabel, -125
             }
-
-            SetTimer, SendCtrlAddLabel, -125
-            SetTimer, MouseTrack, On
-            SetTimer, KeyTrack,   On
+            Else
+                SetTimer, SendCtrlAddLabel, -125
         }
         Else If ( isColumnHeader && !isItemClick) {
 
