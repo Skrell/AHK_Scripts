@@ -5884,7 +5884,7 @@ $~LButton::
                 ; Cache risky UIA properties ONCE
                 ; tooltip, % "line4 - " pt.CurrentControlType
                 If (ctype == "" || ctype > 50035 || (ctype > 50008 && ctype < 50031)) {
-
+                    ; DO NOTHING
                 }
                 Else {
                     If (ctype  == 50031 || ctype  == 50008) && (_winClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
@@ -9675,21 +9675,24 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", showFullTitle := False,
     If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
         Return
 
+    WinGetPos, , , popupWidth, popupHeight, ahk_id %WindowTitleID%
+
     If (centerOnWin) {
-        WinGetPos, xc, yc, w, h, ahk_id %hwnd%
-        drawX := round(xc+(w/2))
-        drawY := round(yc+(h/2))
+        WinGetPos, targetX, targetY, targetWidth, targetHeight, ahk_id %hwnd%
+        drawX := Round(targetX + (targetWidth / 2) - (popupWidth / 2))
+        drawY := Round(targetY + (targetHeight / 2) - (popupHeight / 2))
     }
     Else {
-        WinGetPos,  ,  , w, h,  ahk_id %WindowTitleID%
-        drawX := CoordXCenterScreen()
-        drawY := CoordYCenterScreen()
+        drawX := Round(CoordXCenterScreen() - (popupWidth / 2))
+        drawY := Round(CoordYCenterScreen() - (popupHeight / 2))
     }
+
+    WinMove, ahk_id %WindowTitleID%,, %drawX%, %drawY%
 
     If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
         Return
 
-    WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
+    ; WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
     WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
     WinSet, Transparent, %Opacity%, ahk_id %WindowTitleID%
 
@@ -10985,6 +10988,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ips::IPs
 ::vmware::VMware
 ::ie::i.e.
+::eg::e.g.
 ::lossing::losing
 ::leiu::lieu
 ::suck::suck
