@@ -6214,6 +6214,7 @@ LaunchWinFind:
                 Tooltip,
 
                 StopRecursion := False
+                SearchingWindows := False
                 SetTimer, KeyTrack, On
                 SetTimer, MouseTrack, On
                 Return
@@ -8910,8 +8911,10 @@ DynaRun(TempScript, pipename="")
       name := "AHK" A_TickCount
    Else
       name := pipename
+
    __PIPE_GA_ := DllCall("CreateNamedPipe","str","\\.\pipe\" name,_,2,_,0,_,255,_,0,_,0,@,0,@,0)
    __PIPE_    := DllCall("CreateNamedPipe","str","\\.\pipe\" name,_,2,_,0,_,255,_,0,_,0,@,0,@,0)
+
    If (__PIPE_=-1 or __PIPE_GA_=-1)
       Return 0
 
@@ -8922,13 +8925,17 @@ DynaRun(TempScript, pipename="")
 
    If ErrorLevel
       MsgBox, 262144, ERROR,% "Could not open file:`n" __AHK_EXE_ """\\.\pipe\" name """"
+
    DllCall("ConnectNamedPipe",@,__PIPE_GA_,@,0)
    DllCall("CloseHandle",@,__PIPE_GA_)
    DllCall("ConnectNamedPipe",@,__PIPE_,@,0)
    script := (A_IsUnicode ? chr(0xfeff) : (chr(239) . chr(187) . chr(191))) TempScript
+
    If !DllCall("WriteFile",@,__PIPE_,"str",script,_,(StrLen(script)+1)*(A_IsUnicode ? 2 : 1),_ "*",0,@,0)
         Return A_LastError,DllCall("CloseHandle",@,__PIPE_)
+
    DllCall("CloseHandle",@,__PIPE_)
+
    Return PID
 }
 
@@ -9441,14 +9448,14 @@ AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 
     ; If no target color was provided, use the center pixel as the reference.
     if (targetColor = "") {
         centerOffset := (sampleRadius * rowStride) + (sampleRadius * 4)
-        targetBlue := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
-        targetGreen := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
-        targetRed := NumGet(pixelBuffer + 0, centerOffset + 2, "UChar")
+        targetBlue   := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
+        targetGreen  := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
+        targetRed    := NumGet(pixelBuffer + 0, centerOffset + 2, "UChar")
     } else {
         ; Otherwise use the caller-provided RGB target color.
-        targetRed := (targetColor >> 16) & 0xFF
-        targetGreen := (targetColor >> 8) & 0xFF
-        targetBlue := targetColor & 0xFF
+        targetRed    := (targetColor >> 16) & 0xFF
+        targetGreen  := (targetColor >> 8) & 0xFF
+        targetBlue   := targetColor & 0xFF
     }
 
     ; Compare every sampled pixel against the chosen reference color.
@@ -9458,12 +9465,12 @@ AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 
 
         Loop, %sampleSize%
         {
-            colIndex := A_Index - 1
+            colIndex    := A_Index - 1
             pixelOffset := (rowIndex * rowStride) + (colIndex * 4)
 
-            blueValue := NumGet(pixelBuffer + 0, pixelOffset + 0, "UChar")
-            greenValue := NumGet(pixelBuffer + 0, pixelOffset + 1, "UChar")
-            redValue := NumGet(pixelBuffer + 0, pixelOffset + 2, "UChar")
+            blueValue   := NumGet(pixelBuffer + 0, pixelOffset + 0, "UChar")
+            greenValue  := NumGet(pixelBuffer + 0, pixelOffset + 1, "UChar")
+            redValue    := NumGet(pixelBuffer + 0, pixelOffset + 2, "UChar")
 
             if (Abs(redValue - targetRed) > tolerance
              || Abs(greenValue - targetGreen) > tolerance
@@ -9530,6 +9537,7 @@ AreaLooksUniformFast9(centerPosX, centerPosY, targetColor := "", sampleRadius :=
     if (!dibBitmap || !pixelBuffer) {
         if (dibBitmap)
             DllCall("gdi32\DeleteObject", "Ptr", dibBitmap)
+
         DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
         DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
         return False
@@ -9556,14 +9564,14 @@ AreaLooksUniformFast9(centerPosX, centerPosY, targetColor := "", sampleRadius :=
     ; If no target color was provided, use the center pixel as the reference.
     if (targetColor = "") {
         centerOffset := (sampleRadius * rowStride) + (sampleRadius * 4)
-        targetBlue := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
-        targetGreen := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
-        targetRed := NumGet(pixelBuffer + 0, centerOffset + 2, "UChar")
+        targetBlue   := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
+        targetGreen  := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
+        targetRed    := NumGet(pixelBuffer + 0, centerOffset + 2, "UChar")
     } else {
         ; Otherwise use the caller-provided RGB target color.
-        targetRed := (targetColor >> 16) & 0xFF
-        targetGreen := (targetColor >> 8) & 0xFF
-        targetBlue := targetColor & 0xFF
+        targetRed    := (targetColor >> 16) & 0xFF
+        targetGreen  := (targetColor >> 8) & 0xFF
+        targetBlue   := targetColor & 0xFF
     }
 
     ; Sample only 9 points:
@@ -9575,13 +9583,13 @@ AreaLooksUniformFast9(centerPosX, centerPosY, targetColor := "", sampleRadius :=
 
     for pointIndex, pointPair in pointList
     {
-        pointPosX := sampleRadius + pointPair[1]
-        pointPosY := sampleRadius + pointPair[2]
+        pointPosX   := sampleRadius + pointPair[1]
+        pointPosY   := sampleRadius + pointPair[2]
         pixelOffset := (pointPosY * rowStride) + (pointPosX * 4)
 
-        blueValue := NumGet(pixelBuffer + 0, pixelOffset + 0, "UChar")
-        greenValue := NumGet(pixelBuffer + 0, pixelOffset + 1, "UChar")
-        redValue := NumGet(pixelBuffer + 0, pixelOffset + 2, "UChar")
+        blueValue   := NumGet(pixelBuffer + 0, pixelOffset + 0, "UChar")
+        greenValue  := NumGet(pixelBuffer + 0, pixelOffset + 1, "UChar")
+        redValue    := NumGet(pixelBuffer + 0, pixelOffset + 2, "UChar")
 
         ; If any sampled point differs from the reference pixel/color by more
         ; than the allowed tolerance on any RGB channel, the area is not
@@ -10690,6 +10698,7 @@ SetTitleMatchMode, 2
     && !WinActive("ahk_exe mintty.exe")
     && !SearchingWindows
     && !hitTAB
+    && !hitTilde
     && !GetKeyState("LAlt","P")
     && !GetKeyState("Control","P")
     && !StopAutoFix
@@ -12939,6 +12948,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::to it's::to its
 ::it's appearance::its appearance
 ::it's color::its color
+::it's config::its config
+::it's configuration::its configuration
 ::it's data::its data
 ::it's design::its design
 ::it's effect::its effect
