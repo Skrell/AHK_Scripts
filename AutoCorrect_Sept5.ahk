@@ -5301,22 +5301,6 @@ DebugRolesUnderMouse() {
     MsgBox, %out%
 }
 
-; Returns: "header" | "item" | "blank" | "other"
-; ExplorerClickClassify(xPos, yPos, winCtrlNN) {
-    ; global UIA
-    ; CoordMode, Mouse, Screen
-    ; hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "")
-    ; if !IsObject(hitEl) || !InStr(winCtrlNN, "DirectUIHWND", True)
-        ; Return "other"
-    ; if (SafeUIA_GetAutoId(hitEl) == "System.ItemNameDisplay" || SafeUIA_GetClassName(hitEl) == "UIItem")
-        ; Return "item"
-    ; if (SafeUIA_GetClassName(hitEl) == "UIColumnHeader")
-        ; Return "header"
-    ; if (SafeUIA_GetClassName(hitEl) == "UIItemsView")
-        ; Return "blank"
-
-    ; Return ""
-; }
 ExplorerClickClassify(xPos, yPos, winCtrlNN) {
     global UIA
 
