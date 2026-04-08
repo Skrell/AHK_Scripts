@@ -87,7 +87,7 @@ Global WindowTitleID                       :=
 Global keys                                := "abcdefghijklmnopqrstuvwxyz"
 Global numbers                             := "0123456789"
 Global DoubleClickTime                     := DllCall("GetDoubleClickTime")
-Global SingleClickTime                     := floor(DllCall("GetDoubleClickTime") * 0.65)
+Global SingleClickTime                     := floor(DllCall("GetDoubleClickTime") * 0.5)
 Global isWin11                             := DetectWin11()
 Global isModernExplorerInReg               := IsExplorerModern()
 Global TaskBarHeight                       := 0
@@ -1575,6 +1575,7 @@ $*MButton::
     virtwy0               := 0
     offsetX               := 0
     offsetY               := 0
+    deltaPxTrig           := 5
     windowSnapped         := False
     TL                    := False
     TR                    := False
@@ -1586,7 +1587,7 @@ $*MButton::
     isRbutton             := False
     switchingBackToMove   := False
     switchingBacktoResize := False
-    startedAlwaysOnTop       := False
+    startedAlwaysOnTop    := False
 
     If (!hWnd || !JEE_WinHasAltTabIcon(hWnd))
         return
@@ -1655,6 +1656,9 @@ $*MButton::
     Critical, On
     while GetKeyState("MButton", "P") {
 
+        If (A_TickCount - initTime < SingleClickTime)
+            continue
+
         DraggingWindow := True
         isRbutton := GetKeyState("Rbutton","P")
         If (!isRbutton && isRbutton_last) {
@@ -1689,7 +1693,7 @@ $*MButton::
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
 
-        If (isMax == 1 && (abs(mx - mx0) > 5 || abs(my - my0) > 5)) {
+        If (isMax == 1 && (abs(mx - mx0) > deltaPxTrig || abs(my - my0) > deltaPxTrig)) {
             BlockInput, Mousemove
             xRatio := (mx-monL)/ww
             yRatio := (my-monT)/wh
@@ -1721,16 +1725,16 @@ $*MButton::
 
         dragHorz := ""
         dragVert := ""
-        If ((my - myPrev) < 0) && abs(my - my0) > 5 && abs(my - myPrev) > (abs(mx - mxPrev))   {
+        If      ((my - myPrev) < 0 && abs(my - my0) > deltaPxTrig && abs(my - myPrev) > abs(mx - mxPrev))   {
             dragVert := "up"
         }
-        Else If ((my - myPrev) > 0) && abs(my - my0) > 5  && abs(my - myPrev) > (abs(mx - mxPrev))  {
+        Else If ((my - myPrev) > 0 && abs(my - my0) > deltaPxTrig && abs(my - myPrev) > abs(mx - mxPrev))  {
             dragVert := "down"
         }
-        Else If ((mx - mxPrev) > 0 && abs(mx - mx0) > 5) {
+        Else If ((mx - mxPrev) > 0 && abs(mx - mx0) > deltaPxTrig) {
             dragHorz := "right"
         }
-        Else If ((mx - mxPrev) < 0 && abs(mx - mx0) > 5) {
+        Else If ((mx - mxPrev) < 0 && abs(mx - mx0) > deltaPxTrig) {
             dragHorz := "left"
         }
         mxPrev := mx
@@ -1756,7 +1760,7 @@ $*MButton::
 
         If !startedAlwaysOnTop {
             WinGet, trans, Transparent, ahk_id %hWnd%
-            If (trans == 255 && (abs(dx) > 3 || abs(dy) > 3)) {
+            If (trans == 255 && (abs(dx) > deltaPxTrig || abs(dy) > deltaPxTrig)) {
                 targetTrans := 180
                 WinSet, Transparent, %targetTrans%, ahk_id %hWnd%
             }
@@ -1987,19 +1991,19 @@ $*MButton::
 
     If (rlsTime - initTime < SingleClickTime
         && isOverTitleBar
-        && (abs(checkClickMx - mx0) <= 5)
-        && (abs(checkClickMy - my0) <= 5)) {
+        && (abs(checkClickMx - mx0) <= deltaPxTrig)
+        && (abs(checkClickMy - my0) <= deltaPxTrig)) {
 
         WinSet, Transparent, Off, ahk_id %hWnd%
         GoSub, SwitchDesktop
     }
     Else If (rlsTime - initTime < SingleClickTime
-            && (abs(checkClickMx - mx0) <= 5)
-            && (abs(checkClickMy - my0) <= 5)) {
+            && (abs(checkClickMx - mx0) <= deltaPxTrig)
+            && (abs(checkClickMy - my0) <= deltaPxTrig)) {
         Send, {Mbutton}
     }
     Else If (wh/abs(monB-monT) > 0.95)
-        WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
+        WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT) + 2*abs(offsetY) + 1
 
     If !startedAlwaysOnTop {
         WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
@@ -4174,8 +4178,13 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "") {
         Loop, %iterations%
         {
             ; If a newer fade started, stop ASAP
-            if (localFadeToken != overlayFadeToken)
+            If (localFadeToken != overlayFadeToken)
                 return
+
+            If !GetKeyState("LAlt","P") {
+                Overlay_SetAlpha(overlayHwnd, alphaTarget)
+                break
+            }
 
             Overlay_SetAlpha(overlayHwnd, alphaNow)
             if(A_Index < iterations) {
@@ -4258,7 +4267,7 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
     clipRight    := (holeRight < areaRight) ? holeRight : areaRight
     clipBottom   := (holeBottom < areaBottom) ? holeBottom : areaBottom
 
-    clippedHoleW := clipRight - clipLeft
+    clippedHoleW := clipRight  - clipLeft
     clippedHoleH := clipBottom - clipTop
 
     ; If the window does not overlap the mouse monitor's work area,
@@ -4268,6 +4277,9 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
         overlayAlphaCurrent := 0
         return 0
     }
+
+    If !GetKeyState("LAlt","P")
+        return 0
 
     ; Show overlay exactly over the selected monitor's work area.
     Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
@@ -4397,11 +4409,11 @@ Overlay_SetHoleRegion(overlayHwnd, holeX, holeY, holeW, holeH) {
 Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "", doRedraw := True) {
     global overlayHwnd, overlayIsReady
 
-    static lastHolePosX := 0
-    static lastHolePosY := 0
+    static lastHolePosX  := 0
+    static lastHolePosY  := 0
     static lastHoleSizeW := 0
     static lastHoleSizeH := 0
-    static hasLastHole := False
+    static hasLastHole   := False
 
     if (!overlayIsReady || !overlayHwnd)
         return 0
@@ -10727,6 +10739,7 @@ SetTitleMatchMode, 2
 ::design::
 ::digidesign::
 ::eloign::
+::exiting::
 ::ensign::
 ::feign::
 ::foreign::
