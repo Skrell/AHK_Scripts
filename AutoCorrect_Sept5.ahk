@@ -5559,52 +5559,36 @@ ExplorerClickClassify(xPos, yPos, winCtrlNN) {
 
     ; Early gate: only handle shell view clicks
     if !InStr(winCtrlNN, "DirectUIHWND", True)
-    {
         return "other"
-    }
 
     hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "")
     if !IsObject(hitEl)
-    {
         return "other"
-    }
 
     ; 1) HEADER WINS: if the hit element OR ANY ANCESTOR is a column header, it's "header"
     if ExplorerClickClassify_HasAncestorClass(hitEl, "UIColumnHeader", 12)
-    {
         return "header"
-    }
 
     ; Optional: even more reliable (uses UIA control types, not class strings)
     ; Some builds report HeaderItem/Header instead of UIColumnHeader at the leaf.
-    headerCtlId := UIA.ControlTypeId("Header")
+    headerCtlId     := UIA.ControlTypeId("Header")
     headerItemCtlId := UIA.ControlTypeId("HeaderItem")
     if ExplorerClickClassify_HasAncestorControlType(hitEl, headerItemCtlId, 16)
-    {
         return "header"
-    }
     if ExplorerClickClassify_HasAncestorControlType(hitEl, headerCtlId, 16)
-    {
         return "header"
-    }
 
     ; 2) ITEM: require UIItem ancestry (don’t rely on AutoId alone)
     if ExplorerClickClassify_HasAncestorClass(hitEl, "UIItem", 18)
-    {
         return "item"
-    }
 
     ; Your original leaf checks can stay as a fast path, but after header checks
     if (SafeUIA_GetAutoId(hitEl) == "System.ItemNameDisplay" || SafeUIA_GetClassName(hitEl) == "UIItem")
-    {
         return "item"
-    }
 
     ; 3) BLANK: click landed in ItemsView (or within it) but not on an item/header
     if ExplorerClickClassify_HasAncestorClass(hitEl, "UIItemsView", 18)
-    {
         return "blank"
-    }
 
     return "other"
 }
@@ -5612,17 +5596,11 @@ ExplorerClickClassify(xPos, yPos, winCtrlNN) {
 ExplorerClickClassify_GetParentTW(el) {
     global UIA
     if !IsObject(el)
-    {
         return ""
-    }
     try
-    {
         return UIA.TreeWalkerTrue.GetParentElement(el)
-    }
     catch exception
-    {
         return ""
-    }
 }
 
 ExplorerClickClassify_HasAncestorClass(el, classNeedle, maxDepth) {
@@ -5632,9 +5610,7 @@ ExplorerClickClassify_HasAncestorClass(el, classNeedle, maxDepth) {
     while (IsObject(walkEl) && depth < maxDepth)
     {
         if (SafeUIA_GetClassName(walkEl, "") == classNeedle)
-        {
             return 1
-        }
         walkEl := ExplorerClickClassify_GetParentTW(walkEl)
         depth++
     }
@@ -5649,9 +5625,7 @@ ExplorerClickClassify_HasAncestorControlType(el, typeNeedle, maxDepth) {
     while (IsObject(walkEl) && depth < maxDepth)
     {
         if (SafeUIA_GetControlType(walkEl, 0) == typeNeedle)
-        {
             return 1
-        }
         walkEl := ExplorerClickClassify_GetParentTW(walkEl)
         depth++
     }
@@ -6023,6 +5997,8 @@ $~LButton::
         SetTimer, KeyTrack,   On
         If isBlankSpaceNonExplorer
             isBlankSpaceNonExplorer := False
+        If isBlankSpaceExplorer
+            isBlankSpaceExplorer    := False
         Return
     }
 
@@ -6075,7 +6051,7 @@ $~LButton::
         If (InStr(_winCtrlD,"SysHeader32", True)) {
             isColumnHeader := True
         }
-        isBlankSpaceExplorer := AreaLooksUniformFast(lbX1, lbY1, 0xFFFFFF)
+        isBlankSpaceNonExplorer := AreaLooksUniformFast(lbX1, lbY1, 0xFFFFFF)
     }
 
     MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU
@@ -9650,7 +9626,9 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", showFullTitle := False,
         Gui, WindowTitle: Destroy
     }
 
-    If (!vtext || ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P")))
+    If !vtext
+        Return
+    If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
         Return
 
     If (InStr(vtext, " - ", False) && !showFullTitle)
