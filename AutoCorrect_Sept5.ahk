@@ -4181,7 +4181,7 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "") {
             If (localFadeToken != overlayFadeToken)
                 return
 
-            If !GetKeyState("LAlt","P") {
+            If !GetKeyState("LAlt","P") && !GetKeyState("Esc","P") {
                 Overlay_SetAlpha(overlayHwnd, alphaTarget)
                 break
             }
@@ -4278,7 +4278,7 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
         return 0
     }
 
-    If !GetKeyState("LAlt","P")
+    If !GetKeyState("LAlt","P") && !GetKeyState("Esc","P")
         return 0
 
     ; Show overlay exactly over the selected monitor's work area.
@@ -5922,6 +5922,7 @@ $~LButton::
 
     If (   _winClassD != "CabinetWClass"
         && _winClassD != "#32770"
+        && _winClassD != "Chrome_WidgetWin_1"
         && !InStr(_winCtrlD, "SysListView32", True)
         && !InStr(_winCtrlD, "DirectUIHWND",  True)
         && !InStr(_winCtrlD, "SysTreeView32", True)
@@ -5931,6 +5932,7 @@ $~LButton::
         SetTimer, KeyTrack,   On
         Return
     }
+
     If (disableSendCtrlHwnd == _winIdD) {
         SetTimer, MouseTrack, On
         SetTimer, KeyTrack,   On
@@ -6043,6 +6045,10 @@ $~LButton::
                 }
             }
         }
+    }
+
+    while (GetKeyState("Lbutton","P")) {
+        ClearEditUnderMouseOnLButtonHold()
     }
 
     KeyWait, LButton, U T5
@@ -7899,7 +7905,7 @@ Return
 MouseTrack() {
     global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, TaskBarHeight
     static x, y, lastX, lastY, taskview
-    static LbuttonHeld := False, timeOfLastMove
+    static timeOfLastMove
 
     ListLines Off
 
@@ -7913,15 +7919,6 @@ MouseTrack() {
     If (timeOfLastMove == "")
         timeOfLastMove := A_TickCount
 
-    If (LbuttonHeld && GetKeyState("Lbutton", "P") && x < A_ScreenWidth-3 && x > 3)
-    {
-        LbuttonHeld := False
-        WinGet, actwndId, ID, A
-    }
-    Else If (LbuttonHeld && !GetKeyState("Lbutton", "P") && x < A_ScreenWidth-3 && x > 3)
-    {
-        LbuttonHeld := False
-    }
     If ((abs(x - lastX) > 3 || abs(y - lastY) > 3) && lastX != "" && lastY != "") {
         If !mouseMoving {
             mouseMoving := True
@@ -7954,6 +7951,106 @@ MouseTrack() {
         }
     }
     ListLines On
+}
+
+ClearEditUnderMouseOnLButtonHold(holdDelay := 300, maxParentDepth := 4, moveTolerance := 3) {
+    static holdStartTick := 0
+    static startPosX := ""
+    static startPosY := ""
+    static alreadyHandled := false
+
+    if !GetKeyState("LButton", "P") {
+        holdStartTick := 0
+        startPosX := ""
+        startPosY := ""
+        alreadyHandled := false
+        return false
+    }
+
+    MouseGetPos, currentPosX, currentPosY, windowId, controlClassNN
+    MouseGetPos, , , , controlHwnd, 2
+
+    if (holdStartTick = 0) {
+        holdStartTick := A_TickCount
+        startPosX := currentPosX
+        startPosY := currentPosY
+        alreadyHandled := false
+    }
+
+    if (Abs(currentPosX - startPosX) > moveTolerance || Abs(currentPosY - startPosY) > moveTolerance) {
+        holdStartTick := A_TickCount
+        startPosX := currentPosX
+        startPosY := currentPosY
+        alreadyHandled := false
+        return false
+    }
+
+    if (alreadyHandled) {
+        return false
+    }
+
+    if (holdDelay > 0 && (A_TickCount - holdStartTick) < holdDelay) {
+        return false
+    }
+
+    if RegExMatch(controlClassNN, "^Edit\d+$") {
+        ControlFocus, %controlClassNN%, ahk_id %windowId%
+        ControlSetText, %controlClassNN%, , ahk_id %windowId%
+        alreadyHandled := true
+        return true
+    }
+
+    if (controlHwnd) {
+        WinGetClass, controlClassName, ahk_id %controlHwnd%
+        if (controlClassName = "Edit") {
+            ControlSetText, , , ahk_id %controlHwnd%
+            alreadyHandled := true
+            return true
+        }
+    }
+
+    elementObject := SafeUIA_ElementFromPoint(currentPosX, currentPosY, "")
+    editElement := ""
+
+    if IsObject(elementObject) {
+        editElement := FindEditableAncestor(elementObject, maxParentDepth)
+    }
+
+    if IsObject(editElement) {
+        try
+        {
+            editElement.SetFocus()
+        }
+        catch
+        {
+            return false
+        }
+
+        SendInput, ^a
+        SendInput, {Delete}
+
+        alreadyHandled := true
+        return true
+    }
+
+    return false
+}
+
+FindEditableAncestor(elementObject, maxParentDepth := 4) {
+    currentElement := elementObject
+    depthIndex := 0
+
+    while (IsObject(currentElement) && depthIndex <= maxParentDepth) {
+        localizedControlType := SafeUIA_GetLocalizedControlType(currentElement, "")
+        if (localizedControlType = "edit") {
+            return currentElement
+        }
+
+        currentElement := SafeUIA_GetParent(currentElement)
+        depthIndex++
+    }
+
+    return ""
 }
 
 MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
@@ -12987,6 +13084,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::of it's::of its
 ::its a::it's a
 ::its an::it's an
+::its as::it's as
 ::its apparently::it's apparently
 ::its the::it's the
 ::its any::it's any
