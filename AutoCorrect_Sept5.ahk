@@ -2608,6 +2608,11 @@ $~Space::
     lastHotkeyTyped := "~Space"
 Return
 
+$!Space::
+    Send, {Space}
+    lastHotkeyTyped := "~Space"
+Return
+
 ; duplicate hotkey in case shift is accidentally  held as a result of attempting to type a '?'
 $~+Space::
     GoSub, Marktime_Hoty_FixSlash
@@ -5920,18 +5925,18 @@ $~LButton::
     MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
     WinGetClass, _winClassD, ahk_id %_winIdD%
 
-    If (   _winClassD != "CabinetWClass"
-        && _winClassD != "#32770"
-        && _winClassD != "Chrome_WidgetWin_1"
-        && !InStr(_winCtrlD, "SysListView32", True)
-        && !InStr(_winCtrlD, "DirectUIHWND",  True)
-        && !InStr(_winCtrlD, "SysTreeView32", True)
-        && !InStr(_winCtrlD, "SysHeader32",   True)) {
+    ; If (   _winClassD != "CabinetWClass"
+        ; && _winClassD != "#32770"
+        ; && _winClassD != "Chrome_WidgetWin_1"
+        ; && !InStr(_winCtrlD, "SysListView32", True)
+        ; && !InStr(_winCtrlD, "DirectUIHWND",  True)
+        ; && !InStr(_winCtrlD, "SysTreeView32", True)
+        ; && !InStr(_winCtrlD, "SysHeader32",   True)) {
 
-        SetTimer, MouseTrack, On
-        SetTimer, KeyTrack,   On
-        Return
-    }
+        ; SetTimer, MouseTrack, On
+        ; SetTimer, KeyTrack,   On
+        ; Return
+    ; }
 
     If (disableSendCtrlHwnd == _winIdD) {
         SetTimer, MouseTrack, On
@@ -6047,7 +6052,11 @@ $~LButton::
         }
     }
 
-    while (GetKeyState("Lbutton","P")) {
+    while (GetKeyState("Lbutton","P")
+        && !InStr(_winCtrlD, "SysListView32", True)
+        && !InStr(_winCtrlD, "DirectUIHWND",  True)
+        && !InStr(_winCtrlD, "SysTreeView32", True)
+        && !InStr(_winCtrlD, "SysHeader32",   True)) {
         ClearEditUnderMouseOnLButtonHold()
     }
 
@@ -7953,28 +7962,60 @@ MouseTrack() {
     ListLines On
 }
 
-ClearEditUnderMouseOnLButtonHold(holdDelay := 300, maxParentDepth := 4, moveTolerance := 3) {
+ClearEditUnderMouseOnLButtonHold(holdDelay := 300, maxParentDepth := 4, moveTolerance := 3, focusDelay := 60, doubleClickTolerance := 6) {
     static holdStartTick := 0
     static startPosX := ""
     static startPosY := ""
     static alreadyHandled := false
+    static pendingAction := false
+    static pendingActionTick := 0
+    static wasLButtonDown := false
+    static suppressHold := false
+    static lastReleaseTick := 0
+    static lastReleasePosX := ""
+    static lastReleasePosY := ""
 
-    if !GetKeyState("LButton", "P") {
+    currentLButtonDown := GetKeyState("LButton", "P")
+    doubleClickDelay := DllCall("GetDoubleClickTime")
+
+    if !currentLButtonDown {
+        if (wasLButtonDown) {
+            MouseGetPos, lastReleasePosX, lastReleasePosY
+            lastReleaseTick := A_TickCount
+        }
+
         holdStartTick := 0
         startPosX := ""
         startPosY := ""
         alreadyHandled := false
+        pendingAction := false
+        pendingActionTick := 0
+        suppressHold := false
+        wasLButtonDown := false
         return false
     }
 
     MouseGetPos, currentPosX, currentPosY, windowId, controlClassNN
     MouseGetPos, , , , controlHwnd, 2
 
-    if (holdStartTick = 0) {
+    if !wasLButtonDown {
         holdStartTick := A_TickCount
         startPosX := currentPosX
         startPosY := currentPosY
         alreadyHandled := false
+        pendingAction := false
+        pendingActionTick := 0
+        suppressHold := false
+        wasLButtonDown := true
+
+        if (lastReleaseTick
+        && (A_TickCount - lastReleaseTick <= doubleClickDelay)
+        && Abs(currentPosX - lastReleasePosX) <= doubleClickTolerance
+        && Abs(currentPosY - lastReleasePosY) <= doubleClickTolerance) {
+            suppressHold := true
+        }
+
+        return false
     }
 
     if (Abs(currentPosX - startPosX) > moveTolerance || Abs(currentPosY - startPosY) > moveTolerance) {
@@ -7982,6 +8023,12 @@ ClearEditUnderMouseOnLButtonHold(holdDelay := 300, maxParentDepth := 4, moveTole
         startPosX := currentPosX
         startPosY := currentPosY
         alreadyHandled := false
+        pendingAction := false
+        pendingActionTick := 0
+        return false
+    }
+
+    if (suppressHold) {
         return false
     }
 
@@ -7993,20 +8040,23 @@ ClearEditUnderMouseOnLButtonHold(holdDelay := 300, maxParentDepth := 4, moveTole
         return false
     }
 
-    if RegExMatch(controlClassNN, "^Edit\d+$") {
-        ControlFocus, %controlClassNN%, ahk_id %windowId%
-        ControlSetText, %controlClassNN%, , ahk_id %windowId%
+    if (pendingAction) {
+        if ((A_TickCount - pendingActionTick) < focusDelay) {
+            return false
+        }
+
+        SendInput, ^a
+        SendInput, {Delete}
+
         alreadyHandled := true
+        pendingAction := false
+        pendingActionTick := 0
         return true
     }
 
-    if (controlHwnd) {
-        WinGetClass, controlClassName, ahk_id %controlHwnd%
-        if (controlClassName = "Edit") {
-            ControlSetText, , , ahk_id %controlHwnd%
-            alreadyHandled := true
-            return true
-        }
+    if ClearClassicEditableControl(windowId, controlClassNN, controlHwnd) {
+        alreadyHandled := true
+        return true
     }
 
     elementObject := SafeUIA_ElementFromPoint(currentPosX, currentPosY, "")
@@ -8026,11 +8076,9 @@ ClearEditUnderMouseOnLButtonHold(holdDelay := 300, maxParentDepth := 4, moveTole
             return false
         }
 
-        SendInput, ^a
-        SendInput, {Delete}
-
-        alreadyHandled := true
-        return true
+        pendingAction := true
+        pendingActionTick := A_TickCount
+        return false
     }
 
     return false
@@ -8051,6 +8099,69 @@ FindEditableAncestor(elementObject, maxParentDepth := 4) {
     }
 
     return ""
+}
+
+ClearClassicEditableControl(windowId, controlClassNN, controlHwnd) {
+    static emSetSel := 0x00B1
+    static emReplaceSel := 0x00C2
+    static wmClear := 0x0303
+
+    if RegExMatch(controlClassNN, "i)^Edit\d+$") {
+        ControlFocus, %controlClassNN%, ahk_id %windowId%
+        ControlSetText, %controlClassNN%, , ahk_id %windowId%
+        return true
+    }
+
+    if RegExMatch(controlClassNN, "i)^(RICHEDIT\w*\d+|RichEdit\w*\d+)$") {
+        ControlFocus, %controlClassNN%, ahk_id %windowId%
+
+        ; Select everything
+        SendMessage, %emSetSel%, 0, -1, %controlClassNN%, ahk_id %windowId%
+
+        ; First try WM_CLEAR on the current selection
+        SendMessage, %wmClear%, 0, 0, %controlClassNN%, ahk_id %windowId%
+
+        ControlGetText, controlText, %controlClassNN%, ahk_id %windowId%
+        if (controlText = "")
+            return true
+
+        ; Fallback: select everything again and replace with empty text
+        SendMessage, %emSetSel%, 0, -1, %controlClassNN%, ahk_id %windowId%
+        VarSetCapacity(emptyText, 2, 0)
+        SendMessage, %emReplaceSel%, 1, &emptyText, %controlClassNN%, ahk_id %windowId%
+
+        ControlGetText, controlText, %controlClassNN%, ahk_id %windowId%
+        return (controlText = "")
+    }
+
+    if (controlHwnd) {
+        WinGetClass, controlClassName, ahk_id %controlHwnd%
+
+        if (controlClassName = "Edit") {
+            ControlSetText, , , ahk_id %controlHwnd%
+            return true
+        }
+
+        if RegExMatch(controlClassName, "i)^(RICHEDIT\w*|RichEdit\w*)$") {
+            ControlFocus, , ahk_id %controlHwnd%
+
+            SendMessage, %emSetSel%, 0, -1, , ahk_id %controlHwnd%
+            SendMessage, %wmClear%, 0, 0, , ahk_id %controlHwnd%
+
+            ControlGetText, controlText, , ahk_id %controlHwnd%
+            if (controlText = "")
+                return true
+
+            SendMessage, %emSetSel%, 0, -1, , ahk_id %controlHwnd%
+            VarSetCapacity(emptyText, 2, 0)
+            SendMessage, %emReplaceSel%, 1, &emptyText, , ahk_id %controlHwnd%
+
+            ControlGetText, controlText, , ahk_id %controlHwnd%
+            return (controlText = "")
+        }
+    }
+
+    return false
 }
 
 MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
