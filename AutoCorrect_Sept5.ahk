@@ -1656,7 +1656,7 @@ $*MButton::
     Critical, On
     while GetKeyState("MButton", "P") {
 
-        If (A_TickCount - initTime < SingleClickTime)
+        If (A_TickCount - initTime < SingleClickTime && !GetKeyState("LShift","P"))
             continue
 
         DraggingWindow := True
@@ -1786,7 +1786,9 @@ $*MButton::
         virtwy0 := wy0 + dy
 
         If !isRbutton {
-            WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+            If !GetKeyState("LShift","P")
+                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+
             UnclipCursor()
             ; --- One-way vertical clamp (top/bottom) ---
             If (virtwy0 < minY)
@@ -3227,7 +3229,6 @@ $!Lbutton::
         Send, {ENTER}
         sleep, 275
         blockKeys := False
-        FixModifiers()
     }
 Return
 
@@ -4909,110 +4910,121 @@ Min(a,b) {
 }
 ; -------------------------------------------------------------------------------------------
 
-#If MouseIsOverTaskbarWidgets()
-$~^Lbutton::
+#If MouseIsOverTaskbarWidgets() || MouseIsOverTitleBar()
+$~^LButton::
     global MonCount
     Thread, NoTimers, True
     StopRecursion := True
 
+    clickedTaskbar  := MouseIsOverTaskbarWidgets()
+    clickedTitleBar := MouseIsOverTitleBar()
+
     DetectHiddenWindows, Off
     SysGet, MonCount, MonitorCount
 
-    KeyWait, Lbutton, U T3
+    if (clickedTaskbar) {
+        KeyWait, LButton, U T3
+        Sleep, 125
+        targetID := FindTopMostWindow()
+        WinGetClass, targetClass, ahk_id %targetID%
 
-    sleep, 125
-    targetID := FindTopMostWindow()
-    WinGetClass, targetClass, ahk_id %targetID%
+        if (targetClass != "Windows.UI.Core.CoreWindow"
+        &&  targetClass != "TaskListThumbnailWnd"
+        &&  targetClass != "XamlExplorerHostIslandWindow") {
 
-    If (targetClass != "Windows.UI.Core.CoreWindow" && targetClass != "TaskListThumbnailWnd" && targetClass != "XamlExplorerHostIslandWindow") {
+            WinGet, targetProcess, ProcessName, ahk_id %targetID%
+
+            WinGet, windowList, List, ahk_exe %targetProcess% ahk_class %targetClass%
+            Loop, %windowList%
+            {
+                windowID := windowList%A_Index%
+                WinGet, windowState, MinMax, ahk_id %windowID%
+
+                if (windowState == -1) {
+                    WinRestore, ahk_id %windowID%
+                    if (MonCount > 1) {
+                        currentMon := MWAGetMonitorMouseIsIn()
+                        windowOnMon := IsWindowOnMonNum(windowID, currentMon)
+                        if !windowOnMon
+                            WinMinimize, ahk_id %windowID%
+                    }
+                }
+                else if (windowState == 0) {
+                    if (MonCount > 1) {
+                        currentMon := MWAGetMonitorMouseIsIn()
+                        windowOnMon := IsWindowOnMonNum(windowID, currentMon)
+                        if windowOnMon
+                            WinActivate, ahk_id %windowID%
+                    }
+                    else {
+                        WinActivate, ahk_id %windowID%
+                    }
+                }
+            }
+        }
+        WinActivate, ahk_id %targetID%
+    }
+    else if (clickedTitleBar) {
+        targetID := FindTopMostWindow()
+        WinGetClass, targetClass, ahk_id %targetID%
         WinGet, targetProcess, ProcessName, ahk_id %targetID%
-        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-        Loop, %windowsFromProc%
-        {
-            hwndID := windowsFromProc%A_Index%
-            WinGet, isMin, MinMax, ahk_id %hwndId%
-            If (isMin == -1) {
-                WinRestore, ahk_id %hwndId%
-                If (MonCount > 1) {
-                    currentMon := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
-                    If !currentMonHasActWin
-                        WinMinimize, ahk_id %hwndId%
-                }
-            }
-            Else If (isMin == 0) {
-                If (MonCount > 1) {
-                    currentMon := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
-                    If currentMonHasActWin
-                        WinActivate, ahk_id %hwndId%
-                }
-                Else {
-                    WinActivate, ahk_id %hwndId%
-                }
-            }
-        }
-        FixModifiers()
+        currentMon := MWAGetMonitorMouseIsIn()
+        BringAppWindowsOnMonitorToTop(targetProcess, targetClass, currentMon, targetID)
     }
-    WinActivate, ahk_id %targetID%
+
+    KeyWait, Ctrl, U T10
+    FixModifiers()
+
     StopRecursion := False
     Thread, NoTimers, False
 Return
 #If
 
-#If MouseIsOverTitleBar()
-$^LButton::
-    global currentMon, previousMon, DoubleClickTime, MonCount
+
+BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) {
     DetectHiddenWindows, Off
-    StopRecursion := True
-    Thread, NoTimers, True
 
-    MouseGetPos, mx1, my1, actID,
-    If !((A_TimeSincePriorHotkey < DoubleClickTime) && (A_PriorHotKey == A_ThisHotKey)) {
-        Send, {Lbutton DOWN}
-        startMon := MWAGetMonitorMouseIsIn()
+    WinGet, windowList, List, ahk_exe %targetProcess% ahk_class %targetClass%
+    orderedList := []
+
+    Loop, %windowList%
+    {
+        windowID := windowList%A_Index%
+
+        WinGet, windowState, MinMax, ahk_id %windowID%
+        if (windowState != 0)
+            continue
+
+        windowOnMon := IsWindowOnMonNum(windowID, monitorNum)
+        if !windowOnMon
+            continue
+
+        orderedList.Push(windowID)
     }
 
-    KeyWait, Lbutton, U T5
+    listCount := orderedList.Length()
+    if (listCount < 2)
+        return
 
-    MouseGetPos, mx2, my2, ,
-    If !((A_TimeSincePriorHotkey < DoubleClickTime) && (A_PriorHotKey == A_ThisHotKey))
-        Send, {Lbutton UP}
+    WinSet, AlwaysOnTop, On, ahk_id %targetID%
 
-    If (   (A_TimeSincePriorHotkey < DoubleClickTime)
-        && (A_PriorHotKey == A_ThisHotKey)
-        && (abs(mx2-mx1) < 15 && abs(my2-my1) < 15)) {
+    Loop, %listCount%
+    {
+        listIndex := listCount - A_Index + 1
+        windowID := orderedList[listIndex]
 
-        WinSet, AlwaysOnTop, On, ahk_id %actID%
-        WinGet, targetProcess, ProcessName, ahk_id %actID%
-        WinGetClass, targetClass, ahk_id %actID%
-        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-        Loop, %windowsFromProc%
-        {
-            hwndID := windowsFromProc%A_Index%
-            WinGet, isMin, MinMax, ahk_id %hwndId%
-            If (isMin == 0) {
-                If (MonCount > 1) {
-                    currentMonHasActWin := IsWindowOnMonNum(hwndId, startMon)
-                    If (currentMonHasActWin)
-                        WinActivate, ahk_id %hwndId%
-                }
-                Else {
-                    WinActivate, ahk_id %hwndId%
-                }
-            }
-        }
-        WinActivate, ahk_id %actID%
-        WinSet, AlwaysOnTop, Off, ahk_id %actID%
-        WinActivate, ahk_id %actID%
-        FixModifiers()
+        if (windowID = targetID)
+            continue
+
+        WinActivate, ahk_id %windowID%
+        WinWaitActive, ahk_id %windowID%,, 0.15
     }
 
-    StopRecursion := False
-    Thread, NoTimers, False
-Return
-#If
+    WinActivate, ahk_id %targetID%
+    WinWaitActive, ahk_id %targetID%,, 0.15
 
+    WinSet, AlwaysOnTop, Off, ahk_id %targetID%
+}
 
 #If MouseIsOverTaskbarBlank()
 $~Lbutton::
@@ -12358,6 +12370,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::definatly::definitely
 ::definetly::definitely
 ::definining::defining
+::defintioin::definition
 ::degrate::degrade
 ::degredation::degradation
 ::delagates::delegates
