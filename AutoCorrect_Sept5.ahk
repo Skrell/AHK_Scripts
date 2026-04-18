@@ -827,14 +827,8 @@ DoNothing:
 ; ==========================================================================================================================================
 ; ==========================================================================================================================================
 WhichButton(vPosX, vPosY, hWnd) {
-    errorFound := False
 
-    ;get role number
-    ; vRole := "", try vRole := oAcc.accRole(vChildID)
-    ;get role text method 1
-    ; vRoleText1 := Acc_RoleName(oAcc, vChildID)
-    ;get role text method 2 (using role number from earlier)
-    ; vRoleText2 := (vRole = "") ? "" : Acc_GetRoleText(vRole)
+    errorFound := False
     vName := "",
 
     try {
@@ -998,8 +992,7 @@ GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) 
     SysGet, count, MonitorCount
     bestDist := 0x7FFFFFFF, found := false
 
-    Loop, %count%
-    {
+    Loop, %count% {
         idx := A_Index
         if (useWorkArea)
             SysGet, r, MonitorWorkArea, %idx%
@@ -9609,7 +9602,6 @@ MouseIsOverTaskbar() {
 }
 
 MouseIsOverTaskbarButtonGroup() {
-    ; global UIA
     CoordMode, Mouse, Screen
     MouseGetPos, x, y, WindowUnderMouseID, CtrlUnderMouseId
 
@@ -9668,7 +9660,11 @@ MouseIsOverTaskbarBlank() {
 
     return AreaLooksUniformFast(mousePosX, mousePosY, 0x1C1C1C, 2, 18)
 }
-
+; Use AreaLooksUniformFast() when:
+; more thorough
+; false positives are costly,
+; you need confidence the whole region is really flat,
+; the sample region is small enough that scanning all pixels is cheap.
 AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 2, tolerance := 18) {
 
     ; Compute the width/height of the square sample region.
@@ -9779,7 +9775,11 @@ AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 
 
     return True
 }
-
+; Use AreaLooksUniformFast9() when:
+; faster, but more approximate
+; this runs in a hot path,
+; you only need a quick heuristic,
+; you want to cheaply reject obviously non-uniform regions without paying for a full scan.
 AreaLooksUniformFast9(centerPosX, centerPosY, targetColor := "", sampleRadius := 3, tolerance := 18) {
 
     ; Compute the width/height of the sampled square.
@@ -10059,22 +10059,6 @@ GetFileVersionString(filePath, stringName) {
     return RTrim(resultText, "`0")
 }
 
-; https://www.autohotkey.com/boards/viewtopic.php?t=51788
-GetNameOfIconUnderMouse() {
-   MouseGetPos, , , hwnd, CtrlClass
-   WinGetClass, WinClass, ahk_id %hwnd%
-   try
-       If (WinClass = "CabinetWClass" && (CtrlClass = "DirectUIHWND3"|| CtrlClass = "DirectUIHWND2")) {
-          oAcc := Acc_ObjectFromPoint()
-          Name := Acc_ParentSafe(oAcc).accValue(0)
-          Name := Name ? Name : oAcc.accValue(0)
-       } Else If (WinClass = "Progman" || WinClass = "WorkerW") {
-          oAcc := Acc_ObjectFromPoint(ChildID)
-          Name := ChildID ? oAcc.accName(ChildID) : ""
-       }
-   Return Name
-}
-
 InitCOM_STA() {
     global comInitd
 
@@ -10119,13 +10103,9 @@ Acc_CreateChildRef(parentIA, childId) {
 }
 
 Acc_IsChildRef(accObj) {
-    if !IsObject(accObj)
-        return false
-
-    try
-        return accObj.__accChildRef = true
-    catch
-        return false
+    return IsObject(accObj)
+        && ObjHasKey(accObj, "__accChildRef")
+        && (accObj.__accChildRef = true)
 }
 ; ChatGPT
 Acc_GetRoleText(nRole) {
@@ -10164,21 +10144,21 @@ Acc_FindLikelyAddressMarker(rootAcc, maxNodes := 60) {
         currentValue := Acc_ValueSafe(currentAcc)
         if (currentValue != "")
         {
-            if (InStr(currentValue, ":\") || InStr(currentValue, "\\") || InStr(currentValue, "\"))
+            if (InStr(currentValue, ":\")
+             || InStr(currentValue, "\\")
+             || InStr(currentValue, "Breadcrumb")
+             || InStr(currentValue, "Address"))
                 return true
         }
 
         currentName := Acc_NameSafe(currentAcc)
         if (currentName != "")
         {
-            if (InStr(currentName, "Address")
-             || InStr(currentName, "Breadcrumb")
-             || InStr(currentName, ":\")
+            if (InStr(currentName, ":\")
              || InStr(currentName, "\\")
-             || InStr(currentName, "\"))
-            {
+             || InStr(currentName, "Breadcrumb")
+             || InStr(currentName, "Address"))
                 return true
-            }
         }
 
         childrenList := Acc_GetChildrenListSafe(currentAcc)
@@ -10203,13 +10183,11 @@ Acc_LocationSafe(accObj, ByRef xPos, ByRef yPos, ByRef wid, ByRef hei, childId :
     if !IsObject(accObj)
         return false
 
-    if (Acc_IsChildRef(accObj))
-    {
+    if (Acc_IsChildRef(accObj)) {
         iaObj := accObj.acc
         childVal := accObj.child
     }
-    else
-    {
+    else {
         iaObj := accObj
         childVal := (childId = "") ? 0 : childId
     }
@@ -10218,13 +10196,10 @@ Acc_LocationSafe(accObj, ByRef xPos, ByRef yPos, ByRef wid, ByRef hei, childId :
     if (childNum = 0 && childVal != 0 && childVal != "0")
         return false
 
-    try
-    {
+    try {
         iaObj.accLocation(xPos, yPos, wid, hei, ComObjParameter(3, childNum))
         return true
-    }
-    catch
-    {
+    } catch {
         xPos := ""
         yPos := ""
         wid := ""
@@ -10248,6 +10223,8 @@ Acc_PointInAccRect(accObj, sx, sy) {
 }
 ; ChatGPT
 Acc_GetObjectAtScreenPoint(xPos, yPos) {
+    local accObj, pointStruct, hwndUnder, accRoot, hitVal, childId, childObj
+
     accObj := Acc_ObjectFromPoint(, xPos, yPos)
     if IsObject(accObj)
         return accObj
@@ -10266,47 +10243,40 @@ Acc_GetObjectAtScreenPoint(xPos, yPos) {
     if !IsObject(accRoot)
         return ""
 
-    hitVal := ""
-
-    ; accHitTest expects SCREEN coordinates
-    try
-        hitVal := accRoot.accHitTest(xPos, yPos)
+    try hitVal := accRoot.accHitTest(xPos, yPos)
     catch
         return ""
 
     if IsObject(hitVal)
         return hitVal
 
-    ; Some MSAA trees return a child-id instead of an object
-    if (hitVal != "")
-    {
-        childId := hitVal + 0
+    if (hitVal = "" || hitVal = 0 || hitVal = "0")
+        return ""
+
+    childId := hitVal + 0
+    if (childId = 0 && hitVal != 0 && hitVal != "0")
+        return ""
+
+    try 
+        childObj := accRoot.accChild(childId)
+    catch
         childObj := ""
 
-        try
-            childObj := accRoot.accChild(childId)
-        catch
-            childObj := ""
+    if IsObject(childObj)
+        return childObj
 
-        if IsObject(childObj)
-            return childObj
-
-        ; If accChild didn't produce an object, you might want to return a child-ref instead:
-        ; return Acc_CreateChildRef(accRoot, childId)
-    }
-
-    return ""
+    return Acc_CreateChildRef(accRoot, childId)
 }
 ; ChatGPT
 Acc_ObjectFromPoint(ByRef childIdOut := "", xPos := "", yPos := "") {
-    local pointStruct, xVal, yVal, pt64, hr, pacc, vt
+    local pointStruct, xVal, yVal, pt64, hr, pacc := 0, vt
+    local varChild
 
     Acc_Init()
 
     VarSetCapacity(varChild, (A_PtrSize = 8) ? 24 : 16, 0)
 
-    if (xPos = "" || yPos = "")
-    {
+    if (xPos = "" || yPos = "") {
         VarSetCapacity(pointStruct, 8, 0)
         if !DllCall("user32\GetCursorPos", "Ptr", &pointStruct)
         {
@@ -10316,10 +10286,9 @@ Acc_ObjectFromPoint(ByRef childIdOut := "", xPos := "", yPos := "") {
         xVal := NumGet(pointStruct, 0, "Int")
         yVal := NumGet(pointStruct, 4, "Int")
     }
-    else
-    {
-        xVal := xPos
-        yVal := yPos
+    else {
+        xVal := xPos + 0
+        yVal := yPos + 0
     }
 
     ; Pack POINT into 64-bit: low DWORD = x, high DWORD = y
@@ -10331,22 +10300,17 @@ Acc_ObjectFromPoint(ByRef childIdOut := "", xPos := "", yPos := "") {
         , "Ptr", &varChild
         , "Int")
 
-    if (hr != 0 || !pacc)
-    {
+    if (hr != 0 || !pacc) {
         childIdOut := 0
         return
     }
 
     vt := NumGet(varChild, 0, "UShort")
-    if (vt = 3) ; VT_I4
-        childIdOut := NumGet(varChild, 8, "Int")
-    else
-        childIdOut := 0
+    childIdOut := (vt = 3) ? NumGet(varChild, 8, "Int") : 0
 
     try
         return ComObjEnwrap(9, pacc, 1)
-    catch
-    {
+    catch {
         childIdOut := 0
         return
     }
@@ -10364,18 +10328,21 @@ Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) {
 }
 ; ChatGPT
 Acc_TryGetIAccessibleSafe(accObj) {
-    local iAccessiblePtr
+    local iAccessiblePtr := 0
 
     if !IsObject(accObj)
         return 0
 
-    try
-    {
-        iAccessiblePtr := ComObjQuery(accObj, "{618736e0-3c3d-11cf-810c-00aa00389b71}")
-        return ComObj(9, iAccessiblePtr, 1)
+    try {
+        iAccessiblePtr := ComObjQuery(accObj, "{618736E0-3C3D-11CF-810C-00AA00389B71}")
+        if !iAccessiblePtr
+            return 0
+
+        return ComObjEnwrap(9, iAccessiblePtr, 1)
     }
-    catch
+    catch {
         return 0
+    }
 }
 ; ChatGPT
 Acc_RoleNameSafe(accObj) {
@@ -10424,18 +10391,12 @@ Acc_FindLikelyPathText(rootAcc, maxNodes := 140) {
         seenCount += 1
 
         currentValue := Acc_ValueSafe(currentAcc)
-        if (currentValue != "" && currentValue != "Address Band")
-        {
-            if (Acc_LooksLikePath(currentValue))
-                return currentValue
-        }
+        if (currentValue != "" && currentValue != "Address Band" && Acc_LooksLikePath(currentValue))
+            return currentValue
 
         currentName := Acc_NameSafe(currentAcc)
-        if (currentName != "" && currentName != "Address Band")
-        {
-            if (Acc_LooksLikePath(currentName))
-                return currentName
-        }
+        if (currentName != "" && currentName != "Address Band" && Acc_LooksLikePath(currentName))
+            return currentName
 
         childrenList := Acc_GetChildrenListSafe(currentAcc)
         for childIndex, childAcc in childrenList
@@ -10444,37 +10405,50 @@ Acc_FindLikelyPathText(rootAcc, maxNodes := 140) {
                 queueList.Push(childAcc)
         }
     }
+
     return ""
 }
 ; ChatGPT
 Acc_LooksLikePath(s) {
     ; Heuristic: accept full paths, UNC, or shell-like breadcrumb with backslashes.
     ; You can tighten/expand this based on what you see on your system.
-    if (InStr(s, ":\") || InStr(s, "\\"))
-        return True
-    if (InStr(s, "\") && !InStr(s, "Address Band"))
-        return True
-    return False
+    if (s = "" || s = "Address Band")
+        return false
+
+    ; Strong matches first
+    if InStr(s, ":\")
+        return true
+
+    if InStr(s, "\\")
+        return true
+
+    ; Explorer breadcrumb-ish path fragments:
+    ; require at least one backslash and avoid obvious non-path labels
+    if (InStr(s, "\")
+     && !InStr(s, "Address Band")
+     && !InStr(s, "Toolbar")
+     && !InStr(s, "Ribbon"))
+        return true
+
+    return false
 }
 ; ChatGPT
 Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
-    local iaObj, childrenCount, fetchedCount
+    local iaObj, childrenCount := 0, fetchedCount := 0
     local fetchCount, cbVariant, bufferBytes
     local childIndex, offsetBytes, variantType
     local childId, dispatchPointer, outputList := []
-    local resultCode
+    local resultCode := 0
+    local buf
 
     if !IsObject(accObj)
         return outputList
 
-    if (Acc_IsChildRef(accObj))
-        iaObj := accObj.acc
-    else
-        iaObj := accObj
+    iaObj := Acc_IsChildRef(accObj) ? accObj.acc : accObj
+    if !IsObject(iaObj)
+        return outputList
 
-    childrenCount := 0
-
-    try
+    try 
         childrenCount := iaObj.accChildCount
     catch
         return outputList
@@ -10483,15 +10457,12 @@ Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
         return outputList
 
     fetchCount := childrenCount
-    if (maxChildren && fetchCount > maxChildren)
+    if (maxChildren > 0 && fetchCount > maxChildren)
         fetchCount := maxChildren
 
     cbVariant := (A_PtrSize = 8) ? 24 : 16
     bufferBytes := fetchCount * cbVariant
     VarSetCapacity(buf, bufferBytes, 0)
-
-    fetchedCount := 0
-    resultCode := 0
 
     try
     {
@@ -10506,8 +10477,10 @@ Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
     catch
         return outputList
 
-    if (resultCode != 0)
+    if (resultCode != 0 || fetchedCount <= 0)
         return outputList
+
+    outputList.Capacity := fetchedCount
 
     Loop, %fetchedCount%
     {
@@ -10519,17 +10492,12 @@ Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
         {
             dispatchPointer := NumGet(buf, offsetBytes + 8, "Ptr")
             if (dispatchPointer)
-            {
                 outputList.Push(ComObjEnwrap(9, dispatchPointer, 1))
-            }
-            continue
         }
-
-        if (variantType = 3) ; VT_I4
+        else if (variantType = 3) ; VT_I4
         {
             childId := NumGet(buf, offsetBytes + 8, "Int")
             outputList.Push(Acc_CreateChildRef(iaObj, childId))
-            continue
         }
     }
 
@@ -10717,13 +10685,9 @@ Acc_ValueSafe(accObj) {
         return ""
 
     try
-    {
         valueStr := iaObj.accValue(childId)
-    }
     catch
-    {
         return ""
-    }
 
     return valueStr
 }
@@ -10735,13 +10699,9 @@ Acc_RoleIdSafe(accObj) {
         return 0
 
     try
-    {
         roleVal := iaObj.accRole(childId)
-    }
     catch
-    {
         return 0
-    }
 
     roleNum := roleVal + 0
     if (roleNum = 0 && roleVal != 0 && roleVal != "0")
@@ -10770,9 +10730,9 @@ Acc_ParentSafe(accObj) {
 SafeUIA_ElementFromPoint(x, y, default := "") {
     global UIA
 
-    try {
+    try
         return UIA.ElementFromPoint(x, y, False)
-    } catch {
+    catch {
         UIA :=  ;// set to a different value
         UIA := UIA_Interface() ; Initialize UIA interface
         UIA.TransactionTimeout := 2000
@@ -10784,90 +10744,82 @@ SafeUIA_ElementFromPoint(x, y, default := "") {
 SafeUIA_GetControlType(el, default := "") {
     if !IsObject(el)
         return default
-    try {
+    try
         return el.CurrentControlType
-    } catch e {
+    catch e
         return default
-    }
+
 }
 ; ChatGPT
 SafeUIA_GetLocalizedControlType(el, default := "") {
     if !IsObject(el)
         return default
-    try {
+    try
         return el.CurrentLocalizedControlType
-    } catch e {
+    catch e
         return default
-    }
 }
 ; ChatGPT
 SafeUIA_GetName(el, default := "") {
     if !IsObject(el)
         return default
-    try {
+    try
         return el.CurrentName
-    } catch e {
+    catch e
         return default
-    }
 }
 ; ChatGPT
 SafeUIA_GetClassName(el, default := "") {
     if !IsObject(el)
         return default
-    try {
+    try
         return el.CurrentClassName
-    } catch e {
+    catch e
         return default
-    }
 }
 ; ChatGPT
 SafeUIA_GetOrientation(el, default := 0) {
     if !IsObject(el)
         return default
-    try {
+    try
         return el.CurrentOrientation
-    } catch e {
+    catch e
         return default
-    }
 }
 ; ChatGPT
 SafeUIA_GetParent(el) {
     if !IsObject(el)
         return ""
-    try {
+    try
         return el.Parent
-    } catch e {
+    catch e
         return ""
-    }
 }
 ; ChatGPT
 SafeUIA_GetAutoId(el) {
     if !IsObject(el)
         return ""
-    try {
+    try
         return el.AutomationId
-    } catch e {
+    catch e
         return ""
-    }
 }
 SafeUIA_GetIsContentElement(el, default := 0) {
     if !IsObject(el)
         return default
-    try {
+    try
         return el.CurrentIsContentElement
-    } catch e {
+    catch e
         return default
-    }
 }
 
 SafeUIA_GetIsControlElement(el, default := 0) {
     if !IsObject(el)
         return default
-    try {
+    try
         return el.CurrentIsControlElement
-    } catch e {
+    catch e
         return default
-    }
 }
 
 ;------------------------------------------------------------------------------
