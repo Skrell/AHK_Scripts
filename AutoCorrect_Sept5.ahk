@@ -118,15 +118,7 @@ Global ReleaseAway   := 24     ; px: while snapped, drag this far AWAY from the 
 Global skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
 ; === Settings ===
-Global BlockClicks := False   ; true = block clicks outside active window, false = let clicks pass through
 Global Opacity     := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
-
-; === Globals ===
-Global black1Hwnd := ""
-Global black2Hwnd := ""
-Global black3Hwnd := ""
-Global black4Hwnd := ""
-Global black5Hwnd := ""
 
 Process, Priority,, High
 
@@ -992,7 +984,8 @@ GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) 
     SysGet, count, MonitorCount
     bestDist := 0x7FFFFFFF, found := false
 
-    Loop, %count% {
+    Loop, %count%
+    {
         idx := A_Index
         if (useWorkArea)
             SysGet, r, MonitorWorkArea, %idx%
@@ -2721,7 +2714,7 @@ $Esc::
             Hotkey, x, DoNothing, On
             WinGetPosEx(escHwndID, wx, wy, ww, wh, null, null)
             Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
-            DrawWindowTitlePopup(escHwndID, "Close?", pp, False, True)
+            DrawWindowTitlePopup(escHwndID, "Close?", pp, True)
 
             Loop
             {
@@ -3172,8 +3165,7 @@ $!x::
     WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
 
     GoSub, ResetWins
-    ClearBlackMonitor()
-    ClearMasks_not(lastActWinID)
+    Overlay_Hide(30)
     sleep, 1000
     tooltip,
     GoSub, Altup
@@ -3502,8 +3494,9 @@ Cycle() {
     If !GetKeyState("LAlt","P")
         Return 0
 
-    WinGetTitle, tits, ahk_id %gwHwndId%
+    ; WinGetTitle, tits, ahk_id %gwHwndId%
     WinGet, pp, ProcessPath , ahk_id %gwHwndId%
+    tits := GetAppDisplayNameFromHwnd(gwHwndId)
     DrawWindowTitlePopup(gwHwndId, tits, pp)
 
     Loop
@@ -3530,17 +3523,18 @@ Cycle() {
                         cycleCount -= 1
                 }
 
-                gwHwnd := GroupedWindows[cycleCount]
-                WinActivate,   ahk_id %gwHwnd%
-                WinWaitActive, ahk_id %gwHwnd%, , 2
-                WinGetPosEx(gwHwnd, wx, wy, ww, wh, null, null)
+                gwHwndId := GroupedWindows[cycleCount]
+                WinActivate,   ahk_id %gwHwndId%
+                WinWaitActive, ahk_id %gwHwndId%, , 2
+                WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
                 Overlay_MoveHole(wx, wy, ww, wh)
 
                 KeyWait, Tab, U
 
-                WinGetTitle, tits,ahk_id %gwHwnd%
-                WinGet, pp, ProcessPath , ahk_id %gwHwnd%
-                DrawWindowTitlePopup(gwHwnd, tits, pp)
+                ; WinGetTitle, tits,ahk_id %gwHwnd%
+                WinGet, pp, ProcessPath , ahk_id %gwHwndId%
+                tits := GetAppDisplayNameFromHwnd(gwHwndId)
+                DrawWindowTitlePopup(gwHwndId, tits, pp)
             }
         }
     }
@@ -3627,7 +3621,7 @@ CycleAppWindows(activeProcessName, activeClass) {
 
     WinGetTitle, tits, ahk_id %gwHwndId%
     WinGet, pp, ProcessPath , ahk_id %gwHwndId%
-    DrawWindowTitlePopup(gwHwndId, tits, pp, True)
+    DrawWindowTitlePopup(gwHwndId, tits, pp)
 
     cycleCount++
     If (cycleCount > numWindows) {
@@ -3659,7 +3653,7 @@ CycleAppWindows(activeProcessName, activeClass) {
 
             WinGetTitle, tits, ahk_id %gwHwndId%
             WinGet, pp, ProcessPath , ahk_id %gwHwndId%
-            DrawWindowTitlePopup(gwHwndId, tits, pp, True)
+            DrawWindowTitlePopup(gwHwndId, tits, pp)
 
             cycleCount++
             If (cycleCount > numWindows) {
@@ -3924,7 +3918,6 @@ ActivateWindow:
         sleep, 125
 
     sleep, 400
-    ; ClearBlackMonitor(, 10)
     Overlay_Hide(30)
 
     Process, Close, Expr_Name
@@ -4074,6 +4067,12 @@ ClampAlpha(alphaValue) {
     return alphaValue
 }
 
+; alphaPrimary is the transparency of the top window.
+; alphaTarget is the final combined opacity you want after both windows are layered.
+; The function first clamps both values into the valid 0..255 range.
+; It figures out how much of the background still shows through the first window.
+; Then it computes how transparent the second window must be so the total visible background matches the target.
+; It clamps that result to a valid range, converts it back to an AHK alpha value, rounds it, and returns it.
 Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget) {
     ; alphaPrimary: 0..255 (WinSet alpha for primary window)
     ; alphaTarget:  0..255 (desired combined opacity of the two stacked windows)
@@ -4163,8 +4162,6 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "") {
     else if (alphaTarget > 255)
         alphaTarget := 255
 
-    startTick := A_TickCount
-
     ; Guard: avoid divide-by-zero and negative durations
     if (fadeMs < 1)
         fadeMs := 1
@@ -4222,6 +4219,9 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
     ; Cancel any in-progress fade immediately.
     Overlay_CancelFade()
 
+    If !GetKeyState("LAlt","P") && !GetKeyState("Esc","P")
+        return 0
+
     ; Toggle click-through.
     if (clickThrough)
         WinSet, ExStyle, +0x20, ahk_id %overlayHwnd%
@@ -4242,6 +4242,9 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
         return 0
     }
 
+    If !GetKeyState("LAlt","P") && !GetKeyState("Esc","P")
+        return 0
+
     ; Incoming hole rectangle is in screen coordinates.
     holeLeft     := holePosX
     holeTop      := holePosY
@@ -4258,6 +4261,9 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
         shouldRedraw := True
     else if (holeBottom > areaBottom)
         shouldRedraw := True
+
+    If !GetKeyState("LAlt","P") && !GetKeyState("Esc","P")
+        return 0
 
     ; Intersect the hole rectangle with the selected monitor's work area.
     ; This is what makes non-zero monitor origins and negative coords safe.
@@ -4297,6 +4303,9 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
     ; Force repaint only if part of the requested hole was outside the monitor edges.
     if (shouldRedraw)
         WinSet, Redraw,, ahk_id %overlayHwnd%
+
+    If !GetKeyState("LAlt","P") && !GetKeyState("Esc","P")
+        return 0
 
     ; Fade from current alpha to target alpha.
     Overlay_FadeTo(overlayHwnd, overlayAlpha, fadeMs, overlayAlphaCurrent)
@@ -4502,7 +4511,9 @@ Overlay_Hide(fadeMs := 100) {
         , "int", A_ScreenWidth, "int", A_ScreenHeight
         , "ptr")
     DllCall("user32\SetWindowRgn", "ptr", overlayHwnd, "ptr", regFull, "int", True)
-    Overlay_SetAlpha(overlayHwnd, 0)
+
+    ; Overlay_SetAlpha(overlayHwnd, 0)
+
     Gui, Overlay:Hide
 }
 
@@ -4531,346 +4542,6 @@ Overlay_SetOpacity(alphaVal, fadeMs := 0) {
     return 1
 }
 
-CreateMaskGui(index, ByRef hWndOut, startingTrans := 1) {
-    global BlockClicks
-    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd, black5Hwnd  ; optional, if you want these exact globals
-
-    clickStyle := BlockClicks ? "" : "+E0x20"
-
-    if (!index) {
-        return
-    }
-
-    ; Create GUI and capture HWND into local variable h
-    Gui, %index%: -Caption +ToolWindow %clickStyle% +Hwndh
-    Gui, %index%: Color, Black
-    WinSet, Transparent, %startingTrans%, ahk_id %h%
-    Gui, %index%: Hide
-
-    ; Populate the ByRef output variable (black1Hwnd/black2Hwnd/etc. as passed by caller)
-    hWndOut := h
-
-    ; Also store into globals by index (so they're always available globally)
-    if (index = 1) {
-        black1Hwnd := h
-    } else if (index = 2) {
-        black2Hwnd := h
-    } else if (index = 3) {
-        black3Hwnd := h
-    } else if (index = 4) {
-        black4Hwnd := h
-    } else if (index = 5) {
-        black5Hwnd := h
-    }
-}
-
-DrawBlackBar(guiIndex, x, y, w, h, startingTrans := -1, adjustTrans := False, onTop := False) {
-    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd
-    startVal := 0
-
-    If (w <= 0 || h <= 0) {
-        Gui, %guiIndex%: Hide
-        Return
-    }
-
-    buildVar := "black" . guiIndex . "Hwnd"
-    hwndVarName := %buildVar%
-    DetectHiddenWindows, On
-    If !WinExist("ahk_id " . hwndVarName) {
-        If (guiIndex == 1)
-            CreateMaskGui(guiIndex, black1Hwnd)
-        Else if (guiIndex == 2)
-            CreateMaskGui(guiIndex, black2Hwnd)
-        Else if (guiIndex == 3)
-            CreateMaskGui(guiIndex, black3Hwnd)
-        Else if (guiIndex == 4)
-            CreateMaskGui(guiIndex, black4Hwnd)
-        Else if (guiIndex == 5)
-            CreateMaskGui(guiIndex, black5Hwnd)
-    }
-
-    If adjustTrans {
-        If (startingTrans == -1)
-            startVal := 1
-        Else
-            startVal := startingTrans
-
-    }
-    Gui, %guiIndex%: Show, Hide
-    If (startVal > 0)
-        WinSet, Transparent, %startVal%, ahk_id %hwndVarName%
-    Else
-        WinSet, Transparent, 0, ahk_id %hwndVarName%
-    ; Showing with new size/position is one atomic operation internally
-    Gui, %guiIndex%: Show, x%x% y%y% w%w% h%h% NoActivate
-    ; Make sure they’re on top exactly once per draw
-    If onTop
-        WinSet, AlwaysOnTop, On, ahk_id %hwndVarName%
-
-    DetectHiddenWindows, Off
-}
-
-ClearMasks_not(targetHwnd := "", initTransVal := 255) {
-    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd
-
-    If (!targetHwnd || !WinExist("ahk_id " . targetHwnd))
-        WinGet, hA, ID, A
-    Else
-        hA := targetHwnd
-
-    iterations := 10
-    transVal   := initTransVal
-    opacityInterval := Floor(initTransVal / iterations)
-
-    Loop, %iterations%
-    {
-        transVal -= opacityInterval
-        currentVal := ClampAlpha(transVal)
-
-        WinSet, Transparent, %currentVal%, ahk_id %black1Hwnd%
-        WinSet, Transparent, %currentVal%, ahk_id %black2Hwnd%
-        WinSet, Transparent, %currentVal%, ahk_id %black3Hwnd%
-        WinSet, Transparent, %currentVal%, ahk_id %black4Hwnd%
-
-        ; Short sleep for visual smoothness; not in Critical
-        sleep, 10
-
-        ; Now a tiny critical section to safely check/early-exit
-        If (GetKeyState("LAlt", "P") || (hA != "" && !WinExist("ahk_id " . hA)))
-            break
-    }
-
-    ; Final hide – we do want this to be atomic-ish
-    Critical, On
-    Loop, 4
-        Gui, %A_Index%: Hide
-    Critical, Off
-
-    If (targetHwnd != "" && WinExist("ahk_id " . targetHwnd)) {
-        WinSet, AlwaysOnTop, Off, ahk_id %targetHwnd%
-        WinGetTitle, tit, ahk_id %targetHwnd%
-        tooltip, not on top %tit%
-    }
-
-    Return
-}
-
-; Why this helps flicker:
-    ; All geometry & showing of the 4 bars happens back-to-back while uninterruptible:
-        ; No Sleep inside Critical.
-        ; No other thread can sneak in and change these GUIs mid-update.
-    ; The visual fade (the transparent WinSet calls) happens after the bars are in their final positions and already visible. So even If a timer/hotkey interrupts, it doesn’t cause a half-drawn layout—only an intermediate opacity.
-DrawMasks_aot(targetHwnd := "", firstDraw := True) {
-    global black2Hwnd, black1Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
-
-    Margin        := 0  ; expands the hole around the active window by this many pixels
-
-    If !firstDraw {
-        iterations      := 5
-        opacityInterval := Floor(Opacity / iterations)
-        transVal        := Opacity
-        fadeVal         := 0
-        DrawBlackMonitor_aot(targetHwnd, False, 0)
-
-        Critical, On
-        Loop, %iterations%
-        {
-            transVal -= opacityInterval
-            fadeVal := Get2ndAlphaForTransparencyTarget(transVal, Opacity)
-
-            WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
-            WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
-            WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
-            WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
-
-            WinSet, Transparent, %fadeVal%,  ahk_id %black5Hwnd%
-            ; SetWindowAlphaTopmost(black5Hwnd, fadeVal, True)
-            sleep, 2
-        }
-        Critical, Off
-    }
-    ; Resolve target window
-    If (!targetHwnd || !WinExist("ahk_id " . targetHwnd))
-        WinGet, hA, ID, A
-    Else
-        hA := targetHwnd
-
-    ; Don’t mask our own mask windows
-    If ((!hA) || (hA == black1Hwnd || hA == black2Hwnd || hA == black3Hwnd || hA == black4Hwnd))
-        Return
-
-    ; Get monitor WORK AREA for active window’s monitor
-    If (!GetMonitorRectsForWindow(hA, mx, my, mw, mh, wx2, wy2, ww2, wh2))
-        Return
-
-    wRight  := wx2 + ww2
-    wBottom := wy2 + wh2
-
-    ; Active window rect (expanded)
-    WinGetPosEx(hA, wx, wy, ww, wh)
-    If (wx = "")
-        Return
-
-    wx -= Margin, wy -= Margin, ww += 2*Margin, wh += 2*Margin
-
-    holeL := Max(wx2, wx)
-    holeT := Max(wy2, wy)
-    holeR := Min(wRight,  wx + ww)
-    holeB := Min(wBottom, wy + wh)
-
-    ; --- CRITICAL SECTION: JUST THE GEOMETRY + SHOWS ---
-    Critical, On
-    ; TOP panel
-    DrawBlackBar(1, wx2, wy2, ww2, Max(0, holeT - wy2),,,True)
-    ; LEFT panel
-    DrawBlackBar(2, wx2, holeT, Max(0, holeL - wx2), Max(0, holeB - holeT),,,True)
-    ; RIGHT panel
-    DrawBlackBar(3, holeR, holeT, Max(0, wRight - holeR), Max(0, holeB - holeT),,,True)
-    ; BOTTOM panel
-    DrawBlackBar(4, wx2, holeB, ww2, Max(0, wBottom - holeB),,,True)
-    Critical, Off
-    ; --- END CRITICAL SECTION ---
-
-    ; At this point all 4 bars are in place and visible.
-    ; Any animation is now cosmetic and won’t affect “tearing” of geometry.
-
-    ; --- FADE / OPACITY (non-critical) ---
-    If (firstDraw) {
-        iterations         := 10
-    } Else {
-        ; For subsequent moves, you can skip animation entirely If you want:
-        iterations         := 4
-    }
-    opacityInterval   := Floor(Opacity / iterations)
-    transVal          := opacityInterval
-    fadeVal           := Opacity
-
-    Critical, On
-    Loop, %iterations%
-    {
-        fadeVal := Get2ndAlphaForTransparencyTarget(transVal, Opacity)
-
-        WinSet, Transparent, %transVal%, ahk_id %black1Hwnd%
-        ; WinSetAlphaTopmost(black1Hwnd, transVal, True)
-        WinSet, Transparent, %transVal%, ahk_id %black2Hwnd%
-        ; WinSetAlphaTopmost(black2Hwnd, transVal, True)
-        WinSet, Transparent, %transVal%, ahk_id %black3Hwnd%
-        ; WinSetAlphaTopmost(black3Hwnd, transVal, True)
-        WinSet, Transparent, %transVal%, ahk_id %black4Hwnd%
-        ; WinSetAlphaTopmost(black4Hwnd, transVal, True)
-
-        If !firstDraw
-            WinSet, Transparent, %fadeVal%,  ahk_id %black5Hwnd%
-
-        transVal += opacityInterval
-        Sleep, 2   ; purely visual – safe outside Critical
-        If (!GetKeyState("LAlt", "P")) {
-            WinSet, Transparent, %Opacity%, ahk_id %black1Hwnd%
-            WinSet, Transparent, %Opacity%, ahk_id %black2Hwnd%
-            WinSet, Transparent, %Opacity%, ahk_id %black3Hwnd%
-            WinSet, Transparent, %Opacity%, ahk_id %black4Hwnd%
-            break
-        }
-    }
-    Critical, Off
-    ; tooltip, %fadeVal% - %transVal% - %Opacity  %
-    Return
-}
-
-ClearBlackMonitor(initialOpacity := -1, iterations := 0) {
-    global black5Hwnd, Opacity
-
-    if (initialOpacity >= 0)
-        initTransVal := initialOpacity
-    else
-        initTransVal := Opacity
-
-    transVal   := initTransVal
-    opacityInterval := Floor(initTransVal / iterations)
-
-    ; fade-out Loop (non-critical)
-    Loop, %iterations%
-    {
-        transVal -= opacityInterval
-        currentVal := transVal
-
-        WinSet, Transparent, %currentVal%, ahk_id %black5Hwnd%
-
-        sleep, 10
-    }
-
-    ; Final hide – we do want this to be atomic-ish
-    Gui, 5: Hide
-
-    Return
-}
-
-DrawBlackMonitor_aot(targetHwnd := "", firstDraw := True, targetOpacity := -1, guiIndex := 5, useWorkArea := true) {
-    global black1Hwnd, black2Hwnd, black3Hwnd, black4Hwnd, black5Hwnd, Opacity
-    static prevTargetHwnd
-
-    currentMon := MWAGetMonitorMouseIsIn()
-    buildVar := "black" . guiIndex . "Hwnd"
-    hwndVarName := %buildVar%
-
-    if (targetOpacity >= 0)
-        finalOpacity := targetOpacity
-    else
-        finalOpacity := Opacity
-
-    if (useWorkArea) {
-        SysGet, mon, MonitorWorkArea, %currentMon%
-    } else {
-        SysGet, mon, Monitor, %currentMon%
-    }
-
-    x := monLeft
-    y := monTop
-    w := monRight - monLeft
-    h := monBottom - monTop
-
-    If (prevTargetHwnd != "" && WinExist("ahk_id " . prevTargetHwnd))
-        WinSet, AlwaysOnTop, Off, ahk_id %prevTargetHwnd%
-    Else
-        prevTargetHwnd := ""
-
-
-    If (targetHwnd && WinExist("ahk_id " . targetHwnd))
-        WinSet, AlwaysOnTop,  On, ahk_id %targetHwnd%
-
-    DrawBlackBar(guiIndex, x, y, w, h,,,True)
-
-    If (targetHwnd && WinExist("ahk_id " . targetHwnd))
-        WinSet, AlwaysOnTop,  On, ahk_id %targetHwnd%
-
-    If (firstDraw) {
-        iterations     := 15
-    } Else {
-        ; For subsequent moves, you can skip animation entirely If you want:
-        iterations     := 5
-    }
-
-    If (finalOpacity >= iterations) {
-        opacityInterval   := Ceil(finalOpacity / iterations)
-        transVal          := opacityInterval
-
-        Critical, On
-        Loop, %iterations%
-        {
-            WinSet, Transparent, %transVal%, ahk_id %hwndVarName%
-            transVal += opacityInterval
-            Sleep, 5   ; purely visual – safe outside Critical
-        }
-        Critical, Off
-    }
-    Else
-        WinSet, Transparent, %finalOpacity%, ahk_id %hwndVarName%
-
-    WinSet, AlwaysOnTop, Off, ahk_id %hwndVarName%
-
-    If targetHwnd
-        prevTargetHwnd := targetHwnd
-}
 ; Finds the monitor + work area rect that contains the center of the given window.
 GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
                              , ByRef workX, ByRef workY, ByRef workW, ByRef workH) {
@@ -4902,6 +4573,99 @@ Min(a,b) {
     Return (a < b) ? a : b
 }
 ; -------------------------------------------------------------------------------------------
+#If MouseIsOverCaptionButtons()
+^Lbutton Up::
+    CoordMode, Mouse, Screen
+    SysGet, MonCount, MonitorCount
+    MouseGetPos, vPosX, vPosY, hWnd
+
+    WinGet, targetProcess, ProcessName, ahk_id %hWnd%
+    WinGetClass, targetClass, ahk_id %hWnd%
+
+    If targetProcess == "svchost.exe"
+        Return
+
+    vName := WhichButton(vPosX, vPosY, hWnd)
+
+    If (InStr(vName,"close",false)) {
+        tooltip, Closing all windows...
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc
+        {
+            hwndID := windowsFromProc%A_Index%
+            If (MonCount > 1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+                If currentMonHasActWin {
+                    WinClose, ahk_id %hwndID%
+                    sleep, 100
+                }
+            }
+            Else {
+                WinClose, ahk_id %hwndID%
+                sleep, 100
+            }
+        }
+    }
+    If (InStr(vName,"minimize",false)) {
+        tooltip, Minimizing all windows...
+        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        loop % windowsFromProc
+        {
+            hwndID := windowsFromProc%A_Index%
+            If (MonCount > 1) {
+                currentMon          := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+                If currentMonHasActWin {
+                    WinMinimize, ahk_id %hwndId%
+                    sleep, 100
+                }
+            }
+            Else {
+                WinMinimize, ahk_id %hwndID%
+                sleep, 100
+            }
+        }
+    }
+    sleep, 500
+    tooltip,
+Return
+
+Lbutton Up::
+    CoordMode, Mouse, Screen
+    MouseGetPos, vPosX, vPosY, hWnd
+
+    KeyWait, LButton, U T1
+    vName := WhichButton(vPosX, vPosY, hWnd)
+
+    If (InStr(vName,"minimize",false)) {
+        WinMinimize, ahk_id %hWnd%
+        ; Send, {Click, left}
+    }
+    Else If (InStr(vName,"maximize",false)) {
+        WinGet, state, MinMax, ahk_id %hWnd%
+        If (state == 0)
+            WinMaximize, ahk_id %hWnd%
+        Else
+            WinRestore, ahk_id %hWnd%
+        ; Send, {Click, left}
+    }
+    Else If (InStr(vName,"close",false)) {
+        WinClose, ahk_id %hWnd%
+        ; Send, {Click, left}
+    }
+    Else If (InStr(vName,"restore",false)) {
+        WinRestore, ahk_id %hWnd%
+        ; Send, {Click, left}
+    }
+    ; Else If (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))
+    ; Send, {Click, left}
+
+    ; ToolTip, % vName
+    ; sleep, 1000
+    ; tooltip
+    Return
+#If
 
 #If MouseIsOverTaskbarWidgets() || MouseIsOverTitleBar()
 $~^LButton::
@@ -4942,19 +4706,19 @@ $~^LButton::
                     WinGet, windowState, MinMax, ahk_id %windowID%
 
                     if (windowState == -1) {
-                        WinRestore, ahk_id %windowID%
-                        if (MonCount > 1) {
-                            currentMon := MWAGetMonitorMouseIsIn()
-                            windowOnMon := IsWindowOnMonNum(windowID, currentMon)
-                            if !windowOnMon
-                                WinMinimize, ahk_id %windowID%
+                        winMonNum := GetWindowMonitorNumber(windowID)
+                        currentMon := MWAGetMonitorMouseIsIn()
+
+                        If (winMonNum == currentMon) {
+                            WinRestore, ahk_id %windowID%
+                            sleep, 100
                         }
                     }
                     else if (windowState == 0) {
                         if (MonCount > 1) {
-                            currentMon := MWAGetMonitorMouseIsIn()
-                            windowOnMon := IsWindowOnMonNum(windowID, currentMon)
-                            if windowOnMon
+                            currentMon          := MWAGetMonitorMouseIsIn()
+                            currentMonHasActWin := IsWindowOnMonNum(windowID, currentMon)
+                            if currentMonHasActWin
                                 WinActivate, ahk_id %windowID%
                         }
                         else {
@@ -4982,7 +4746,6 @@ $~^LButton::
 Return
 #If
 
-
 BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) {
     DetectHiddenWindows, Off
 
@@ -4997,8 +4760,8 @@ BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) 
         if (windowState != 0)
             continue
 
-        windowOnMon := IsWindowOnMonNum(windowID, monitorNum)
-        if !windowOnMon
+        currentMonHasActWin := IsWindowOnMonNum(windowID, monitorNum)
+        if !currentMonHasActWin
             continue
 
         orderedList.Push(windowID)
@@ -5931,7 +5694,7 @@ GetClassName(hwnd)
 }
 
 #MaxThreadsPerHotkey 2
-#If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets()
+#If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
 $~LButton::
     tooltip,
     SetTimer, MouseTrack, Off
@@ -7980,7 +7743,7 @@ MouseTrack() {
     ListLines On
 }
 
-ClearEditUnderMouseOnLButtonHold(holdDelay := 300, maxParentDepth := 4, moveTolerance := 3, focusDelay := 60, doubleClickTolerance := 6) {
+ClearEditUnderMouseOnLButtonHold(holdDelay := 500, maxParentDepth := 4, moveTolerance := 3, focusDelay := 60, doubleClickTolerance := 6) {
     ; Tracks when the current hold started.
     static holdStartTick     := 0
 
@@ -8316,9 +8079,8 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
             Else If (hitVal == 12 || hitVal == 13 || hitVal == 14)
                 Return False
             Else  {
-                ; try {
-                    pt := SafeUIA_ElementFromPoint(xPos, yPos)
-                    ctype := SafeUIA_GetControlType(pt)
+                    pt     := SafeUIA_ElementFromPoint(xPos, yPos)
+                    ctype  := SafeUIA_GetControlType(pt)
                     ccname := SafeUIA_GetClassName(pt)
 
                     If (mClass == "Chrome_WidgetWin_1" && ctype == 50033 && ccname == "FrameGrabHandle")
@@ -8329,19 +8091,6 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
                         Return True
                     Else
                         Return False
-                ; } catch e {
-                    ; tooltip, 5: UIA TIMED OUT!!!!
-                    ; ListLines
-                    ; MsgBox % "Exception caught:`n"
-                    ; . "Message: " e.Message "`n"
-                    ; . "What: " e.What "`n"
-                    ; . "File: " e.File "`n"
-                    ; . "Line: " e.Line "`n"
-                    ; . "Extra: " e.Extra "`n`n"
-                    ; . "A_LastError: " A_LastError "`n"
-                    ; . "ErrorLevel: " ErrorLevel
-                    ; Pause
-                ; }
             }
             Return True
         }
@@ -8392,6 +8141,55 @@ IsPointOnCaption(x := "", y := "", hwnd := "") {
 
     ; ; Only accept true caption area
     ; return (hit == 2)    ; HTCAPTION
+}
+
+MouseIsOverCaptionButtons(xPos := "", yPos := "") {
+    SysGet, SM_CXBORDER, 5
+    SysGet, SM_CYBORDER, 6
+    SysGet, SM_CXFIXEDFRAME, 7
+    SysGet, SM_CYFIXEDFRAME, 8
+    SysGet, SM_CXMIN, 28
+    SysGet, SM_CYMIN, 29
+    SysGet, SM_CXSIZE, 30
+    SysGet, SM_CYSIZE , 31
+    SysGet, SM_CXSIZEFRAME, 32
+    SysGet, SM_CYSIZEFRAME , 33
+
+    titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
+
+    CoordMode, Mouse, Screen
+    if (xPos = "" || yPos = "") {
+        MouseGetPos, xPos, yPos, windowUnderMouseId
+    } else {
+        MouseGetPos, , , windowUnderMouseId
+    }
+
+    If (!IsAltTabWindow(WindowUnderMouseID))
+        Return False
+
+    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+
+    If    ((mClass != "Shell_TrayWnd")
+        && (mClass != "WorkerW")
+        && (mClass != "ProgMan")
+        && (mClass != "TaskListThumbnailWnd")
+        && (mClass != "#32768")
+        && (mClass != "Net UI Tool Window")) {
+
+        WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+        SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, ahk_id %WindowUnderMouseID%, , , , 500
+        If (((yPos > y) && (yPos < (y+titlebarHeight))) && ((ErrorLevel == 8) || (ErrorLevel == 9) || (ErrorLevel == 20)))
+            Return True
+        Else If ((ErrorLevel != 12)
+                && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45)))) {
+            ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
+            Return True
+        }
+        Else
+            Return False
+    }
+    Else
+        Return False
 }
 
 ;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
@@ -8458,6 +8256,64 @@ FindMonNumForWindows(thisWindowHwnd) {
     }
     Critical, Off
     Return 0
+}
+
+GetWindowMonitorNumber(windowHwnd) {
+    static monitorDefaultToNearest := 2  ; MONITOR_DEFAULTTONEAREST
+    static windowPlacementSize := 44
+    static rectSize := 16
+    static swShowMinimized := 2
+
+    if !windowHwnd
+        return 0
+
+    VarSetCapacity(windowPlacement, windowPlacementSize, 0)
+    NumPut(windowPlacementSize, windowPlacement, 0, "UInt")
+
+    if !DllCall("GetWindowPlacement", "Ptr", windowHwnd, "Ptr", &windowPlacement)
+        return 0
+
+    showCmd := NumGet(windowPlacement, 8, "UInt")
+
+    VarSetCapacity(targetRect, rectSize, 0)
+
+    if (showCmd = swShowMinimized) {
+        ; Use restored position for minimized windows.
+        windowLeft   := NumGet(windowPlacement, 28, "Int")
+        windowTop    := NumGet(windowPlacement, 32, "Int")
+        windowRight  := NumGet(windowPlacement, 36, "Int")
+        windowBottom := NumGet(windowPlacement, 40, "Int")
+
+        NumPut(windowLeft,   targetRect, 0,  "Int")
+        NumPut(windowTop,    targetRect, 4,  "Int")
+        NumPut(windowRight,  targetRect, 8,  "Int")
+        NumPut(windowBottom, targetRect, 12, "Int")
+    } else {
+        ; Use actual current rect for normal/maximized windows.
+        if !DllCall("GetWindowRect", "Ptr", windowHwnd, "Ptr", &targetRect)
+            return 0
+    }
+
+    targetMonitorHandle := DllCall("MonitorFromRect", "Ptr", &targetRect, "UInt", monitorDefaultToNearest, "Ptr")
+    if !targetMonitorHandle
+        return 0
+
+    SysGet, monitorCount, MonitorCount
+    Loop, %monitorCount% {
+        SysGet, monitorArea, Monitor, %A_Index%
+
+        VarSetCapacity(monitorRect, rectSize, 0)
+        NumPut(monitorAreaLeft,   monitorRect, 0,  "Int")
+        NumPut(monitorAreaTop,    monitorRect, 4,  "Int")
+        NumPut(monitorAreaRight,  monitorRect, 8,  "Int")
+        NumPut(monitorAreaBottom, monitorRect, 12, "Int")
+
+        currentMonitorHandle := DllCall("MonitorFromRect", "Ptr", &monitorRect, "UInt", monitorDefaultToNearest, "Ptr")
+        if (currentMonitorHandle = targetMonitorHandle)
+            return A_Index
+    }
+
+    return 0
 }
 
 ;https://www.autohotkey.com/boards/viewtopic.php?f=6&t=54557
@@ -8957,31 +8813,37 @@ FindTopMostWindow() {
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
     Critical, On
+
+    targetID := 0
+
     WinGet, winList, List,
     Loop, %winList%
     {
         hwndID := winList%A_Index%
-        If IsAltTabWindow(hwndId) && !IsAlwaysOnTop(hwndId) {
-            WinGet, mmState, MinMax, ahk_id %hwndId%
-            WinGet, procName, ProcessName, ahk_id %hwndId%
-            WinGet, ExStyle, ExStyle, ahk_id %hwndId%
-            ; If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip If zoom or always on top window
+        If IsAltTabWindow(hwndID) && !IsAlwaysOnTop(hwndID) {
+            WinGet, mmState, MinMax, ahk_id %hwndID%
+            ; WinGet, procName, ProcessName, ahk_id %hwndID%
+            ; WinGet, ExStyle, ExStyle, ahk_id %hwndID%
+            ; If (procName == "Zoom.exe" || (ExStyle & 0x8))
                 ; continue
+
             If (mmState > -1) {
                 If (MonCount > 1) {
-                    currentMon := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+                    currentMon          := MWAGetMonitorMouseIsIn()
+                    currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
                 }
-                Else {
+                Else
                     currentMonHasActWin := True
-                }
-                If currentMonHasActWin
+
+                If currentMonHasActWin {
+                    targetID := hwndID
                     break
+                }
             }
         }
     }
     Critical, Off
-    Return hwndID
+    Return targetID
 }
 
 FindSecondMostWindow(ref_hwndID := "") {
@@ -8989,19 +8851,23 @@ FindSecondMostWindow(ref_hwndID := "") {
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
     Critical, On
+
+    targetID := 0
+
     WinGet, winList, List,
     Loop, %winList%
     {
         hwndID := winList%A_Index%
-        If IsAltTabWindow(hwndId) {
+        If IsAltTabWindow(hwndId) && !IsAlwaysOnTop(hwndID) {
             WinGet, mmState, MinMax, ahk_id %hwndId%
-            WinGet, procName, ProcessName, ahk_id %hwndId%
-            WinGet, ExStyle, ExStyle, ahk_id %hwndId%
-            If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip If zoom or always on top window
-                continue
+            ; WinGet, procName, ProcessName, ahk_id %hwndId%
+            ; WinGet, ExStyle, ExStyle, ahk_id %hwndId%
+            ; If (procName == "Zoom.exe" || (ExStyle & 0x8)) ; skip If zoom or always on top window
+                ; continue
+
             If (mmState > -1) {
                 If (MonCount > 1) {
-                    currentMon := MWAGetMonitorMouseIsIn()
+                    currentMon          := MWAGetMonitorMouseIsIn()
                     currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
                 }
                 Else {
@@ -9011,6 +8877,7 @@ FindSecondMostWindow(ref_hwndID := "") {
                     If (!firstFound && currentMonHasActWin)
                         firstFound := True
                     Else If (firstFound && currentMonHasActWin)
+                        targetID := hwndID
                         break
                 }
                 Else {
@@ -9018,13 +8885,14 @@ FindSecondMostWindow(ref_hwndID := "") {
                         firstFound := True
                     }
                     Else If (firstFound && currentMonHasActWin)
+                        targetID := hwndID
                         break
                 }
             }
         }
     }
     Critical, Off
-    Return hwndID
+    Return targetID
 }
 
 IsEditFieldActive() {
@@ -9923,33 +9791,22 @@ ClearWindowTitlePopup() {
     return
 }
 
-DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", showFullTitle := False, centerOnWin := False) {
+DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     global Opacity, WindowTitleID, WindowTitle
     static IsWindowTitleGuiInitialized := False
 
     strArray := []
     CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
-    fullTitle := showFullTitle
 
     If (WindowTitleID && WinExist("ahk_id " . WindowTitleID)) {
         Gui, WindowTitle: Destroy
     }
 
-    If !vtext
-        Return
     If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
         Return
 
-    If (InStr(vtext, " - ", False) && !showFullTitle)
-        fullTitle := False
-
-    If fullTitle {
-        If (StrLen(vtext) > 60) {
-            vtext := SubStr(vtext, 1, 60) . "..."
-        }
-    }
-    Else {
-        vtext := GetAppDisplayNameFromHwnd(hwnd)
+    If (StrLen(vtext) > 60) {
+        vtext := SubStr(vtext, 1, 60) . "..."
     }
 
     If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
@@ -10243,7 +10100,11 @@ Acc_GetObjectAtScreenPoint(xPos, yPos) {
     if !IsObject(accRoot)
         return ""
 
-    try hitVal := accRoot.accHitTest(xPos, yPos)
+    hitVal := ""
+
+    ; accHitTest expects SCREEN coordinates
+    try
+        hitVal := accRoot.accHitTest(xPos, yPos)
     catch
         return ""
 
@@ -10257,7 +10118,7 @@ Acc_GetObjectAtScreenPoint(xPos, yPos) {
     if (childId = 0 && hitVal != 0 && hitVal != "0")
         return ""
 
-    try 
+    try
         childObj := accRoot.accChild(childId)
     catch
         childObj := ""
@@ -10448,7 +10309,7 @@ Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
     if !IsObject(iaObj)
         return outputList
 
-    try 
+    try
         childrenCount := iaObj.accChildCount
     catch
         return outputList
@@ -14774,6 +14635,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Anything below this point was added to the script by the user via the Win+H hotkey.
 ;------------------------------------------------------------------------------
+::nd::and
 ::hilighting::highlighting
 ::releasses::releases
 ::ahven't::haven't
@@ -14911,6 +14773,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::your their::you're their
 ::your your::you're your
 ::you're own::your own
+::you're time::your time
 ::Suggetsions::Suggestions
 ::specificed::specified
 ::docn::documentation
@@ -15080,6 +14943,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::depdenency::dependency
 ::incredably::incredibly
 ::os::so
+::HSL::HLS
 ;------------------------------------------------------------------------------
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
