@@ -120,6 +120,16 @@ Global skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman"
 ; === Settings ===
 Global Opacity     := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 
+Global rightButtonHeld          := false
+Global rightButtonComboUsed     := false
+Global rightButtonDragging      := false
+Global rightButtonNativeDown    := false
+Global rightButtonStartPosX     := 0
+Global rightButtonStartPosY     := 0
+Global rightButtonDragThreshold := 4
+
+Global suppressRightButtonLogic := false
+
 Process, Priority,, High
 
 UIA.TransactionTimeout := 2000
@@ -370,13 +380,13 @@ hHookKbd   := DllCall("SetWindowsHookEx"
     , "Ptr")
 
 ; Low-level mouse hook: WH_MOUSE_LL = 14
-mouseCallback := RegisterCallback("LL_MouseHook", "Fast")
-hHookMouse    := DllCall("SetWindowsHookEx"
-    , "Int", 14              ; WH_MOUSE_LL
-    , "Ptr", mouseCallback
-    , "Ptr", hMod
-    , "UInt", 0
-    , "Ptr")
+; mouseCallback := RegisterCallback("LL_MouseHook", "Fast")
+; hHookMouse    := DllCall("SetWindowsHookEx"
+    ; , "Int", 14              ; WH_MOUSE_LL
+    ; , "Ptr", mouseCallback
+    ; , "Ptr", hMod
+    ; , "UInt", 0
+    ; , "Ptr")
 
 if (!hHookKbd || !hHookMouse)
 {
@@ -391,8 +401,8 @@ comInitd := InitCOM_STA()
 accInitd := Acc_Init()
 
 10_Minutes := 60000*10
-SetTimer MouseTrack, 10
-SetTimer KeyTrack, 5
+; SetTimer MouseTrack, 10
+SetTimer KeyTrack, 10
 SetTimer MasterTimer, %10_Minutes%
 
 Return
@@ -987,23 +997,26 @@ GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) 
     Loop, %count%
     {
         idx := A_Index
+        ; Switch between full monitor bounds and the work area that excludes taskbars/docked bars.
         if (useWorkArea)
             SysGet, r, MonitorWorkArea, %idx%
         else
             SysGet, r, Monitor, %idx%
 
-        ; Inside?
+        ; Fast path: return immediately when the mouse is already inside this monitor rectangle.
         if (mx >= rLeft && mx < rRight && my >= rTop && my < rBottom) {
             L := rLeft, T := rTop, R := rRight, B := rBottom
             return
         }
 
-        ; Distance from point to rect (0 if inside)
+        ; Clamp the mouse point to the nearest point on this rectangle, then compare squared distance.
+        ; Using squared distance avoids the cost of Sqrt while still preserving the ordering.
         cx := (mx < rLeft) ? rLeft : (mx > rRight ? rRight : mx)
         cy := (my < rTop)  ? rTop  : (my > rBottom ? rBottom : my)
         dx := mx - cx, dy := my - cy
         dist2 := dx*dx + dy*dy
         if (dist2 < bestDist) {
+            ; Keep the closest monitor as a fallback when the mouse is between or just outside monitors.
             bestDist := dist2
             L := rLeft, T := rTop, R := rRight, B := rBottom
             found := true
@@ -1045,7 +1058,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         If (vWinClass == "#32770" && vWinTitle == "Run") {
             WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
             If UIA_GetStartButtonCenter(sx, sy, bw) {
-                x := sx - (rw/2) - bw ; 44 is the width of a single taskbar button
+                x := sx - (rw/2) ; 44 is the width of a single taskbar button
                 WinMove, ahk_id %hWnd%,, x,
             }
         }
@@ -1350,33 +1363,379 @@ $~^Enter::
     }
 Return
 
-$^WheelUp::
-    If (IsConsoleWindow() && !MouseIsOverTitleBar()) {
-        StopRecursion := True
-        SetTimer, MbuttonTimer, Off
-        Send, {UP}
-        sleep, 125
-        SetTimer, MbuttonTimer, -1
-        StopRecursion := False
+;===============================================================
+;    Neuter Win Key Combos!!
+;===============================================================
+LWin & WheelUp::Send {Volume_Up}
+LWin & WheelDown::Send {Volume_Down}
+RWin & WheelUp::Send {Volume_Up}
+RWin & WheelDown::Send {Volume_Down}
+
+LWin::Return
+RWin::Return
+
+; --- Allow only volume control while Win is held ---
+#If GetKeyState("LWin", "P") || GetKeyState("RWin", "P")
+; Block common keys while either Win key is held
+*a::Return
+*b::Return
+*c::Return
+*d::Return
+*e::Return
+*f::Return
+*g::Return
+*h::Return
+*i::Return
+*j::Return
+*k::Return
+*l::Return
+*m::Return
+*n::Return
+*o::Return
+*p::Return
+*q::Return
+*r::Return
+*s::Return
+*t::Return
+*u::Return
+*v::Return
+*w::Return
+*x::Return
+*y::Return
+*z::Return
+#If
+;================================================================
+#If VolumeHover()
+$WheelUp::send {Volume_Up}
+$WheelDown::send {Volume_Down}
+#If
+
+$*RButton::
+    if (suppressRightButtonLogic) {
+        rightButtonHeld      := true
+        rightButtonComboUsed := true
+        return
     }
-    Else {
+
+    rightButtonHeld          := true
+    rightButtonComboUsed     := false
+    rightButtonDragging      := false
+    rightButtonNativeDown    := false
+    MouseGetPos, rightButtonStartPosX, rightButtonStartPosY
+    SetTimer, WatchRightButtonDrag, 10
+return
+
+$*RButton Up::
+    if (suppressRightButtonLogic) {
+        rightButtonHeld          := false
+        rightButtonComboUsed     := false
+        rightButtonDragging      := false
+        rightButtonNativeDown    := false
+        suppressRightButtonLogic := false
+        SetTimer, WatchRightButtonDrag, Off
+        return
+    }
+
+    SetTimer, WatchRightButtonDrag, Off
+
+    if (rightButtonNativeDown)
+        SendInput, {RButton Up}
+    else if (!rightButtonComboUsed)
+        Click, Right
+
+    rightButtonHeld              := false
+    rightButtonComboUsed         := false
+    rightButtonDragging          := false
+    rightButtonNativeDown        := false
+return
+
+#If MouseIsOverTitleBar()
+
+~LButton & RButton::
+    suppressRightButtonLogic := true
+    rightButtonComboUsed     := true
+
+    MouseGetPos,,, hwndId
+    WinGetTitle, winTitle, ahk_id %hwndId%
+    WinGet, exStyle, ExStyle, ahk_id %hwndId%
+
+    if IsAlwaysOnTop(hwndId) {
+        Gui, GUI4Boarder: Color, 0x00FF00
+        WinSet, Transparent, Off, ahk_id %hwndId%
+    }
+    else {
+        Gui, GUI4Boarder: Color, 0xFF0000
+        transDelta := 5
+        iterations := (255 - Opacity) / transDelta
+        transVal := 255
+        transVal -= transDelta
+
+        Critical, On
+        Loop, %iterations%
+        {
+            WinSet, Transparent, %transVal%, ahk_id %hwndId%
+            transVal -= transDelta
+            Sleep, 20
+        }
+        Critical, Off
+    }
+
+    BlockInput, MouseMove
+    GoSub, DrawRect
+    Sleep, 200
+    ClearRect()
+    BlockInput, MouseMoveOff
+    Gui, GUI4Boarder: Color, %border_color%
+    WinSet, AlwaysOnTop, Toggle, ahk_id %hwndId%
+return
+
+#If
+
+#If GetKeyState("RButton", "P")
+
+WheelUp::
+    if (!rightButtonDragging && !VolumeHover() && !IsOverException() && !DraggingWindow) {
+        rightButtonComboUsed := true
+        SetTimer, WatchRightButtonDrag, Off
+        SetTimer, SendCtrlAddLabel, Off
+
+        targetHwnd := 0
+        targetPosX := ""
+        targetPosY := ""
+        targetWidth := ""
+        targetHeight := ""
+        zoneWidth := ""
+
+        isInScrollZone := IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12
+            , targetHwnd, true
+            , targetPosX, targetPosY, targetWidth, targetHeight
+            , zoneWidth)
+
+        if (!targetHwnd)
+            return
+
+        WinGetClass, currentClass, ahk_id %targetHwnd%
+
+        if !WinActive("ahk_id " . targetHwnd) {
+            WinActivate, ahk_id %targetHwnd%
+            WinWaitActive, ahk_id %targetHwnd%,, 0.15
+            if !WinActive("ahk_id " . targetHwnd)
+                return
+        }
+
+        if (isInScrollZone) {
+            if (currentClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+                Send, ^+{Home}
+            }
+            else {
+                Send, ^{Home}
+                Send, {Home}
+            }
+        }
+        else if (currentClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+            Send, ^+{PgUp}
+            Sleep, 50
+        }
+        else {
+            Send, {PgUp}
+            Sleep, 50
+        }
+        return
+    }
+return
+
+WheelDown::
+    if (!rightButtonDragging && !VolumeHover() && !IsOverException() && !DraggingWindow) {
+        rightButtonComboUsed := true
+        SetTimer, WatchRightButtonDrag, Off
+        SetTimer, SendCtrlAddLabel, Off
+
+        targetHwnd := 0
+        targetPosX := ""
+        targetPosY := ""
+        targetWidth := ""
+        targetHeight := ""
+        zoneWidth := ""
+
+        isInScrollZone := IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12
+            , targetHwnd, true
+            , targetPosX, targetPosY, targetWidth, targetHeight
+            , zoneWidth)
+
+        if (!targetHwnd)
+            return
+
+        WinGetClass, currentClass, ahk_id %targetHwnd%
+
+        if !WinActive("ahk_id " . targetHwnd) {
+            WinActivate, ahk_id %targetHwnd%
+            WinWaitActive, ahk_id %targetHwnd%,, 0.15
+            if !WinActive("ahk_id " . targetHwnd)
+                return
+        }
+
+        if (isInScrollZone) {
+            if (currentClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+                Send, ^+{End}
+            }
+            else {
+                Send, ^{End}
+                Send, {End}
+            }
+        }
+        else if (currentClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
+            Send, ^+{PgDn}
+            Sleep, 50
+        }
+        else {
+            Send, {PgDn}
+            Sleep, 50
+        }
+        return
+    }
+return
+
+#If
+
+#If !GetKeyState("RButton", "P")
+
+$^WheelUp::
+    if (IsConsoleWindow() && !MouseIsOverTitleBar()) {
+        stopRecursion := true
+        SetTimer, MbuttonTimer, Off
+        Send, {Up}
+        Sleep, 125
+        SetTimer, MbuttonTimer, -1
+        stopRecursion := false
+    }
+    else {
         Send, ^{WheelUp}
     }
-Return
+return
 
 $^WheelDown::
-    If (IsConsoleWindow() && !MouseIsOverTitleBar()) {
-        StopRecursion := True
+    if (IsConsoleWindow() && !MouseIsOverTitleBar()) {
+        stopRecursion := true
         SetTimer, MbuttonTimer, Off
-        Send, {DOWN}
-        sleep, 125
+        Send, {Down}
+        Sleep, 125
         SetTimer, MbuttonTimer, -1
-        StopRecursion := False
+        stopRecursion := false
     }
-    Else {
-        Send, ^{wheelDown}
+    else {
+        Send, ^{WheelDown}
     }
-Return
+return
+
+$~WheelUp::
+    stopRecursion := true
+    Critical, Off
+    Sleep, -1
+
+    if (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
+    {
+        MouseGetPos,,, windowId, wheelControl
+        WinGetClass, hoverClass, ahk_id %windowId%
+        WinGetClass, activeClass, A
+
+        if (hoverClass != "ProgMan"
+         && hoverClass != "WorkerW"
+         && hoverClass != "Notepad++"
+         && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+         && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+         && (wheelControl == "SysListView321"
+          || wheelControl == "DirectUIHWND2"
+          || wheelControl == "DirectUIHWND3"))
+        {
+            SetTimer, AdjustColumns, Off
+            SetTimer, AdjustColumns, -125
+        }
+    }
+    else if (MouseIsOverTaskbarBlank())
+    {
+        Send, #^{Left}
+        Sleep, 1000
+    }
+
+    Thread, NoTimers, False
+    stopRecursion := false
+return
+
+$~WheelDown::
+    stopRecursion := true
+    Critical, Off
+    Sleep, -1
+
+    if (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
+    {
+        MouseGetPos,,, windowId, wheelControl
+        WinGetClass, hoverClass, ahk_id %windowId%
+        WinGetClass, activeClass, A
+
+        if (hoverClass != "ProgMan"
+         && hoverClass != "WorkerW"
+         && hoverClass != "Notepad++"
+         && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+         && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+         && (wheelControl == "SysListView321"
+          || wheelControl == "DirectUIHWND2"
+          || wheelControl == "DirectUIHWND3"))
+        {
+            SetTimer, AdjustColumns, Off
+            SetTimer, AdjustColumns, -125
+        }
+    }
+    else if (MouseIsOverTitleBar())
+    {
+        blockMouse := true
+        MouseGetPos,,, windowHwnd, controlHwnd, 2
+        rootHwnd := DllCall("GetAncestor", "ptr", windowHwnd, "uint", 2, "ptr")
+        WinMinimize, ahk_id %rootHwnd%
+        Sleep, 500
+        blockMouse := false
+        return
+    }
+    else if (MouseIsOverTaskbarBlank())
+    {
+        Send, #^{Right}
+        Sleep, 1000
+    }
+
+    Thread, NoTimers, False
+    stopRecursion := false
+return
+
+#If
+
+WatchRightButtonDrag:
+    if (!rightButtonHeld) {
+        SetTimer, WatchRightButtonDrag, Off
+        return
+    }
+
+    if (rightButtonComboUsed)
+        return
+
+    if (rightButtonNativeDown)
+        return
+
+    MouseGetPos, currentPosX, currentPosY
+
+    if (Abs(currentPosX - rightButtonStartPosX) >= rightButtonDragThreshold
+    || Abs(currentPosY - rightButtonStartPosY) >= rightButtonDragThreshold)
+    {
+        rightButtonDragging := true
+        rightButtonNativeDown := true
+        SendInput, {RButton Down}
+    }
+return
+
+AdjustColumns:
+    blockKeys := true
+    Send, ^{NumpadAdd}
+    blockKeys := false
+    FixModifiers()
+return
 
 MbuttonTimer:
     MbuttonIsEnter := True
@@ -1391,93 +1750,6 @@ Mbutton::
     SetTimer, MbuttonTimer, -1
 Return
 #If
-
-$~WheelUp::
-    StopRecursion := True
-    Critical, Off
-    Sleep, -1
-
-    If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
-        MouseGetPos,,, wdID, wuCtrl
-        WinGetClass, hoverClass, ahk_id %wdID%
-        WinGetClass, activeClass, A
-
-        ; Only do zoom logic for your target controls
-        If (hoverClass != "ProgMan"
-         && hoverClass != "WorkerW"
-         && hoverClass != "Notepad++"
-         && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-         && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-         && (wuCtrl == "SysListView321"
-          || wuCtrl == "DirectUIHWND2"
-          || wuCtrl == "DirectUIHWND3"))
-        {
-            SetTimer, AdjustColumns, Off
-            SetTimer, AdjustColumns, -125
-        }
-        ; We still want normal scrolling here, so handled stays False
-    }
-    Else If MouseIsOverTaskbarBlank() {
-        Send, #^{Left}
-        sleep, 1000
-    }
-
-    Thread, NoTimers, False
-    StopRecursion := False
-Return
-
-$~WheelDown::
-    StopRecursion := True
-    Critical, Off
-    Sleep, -1
-
-    If (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank()) {
-        MouseGetPos,,, wdID, wuCtrl
-        WinGetClass, hoverClass, ahk_id %wdID%
-        WinGetClass, activeClass, A
-
-        ; Only do zoom logic for your target controls
-        If (hoverClass != "ProgMan"
-         && hoverClass != "WorkerW"
-         && hoverClass != "Notepad++"
-         && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-         && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-         && (wuCtrl == "SysListView321"
-          || wuCtrl == "DirectUIHWND2"
-          || wuCtrl == "DirectUIHWND3"))
-        {
-            SetTimer, AdjustColumns, Off
-            SetTimer, AdjustColumns, -125
-        }
-        ; We still want normal scrolling here, so handled stays False
-    }
-    Else If (MouseIsOverTitleBar()) {
-        ; In this branch we swallow the wheel
-        blockMouse := True
-        MouseGetPos,,, winHwnd, ctrlHwnd, 2
-
-        rootHwnd := DllCall("GetAncestor", "ptr", winHwnd, "uint", 2, "ptr") ; GA_ROOT
-
-        WinMinimize, ahk_id %rootHwnd%
-        Sleep, 500
-        blockMouse := False
-        Return
-    }
-    Else If MouseIsOverTaskbarBlank() {
-        Send, #^{Right}
-        sleep, 1000
-    }
-
-    Thread, NoTimers, False
-    StopRecursion := False
-Return
-
-AdjustColumns:
-    blockKeys := True
-    Send, ^{NumpadAdd}
-    blockKeys := False
-    FixModifiers()
-Return
 
 IsConsoleWindow() {
     WinGetClass, targetClass, A
@@ -2226,6 +2498,21 @@ ControlExist(ctrl, winTitle := "", winText := "") {
     Return !!hCtl
 }
 
+; Wraps clipboard text and preserves a single trailing space outside the wrapper.
+WrapClipboardText(leftText, rightText) {
+    Send, ^!+m
+    clipboardText    := Clip()
+    hasTrailingSpace := SubStr(clipboardText, 0) == " "
+    wrappedText      := RTrim(clipboardText, " ")
+
+    wrappedText := leftText . wrappedText . rightText
+    if (hasTrailingSpace)
+        wrappedText .= " "
+
+    Clip(wrappedText)
+    Send, ^!+m
+}
+
 !a::
     StopAutoFix := True
     Send, {Home}
@@ -2272,15 +2559,7 @@ Return
     StopAutoFix := True
     blockKeys   := True
 
-    store := Clip()
-    len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
-    store := Trim(store)
-    If !foundSpace
-        store := """" . store . """"
-    Else
-        store := """" . store . """" . " "
-    Clip(store)
+    WrapClipboardText("""", """")
 
     Hotstring("Reset")
     StopAutoFix := False
@@ -2294,15 +2573,7 @@ Return
     StopAutoFix := True
     blockKeys   := True
 
-    store := Clip()
-    len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
-    store := Trim(store)
-    If !foundSpace
-        store := "{" . store . "}"
-    Else
-        store := "{" . store . "} "
-    Clip(store)
+    WrapClipboardText("{", "}")
 
     Hotstring("Reset")
     StopAutoFix := False
@@ -2316,15 +2587,7 @@ Return
     StopAutoFix := True
     blockKeys   := True
 
-    store := Clip()
-    len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
-    store := Trim(store)
-    If !foundSpace
-        store := "{" . store . "}"
-    Else
-        store := "{" . store . "} "
-    Clip(store)
+    WrapClipboardText("{", "}")
 
     Hotstring("Reset")
     StopAutoFix := False
@@ -2338,15 +2601,7 @@ Return
     StopAutoFix := True
     blockKeys   := True
 
-    store := Clip()
-    len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
-    store := Trim(store)
-    If !foundSpace
-        store := "<" . store . ">"
-    Else
-        store := "<" . store . "> "
-    Clip(store)
+    WrapClipboardText("<", ">")
 
     Hotstring("Reset")
     StopAutoFix := False
@@ -2360,15 +2615,7 @@ Return
     StopAutoFix := True
     blockKeys   := True
 
-    store := Clip()
-    len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
-    store := Trim(store)
-    If !foundSpace
-        store := "<" . store . ">"
-    Else
-        store := "<" . store . "> "
-    Clip(store)
+    WrapClipboardText("<", ">")
 
     Hotstring("Reset")
     StopAutoFix := False
@@ -2382,15 +2629,7 @@ Return
     StopAutoFix := True
     blockKeys   := True
 
-    store := Clip()
-    len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
-    store := Trim(store)
-    If !foundSpace
-        store := "(" . store . ")"
-    Else
-        store := "(" . store . ") "
-    Clip(store)
+    WrapClipboardText("(", ")")
 
     Hotstring("Reset")
     StopAutoFix := False
@@ -2404,15 +2643,7 @@ Return
     StopAutoFix := True
     blockKeys   := True
 
-    store := Clip()
-    len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
-    store := Trim(store)
-    If !foundSpace
-        store := "(" . store . ")"
-    Else
-        store := "(" . store . ") "
-    Clip(store)
+    WrapClipboardText("(", ")")
 
     Hotstring("Reset")
     StopAutoFix := False
@@ -2426,15 +2657,7 @@ Return
     StopAutoFix := True
     blockKeys   := True
 
-    store := Clip()
-    len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
-    store := Trim(store)
-    If !foundSpace
-        store := "\b" . store . "\b"
-    Else
-        store := "\b" . store . "\b "
-    Clip(store)
+    WrapClipboardText("\b", "\b")
 
     Hotstring("Reset")
     StopAutoFix := False
@@ -2448,15 +2671,7 @@ Return
     StopAutoFix := True
     blockKeys   := True
 
-    store := Clip()
-    len := StrLen(store)
-    foundSpace := SubStr(store, len-1, 1) == " " ? True : False
-    store := Trim(store)
-    If !foundSpace
-        store := "%" . store . "%"
-    Else
-        store := "%" . store . "% "
-    Clip(store)
+    WrapClipboardText("%", "%")
 
     Hotstring("Reset")
     StopAutoFix := False
@@ -2517,40 +2732,6 @@ $Enter::
     disableEnter := False
 Return
 #If
-
-; --- Volume control when holding Left Win ---
-#If GetKeyState("LWin", "P")   ; condition: while LWin is physically held
-$WheelUp::Send {Volume_Up}
-$WheelDown::Send {Volume_Down}
-#If   ; end of context-sensitive block
-;=============== KILL WINDOWS SHORTCUT KEYS =============
-; Block bare Win keys
-; *LWin::Return
-; *RWin::Return
-; *LWin up::Return
-; *RWin up::Return
-
-; Block bare Win release so Start menu does not open
-~LWin Up::
-    if (A_PriorKey = "LWin")
-    {
-        Send, {Blind}{vk07}
-    }
-return
-~RWin Up::
-    if (A_PriorKey = "LWin")
-    {
-        Send, {Blind}{vk07}
-    }
-return
-
-; Optionally block specific Windows shortcuts
-#d::Return      ; Block Win+D (Show desktop)
-#i::Return      ; Block Win+I (Settings)
-#x::Return      ; Block Win+X (Power user menu)
-#v::Return      ; Block Win+V (Clipboard history)
-#space::Return  ; Block Win+Space (input language switch)
-#+s::Return
 
 ; =========================================================
 
@@ -2989,7 +3170,7 @@ AltupCleanup:
     Thread, NoTimers, False
     Critical, Off
     Gui, WindowTitle: Destroy
-    SetTimer, MouseTrack, On
+    ; SetTimer, MouseTrack, On
     SetTimer, KeyTrack,   On
 Return
 ;============================================================================================================================
@@ -3291,19 +3472,18 @@ IsProcessElevated(pid)
 IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
     , extraW := 6
     , ByRef hitHwnd := 0, useRoot := true
-    , ByRef wx := "", ByRef wy := "", ByRef ww := "", ByRef wh := ""
-    , ByRef zoneW := "")
+    , ByRef winPosX := "", ByRef winPosY := "", ByRef winWidth := "", ByRef winHeight := ""
+    , ByRef zoneWidth := "")
 {
-    isScrollbar := False
-    ; System metric: vertical scrollbar width
-    SysGet, sbW, 2  ; SM_CXVSCROLL
-    if (sbW <= 0)
-        sbW := 17  ; sane fallback
+    isScrollbar := false
 
-    ; Make it a bit wider than the metric (Win11 overlay scrollbars feel easier this way)
-    zoneW := sbW + extraW
+    SysGet, scrollWidth, 2
+    if (scrollWidth <= 0)
+        scrollWidth := 17
 
-    MouseGetPos, mx, my, winHwnd
+    zoneWidth := scrollWidth + extraW
+
+    MouseGetPos, mousePosX, mousePosY, winHwnd
     if (!winHwnd)
         return false
 
@@ -3311,99 +3491,35 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
 
     if (useRoot)
     {
-        rootHwnd := DllCall("GetAncestor", "ptr", hitHwnd, "uint", 2, "ptr") ; GA_ROOT=2
+        rootHwnd := DllCall("GetAncestor", "ptr", hitHwnd, "uint", 2, "ptr")
         if (rootHwnd)
             hitHwnd := rootHwnd
     }
 
-    WinGetPosEx(hitHwnd, wx, wy, ww, wh)
+    WinGetPosEx(hitHwnd, winPosX, winPosY, winWidth, winHeight)
 
-    if (ww <= 0 || wh <= 0)
-        isScrollbar := false
+    if (winWidth <= 0 || winHeight <= 0)
+        return false
 
-    right  := wx + ww
-    bottom := wy + wh
+    rightEdge := winPosX + winWidth
+    bottomEdge := winPosY + winHeight
 
-    if (my < wy + zonePadTop || my >= bottom - zonePadBot)
-        isScrollbar := false
+    if (mousePosY >= winPosY + zonePadTop && mousePosY < bottomEdge - zonePadBot)
+    {
+        if (mousePosX >= rightEdge - zoneWidth && mousePosX < rightEdge)
+            isScrollbar := true
+    }
 
-    if (mx >= right - zoneW && mx < right)
-        isScrollbar := true
-
-    if !isScrollbar {
-        MouseGetPos, mx, my
-        pt := SafeUIA_ElementFromPoint(mx,my)
-        ; ctype := SafeUIA_GetControlType(pt)
+    if !isScrollbar
+    {
+        pt := SafeUIA_ElementFromPoint(mousePosX, mousePosY)
         autoId := SafeUIA_GetAutoId(pt)
-        if InStr(autoId, "DownPage", False) || InStr(autoId, "UpPage", False)
-            return True
+        if (InStr(autoId, "DownPage", false) || InStr(autoId, "UpPage", false))
+            return true
     }
 
     return isScrollbar
 }
-
-#If !mouseMoving && !VolumeHover() && !IsOverException() && !DraggingWindow
-RButton & WheelUp::
-    SetTimer, SendCtrlAddLabel, Off
-    WinGetClass, currClass, A
-    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12, h) {
-        If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
-            Send, ^+{Home}
-        }
-        Else {
-            Send, ^{Home}
-            Send, {Home}
-        }
-    }
-    Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
-        Send, ^+{PgUp}
-        sleep, 50
-    }
-    Else {
-        Send, {PgUp}
-        sleep, 50
-    }
-Return
-
-RButton & WheelDown::
-    SetTimer, SendCtrlAddLabel, Off
-    WinGetClass, currClass, A
-    If IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12, h) {
-        If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
-            Send, ^+{End}
-        }
-        Else {
-            Send, ^{End}
-            Send, {End}
-        }
-    }
-    Else If (currClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
-        Send, ^+{PgDn}
-        sleep, 50
-    }
-    Else {
-        Send, {PgDn}
-        sleep, 50
-    }
-Return
-
-; WheelUp alone → normal wheel scroll
-; WheelUp while RButton is held → combo fires
-; RButton alone → still works normally (due to $RButton::Send {RButton})
-
-; code works because:
-    ; AHK requires the prefix (RButton) to be defined as a hotkey
-    ; $RButton::Send {RButton} creates the hotkey while preserving right-click
-    ; $ prevents infinite recursion
-    ; The prefix being defined allows AHK’s hook engine to detect combos reliably
-
-; WheelUp/WheelDown remain normal unless RButton is held
-$RButton::
-    StopRecursion := True
-    Send, {Rbutton}
-    StopRecursion := False
-Return
-#If
 
 Cycle() {
     global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, Opacity
@@ -3711,7 +3827,7 @@ LaunchWinFind:
     If (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (0.75*(DoubleClickTime/2))) {
         StopRecursion   := True
         SetTimer, KeyTrack,   Off
-        SetTimer, MouseTrack, Off
+        ; SetTimer, MouseTrack, Off
 
         UserInputTrimmed :=
         StopCheck        := False
@@ -3725,7 +3841,7 @@ LaunchWinFind:
             StopRecursion    := False
             SearchingWindows := False
             SetTimer, KeyTrack,   On
-            SetTimer, MouseTrack, On
+            ; SetTimer, MouseTrack, On
             Return
         }
         Else
@@ -3769,7 +3885,7 @@ LaunchWinFind:
                 StopRecursion := False
                 SearchingWindows := False
                 SetTimer, KeyTrack, On
-                SetTimer, MouseTrack, On
+                ; SetTimer, MouseTrack, On
                 Return
             }
 
@@ -3858,7 +3974,7 @@ LaunchWinFind:
         SearchingWindows := False
         StopRecursion    := False
         SetTimer, KeyTrack,   On
-        SetTimer, MouseTrack, On
+        ; SetTimer, MouseTrack, On
     }
     KeyWait, Ctrl, U T10
 Return
@@ -4120,10 +4236,7 @@ Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget) {
 Overlay_SetAlpha(overlayHwnd, alphaVal) {
     global overlayAlphaCurrent
 
-    if (alphaVal < 0)
-        alphaVal := 0
-    else if (alphaVal > 255)
-        alphaVal := 255
+    alphaVal := ClampAlpha(alphaVal)
 
     ; Ensures WS_EX_LAYERED is present (required for alpha)
     WinSet, ExStyle, +0x80000, ahk_id %overlayHwnd%  ; WS_EX_LAYERED
@@ -4152,15 +4265,8 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "") {
     if (alphaStart = "")
         alphaStart := overlayAlphaCurrent
 
-    if (alphaStart < 0)
-        alphaStart := 0
-    else if (alphaStart > 255)
-        alphaStart := 255
-
-    if (alphaTarget < 0)
-        alphaTarget := 0
-    else if (alphaTarget > 255)
-        alphaTarget := 255
+    alphaStart := ClampAlpha(alphaStart)
+    alphaTarget := ClampAlpha(alphaTarget)
 
     ; Guard: avoid divide-by-zero and negative durations
     if (fadeMs < 1)
@@ -5630,6 +5736,40 @@ ControlGetFocusEx(tidTarget, hwndTarget, timeoutMs := 15)
     return false
 }
 
+; Returns the focused ClassNN for a top-level window once focus has settled inside it.
+GetCtrlNNFromHwnd(hwndTop, hwndCtl)
+{
+    if (!hwndCtl || hwndCtl = hwndTop)
+        return ""
+
+    ; Walk up to the direct child owned by hwndTop so it can be matched against ControlListHwnd.
+    while (true)
+    {
+        parentHwnd := DllCall("user32\GetParent", "Ptr", hwndCtl, "Ptr")
+        if (!parentHwnd || parentHwnd = hwndTop)
+            break
+        if !DllCall("user32\IsChild", "Ptr", hwndTop, "Ptr", parentHwnd, "Int")
+            break
+        hwndCtl := parentHwnd
+    }
+
+    WinGet, ctrlNNList, ControlList, ahk_id %hwndTop%
+    WinGet, ctrlHwndList, ControlListHwnd, ahk_id %hwndTop%
+    if (ctrlNNList = "" || ctrlHwndList = "")
+        return ""
+
+    ctrlNNs := StrSplit(RTrim(ctrlNNList, "`r`n"), "`n", "`r")
+    ctrlHwnds := StrSplit(RTrim(ctrlHwndList, "`r`n"), "`n", "`r")
+
+    Loop, % ctrlHwnds.Length()
+    {
+        if ((ctrlHwnds[A_Index] + 0) = hwndCtl)
+            return (A_Index <= ctrlNNs.Length()) ? ctrlNNs[A_Index] : ""
+    }
+
+    return ""
+}
+
 EnsureFocusedHwnd(hwndTarget, totalMs := 60, refocusEveryMs := 15)
 {
     if !DllCall("user32\IsWindow", "Ptr", hwndTarget, "Int")
@@ -5697,7 +5837,7 @@ GetClassName(hwnd)
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
 $~LButton::
     tooltip,
-    SetTimer, MouseTrack, Off
+    ; SetTimer, MouseTrack, Off
     SetTimer, KeyTrack,   Off
 
     HotString("Reset")
@@ -5720,7 +5860,7 @@ $~LButton::
     ; }
 
     If (disableSendCtrlHwnd == _winIdD) {
-        SetTimer, MouseTrack, On
+        ; SetTimer, MouseTrack, On
         SetTimer, KeyTrack,   On
         Return
     }
@@ -5755,7 +5895,7 @@ $~LButton::
             currentPath    := ""
             Loop,20 {
                 If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
-                    SetTimer, MouseTrack, On
+                    ; SetTimer, MouseTrack, On
                     SetTimer, KeyTrack,   On
                     Return
                 }
@@ -5781,7 +5921,7 @@ $~LButton::
                 SendCtrlAdd(_winIdD, , , _winClassD)
         }
 
-        SetTimer, MouseTrack, On
+        ; SetTimer, MouseTrack, On
         SetTimer, KeyTrack,   On
         If isBlankSpaceNonExplorer
             isBlankSpaceNonExplorer := False
@@ -5819,7 +5959,7 @@ $~LButton::
             If (!isColumnHeader && (isBlankSpaceExplorer || isItemClick)) {
                 Loop,20 {
                     If (WinExist("A") != _winIdD) {
-                        SetTimer, MouseTrack, On
+                        ; SetTimer, MouseTrack, On
                         SetTimer, KeyTrack,   On
                         Return
                     }
@@ -5859,7 +5999,7 @@ $~LButton::
     ; traceText .= "TOTAL dt=" (tickTotalEnd - tickTotalStart) "ms`n"
     ; ToolTip, %traceText%
     ; tooltip, %isColumnHeader%
-    ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick() "-" IsModernExplorerActive(_winIdU)
+    ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick()
     ; tooltip, %timeDiff% ms-allowDoubleclick:%allowDoubleClicks%-isBlankSpaceExplorer:%isBlankSpaceExplorer%-isItemClick:%isItemClick% - isColumnHeader:%isColumnHeader% ; - %_winClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If (timeDiff < SingleClickTime && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
@@ -5928,7 +6068,7 @@ $~LButton::
 
             If (ctype == "") {
 
-                SetTimer, MouseTrack, On
+                ; SetTimer, MouseTrack, On
                 SetTimer, KeyTrack,   On
                 Return
             }
@@ -5979,7 +6119,7 @@ $~LButton::
         disableSendCtrlHwnd := _winIdU
     }
 
-    SetTimer, MouseTrack, On
+    ; SetTimer, MouseTrack, On
     SetTimer, KeyTrack,   On
 Return
 #If
@@ -6072,7 +6212,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
             ; UIA couldn't find it by name; don't explode, just skip the wait/focus part
             return
         }
-        shellEl := exEl.FindFirstByName("Items View")
+
         shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
 
         If (!isCabinetWClass10 && !skipFocus) {
@@ -6326,111 +6466,26 @@ IsExplorerModern() {
     return !HasWin10ExplorerOverride()
 }
 
-; -----------------------
-; Example usage:
-; -----------------------
-; if (IsExplorerModern())
-;     MsgBox % "Explorer appears to be MODERN (Windows 11)."
-; else
-;     MsgB
-
-IsModernExplorerActive(hWnd := "") {
-    global UIA, isWin11
-
-    if !isWin11
-        return false
-
-    ; 1) Get target window (active if none passed)
-    if !hWnd {
-        WinGet, hWnd, ID, A
-        if !hWnd
-            return false
-    }
-
-    ; 2) Must be Explorer frame, backed by explorer.exe
-    WinGetClass, cls, ahk_id %hWnd%
-    if (cls != "CabinetWClass")
-        return false
-
-    WinGet, proc, ProcessName, ahk_id %hWnd%
-    if (proc != "explorer.exe")
-        return false
-
-    ; 3) Ensure UIA is initialized
-    if !IsObject(UIA) {
-        try {
-            UIA := UIA_Interface()
-            UIA.TransactionTimeout := 2000
-            UIA.ConnectionTimeout  := 20000
-        } catch e {
-            return false
-        }
-    }
-
-    ; 4) Get UIA root for this Explorer window
-    root := ""
-    try
-        root := UIA.ElementFromHandle(hWnd)
-    catch
-        root := ""
-
-    if !IsObject(root)
-        return false
-
-    ; 5) Look for the WinUI/XAML host:
-    ;    ClassName = Microsoft.UI.Content.DesktopChildSiteBridge
-    bridge := ""
-    try
-        bridge := root.FindFirstBy("ClassName=InputSiteWindowClass")
-    catch
-        bridge := ""
-
-    if !IsObject(bridge)
-        return false
-
-    ; 6) Check its FrameworkId – should be XAML / WinUI on modern Explorer
-    fw := ""
-    try
-        fw := bridge.FrameworkId
-    catch
-        fw := ""
-
-    ; Normalize to lower for comparison
-    if (fw != "") {
-        StringLower, fwLower, fw
-        if (fwLower == "xaml" || fwLower == "winui")
-            return true
-    }
-
-    return false
-}
-
 GetCtrlNNsByPrefix(hwndTop, classPrefix)
 {
     WinGet, listC, ControlList,     ahk_id %hwndTop%
     WinGet, listH, ControlListHwnd, ahk_id %hwndTop%
-
-    ; Build array of ctrlNNs by index in one pass
-    ctrlAt := []
-    Loop, Parse, listC, `n, `r
-    {
-        ctrlAt.Push(A_LoopField)
-    }
+    prefixLen := StrLen(classPrefix)
+    ctrlNNs := StrSplit(RTrim(listC, "`r`n"), "`n", "`r")
+    ctrlHwnds := StrSplit(RTrim(listH, "`r`n"), "`n", "`r")
 
     out := ""
-    idx := 0
-    Loop, Parse, listH, `n, `r
+    Loop, % ctrlHwnds.Length()
     {
-        idx++
-        hCtl := A_LoopField + 0
+        hCtl := ctrlHwnds[A_Index] + 0
         if (!hCtl)
             continue
 
         cls := GetClassName(hCtl)
-        if (SubStr(cls, 1, StrLen(classPrefix)) != classPrefix)
+        if (SubStr(cls, 1, prefixLen) != classPrefix)
             continue
 
-        ctrlNN := (idx <= ctrlAt.Length()) ? ctrlAt[idx] : ""
+        ctrlNN := (A_Index <= ctrlNNs.Length()) ? ctrlNNs[A_Index] : ""
         if (ctrlNN != "")
             out .= ctrlNN " "
     }
@@ -6503,13 +6558,13 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
         Else {
             DirectUICtrls := GetCtrlNNsByPrefix(initTargetHwnd, "DirectUIHWND")
-            SysListCtrls := GetCtrlNNsByPrefix(initTargetHwnd, "SysListView32")
-            OutputVar1 := InStr(SysListCtrls,  "SysListView32", false) > 0
-            OutputVar2 := InStr(DirectUICtrls, "DirectUIHWND2", false) > 0
-            OutputVar3 := InStr(DirectUICtrls, "DirectUIHWND3", false) > 0
-            OutputVar4 := InStr(DirectUICtrls, "DirectUIHWND4", false) > 0
-            OutputVar6 := InStr(DirectUICtrls, "DirectUIHWND6", false) > 0
-            OutputVar8 := InStr(DirectUICtrls, "DirectUIHWND8", false) > 0
+            SysListCtrls  := GetCtrlNNsByPrefix(initTargetHwnd, "SysListView32")
+            OutputVar1    := InStr(SysListCtrls,  "SysListView32", false) > 0
+            OutputVar2    := InStr(DirectUICtrls, "DirectUIHWND2", false) > 0
+            OutputVar3    := InStr(DirectUICtrls, "DirectUIHWND3", false) > 0
+            OutputVar4    := InStr(DirectUICtrls, "DirectUIHWND4", false) > 0
+            OutputVar6    := InStr(DirectUICtrls, "DirectUIHWND6", false) > 0
+            OutputVar8    := InStr(DirectUICtrls, "DirectUIHWND8", false) > 0
         }
 
         ; tooltip, target:%lClassCheck% OutputVar1:%OutputVar1% OutputVar2:%OutputVar2% OutputVar3:%OutputVar3% OutputVar4:%OutputVar4% OutputVar6:%OutputVar6% OutputVar8:%OutputVar8%
@@ -6632,43 +6687,6 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 Return
 }
 
-#If MouseIsOverTitleBar()
-~Lbutton & Rbutton::
-    HotKey, Rbutton, DoNothing, On
-    MouseGetPos, , , hwndId
-    WinGetTitle, winTitle, ahk_id %hwndId%
-    WinGet, ExStyle, ExStyle, ahk_id %hwndId%
-    If IsAlwaysOnTop(hwndID) {
-        Gui, GUI4Boarder: Color, 0x00FF00
-        WinSet, Transparent, Off, ahk_id %hwndId%
-    }
-    Else {
-        Gui, GUI4Boarder: Color, 0xFF0000
-        transDelta  := 5
-        iterations   := (255 - Opacity) / transDelta
-        transVal     := 255
-        transVal     -= transDelta
-
-        Critical, On
-        Loop, %iterations%
-        {
-            WinSet, Transparent, %transVal%, ahk_id %hwndId%
-            transVal -= transDelta
-            Sleep, 20   ; purely visual – safe outside Critical
-        }
-        Critical, Off
-    }
-    BlockInput, MouseMove
-    GoSub, DrawRect
-    sleep, 200
-    ClearRect()
-    BlockInput, MouseMoveOff
-    Gui, GUI4Boarder: Color, %border_color%
-    WinSet, AlwaysOnTop, toggle, ahk_id %hwndId%
-    HotKey, Rbutton, DoNothing, Off
-Return
-#If
-
 IsAlwaysOnTop(hwndID) {
     WinGet, ExStyle, ExStyle, ahk_id %hwndId% ; 0x8 is WS_EX_LAYERED.
     If (ExStyle & 0x8)
@@ -6676,17 +6694,6 @@ IsAlwaysOnTop(hwndID) {
     Else
         Return False
 }
-
-#If MouseIsOverTaskbarBlank()
-Lbutton & Rbutton::
-    Send, #{r}
-Return
-#If
-
-#If VolumeHover()
-$WheelUp::send {Volume_Up}
-$WheelDown::send {Volume_Down}
-#If
 
 /* ;
 ***********************************
@@ -8518,54 +8525,6 @@ HasVal(haystack, needle) {
 ; Paste text and restore the user's clipboard afterward.
 ; Uses a short one-shot timer to avoid paste race conditions.
 ;========================
-; Clip() - Send and Retrieve Text Using the Clipboard
-; by berban - updated February 18, 2019
-; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=62156
-; Clip(Text := "", Reselect := "")
-; {
-    ; Static BackUpClip, Stored, LastClip
-    ; ; Did this run because of the label Clip: (a timer callback)? Or because the function Clip() was called directly?
-    ; If (A_ThisLabel = A_ThisFunc) {
-        ; If (Clipboard == LastClip)
-            ; Clipboard := BackUpClip
-        ; BackUpClip := LastClip := Stored := ""
-    ; } Else {
-        ; If !Stored {
-            ; Stored := True
-            ; BackUpClip := ClipboardAll ; ClipboardAll must be on its own line
-        ; } Else
-            ; SetTimer, %A_ThisFunc%, Off
-        ; LongCopyMs := A_TickCount
-        ; Clipboard := ""
-        ; LongCopyMs -= A_TickCount ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
-        ; LongCopySec := LongCopyMs / 1000.0
-        ; If RegExMatch(Text, "^\s+$")
-            ; Return
-        ; Else If (Text == "") {
-            ; Send, ^c
-            ; ; ClipWait, LongCopy ? 0.6 : 0.2, True
-            ; ; ClipWait, LongCopySec, True
-            ; ClipWait, %LongCopySec%
-        ; } Else {
-            ; Clipboard := LastClip := Text
-            ; ; ClipWait, 10
-            ; ClipWait, %LongCopyMs%
-            ; Send, ^v
-        ; }
-        ; SetTimer, %A_ThisFunc%, -700
-        ; Sleep 20 ; Short sleep in case Clip() is followed by more keystrokes such as {Enter}
-        ; If (Text == "")
-            ; Return LastClip := Clipboard
-        ; Else If ReSelect && ((ReSelect == True) || (StrLen(Text) < 3000))
-            ; Send, % "{Shift Down}{Left " StrLen(StrReplace(Text, "`r")) "}{Shift Up}"
-    ; }
-    ; Return
-
-    ; Clip:
-        ; Return Clip()
-; }
-; https://www.autohotkey.com/boards/viewtopic.php?p=526665#p526665
-; AutoHotkey v1 version of Clip()
 Clip(Text := "", Reselect := "", Restore := "")
 {
     static BackUpClip := "", Stored := False, LastClip := "", Restored := ""
@@ -8586,16 +8545,13 @@ Clip(Text := "", Reselect := "", Restore := "")
             SetTimer, ClipRestore, Off
         }
 
-        LongCopy := A_TickCount
+        clearStartTick := A_TickCount
         Clipboard := ""
-        LongCopy -= A_TickCount
-        ; LongCopy indicates how long it took to clear the clipboard,
-        ; used to guess how long ClipWait may need.
+        clearMs := A_TickCount - clearStartTick
 
         if (Text = "") {
             SendInput, ^c
-            ; mimic v2: ClipWait (LongCopy ? 0.6 : 0.2), True
-            if (LongCopy) {
+            if (clearMs > 50) {
                 ClipWait, 0.6, 1
             } else {
                 ClipWait, 0.2, 1
@@ -8604,11 +8560,11 @@ Clip(Text := "", Reselect := "", Restore := "")
             Clipboard := LastClip := Text
             ClipWait, 10
             SendInput, ^v
+            Sleep, 20  ; small buffer in case more keystrokes (e.g., Enter) follow a paste
         }
 
         ; schedule a one-shot restore in ~700ms
         SetTimer, ClipRestore, -700
-        Sleep, 20  ; small buffer in case more keystrokes (e.g., Enter) follow
 
         if (Text = "") {
             ; return the copied text, normalizing CR
@@ -11479,6 +11435,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::accompanyed::accompanied
 ::accordeon::accordion
 ::accordian::accordion
+::accordians::accordions
 ::accordingto::according to
 ::accoustic::acoustic
 ::accquainted::acquainted
