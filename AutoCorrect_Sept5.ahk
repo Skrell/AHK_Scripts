@@ -1420,6 +1420,14 @@ $*RButton::
     rightButtonComboUsed     := false
     rightButtonDragging      := false
     rightButtonNativeDown    := false
+
+    if (IsMouseOverShellItemForRButton()) {
+        rightButtonComboUsed  := true
+        rightButtonNativeDown := true
+        SendInput, {RButton Down}
+        return
+    }
+
     MouseGetPos, rightButtonStartPosX, rightButtonStartPosY
     SetTimer, WatchRightButtonDrag, 10
 return
@@ -5018,6 +5026,27 @@ ExplorerHitTestType() {
     }
 
     return "other"
+}
+
+IsMouseOverShellItemForRButton() {
+    CoordMode, Mouse, Screen
+    MouseGetPos, mx, my, hwnd, ctrlNN
+
+    if (!hwnd)
+        return false
+
+    WinGetClass, winClass, ahk_id %hwnd%
+
+    if (winClass != "CabinetWClass" && winClass != "ExplorerWClass" && winClass != "#32770" && winClass != "Progman" && winClass != "WorkerW")
+        return false
+
+    if (InStr(ctrlNN, "DirectUIHWND", True))
+        return (ExplorerClickClassify(mx, my, ctrlNN) = "item")
+
+    if (InStr(ctrlNN, "SysListView32", True))
+        return (ExplorerHitTestType() = "item")
+
+    return false
 }
 ; ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 Explorer__GetRoleNum(ByRef accObj := "") {
