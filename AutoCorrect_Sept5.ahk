@@ -40,7 +40,7 @@ SendMode, Input ; It injects the whole keystroke atomically, reducing the window
 ; This same is true for Send when SendMode Input is in effect.
 ; SetKeyDelay, -1, -1
 SetMouseDelay,   -1
-SetBatchLines,   -1 ; Remove AHK’s built-in “cooperate with the OS” sleeps
+SetBatchLines,   -1 ; Remove AHK's built-in "cooperate with the OS" sleeps
 SetWinDelay,      1 ;
 SetControlDelay,  1 ;
 
@@ -158,7 +158,7 @@ else
 ; listens for tray icon notifications
 ; - watch for message 0x404
 ; - sent to your script window
-; - from your script’s tray icon registration
+; - from your script's tray icon registration
 OnMessage(0x404, "HandleTrayIconMessage")
 
 SysGet, MonNum, MonitorPrimary
@@ -402,7 +402,7 @@ accInitd := Acc_Init()
 
 10_Minutes := 60000*10
 ; SetTimer MouseTrack, 10
-SetTimer KeyTrack, 10
+SetTimer KeyTrack, 25
 SetTimer MasterTimer, %10_Minutes%
 
 Return
@@ -430,15 +430,10 @@ HandleTrayIconMessage(wParam, lParam, msg, hwnd) {
 
         CoordMode, Mouse, Screen
         MouseGetPos, trayClickPosX, trayClickPosY
-
-        SetTimer, __DeferredShowTrayMenuAtTaskbar, -1
+        ShowTrayMenuAtTaskbar()
         return 0
     }
 }
-
-__DeferredShowTrayMenuAtTaskbar:
-ShowTrayMenuAtTaskbar()
-return
 
 ShowTrayMenuAtTaskbar() {
     global trayClickPosX
@@ -545,7 +540,7 @@ InitVDA()
 
     initializing := false
 
-    ; only require “core” to succeed
+    ; only require "core" to succeed
     if !(GetDesktopCountProc
       && GoToDesktopNumberProc
       && GetCurrentDesktopNumberProc
@@ -1154,13 +1149,15 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     Return
 }
 
-; Waits until the shell view’s item list has finished populating.
+; Waits until the shell view's item list has finished populating.
 ; Works for both:
 ;   - Explorer windows (ahk_class CabinetWClass)
 ;   - Common file dialogs (ahk_class #32770)
 ; Returns an object { hwnd: <hwnd>, itemsView: <UIA element>, count: <int> }
 ; or 0 on timeout.
 WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll := 100) {
+    global UIA
+
     if !hwnd {
         ; If no hwnd provided, use the active window (either class will work)
         WinGet, hwnd, ID, A
@@ -1168,7 +1165,9 @@ WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll 
             return 0
     }
 
-    UIA   := UIA_Interface()
+    if !IsObject(UIA)
+        UIA := UIA_Interface()
+
     root  := UIA.ElementFromHandle(hwnd)
     if !IsObject(root)
         return 0
@@ -1176,8 +1175,8 @@ WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll 
     start := A_TickCount
     items := ""
 
-    ; -------- 1) Find the shell view’s item list (works across Explorer + dialogs)
-    ; Try List first (Explorer “Items View”), then DataGrid/Table (some dialogs), then Tree (rare)
+    ; -------- 1) Find the shell view's item list (works across Explorer + dialogs)
+    ; Try List first (Explorer "Items View"), then DataGrid/Table (some dialogs), then Tree (rare)
     for _, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
         items := root.FindFirstBy("ControlType=" . ctlType)
         if (items)
@@ -1186,8 +1185,8 @@ WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll 
     if !items
         return 0
 
-    ; -------- 2) If there’s an active “Working on it…” progress bar, wait for it to go away
-    ; Not all windows show one; that’s fine—we’ll proceed either way.
+    ; -------- 2) If there's an active "Working on it" progress bar, wait for it to go away
+    ; Not all windows show one; that's fine we'll proceed either way.
     while (A_TickCount - start < timeout) {
         prog := root.FindFirstBy("ControlType=UIA_ProgressBarControlTypeId")
         if !prog
@@ -2039,7 +2038,7 @@ $*MButton::
         ; virtwx0 is continuously changing with your mouse and represents the current theoretical value of the window's x coordinate.
         ; it's "theoretical" because the window may be "snapped" but this value will still change as the mouse moves which
         ; is why you can compare virtwx0 against the difference between monL and BreakAway/ReleaseAway distances
-        ; monL is fixed to the active monitor’s left edge.
+        ; monL is fixed to the active monitor's left edge.
         virtwx0 := wx0 + dx ; (original window X) + (how far the mouse has moved in X since drag start)
         virtwy0 := wy0 + dy
 
@@ -2451,7 +2450,7 @@ Return
     Critical, On
     StopAutoFix := True
     blockKeys   := True
-    ; If there’s no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
+    ; If there's no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
     if (A_CaretX = "")
     {
         Send ^+d
@@ -2876,7 +2875,7 @@ GetVisibleHwndByPartialClass(classPart) {
 }
 #If !SearchingWindows && !hitTAB
 ; Defining Esc & x:: turns Esc into a prefix key. While a prefix is held, AHK delays (or suppresses) the Esc down hotkey until it
-; knows whether a combo (with x) is coming. That’s why your 2nd press + hold never reaches your $Esc routine, so GoSub, DrawRect never runs.
+; knows whether a combo (with x) is coming. That's why your 2nd press + hold never reaches your $Esc routine, so GoSub, DrawRect never runs.
 $Esc::
     StopRecursion := True
     SetTimer, EscTimer, Off
@@ -5070,12 +5069,12 @@ Explorer__GetRoleNum(ByRef accObj := "") {
     ; ListItem (0x22)     ← real file/folder
     ; ColumnHeader (0x19) ← click on a sort header
 
-    ; Explorer’s modern implementation sometimes reports:
+    ; Explorer's modern implementation sometimes reports:
         ; ROLE_SYSTEM_OUTLINE (0x3E) for the whole file-view region
         ; ROLE_SYSTEM_OUTLINEITEM (0x24) for individual files/folders
         ; Instead of using classic LIST (0x21) / LISTITEM (0x22)
     ; This happens frequently in:
-        ; Windows 11’s XAML Explorer
+        ; Windows 11's XAML Explorer
         ; WebView-backed folder views
         ; File dialogs using UIA → MSAA proxying
     return 0
@@ -5086,27 +5085,7 @@ Explorer__GetRoleNum(ByRef accObj := "") {
 UIA_SafeElementFromPoint_(x, y) {
     ; Requires: #Include UIA_Interface.ahk
     ; Returns a UIA element or "" if it fails.
-
-    global UIA
-
-    if (!IsObject(UIA))
-        UIA := UIA_Interface()
-
-    el := ""
-    try
-        el := UIA.ElementFromPoint(x, y, False)
-    catch
-    {
-        ; UIA wrapper can occasionally get into a bad COM state, re-init once
-        UIA := ""
-        UIA := UIA_Interface()
-
-        try
-            el := UIA.ElementFromPoint(x, y, False)
-        catch
-            el := ""
-    }
-    return el
+    return SafeUIA_ElementFromPoint(x, y, "")
 }
 
 Dialog_IsDetails_UIA_ByPoint(dlgHwnd := "") {
@@ -5448,6 +5427,18 @@ DebugRolesUnderMouse() {
 
 ExplorerClickClassify(xPos, yPos, winCtrlNN) {
     global UIA
+    static headerCtlId := 0
+    static headerItemCtlId := 0
+
+    if (!headerCtlId || !headerItemCtlId) {
+        try {
+            headerCtlId     := UIA.ControlTypeId("Header")
+            headerItemCtlId := UIA.ControlTypeId("HeaderItem")
+        } catch {
+            headerCtlId     := 50034
+            headerItemCtlId := 50035
+        }
+    }
 
     ; Early gate: only handle shell view clicks
     if !InStr(winCtrlNN, "DirectUIHWND", True)
@@ -5463,14 +5454,12 @@ ExplorerClickClassify(xPos, yPos, winCtrlNN) {
 
     ; Optional: even more reliable (uses UIA control types, not class strings)
     ; Some builds report HeaderItem/Header instead of UIColumnHeader at the leaf.
-    headerCtlId     := UIA.ControlTypeId("Header")
-    headerItemCtlId := UIA.ControlTypeId("HeaderItem")
     if ExplorerClickClassify_HasAncestorControlType(hitEl, headerItemCtlId, 16)
         return "header"
     if ExplorerClickClassify_HasAncestorControlType(hitEl, headerCtlId, 16)
         return "header"
 
-    ; 2) ITEM: require UIItem ancestry (don’t rely on AutoId alone)
+    ; 2) ITEM: require UIItem ancestry (don't rely on AutoId alone)
     if ExplorerClickClassify_HasAncestorClass(hitEl, "UIItem", 18)
         return "item"
 
@@ -5807,15 +5796,15 @@ EnsureFocusedHwnd(hwndTarget, totalMs := 60, refocusEveryMs := 15)
 
     return ControlGetFocusEx(tidTarget, hwndTarget, 0)
 }
-; Why that’s faster
+; Why that's faster
     ; One-time ControlGet and minimal focus calls
     ; Verification is a single API call (GetGUIThreadInfo) + IsChild, rather than a higher-level AHK command and repeated focus attempts
-    ; The total work is bounded by a time budget (e.g., 35–60ms), not a huge Loop count
-; Why it’s more reliable
-    ; It doesn’t require the focused thing to equal your exact ClassNN string.
-    ; It treats “focus is within the target control subtree” as success, which is what you actually want before sending keys (especially for DirectUIHWND*).
+    ; The total work is bounded by a time budget (e.g., 35Ã¢â‚¬â€œ60ms), not a huge Loop count
+; Why it's more reliable
+    ; It doesn't require the focused thing to equal your exact ClassNN string.
+    ; It treats "focus is within the target control subtree" as success, which is what you actually want before sending keys (especially for DirectUIHWND*).
 ; When not to use it
-    ; For simple, same-process Win32 apps where ControlGetFocus is perfectly reliable, your old Loop isn’t necessary anyway; one ControlFocus is enough.
+    ; For simple, same-process Win32 apps where ControlGetFocus is perfectly reliable, your old Loop isn't necessary anyway; one ControlFocus is enough.
 EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15)
 {
     ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hwndTop%
@@ -5823,7 +5812,7 @@ EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15)
         return false
     return EnsureFocusedHwnd(hCtl, totalMs, refocusEveryMs)
 }
-;You can use WinGetClass, cls, ahk_id %hwnd%, but it’s heavier in tight loops because it’s a higher-
+;You can use WinGetClass, cls, ahk_id %hwnd%, but it's heavier in tight loops because it's a higher-
 ; level AHK command. The direct DllCall("GetClassNameW") version is typically faster and easier
 ; to use in a parent-walk Loop.
 GetClassName(hwnd)
@@ -6468,6 +6457,18 @@ IsExplorerModern() {
 
 GetCtrlNNsByPrefix(hwndTop, classPrefix)
 {
+    static cache := {}
+
+    if (!hwndTop)
+        return ""
+
+    cacheKey := hwndTop "|" classPrefix
+    if (cache.HasKey(cacheKey)) {
+        cacheItem := cache[cacheKey]
+        if ((A_TickCount - cacheItem.tick) < 250 && WinExist("ahk_id " . hwndTop))
+            return cacheItem.value
+    }
+
     WinGet, listC, ControlList,     ahk_id %hwndTop%
     WinGet, listH, ControlListHwnd, ahk_id %hwndTop%
     prefixLen := StrLen(classPrefix)
@@ -6490,9 +6491,10 @@ GetCtrlNNsByPrefix(hwndTop, classPrefix)
             out .= ctrlNN " "
     }
 
-    return RTrim(out, " ")
+    out := RTrim(out, " ")
+    cache[cacheKey] := { tick: A_TickCount, value: out }
+    return out
 }
-
 
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
     global UIA, isWin11, blockKeys
@@ -6504,6 +6506,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     OutputVar4    := 0
     OutputVar6    := 0
     OutputVar8    := 0
+    didNavigate   := (prevPath != "" && currentPath != "" && prevPath != currentPath)
 
     If (initTargetClass == "")
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
@@ -6586,7 +6589,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
                 If isWin11 {
                     ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %initTargetHwnd%
-                   ; In the Win32 API, everything that has an HWND — from the desktop to a text box — is a “window.”
+                   ; In the Win32 API, everything that has an HWND - from the desktop to a text box — is a “window.”
                     ; That’s why these functions don’t care whether it’s a dialog, listview, or StaticNN.
                     If (GetWindowRectEx(hCtl, L, T, R, B)) {
                         OutHeight2 := B - T
@@ -6632,7 +6635,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
 
         ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
-            WaitForExplorerLoad(initTargetHwnd, , True)
+            if (didNavigate)
+                WaitForExplorerLoad(initTargetHwnd, , True)
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
 
@@ -6640,7 +6644,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         Else If (TargetControl == "DirectUIHWND2" && lClassCheck == "#32770") {
-            WaitForExplorerLoad(initTargetHwnd, True)
+            if (didNavigate)
+                WaitForExplorerLoad(initTargetHwnd, True)
             ; tooltip, here7b targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
 
@@ -6649,7 +6654,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
         Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
             ; tooltip, here7c
-            WaitForExplorerLoad(initTargetHwnd)
+            if (didNavigate)
+                WaitForExplorerLoad(initTargetHwnd)
         }
         Else {
             ; tooltip, here7d targeted is %TargetControl% with init at %initFocusedCtrlNN%
@@ -6962,7 +6968,7 @@ ProcessIsElevated(vPID)
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=37184
 ; gives you roughly the correct results (tested on Windows 7)
-; The function approximates Windows’ Alt-Tab eligibility:
+; The function approximates Windows' Alt-Tab eligibility:
 ; Include: visible, enabled, top-level windows; anything explicitly marked WS_EX_APPWINDOW.
 ; Exclude: child/owned/tool windows, non-activating windows, disabled/invisible windows, and some known host processes.
 JEE_WinHasAltTabIcon(hWnd)
@@ -7261,7 +7267,7 @@ IsAltTabWindow(hWnd, ByRef why := "") {
         }
 
         ; Leave owner logic intact: if an owner is visible, the owned window typically isn't Alt-Tab eligible.
-        ; (We do NOT “special-case” minimized owners here.)
+        ; (We do NOT "special-case" minimized owners here.)
         if DllCall("IsWindowVisible", "uptr", hWnd) {
             why := "fails: visible owner=" . hWnd
             return False
@@ -7518,7 +7524,7 @@ MoveOrGotoDesktopNumber(num) {
     ; - Therefore, route to 0-based functions (MoveCurrentWindowToDesktopAndSwitch / proc calls)
     ;   rather than the 1-based wrappers.
     ;
-    ; If you WANT MoveOrGotoDesktopNumber to be 1-based, tell me and I’ll normalize it.
+    ; If you WANT MoveOrGotoDesktopNumber to be 1-based, tell me and I'll normalize it.
 
     if (!InitVDA() || !GoToDesktopNumberProc)
         return false
@@ -7659,35 +7665,37 @@ KeyTrack() {
 
     ListLines, Off
 
-    ControlGetFocus, currCtrl, A
     WinGetClass, currClass, A
-    If (currCtrl == "Edit1" && InStr(currClass, "EVERYTHING", True)) {
-        StopAutoFix := True
-        ; A_PriorKey and Loops — How It Works
-        ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a Loop.
-        ; You can read A_PriorKey at any point in the Loop, and it will show the most recent key pressed up to that moment.
-        ; tooltip, % "lastKey- " . A_PriorKey . " - " . A_TickCount-TimeOfLastHotkeyTyped
-        If (   TimeOfLastHotkeyTyped
-            && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
-            && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
-            && (   InStr(keys,    Substr(A_ThisHotkey,2), false)
-                || InStr(numbers, Substr(A_ThisHotkey,2), false)
-                || A_ThisHotkey == "~:"
-                || A_ThisHotkey == "~/"
-                || A_ThisHotkey == "$~Space"
-                || A_ThisHotkey == "$CapsLock"
-                || A_ThisHotkey == "$~Backspace") ) {
+    If (InStr(currClass, "EVERYTHING", True)) {
+        ControlGetFocus, currCtrl, A
+        If (currCtrl == "Edit1") {
+            StopAutoFix := True
+            ; A_PriorKey and Loops - How It Works
+            ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a Loop.
+            ; You can read A_PriorKey at any point in the Loop, and it will show the most recent key pressed up to that moment.
+            ; tooltip, % "lastKey- " . A_PriorKey . " - " . A_TickCount-TimeOfLastHotkeyTyped
+            If (   TimeOfLastHotkeyTyped
+                && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
+                && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
+                && (   InStr(keys,    Substr(A_ThisHotkey,2), false)
+                    || InStr(numbers, Substr(A_ThisHotkey,2), false)
+                    || A_ThisHotkey == "~:"
+                    || A_ThisHotkey == "~/"
+                    || A_ThisHotkey == "$~Space"
+                    || A_ThisHotkey == "$CapsLock"
+                    || A_ThisHotkey == "$~Backspace") ) {
 
-            SetTimer, KeyTrack, Off
+                SetTimer, KeyTrack, Off
 
-            blockKeys := true
-            Send, ^{NumpadAdd}
-            blockKeys := false
+                blockKeys := true
+                Send, ^{NumpadAdd}
+                blockKeys := false
 
-            SetTimer, KeyTrack, On
-            TimeOfLastHotkeyTyped :=
+                SetTimer, KeyTrack, On
+                TimeOfLastHotkeyTyped :=
+            }
+            StopAutoFix := False
         }
-        StopAutoFix := False
     }
     Else If (currClass == "XLMAIN") {
         StopAutoFix := True
@@ -9240,16 +9248,6 @@ GetExplorerPath(hwnd := "")
             return expTitle
         }
 
-        loopCount := 0
-        Loop, 100
-        {
-            loopCount := A_Index
-            if RegExMatch(expTitle, "^\w\:")
-                break
-
-            Sleep, 1
-        }
-
         return expTitle
     }
 
@@ -10384,7 +10382,7 @@ Acc_FindHeaderObject(accObj, cls, outlineRole, colHeaderRole, menuPopupRole, dir
             break
         }
 
-        ; Only pay for this check once or twice (it’s a DllCall)
+        ; Only pay for this check once or twice (it's a DllCall)
         if (directUIHwnd && checked < 2) {
             hostHwnd := Acc_WindowFromObjectSafe(cur)
             checked += 1
@@ -10547,14 +10545,24 @@ Acc_ParentSafe(accObj) {
 SafeUIA_ElementFromPoint(x, y, default := "") {
     global UIA
 
+    if (!IsObject(UIA)) {
+        UIA := UIA_Interface()
+        UIA.TransactionTimeout := 2000
+        UIA.ConnectionTimeout  := 20000
+    }
+
     try
         return UIA.ElementFromPoint(x, y, False)
     catch {
-        UIA :=  ;// set to a different value
-        UIA := UIA_Interface() ; Initialize UIA interface
+        UIA := ""
+        UIA := UIA_Interface()
         UIA.TransactionTimeout := 2000
         UIA.ConnectionTimeout  := 20000
-        return default
+
+        try
+            return UIA.ElementFromPoint(x, y, False)
+        catch
+            return default
     }
 }
 ; ChatGPT
