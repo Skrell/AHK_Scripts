@@ -4959,7 +4959,7 @@ ExplorerHitTestType() {
         return "other"
 
     WinGetClass, cls, ahk_id %winHwnd%
-    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
+    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770" && cls != "Progman" && cls != "ProgMan" && cls != "WorkerW")
         return "other"
 
     ; Get MSAA object under cursor
@@ -5037,7 +5037,7 @@ IsMouseOverShellItemForRButton() {
 
     WinGetClass, winClass, ahk_id %hwnd%
 
-    if (winClass != "CabinetWClass" && winClass != "ExplorerWClass" && winClass != "#32770" && winClass != "Progman" && winClass != "WorkerW")
+    if (winClass != "CabinetWClass" && winClass != "ExplorerWClass" && winClass != "#32770" && winClass != "Progman" && winClass != "ProgMan" && winClass != "WorkerW")
         return false
 
     if (InStr(ctrlNN, "DirectUIHWND", True))
