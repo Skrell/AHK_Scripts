@@ -53,6 +53,7 @@ Global MinimizedWindows                    := []
 Global PrevActiveWindows                   := []
 Global allWinArray                         := []
 Global cycleCount                          := 1
+Global bufferedCycleAdvance                := False
 Global startHighlight                      := False
 Global border_thickness                    := 4
 Global border_color                        := 0xFF00FF
@@ -82,6 +83,7 @@ Global currentPath                         := ""
 Global prevPath                            := ""
 Global _winCtrlD                           := ""
 Global MbuttonIsEnter                      := False
+Global suspendRightButtonForMButtonDrag    := False
 Global lastActWinID                        :=
 Global WindowTitleID                       :=
 Global keys                                := "abcdefghijklmnopqrstuvwxyz"
@@ -95,40 +97,46 @@ Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
 Global allowDoubleClicks                   := True
 Global disableSendCtrlHwnd                 := ""
-Global trayClickPosX := 0
-Global trayClickPosY := 0
+Global trayClickPosX                       := 0
+Global trayClickPosY                       := 0
 
 
-Global hActWin := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
-Global UIA := UIA_Interface() ; Initialize UIA interface
+Global hActWin                             := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+Global UIA                                 := UIA_Interface() ; Initialize UIA interface
 ; Turn key blocking ON/OFF
-Global StopRecursion := False
-Global blockKeys     := False
-Global blockMouse    := False
-Global gExiting      := False
+Global StopRecursion                       := False
+Global blockKeys                           := False
+Global blockMouse                          := False
+Global gExiting                            := False
 Global hHookKbd
 Global hHookMouse
 ; --- Config ---
-Global UseWorkArea   := true   ; true = monitor work area (ignores taskbar). false = full monitor.
-Global SnapRange     := 20     ; px: distance from edge to begin snapping
-Global BreakAway     := 60     ; px: while snapped, drag this far further TOWARD the outside to push past edge
-Global ReleaseAway   := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
+Global UseWorkArea                         := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+Global SnapRange                           := 20     ; px: distance from edge to begin snapping
+Global BreakAway                           := 60     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+Global ReleaseAway                         := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
-Global skipClasses := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
+Global skipClasses                         := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
 ; === Settings ===
-Global Opacity     := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
+Global Opacity                             := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 
-Global rightButtonHeld          := false
-Global rightButtonComboUsed     := false
-Global rightButtonDragging      := false
-Global rightButtonNativeDown    := false
-Global rightButtonStartPosX     := 0
-Global rightButtonStartPosY     := 0
-Global rightButtonDragThreshold := 4
+; Right-button state machine:
+; - held/nativeDown track whether we have started a real OS-level right-click yet.
+; - comboUsed suppresses the fallback Click, Right path when the hold was consumed by a combo.
+; - suppressMenuOnUp dismisses the shell context menu after a successful RButton+wheel action.
+Global rightButtonHeld                     := false
+Global rightButtonComboUsed                := false
+Global rightButtonDragging                 := false
+Global rightButtonNativeDown               := false
+Global rightButtonSuppressMenuOnUp         := false
+Global rightButtonStartPosX                := 0
+Global rightButtonStartPosY                := 0
+Global rightButtonDragThreshold            := 4
 
-Global suppressRightButtonLogic := false
+; Used only for explicit title-bar chords such as LButton+RButton.
+Global suppressRightButtonLogic            := false
 
 Process, Priority,, High
 
@@ -820,6 +828,12 @@ DoNothing() {
 }
 
 DoNothing:
+    if (!GetKeyState("MButton", "P")) {
+        DraggingWindow := False
+        SetTimer, WatchMButtonOverrideState, Off
+        StopRecursion := False
+        suspendRightButtonForMButtonDrag := false
+    }
     Return
 ; ==========================================================================================================================================
 ; ==========================================================================================================================================
@@ -1410,50 +1424,90 @@ $WheelDown::send {Volume_Down}
 #If
 
 $*RButton::
-    if (suppressRightButtonLogic) {
-        rightButtonHeld      := true
-        rightButtonComboUsed := true
+    ; tooltip, % "DOWN sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
+
+    ; While MButton window-drag mode is active, ignore plain RButton handling entirely.
+    if (suspendRightButtonForMButtonDrag) {
+        if (!GetKeyState("MButton", "P")) {
+            suspendRightButtonForMButtonDrag := false
+            SetTimer, WatchMButtonOverrideState, Off
+        }
         return
     }
 
-    rightButtonHeld          := true
-    rightButtonComboUsed     := false
-    rightButtonDragging      := false
-    rightButtonNativeDown    := false
+    if (suppressRightButtonLogic && !GetKeyState("LButton", "P"))
+        suppressRightButtonLogic := false
+
+    ; Heal any stale state before starting a fresh hold.
+    if (rightButtonHeld || rightButtonComboUsed || rightButtonDragging || rightButtonNativeDown)
+        ResetRightButtonState(true)
+
+    ; Title-bar combos consume the hold, so keep the watchdog running but skip normal behavior.
+    if (suppressRightButtonLogic) {
+        rightButtonHeld      := true
+        rightButtonComboUsed := true
+        SetTimer, WatchRightButtonState, 15
+        return
+    }
+
+    ; Start a new hold in deferred mode. We only send a real RButton down immediately
+    ; when the pointer is already over a shell item that must support right-drag.
+    rightButtonHeld             := true
+    rightButtonComboUsed        := false
+    rightButtonDragging         := false
+    rightButtonNativeDown       := false
+    rightButtonSuppressMenuOnUp := false
+    SetTimer, WatchRightButtonState, 15
 
     if (IsMouseOverShellItemForRButton()) {
+        ; Shell items need a real right-button-down immediately so Explorer/Desktop can start
+        ; a native right-drag from the item itself. rightButtonNativeDown is what makes the
+        ; up-handler send the balancing {RButton Up}; comboUsed is kept as a safety/intent
+        ; marker so this hold is treated as already consumed by a special path.
         rightButtonComboUsed  := true
         rightButtonNativeDown := true
         SendInput, {RButton Down}
         return
     }
 
+    ; Otherwise, defer the native right-click until the mouse actually moves far enough
+    ; to count as a drag. This prevents accidental context menus during button+wheel combos.
     MouseGetPos, rightButtonStartPosX, rightButtonStartPosY
     SetTimer, WatchRightButtonDrag, 10
 return
 
 $*RButton Up::
+    ; tooltip, % "UP sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
+
+    ; MButton drag mode owns the hold, so an RButton release should not complete a click here.
+    if (suspendRightButtonForMButtonDrag) {
+        if (!GetKeyState("MButton", "P")) {
+            suspendRightButtonForMButtonDrag := false
+            SetTimer, WatchMButtonOverrideState, Off
+        }
+        return
+    }
+
     if (suppressRightButtonLogic) {
-        rightButtonHeld          := false
-        rightButtonComboUsed     := false
-        rightButtonDragging      := false
-        rightButtonNativeDown    := false
-        suppressRightButtonLogic := false
-        SetTimer, WatchRightButtonDrag, Off
+        ResetRightButtonState(false)
         return
     }
 
     SetTimer, WatchRightButtonDrag, Off
+    SetTimer, WatchRightButtonState, Off
 
-    if (rightButtonNativeDown)
+    ; If we already emitted a native RButton down, always balance it here. This is why
+    ; the shell-item fast path sets rightButtonNativeDown immediately on button-down.
+    ; Successful wheel combos then dismiss the menu with Esc so mouse movement does not matter.
+    if (rightButtonNativeDown) {
         SendInput, {RButton Up}
+        if (rightButtonSuppressMenuOnUp)
+            SendInput, {Esc}
+    }
     else if (!rightButtonComboUsed)
         Click, Right
 
-    rightButtonHeld              := false
-    rightButtonComboUsed         := false
-    rightButtonDragging          := false
-    rightButtonNativeDown        := false
+    ResetRightButtonState(false)
 return
 
 #If MouseIsOverTitleBar()
@@ -1501,8 +1555,8 @@ return
 #If GetKeyState("RButton", "P")
 
 WheelUp::
+    ; RButton+WheelUp scrolls/paginates while the hold remains "consumed" until release.
     if (!rightButtonDragging && !VolumeHover() && !IsOverException() && !DraggingWindow) {
-        rightButtonComboUsed := true
         SetTimer, WatchRightButtonDrag, Off
         SetTimer, SendCtrlAddLabel, Off
 
@@ -1529,6 +1583,10 @@ WheelUp::
             if !WinActive("ahk_id " . targetHwnd)
                 return
         }
+
+        ; Latch the combo only after we know the wheel action is going to execute.
+        rightButtonComboUsed := true
+        rightButtonSuppressMenuOnUp := true
 
         if (isInScrollZone) {
             if (currentClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
@@ -1552,8 +1610,8 @@ WheelUp::
 return
 
 WheelDown::
+    ; Same idea as WheelUp, but for downward paging/end navigation.
     if (!rightButtonDragging && !VolumeHover() && !IsOverException() && !DraggingWindow) {
-        rightButtonComboUsed := true
         SetTimer, WatchRightButtonDrag, Off
         SetTimer, SendCtrlAddLabel, Off
 
@@ -1580,6 +1638,10 @@ WheelDown::
             if !WinActive("ahk_id " . targetHwnd)
                 return
         }
+
+        ; Latch the combo only after we know the wheel action is going to execute.
+        rightButtonComboUsed := true
+        rightButtonSuppressMenuOnUp := true
 
         if (isInScrollZone) {
             if (currentClass == "CASCADIA_HOSTING_WINDOW_CLASS") {
@@ -1714,7 +1776,40 @@ return
 
 #If
 
+; Reset right-button script state if an up transition is missed.
+ResetRightButtonState(sendNativeUp := false) {
+    global rightButtonHeld, rightButtonComboUsed, rightButtonDragging, rightButtonNativeDown, rightButtonSuppressMenuOnUp, suppressRightButtonLogic
+
+    SetTimer, WatchRightButtonDrag, Off
+    SetTimer, WatchRightButtonState, Off
+
+    ; Optionally emit the missing native button-up so the shell is never left thinking
+    ; RButton is still physically held.
+    if (sendNativeUp && rightButtonNativeDown) {
+        SendInput, {RButton Up}
+        if (rightButtonSuppressMenuOnUp)
+            SendInput, {Esc}
+    }
+
+    rightButtonHeld             := false
+    rightButtonComboUsed        := false
+    rightButtonDragging         := false
+    rightButtonNativeDown       := false
+    rightButtonSuppressMenuOnUp := false
+    suppressRightButtonLogic    := false
+}
+
+WatchRightButtonState:
+    ; Self-heal if the physical RButton is no longer down but our script state is still latched.
+    if (GetKeyState("RButton", "P"))
+        return
+
+    if (rightButtonHeld || rightButtonComboUsed || rightButtonDragging || rightButtonNativeDown || suppressRightButtonLogic)
+        ResetRightButtonState(true)
+return
+
 WatchRightButtonDrag:
+    ; Promote a deferred hold into a real drag once the pointer moves past the threshold.
     if (!rightButtonHeld) {
         SetTimer, WatchRightButtonDrag, Off
         return
@@ -1823,12 +1918,11 @@ $*MButton::
     global DraggingWindow
 
     StopRecursion := True
+    suspendRightButtonForMButtonDrag := true
     ; Thread, NoTimers, True
-    Hotkey, *Rbutton, DoNothing, On
-    Hotkey, Mbutton & Rbutton, DoNothing, On
+    SetTimer, WatchMButtonOverrideState, 25
 
     MouseGetPos, mx0, my0, hWnd, ctrl, 2
-
     isOverTitleBar        := MouseIsOverTitleBar(mx0, my0)
     checkClickMx          := mx0
     checkClickMy          := my0
@@ -1854,8 +1948,12 @@ $*MButton::
     switchingBacktoResize := False
     startedAlwaysOnTop    := False
 
-    If (!hWnd || !JEE_WinHasAltTabIcon(hWnd))
+    If (!hWnd || !JEE_WinHasAltTabIcon(hWnd)) {
+        StopRecursion := False
+        suspendRightButtonForMButtonDrag := false
+        SetTimer, WatchMButtonOverrideState, Off
         return
+    }
 
     initTime := A_TickCount
 
@@ -1864,6 +1962,9 @@ $*MButton::
     If (skipClasses.HasKey(cls)) {
         KeyWait, Mbutton, U T3
         Send, {Mbutton}
+        StopRecursion := False
+        suspendRightButtonForMButtonDrag := false
+        SetTimer, WatchMButtonOverrideState, Off
         return
     }
 
@@ -1873,6 +1974,9 @@ $*MButton::
         BlockInput, MouseMoveOff
         KeyWait, Mbutton, U T3
         Send, {Mbutton}
+        StopRecursion := False
+        suspendRightButtonForMButtonDrag := false
+        SetTimer, WatchMButtonOverrideState, Off
         return
     }
 
@@ -2315,13 +2419,24 @@ $*MButton::
     }
 
     StopRecursion := False
+    suspendRightButtonForMButtonDrag := false
     ; Thread, NoTimers, False
-    Hotkey, *Rbutton, DoNothing, Off
-    Hotkey, Mbutton & Rbutton, DoNothing, Off
+    SetTimer, WatchMButtonOverrideState, Off
     DraggingWindow := False
 Return
 #If
 
+WatchMButtonOverrideState:
+    ; MButton window-drag temporarily suppresses plain RButton handling. This watchdog
+    ; clears that suppression as soon as the physical middle button is released.
+    if (GetKeyState("MButton", "P"))
+        return
+
+    DraggingWindow := False
+    StopRecursion := False
+    suspendRightButtonForMButtonDrag := false
+    SetTimer, WatchMButtonOverrideState, Off
+return
 WaitForStableWindow(hwnd, delay := 30, timeout := 1000) {
     lastW := lastH := 0
     elapsed := 0
@@ -3142,7 +3257,7 @@ Return
 
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
 Altup:
-    global cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys, CanceledWinSwap
+    global bufferedCycleAdvance, cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys, CanceledWinSwap
 
     If startHighlight && !CanceledWinSwap {
         WinGet, actWndID, ID, A
@@ -3160,20 +3275,21 @@ Altup:
 Return
 
 AltupCleanup:
-    global cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys, CanceledWinSwap
+    global bufferedCycleAdvance, cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys, CanceledWinSwap
 
     Critical, On
-    hitTAB           := False
-    hitTilde         := False
-    cycleCount       := 1
-    ValidWindows     := []
-    GroupedWindows   := []
-    MinimizedWindows := []
-    lastActWinID     :=
-    startHighlight   := False
-    LclickSelected   := False
-    CanceledWinSwap  := False
-    StopRecursion    := False
+    hitTAB               := False
+    hitTilde             := False
+    bufferedCycleAdvance := False
+    cycleCount           := 1
+    ValidWindows         := []
+    GroupedWindows       := []
+    MinimizedWindows     := []
+    lastActWinID         :=
+    startHighlight       := False
+    LclickSelected       := False
+    CanceledWinSwap      := False
+    StopRecursion        := False
     Thread, NoTimers, False
     Critical, Off
     Gui, WindowTitle: Destroy
@@ -3529,11 +3645,12 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
 }
 
 Cycle() {
-    global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, Opacity
+    global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, Opacity, bufferedCycleAdvance
 
-    prev_exe   :=
-    prev_cl    :=
-    cycleCount := 1
+    prev_exe             :=
+    prev_cl              :=
+    cycleCount           := 1
+    bufferedCycleAdvance := False
 
     DetectHiddenWindows, Off
     failedSwitch := False
@@ -3629,9 +3746,12 @@ Cycle() {
 
         If (GroupedWindows.length() >= 2)
         {
-            KeyWait, Tab, D T0.1
+            bufferedAdvance      := bufferedCycleAdvance
+            bufferedCycleAdvance := False
+            If !bufferedAdvance
+                KeyWait, Tab, D T0.1
 
-            If !ErrorLevel
+            If (bufferedAdvance || !ErrorLevel)
             {
                 If !GetKeyState("LShift","P") {
                     If (cycleCount == GroupedWindows.MaxIndex())
@@ -3669,9 +3789,10 @@ Cycle() {
 ; Switch "App" open windows based on the same process and class
 CycleAppWindows(activeProcessName, activeClass) {
 
-    global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, Opacity
+    global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, Opacity, bufferedCycleAdvance
 
-    windowsToMinimize := []
+    windowsToMinimize    := []
+    bufferedCycleAdvance := False
 
     UpdateValidWindows()
 
@@ -3757,9 +3878,12 @@ CycleAppWindows(activeProcessName, activeClass) {
         If LclickSelected || CanceledWinSwap
             break
 
-        KeyWait, ``, D T0.1
+        bufferedAdvance      := bufferedCycleAdvance
+        bufferedCycleAdvance := False
+        If !bufferedAdvance
+            KeyWait, ``, D T0.1
 
-        If !ErrorLevel
+        If (bufferedAdvance || !ErrorLevel)
         {
             WinGet, mmState, MinMax, ahk_id %gwHwndId%
             If (MonCount > 1 && mmState == -1) {
@@ -5039,12 +5163,14 @@ IsMouseOverShellItemForRButton() {
 
     if (winClass != "CabinetWClass" && winClass != "ExplorerWClass" && winClass != "#32770" && winClass != "Progman" && winClass != "ProgMan" && winClass != "WorkerW")
         return false
-
+    ; tooltip, testing for icon...
     if (InStr(ctrlNN, "DirectUIHWND", True))
         return (ExplorerClickClassify(mx, my, ctrlNN) = "item")
 
-    if (InStr(ctrlNN, "SysListView32", True))
+    if (InStr(ctrlNN, "SysListView32", True)) {
         return (ExplorerHitTestType() = "item")
+    }
+
 
     return false
 }
@@ -9775,7 +9901,7 @@ ClearWindowTitlePopup() {
 }
 
 DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
-    global Opacity, WindowTitleID, WindowTitle
+    global bufferedCycleAdvance, hitTAB, hitTilde, Opacity, WindowTitleID, WindowTitle
     static IsWindowTitleGuiInitialized := False
 
     strArray := []
@@ -9785,15 +9911,17 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
         Gui, WindowTitle: Destroy
     }
 
-    If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
+    If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
+    bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
 
     If (StrLen(vtext) > 60) {
         vtext := SubStr(vtext, 1, 60) . "..."
     }
 
-    If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
+    If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
+    bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
 
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
@@ -9810,8 +9938,9 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
     WinSet, Transparent, 1, ahk_id %WindowTitleID%
 
-    If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
+    If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
+    bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
 
     WinGetPos, , , popupWidth, popupHeight, ahk_id %WindowTitleID%
 
@@ -9827,8 +9956,9 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
 
     WinMove, ahk_id %WindowTitleID%,, %drawX%, %drawY%
 
-    If ((!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P")) || GetKeyState("Tab","P") || GetKeyState("`","P"))
+    If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
+    bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
 
     ; WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
     WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
@@ -10812,18 +10942,29 @@ SetTitleMatchMode, 2
 #Hotstring B0  ; Turns off automatic backspacing for the following hotstrings.
 
 ; Can be suffix exceptions, too, but should correct "-aling" without correcting "-align".
+::'ing::
 ::align::
 ::antiforeign::
+::arming::
+::arose::
 ::arraign::
 ::assign::
+::begin::
 ::benign::
+::bot::
+::bots::
+::caching::
 ::campaign::
+::campaign::
+::cases::
 ::champaign::
 ::codesign::
 ::coign::
+::complain::
 ::compose::
 ::condign::
 ::consign::
+::constrain::
 ::coreign::
 ::cosign::
 ::countersign::
@@ -10831,48 +10972,38 @@ SetTitleMatchMode, 2
 ::deraign::
 ::design::
 ::digidesign::
+::dunk::
 ::eloign::
-::exiting::
 ::ensign::
+::exiting::
 ::feign::
 ::foreign::
 ::indign::
+::ing::
+::login::
 ::malign::
+::mic::
 ::misalign::
 ::outdesign::
 ::overdesign::
+::plugin::
+::poke::
 ::preassign::
+::rake::
 ::realign::
 ::reassign::
 ::redesign::
 ::reign::
+::resets::
 ::resign::
 ::sign::
+::slam::
+::slop::
 ::sovereign::
+::tick::
 ::unalign::
 ::unbenign::
 ::verisign::
-::plugin::
-::complain::
-::login::
-::constrain::
-::begin::
-::mic::
-::poke::
-::arose::
-::caching::
-::bot::
-::bots::
-::campaign::
-::'ing::
-::ing::
-::slam::
-::dunk::
-::cases::
-::tick::
-::rake::
-::resets::
-::arming::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
