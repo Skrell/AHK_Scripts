@@ -53,6 +53,8 @@ Global MinimizedWindows                    := []
 Global PrevActiveWindows                   := []
 Global allWinArray                         := []
 Global cycleCount                          := 1
+; Alt+Tab/Alt+` can receive the next cycle key while DrawWindowTitlePopup() is still
+; building the GUI. Buffer that press here so the loop consumes it instead of losing it.
 Global bufferedCycleAdvance                := False
 Global startHighlight                      := False
 Global border_thickness                    := 4
@@ -1918,6 +1920,8 @@ $*MButton::
     global DraggingWindow
 
     StopRecursion := True
+    ; While MButton window-drag mode is active, plain RButton should never enter its
+    ; normal click/drag state machine. The watchdog clears this if MButton is released.
     suspendRightButtonForMButtonDrag := true
     ; Thread, NoTimers, True
     SetTimer, WatchMButtonOverrideState, 25
@@ -1949,6 +1953,7 @@ $*MButton::
     startedAlwaysOnTop    := False
 
     If (!hWnd || !JEE_WinHasAltTabIcon(hWnd)) {
+        ; Nothing draggable here, so release the temporary RButton suppression immediately.
         StopRecursion := False
         suspendRightButtonForMButtonDrag := false
         SetTimer, WatchMButtonOverrideState, Off
@@ -1960,6 +1965,8 @@ $*MButton::
     WinGet, isMax, MinMax, ahk_id %hWnd%
     WinGetClass, cls, ahk_id %hWnd%
     If (skipClasses.HasKey(cls)) {
+        ; For excluded classes, fall back to a normal MButton click and tear down the
+        ; temporary RButton suppression state on the way out.
         KeyWait, Mbutton, U T3
         Send, {Mbutton}
         StopRecursion := False
@@ -2418,6 +2425,7 @@ $*MButton::
         previousMon := stopMon
     }
 
+    ; Normal exit: restore plain RButton handling before leaving MButton drag mode.
     StopRecursion := False
     suspendRightButtonForMButtonDrag := false
     ; Thread, NoTimers, False
@@ -3650,6 +3658,8 @@ Cycle() {
     prev_exe             :=
     prev_cl              :=
     cycleCount           := 1
+    ; Start each Alt+Tab session with an empty buffer. DrawWindowTitlePopup() will set
+    ; this if a fast second Tab lands before KeyWait, Tab, D gets a chance to see it.
     bufferedCycleAdvance := False
 
     DetectHiddenWindows, Off
@@ -3746,6 +3756,8 @@ Cycle() {
 
         If (GroupedWindows.length() >= 2)
         {
+            ; A quick second Tab can happen while DrawWindowTitlePopup() is still running.
+            ; If that happened, consume the buffered press here instead of waiting for a new one.
             bufferedAdvance      := bufferedCycleAdvance
             bufferedCycleAdvance := False
             If !bufferedAdvance
@@ -3792,6 +3804,7 @@ CycleAppWindows(activeProcessName, activeClass) {
     global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, Opacity, bufferedCycleAdvance
 
     windowsToMinimize    := []
+    ; Same buffering idea as Cycle(): Alt+` can miss a fast repeat while the popup GUI is drawing.
     bufferedCycleAdvance := False
 
     UpdateValidWindows()
@@ -3878,6 +3891,8 @@ CycleAppWindows(activeProcessName, activeClass) {
         If LclickSelected || CanceledWinSwap
             break
 
+        ; Consume any cycle key that arrived during DrawWindowTitlePopup() before waiting
+        ; on a brand-new ` press. This is what prevents the missed second-key problem.
         bufferedAdvance      := bufferedCycleAdvance
         bufferedCycleAdvance := False
         If !bufferedAdvance
@@ -9913,6 +9928,8 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
 
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
+    ; Popup creation can take long enough for the next Tab/` press to arrive before the
+    ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
     bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
 
     If (StrLen(vtext) > 60) {
@@ -9921,6 +9938,8 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
 
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
+    ; Popup creation can take long enough for the next Tab/` press to arrive before the
+    ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
     bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
 
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
@@ -9940,6 +9959,8 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
 
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
+    ; Popup creation can take long enough for the next Tab/` press to arrive before the
+    ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
     bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
 
     WinGetPos, , , popupWidth, popupHeight, ahk_id %WindowTitleID%
@@ -9958,6 +9979,8 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
 
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
+    ; Popup creation can take long enough for the next Tab/` press to arrive before the
+    ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
     bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
 
     ; WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
