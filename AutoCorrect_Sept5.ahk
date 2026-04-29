@@ -9930,7 +9930,7 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
         Return
     ; Popup creation can take long enough for the next Tab/` press to arrive before the
     ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
-    bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
+    bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
 
     If (StrLen(vtext) > 60) {
         vtext := SubStr(vtext, 1, 60) . "..."
@@ -9940,7 +9940,7 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
         Return
     ; Popup creation can take long enough for the next Tab/` press to arrive before the
     ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
-    bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
+    bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
 
     Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
     Gui, WindowTitle: Color, %CustomColor%
@@ -9961,7 +9961,7 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
         Return
     ; Popup creation can take long enough for the next Tab/` press to arrive before the
     ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
-    bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
+    bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
 
     WinGetPos, , , popupWidth, popupHeight, ahk_id %WindowTitleID%
 
@@ -9981,7 +9981,7 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
         Return
     ; Popup creation can take long enough for the next Tab/` press to arrive before the
     ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
-    bufferedCycleAdvance := bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P"))
+    bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
 
     ; WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
     WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
