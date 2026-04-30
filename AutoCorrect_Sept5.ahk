@@ -1565,6 +1565,8 @@ return
 #If GetKeyState("RButton", "P")
 
 WheelUp::
+    ; If the hold started on the taskbar, keep the entire RButton+wheel gesture native.
+    ; This prevents taskbar right-clicks from being repurposed into the custom paging path.
     if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface()) {
         SendInput, {WheelUp}
         return
@@ -1625,6 +1627,8 @@ WheelUp::
 return
 
 WheelDown::
+    ; Same taskbar bypass as WheelUp: preserve the normal taskbar wheel behavior whenever
+    ; this RButton hold belongs to a taskbar interaction instead of the custom combo logic.
     if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface()) {
         SendInput, {WheelDown}
         return
