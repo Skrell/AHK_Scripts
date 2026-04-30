@@ -128,11 +128,13 @@ Global Opacity                             := 220     ; 255=opaque black; try 20
 ; - held/nativeDown track whether we have started a real OS-level right-click yet.
 ; - comboUsed suppresses the fallback Click, Right path when the hold was consumed by a combo.
 ; - suppressMenuOnUp dismisses the shell context menu after a successful RButton+wheel action.
+; - taskbarPassthrough keeps the entire custom RButton state machine out of taskbar clicks.
 Global rightButtonHeld                     := false
 Global rightButtonComboUsed                := false
 Global rightButtonDragging                 := false
 Global rightButtonNativeDown               := false
 Global rightButtonSuppressMenuOnUp         := false
+Global rightButtonTaskbarPassthrough       := false
 Global rightButtonStartPosX                := 0
 Global rightButtonStartPosY                := 0
 Global rightButtonDragThreshold            := 4
@@ -825,17 +827,7 @@ IsThisHotKeyLowerCase() {
     Return (StrLen(A_ThisHotKey) == 2 && InStr(keys, Substr(A_ThisHotKey,2,1), False))
 }
 
-DoNothing() {
-    Return
-}
-
 DoNothing:
-    if (!GetKeyState("MButton", "P")) {
-        DraggingWindow := False
-        SetTimer, WatchMButtonOverrideState, Off
-        StopRecursion := False
-        suspendRightButtonForMButtonDrag := false
-    }
     Return
 ; ==========================================================================================================================================
 ; ==========================================================================================================================================
@@ -1274,7 +1266,7 @@ UnhookHooks:
         return
     }
 
-    gExiting := True
+    gExiting      := True
     StopRecursion := True
     Thread, NoTimers, True
 
@@ -1428,6 +1420,16 @@ $WheelDown::send {Volume_Down}
 $*RButton::
     ; tooltip, % "DOWN sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
 
+    ; Taskbar right-clicks should remain fully native, so bypass the custom RButton state
+    ; machine entirely and just mirror the physical down/up transitions there.
+    if (MouseIsOverAnyTaskbarSurface()) {
+        if (rightButtonHeld || rightButtonComboUsed || rightButtonDragging || rightButtonNativeDown || suppressRightButtonLogic)
+            ResetRightButtonState(true)
+        rightButtonTaskbarPassthrough := true
+        SendInput, {RButton Down}
+        return
+    }
+
     ; While MButton window-drag mode is active, ignore plain RButton handling entirely.
     if (suspendRightButtonForMButtonDrag) {
         if (!GetKeyState("MButton", "P")) {
@@ -1480,6 +1482,12 @@ return
 
 $*RButton Up::
     ; tooltip, % "UP sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
+
+    if (rightButtonTaskbarPassthrough) {
+        rightButtonTaskbarPassthrough := false
+        SendInput, {RButton Up}
+        return
+    }
 
     ; MButton drag mode owns the hold, so an RButton release should not complete a click here.
     if (suspendRightButtonForMButtonDrag) {
@@ -1557,6 +1565,11 @@ return
 #If GetKeyState("RButton", "P")
 
 WheelUp::
+    if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface()) {
+        SendInput, {WheelUp}
+        return
+    }
+
     ; RButton+WheelUp scrolls/paginates while the hold remains "consumed" until release.
     if (!rightButtonDragging && !VolumeHover() && !IsOverException() && !DraggingWindow) {
         SetTimer, WatchRightButtonDrag, Off
@@ -1612,6 +1625,11 @@ WheelUp::
 return
 
 WheelDown::
+    if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface()) {
+        SendInput, {WheelDown}
+        return
+    }
+
     ; Same idea as WheelUp, but for downward paging/end navigation.
     if (!rightButtonDragging && !VolumeHover() && !IsOverException() && !DraggingWindow) {
         SetTimer, WatchRightButtonDrag, Off
@@ -1780,7 +1798,7 @@ return
 
 ; Reset right-button script state if an up transition is missed.
 ResetRightButtonState(sendNativeUp := false) {
-    global rightButtonHeld, rightButtonComboUsed, rightButtonDragging, rightButtonNativeDown, rightButtonSuppressMenuOnUp, suppressRightButtonLogic
+    global rightButtonHeld, rightButtonComboUsed, rightButtonDragging, rightButtonNativeDown, rightButtonSuppressMenuOnUp, rightButtonTaskbarPassthrough, suppressRightButtonLogic
 
     SetTimer, WatchRightButtonDrag, Off
     SetTimer, WatchRightButtonState, Off
@@ -1798,6 +1816,7 @@ ResetRightButtonState(sendNativeUp := false) {
     rightButtonDragging         := false
     rightButtonNativeDown       := false
     rightButtonSuppressMenuOnUp := false
+    rightButtonTaskbarPassthrough := false
     suppressRightButtonLogic    := false
 }
 
@@ -1954,7 +1973,7 @@ $*MButton::
 
     If (!hWnd || !JEE_WinHasAltTabIcon(hWnd)) {
         ; Nothing draggable here, so release the temporary RButton suppression immediately.
-        StopRecursion := False
+        StopRecursion                    := False
         suspendRightButtonForMButtonDrag := false
         SetTimer, WatchMButtonOverrideState, Off
         return
@@ -1969,7 +1988,7 @@ $*MButton::
         ; temporary RButton suppression state on the way out.
         KeyWait, Mbutton, U T3
         Send, {Mbutton}
-        StopRecursion := False
+        StopRecursion                    := False
         suspendRightButtonForMButtonDrag := false
         SetTimer, WatchMButtonOverrideState, Off
         return
@@ -1981,7 +2000,7 @@ $*MButton::
         BlockInput, MouseMoveOff
         KeyWait, Mbutton, U T3
         Send, {Mbutton}
-        StopRecursion := False
+        StopRecursion                    := False
         suspendRightButtonForMButtonDrag := false
         SetTimer, WatchMButtonOverrideState, Off
         return
@@ -4827,6 +4846,8 @@ Min(a,b) {
 ; -------------------------------------------------------------------------------------------
 #If MouseIsOverCaptionButtons()
 ^Lbutton Up::
+    StopRecursion := True
+    DetectHiddenWindows, Off
     CoordMode, Mouse, Screen
     SysGet, MonCount, MonitorCount
     MouseGetPos, vPosX, vPosY, hWnd
@@ -4842,11 +4863,11 @@ Min(a,b) {
     If (InStr(vName,"close",false)) {
         tooltip, Closing all windows...
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        currentMon := MWAGetMonitorMouseIsIn()
         loop % windowsFromProc
         {
             hwndID := windowsFromProc%A_Index%
             If (MonCount > 1) {
-                currentMon := MWAGetMonitorMouseIsIn()
                 currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
                 If currentMonHasActWin {
                     WinClose, ahk_id %hwndID%
@@ -4862,11 +4883,11 @@ Min(a,b) {
     If (InStr(vName,"minimize",false)) {
         tooltip, Minimizing all windows...
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
+        currentMon := MWAGetMonitorMouseIsIn()
         loop % windowsFromProc
         {
             hwndID := windowsFromProc%A_Index%
             If (MonCount > 1) {
-                currentMon          := MWAGetMonitorMouseIsIn()
                 currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
                 If currentMonHasActWin {
                     WinMinimize, ahk_id %hwndId%
@@ -4879,6 +4900,7 @@ Min(a,b) {
             }
         }
     }
+    StopRecursion := False
     sleep, 500
     tooltip,
 Return
@@ -4932,10 +4954,12 @@ $~^LButton::
     SysGet, MonCount, MonitorCount
 
     if (clickedTaskbar) {
+        Send, {Ctrl UP}
         KeyWait, LButton, U T3
         Sleep, 125
         targetID := FindTopMostWindow()
         WinGetClass, targetClass, ahk_id %targetID%
+        WinSet, AlwaysOnTop, On, ahk_id %targetID%
 
         if (targetClass != "Windows.UI.Core.CoreWindow"
         &&  targetClass != "TaskListThumbnailWnd"
@@ -4952,6 +4976,7 @@ $~^LButton::
                 Tooltip,
             }
             else {
+                currentMon := MWAGetMonitorMouseIsIn()
                 Loop, %windowList%
                 {
                     windowID := windowList%A_Index%
@@ -4959,7 +4984,6 @@ $~^LButton::
 
                     if (windowState == -1) {
                         winMonNum := GetWindowMonitorNumber(windowID)
-                        currentMon := MWAGetMonitorMouseIsIn()
 
                         If (winMonNum == currentMon) {
                             WinRestore, ahk_id %windowID%
@@ -4968,7 +4992,6 @@ $~^LButton::
                     }
                     else if (windowState == 0) {
                         if (MonCount > 1) {
-                            currentMon          := MWAGetMonitorMouseIsIn()
                             currentMonHasActWin := IsWindowOnMonNum(windowID, currentMon)
                             if currentMonHasActWin
                                 WinActivate, ahk_id %windowID%
@@ -4979,10 +5002,12 @@ $~^LButton::
                     }
                 }
                 WinActivate, ahk_id %targetID%
+                WinSet, AlwaysOnTop, Off, ahk_id %targetID%
             }
         }
     }
     else if (clickedTitleBar) {
+        Send, {Ctrl UP}
         targetID := FindTopMostWindow()
         WinGetClass, targetClass, ahk_id %targetID%
         WinGet, targetProcess, ProcessName, ahk_id %targetID%
@@ -4990,7 +5015,7 @@ $~^LButton::
         BringAppWindowsOnMonitorToTop(targetProcess, targetClass, currentMon, targetID)
     }
 
-    KeyWait, Ctrl, U T10
+    KeyWait, Ctrl, U
     FixModifiers()
 
     StopRecursion := False
@@ -6890,6 +6915,41 @@ VolumeHover() {
 }
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+IsCustomPopupAppWindow(windowHandle) {
+    WinGet, windowStyle, Style, ahk_id %windowHandle%
+    WinGet, windowExStyle, ExStyle, ahk_id %windowHandle%
+
+    ; Standard window style bits
+    WS_POPUP := 0x80000000
+    WS_CHILD := 0x40000000
+    WS_VISIBLE := 0x10000000
+    WS_DISABLED := 0x08000000
+    WS_THICKFRAME := 0x00040000
+    WS_MAXIMIZEBOX := 0x00010000
+
+    ; Extended window style bits
+    WS_EX_TOPMOST := 0x00000008
+    WS_EX_TOOLWINDOW := 0x00000080
+    WS_EX_APPWINDOW := 0x00040000
+
+    requiredStyleBits := WS_POPUP | WS_VISIBLE
+    rejectedStyleBits := WS_CHILD | WS_DISABLED | WS_THICKFRAME | WS_MAXIMIZEBOX
+
+    requiredExStyleBits := WS_EX_TOPMOST | WS_EX_APPWINDOW
+    rejectedExStyleBits := WS_EX_TOOLWINDOW
+
+    hasRequiredStyle := ((windowStyle & requiredStyleBits) = requiredStyleBits)
+    hasRejectedStyle := ((windowStyle & rejectedStyleBits) != 0)
+
+    hasRequiredExStyle := ((windowExStyle & requiredExStyleBits) = requiredExStyleBits)
+    hasRejectedExStyle := ((windowExStyle & rejectedExStyleBits) != 0)
+
+    return (hasRequiredStyle
+        && !hasRejectedStyle
+        && hasRequiredExStyle
+        && !hasRejectedExStyle)
+}
+
 IsOverException(hWnd := "") {
     If (hWnd == "")
         MouseGetPos, , , hwndID, ctrlNN
@@ -8206,7 +8266,7 @@ ClearClassicEditableControl(windowId, controlClassNN, controlHwnd) {
     return false
 }
 
-MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
+MouseIsOverTitleBar(xPos := "", yPos := "", excludeCaptions := True) {
     global UIA
 
     if !( GetKeyState("Wheeldown","P") || GetKeyState("Wheelup","P") || GetKeyState("LButton","P") || GetKeyState("RButton","P") || GetKeyState("MButton","P") )
@@ -8240,7 +8300,7 @@ MouseIsOverTitleBar(xPos := "", yPos := "", ignoreCaptions := True) {
         SysGet, SM_CXSIZEFRAME, 32
         SysGet, SM_CYSIZEFRAME , 33
 
-        If ignoreCaptions
+        If excludeCaptions
             widthOfCaptions := SM_CXBORDER+(45*3)
         Else
             widthOfCaptions := 0
@@ -8344,9 +8404,9 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
 
     CoordMode, Mouse, Screen
     if (xPos = "" || yPos = "") {
-        MouseGetPos, xPos, yPos, windowUnderMouseId
+        MouseGetPos, xPos, yPos, windowUnderMouseId, ctrlNNUnderMouse
     } else {
-        MouseGetPos, , , windowUnderMouseId
+        MouseGetPos, , , windowUnderMouseId, ctrlNNUnderMouse
     }
 
     If (!IsAltTabWindow(WindowUnderMouseID))
@@ -8365,6 +8425,20 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
         SendMessage, 0x84, 0, (xPos & 0xFFFF) | (yPos & 0xFFFF)<<16,, ahk_id %WindowUnderMouseID%, , , , 500
         If (((yPos > y) && (yPos < (y+titlebarHeight))) && ((ErrorLevel == 8) || (ErrorLevel == 9) || (ErrorLevel == 20)))
             Return True
+        ; Only run the WhichButton() fallback inside the actual top-right caption-button strip.
+        ; Otherwise text under the mouse (for example source code containing the word
+        ; "minimize") can be mistaken for a caption button name.
+        Else If (ctrlNNUnderMouse != ""
+                && (yPos > y) && (yPos < (y+titlebarHeight))
+                && (xPos > (x+w-(3*45)))) {
+            vName := WhichButton(xPos, yPos, windowUnderMouseId)
+            if (   InStr(vName, "minimize", false)
+                || InStr(vName, "maximize", false)
+                || InStr(vName, "restore",  false)
+                || InStr(vName, "close",    false))
+                Return True
+            Return False
+        }
         Else If ((ErrorLevel != 12)
                 && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45)))) {
             ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME%
@@ -8385,32 +8459,22 @@ IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
     If (state == -1)
         Return True
 
-    ;Get number of monitor
-    SysGet, monCount, MonitorCount
+    if (targetMonNum < 1)
+        Return False
 
     ; WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
     WinGetPosEx(thisWindowHwnd, X, Y, W, H)
-    ;Iterate through each monitor
-    Loop, %monCount% {
-        Critical, On
-        ;Get Monitor working area
-        If (A_Index == targetMonNum) {
-            SysGet, workArea, Monitor, % A_Index
+    if (W <= 0 || H <= 0)
+        Return False
 
-            ; tooltip, % targetMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom
+    Critical, On
+    SysGet, workArea, Monitor, %targetMonNum%
 
-            ;Check If the focus window in on the current monitor index
-            ; https://math.stackexchange.com/questions/2449221/calculating-percentage-of-overlap-between-two-rectangles
-            If ((A_Index == targetMonNum) && ((max(X, workAreaLeft) - min(X+W,workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom)))/(W*H) > 0.50 ) {
-
-                ; tooltip, % targetMonNum " : " X " " Y " " W " " H " | " workAreaLeft " , " workAreaTop " , " abs(workAreaRight-workAreaLeft) " , " workAreaBottom " -- " "True"
-                Critical, Off
-                Return True
-            }
-        }
-    }
+    ;Check If the focus window in on the requested monitor index
+    ; https://math.stackexchange.com/questions/2449221/calculating-percentage-of-overlap-between-two-rectangles
+    overlapRatio := ((max(X, workAreaLeft) - min(X+W, workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom))) / (W * H)
     Critical, Off
-    Return False
+    Return (overlapRatio > 0.50)
 }
 
 FindMonNumForWindows(thisWindowHwnd) {
@@ -8505,20 +8569,34 @@ GetWindowMonitorNumber(windowHwnd) {
 MWAGetMonitorMouseIsIn(buffer := 0) ; we didn't actually need the "Monitor = 0"
 {
     global currMonWidth, currMonHeight
+    static cachedMonitorCount := 0
+    static cachedMonitors := []
     ; get the mouse coordinates first
     Coordmode, Mouse, Screen    ; use Screen, so we can compare the coords with the sysget information`
     MouseGetPos, Mx, My
     ActiveMon := 0
 
     SysGet, MonitorCount, 80    ; monitorcount, so we know how many monitors there are, and the number of loops we need to do
+    if (MonitorCount != cachedMonitorCount || cachedMonitors.MaxIndex() != MonitorCount) {
+        cachedMonitors := []
+        Loop, %MonitorCount%
+        {
+            SysGet, mon, Monitor, %A_Index%    ; "Monitor" will get the total desktop space of the monitor, including taskbars
+            cachedMonitors[A_Index] := { "left": monLeft
+                , "top": monTop
+                , "right": monRight
+                , "bottom": monBottom }
+        }
+        cachedMonitorCount := MonitorCount
+    }
+
     Loop, %MonitorCount%
     {
-        SysGet, mon%A_Index%, Monitor, %A_Index%    ; "Monitor" will get the total desktop space of the monitor, including taskbars
-
-        If ( Mx >= (mon%A_Index%left + buffer) ) && ( Mx < (mon%A_Index%right - buffer) ) && ( My >= (mon%A_Index%top + buffer) ) && ( My < (mon%A_Index%bottom - buffer) )
+        mon := cachedMonitors[A_Index]
+        If ( Mx >= (mon.left + buffer) ) && ( Mx < (mon.right - buffer) ) && ( My >= (mon.top + buffer) ) && ( My < (mon.bottom - buffer) )
         {
-            currMonHeight := abs(mon%A_Index%bottom - mon%A_Index%top)
-            currMonWidth  := abs(mon%A_Index%right  - mon%A_Index%left)
+            currMonHeight := abs(mon.bottom - mon.top)
+            currMonWidth  := abs(mon.right  - mon.left)
             ActiveMon := A_Index
             break
         }
@@ -8946,7 +9024,6 @@ ActivateTopMostWindow() {
 FindTopMostWindow() {
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
-    Critical, On
 
     targetID := 0
 
@@ -8976,7 +9053,6 @@ FindTopMostWindow() {
             }
         }
     }
-    Critical, Off
     Return targetID
 }
 
@@ -9262,6 +9338,96 @@ DialogHasAddressBar(hwndDlg)
     }
 
     return False
+}
+
+MoveMouseToDefaultDialogButton(hwndDlg := "", moveSpeed := 0)
+{
+    static BS_DEFPUSHBUTTON := 0x00000001
+    static DC_HASDEFID      := 0x534B
+    static DM_GETDEFID      := 0x0400
+    static GWL_STYLE        := -16
+    static SMTO_ABORTIFHUNG := 0x0002
+
+    ; If no dialog was supplied, target the current active window.
+    if (!hwndDlg)
+        WinGet, hwndDlg, ID, A
+
+    if (!hwndDlg || !DllCall("user32\IsWindow", "Ptr", hwndDlg, "Int"))
+        return 0
+
+    btnHwnd       := 0
+    firstButton   := 0
+    msgResult     := 0
+    defaultCtrlId := 0
+
+    ; Ask the dialog manager which control currently owns the default-button role.
+    ok := DllCall("user32\SendMessageTimeoutW"
+        , "Ptr", hwndDlg
+        , "UInt", DM_GETDEFID
+        , "Ptr", 0
+        , "Ptr", 0
+        , "UInt", SMTO_ABORTIFHUNG
+        , "UInt", 50
+        , "UPtr*", msgResult)
+
+    if (ok && (((msgResult >> 16) & 0xFFFF) = DC_HASDEFID))
+        defaultCtrlId := msgResult & 0xFFFF
+
+    WinGet, listH, ControlListHwnd, ahk_id %hwndDlg%
+    Loop, Parse, listH, `n, `r
+    {
+        h := A_LoopField + 0
+        if (!h)
+            continue
+
+        if (GetClassName(h) != "Button")
+            continue
+
+        if !DllCall("user32\IsWindowVisible", "Ptr", h, "Int")
+            continue
+
+        if !DllCall("user32\IsWindowEnabled", "Ptr", h, "Int")
+            continue
+
+        if (!firstButton)
+            firstButton := h
+
+        if (defaultCtrlId && DllCall("user32\GetDlgCtrlID", "Ptr", h, "Int") = defaultCtrlId) {
+            btnHwnd := h
+            break
+        }
+
+        style := DllCall(A_PtrSize = 8 ? "user32\GetWindowLongPtrW" : "user32\GetWindowLongW"
+            , "Ptr", h
+            , "Int", GWL_STYLE
+            , "Ptr")
+
+        if (!btnHwnd && ((style & 0xF) = BS_DEFPUSHBUTTON))
+            btnHwnd := h
+    }
+
+    if (!btnHwnd)
+        btnHwnd := firstButton
+
+    if (!btnHwnd)
+        return 0
+
+    WinGetPos, bx, by, bw, bh, ahk_id %btnHwnd%
+    if (bw = "" || bh = "")
+        return 0
+
+    targetPosX := bx + Floor(bw / 2)
+    targetPosY := by + Floor(bh / 2)
+
+    if (moveSpeed > 0) {
+        CoordMode, Mouse, Screen
+        MouseMove, %targetPosX%, %targetPosY%, %moveSpeed%
+    }
+    else {
+        DllCall("user32\SetCursorPos", "Int", targetPosX, "Int", targetPosY)
+    }
+
+    return btnHwnd
 }
 
 GetDialogBreadcrumbText(hwndDlg)
@@ -9573,6 +9739,20 @@ IsEditCtrl() {
     ControlGetFocus, whatCtrl, A
 
     Return InStr(whatCtrl,"Edit", True) && !InStr(whatCtrl, "Rich", True)
+}
+
+MouseIsOverAnyTaskbarSurface() {
+    CoordMode, Mouse, Screen
+    MouseGetPos, , , windowUnderMouseId
+    if (!windowUnderMouseId)
+        return False
+
+    WinGetClass, windowClass, ahk_id %windowUnderMouseId%
+    return (windowClass == "Shell_TrayWnd"
+         || windowClass == "Shell_SecondaryTrayWnd"
+         || windowClass == "TaskListThumbnailWnd"
+         || windowClass == "Windows.UI.Core.CoreWindow"
+         || windowClass == "XamlExplorerHostIslandWindow")
 }
 
 MouseIsOverTaskbarTray() {
