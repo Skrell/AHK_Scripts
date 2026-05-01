@@ -1150,7 +1150,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             LbuttonEnabled := True
             Thread, NoTimers, False
             ; tooltip, sent to %initFocusedCtrl%
-            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl)
+            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl, (vWinClass == "CabinetWClass" || vWinClass == "#32770"))
 
             DetectHiddenWindows, On
             i := 1
@@ -6829,14 +6829,17 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             OutputVar3    := 1
             TargetControl := initFocusedCtrlNN
         }
-        If ((lClassCheck != "CabinetWClass" && lClassCheck != "#32770") && TargetControl != "" && GetCtrlNNsByPrefixMinSize(initTargetHwnd, TargetControl, 400, 180) == "") {
-            TargetControl := ""
-            OutputVar1    := 0
-            OutputVar2    := 0
-            OutputVar3    := 0
-            OutputVar4    := 0
-            OutputVar6    := 0
-            OutputVar8    := 0
+        If ((lClassCheck != "CabinetWClass" && lClassCheck != "#32770") && TargetControl != "") {
+            ControlGetPos, , , ctrlWidth, ctrlHeight, %TargetControl%, ahk_id %initTargetHwnd%
+            if (ctrlWidth < 400 || ctrlHeight < 180) {
+                TargetControl := ""
+                OutputVar1    := 0
+                OutputVar2    := 0
+                OutputVar3    := 0
+                OutputVar4    := 0
+                OutputVar6    := 0
+                OutputVar8    := 0
+            }
         }
 
         If (TargetControl == "") {
@@ -6917,9 +6920,6 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
             Return
 
-        WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
-        WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
-
         ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (didNavigate)
@@ -6940,9 +6940,13 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
+            WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
+            WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
             ; tooltip, here7c
-            if (didNavigate)
-                WaitForExplorerLoad(initTargetHwnd)
+            if (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
+                if (didNavigate)
+                    WaitForExplorerLoad(initTargetHwnd)
+            }
         }
         Else {
             ; tooltip, here7d targeted is %TargetControl% with init at %initFocusedCtrlNN%
