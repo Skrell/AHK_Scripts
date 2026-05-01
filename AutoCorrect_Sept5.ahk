@@ -137,7 +137,7 @@ Global rightButtonSuppressMenuOnUp         := false
 Global rightButtonTaskbarPassthrough       := false
 Global rightButtonStartPosX                := 0
 Global rightButtonStartPosY                := 0
-Global rightButtonDragThreshold            := 4
+Global rightButtonDragThreshold            := 10
 
 ; Used only for explicit title-bar chords such as LButton+RButton.
 Global suppressRightButtonLogic            := false
@@ -161,12 +161,34 @@ Menu, Tray, Add, List Vars, listVars_label
 Menu, Tray, Add, List Lines, listLines_label
 Menu, Tray, Click, 1
 
+; Keep the real Tray menu for AutoHotkey's built-in tray bookkeeping, but show a
+; separate normal popup menu when the user right-clicks the icon. A normal menu
+; obeys TrackPopupMenuEx alignment flags, which lets us anchor it flush to the
+; top edge of the bottom taskbar.
+Menu, TrayPopup, Add, Run at startup, Startup
+Menu, TrayPopup, Add, &Suspend, Suspend_label
+Menu, TrayPopup, Add, Reload, Reload_label
+Menu, TrayPopup, Add, Exit, Exit_label
+Menu, TrayPopup, Default, &Suspend
+Menu, TrayPopup, Add
+Menu, TrayPopup, Add, Key History, keyhist_label
+Menu, TrayPopup, Add, List Hotkeys, listHotkeys_label
+Menu, TrayPopup, Add, List Vars, listVars_label
+Menu, TrayPopup, Add, List Lines, listLines_label
+
 link := A_Startup . "\AutoCorrect.lnk"
 runAtStartup := FileExist(link) ? 1 : 0
 if (runAtStartup)
     Menu, Tray, Check, Run at startup
 else
     Menu, Tray, Uncheck, Run at startup
+
+; Mirror the initial check state into TrayPopup so both menus stay visually in
+; sync even though only TrayPopup is shown by the custom right-click handler.
+if (runAtStartup)
+    Menu, TrayPopup, Check, Run at startup
+else
+    Menu, TrayPopup, Uncheck, Run at startup
 ; listens for tray icon notifications
 ; - watch for message 0x404
 ; - sent to your script window
@@ -429,23 +451,32 @@ Return
 HandleTrayIconMessage(wParam, lParam, msg, hwnd) {
     static WM_RBUTTONDOWN := 0x204
     static WM_RBUTTONUP := 0x205
-    static lastShowTick := 0
 
+    ; 0x404 is the script's tray-icon callback message. Windows calls us here
+    ; whenever the user interacts with the tray icon, and lParam tells us which
+    ; mouse message triggered the callback.
     if (lParam = WM_RBUTTONDOWN)
-        return 0
+        ; Swallow the native tray right-button-down because we want to fully own
+        ; the menu behavior and position it ourselves instead of using the stock
+        ; AutoHotkey tray popup location.
+        return 1
 
     if (lParam = WM_RBUTTONUP) {
-        if (A_TickCount - lastShowTick < 150)
-            return 0
-
-        lastShowTick := A_TickCount
-
+        ; Show the tray menu on button-up, which matches normal shell behavior.
+        ; At this point we capture the click position and queue the popup for the
+        ; next tick so the shell callback can unwind before TrackPopupMenuEx runs.
         CoordMode, Mouse, Screen
         MouseGetPos, trayClickPosX, trayClickPosY
-        ShowTrayMenuAtTaskbar()
-        return 0
+        SetTimer, __DeferredShowTrayMenuAtTaskbar, -1
+        return 1
     }
 }
+
+__DeferredShowTrayMenuAtTaskbar:
+    ; Queue the popup outside the tray callback itself so the shell can finish
+    ; delivering the click message before TrackPopupMenuEx starts its modal loop.
+    ShowTrayMenuAtTaskbar()
+Return
 
 ShowTrayMenuAtTaskbar() {
     global trayClickPosX
@@ -454,41 +485,18 @@ ShowTrayMenuAtTaskbar() {
     clickPosX := trayClickPosX
     clickPosY := trayClickPosY
 
+    ; The taskbar is always assumed to be bottom-docked, so show a normal popup
+    ; menu with TPM_BOTTOMALIGN at the taskbar's top edge.
     WinGetPos, trayPosX, trayPosY, trayWidth, trayHeight, ahk_class Shell_TrayWnd
     if (ErrorLevel) {
-        ShowMenuX("Tray", clickPosX, clickPosY)
+        ShowMenuX("TrayPopup", clickPosX, clickPosY, 0x20)
         return
     }
 
-    if (trayPosY + trayHeight >= A_ScreenHeight) {
-        trayIconLeftOffset := 12
-        menuPosX := clickPosX - trayIconLeftOffset
-        menuPosY := trayPosY
-        menuFlags := 0x20
-        ShowMenuX("Tray", menuPosX, menuPosY, menuFlags)
-        return
-    }
-
-    if (trayPosY <= 0) {
-        menuPosX := clickPosX
-        menuPosY := trayPosY + trayHeight
-        menuFlags := 0x00
-        ShowMenuX("Tray", menuPosX, menuPosY, menuFlags)
-        return
-    }
-
-    if (trayPosX <= 0) {
-        menuPosX := trayPosX + trayWidth
-        menuPosY := clickPosY
-        menuFlags := 0x00
-        ShowMenuX("Tray", menuPosX, menuPosY, menuFlags)
-        return
-    }
-
-    menuPosX := trayPosX
-    menuPosY := clickPosY
-    menuFlags := 0x08
-    ShowMenuX("Tray", menuPosX, menuPosY, menuFlags)
+    trayIconLeftOffset := 12
+    menuPosX := clickPosX - trayIconLeftOffset
+    menuPosY := trayPosY
+    ShowMenuX("TrayPopup", menuPosX, menuPosY, 0x20)
 }
 
 ; Helper to resolve exports
@@ -726,11 +734,15 @@ Startup:
 
         FileCreateShortcut, %target%, %link%
         Menu, Tray, Check, Run at startup
+        ; Keep the mirrored popup menu's checkmark matched to the real tray item.
+        Menu, TrayPopup, Check, Run at startup
 
     } else {
         IfExist, %link%
             FileDelete, %link%
         Menu, Tray, Uncheck, Run at startup
+        ; Keep the mirrored popup menu's checkmark matched to the real tray item.
+        Menu, TrayPopup, Uncheck, Run at startup
     }
 Return
 
@@ -746,6 +758,9 @@ Return
 
 Suspend_label:
     Menu, Tray, Togglecheck, &Suspend
+    ; Toggle the mirrored popup menu too so its state always matches the real
+    ; tray item regardless of which menu the user interacted with.
+    Menu, TrayPopup, Togglecheck, &Suspend
     Suspend
 Return
 
@@ -1415,20 +1430,25 @@ RWin::Return
 #If VolumeHover()
 $WheelUp::send {Volume_Up}
 $WheelDown::send {Volume_Down}
+#If MouseIsOverAnyTaskbarSurface()
+
+~*RButton::
+    ; Track taskbar-originated holds without taking ownership of the click itself.
+    ; The tilde lets Windows receive the real taskbar right-click natively.
+    rightButtonTaskbarPassthrough := true
+return
+
 #If
+
+~*RButton Up::
+    if (rightButtonTaskbarPassthrough)
+        rightButtonTaskbarPassthrough := false
+return
+
+#If !MouseIsOverAnyTaskbarSurface()
 
 $*RButton::
     ; tooltip, % "DOWN sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
-
-    ; Taskbar right-clicks should remain fully native, so bypass the custom RButton state
-    ; machine entirely and just mirror the physical down/up transitions there.
-    if (MouseIsOverAnyTaskbarSurface()) {
-        if (rightButtonHeld || rightButtonComboUsed || rightButtonDragging || rightButtonNativeDown || suppressRightButtonLogic)
-            ResetRightButtonState(true)
-        rightButtonTaskbarPassthrough := true
-        SendInput, {RButton Down}
-        return
-    }
 
     ; While MButton window-drag mode is active, ignore plain RButton handling entirely.
     if (suspendRightButtonForMButtonDrag) {
@@ -1482,12 +1502,6 @@ return
 
 $*RButton Up::
     ; tooltip, % "UP sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
-
-    if (rightButtonTaskbarPassthrough) {
-        rightButtonTaskbarPassthrough := false
-        SendInput, {RButton Up}
-        return
-    }
 
     ; MButton drag mode owns the hold, so an RButton release should not complete a click here.
     if (suspendRightButtonForMButtonDrag) {
@@ -6220,6 +6234,17 @@ $~LButton::
                 ; cname := SafeUIA_GetName(pt, "")
                 ; Cache risky UIA properties ONCE
                 ; tooltip, % "line4 - " pt.CurrentControlType
+                if (_winClassD == "CabinetWClass"
+                 && isWin11
+                 && isModernExplorerInReg
+                 && InStr(_winCtrlU, "DirectUIHWND", True)
+                 && ctype == 50026) {
+                    EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
+                    Sleep, 75
+                    Send, ^{NumpadAdd}
+                    return
+                }
+
                 If (ctype == "" || ctype > 50035 || (ctype > 50008 && ctype < 50031)) {
                     ; DO NOTHING
                 }
@@ -6267,7 +6292,7 @@ $~LButton::
             }
             Else {
                 If InStr(cname, "Refresh", True) {
-                    SendCtrlAdd(_winIdU, , , _winClassD)
+                    SendCtrlAdd(_winIdU, , , _winClassD, "", True)
                 }
                 Else If (  (ctype == 50000) ; handles explorer based buttons
                         || (ctype == 50011) ; handles #32770 breadcrumb bar
@@ -6300,7 +6325,7 @@ $~LButton::
                 sleep, 15
             }
             ; tooltip, sending
-            SendCtrlAdd(_winIdU, prevPath, currentPath, _winClassD, _winCtrlU)
+            SendCtrlAdd(_winIdU, prevPath, currentPath, _winClassD, _winCtrlU, True)
         }
     }
     Else If (InStr(_winCtrlU, "SysHeader", True) && (abs(lbX1-lbX2) >= 15 || abs(lbY1-lbY2) >= 15)) { ; dragged to size one of the header columns
@@ -6695,7 +6720,53 @@ GetCtrlNNsByPrefix(hwndTop, classPrefix)
     return out
 }
 
-SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "") {
+; Returns matching ClassNNs whose visible area is large enough to behave like a real file/details view.
+GetCtrlNNsByPrefixMinSize(hwndTop, classPrefix, minWidth := 400, minHeight := 180)
+{
+    static cache := {}
+
+    if (!hwndTop)
+        return ""
+
+    cacheKey := hwndTop "|" classPrefix "|" minWidth "|" minHeight
+    if (cache.HasKey(cacheKey)) {
+        cacheItem := cache[cacheKey]
+        if ((A_TickCount - cacheItem.tick) < 250 && WinExist("ahk_id " . hwndTop))
+            return cacheItem.value
+    }
+
+    WinGet, listC, ControlList,     ahk_id %hwndTop%
+    WinGet, listH, ControlListHwnd, ahk_id %hwndTop%
+    prefixLen := StrLen(classPrefix)
+    ctrlNNs   := StrSplit(RTrim(listC, "`r`n"), "`n", "`r")
+    ctrlHwnds := StrSplit(RTrim(listH, "`r`n"), "`n", "`r")
+
+    out := ""
+    Loop, % ctrlHwnds.Length()
+    {
+        hCtl := ctrlHwnds[A_Index] + 0
+        if (!hCtl)
+            continue
+
+        cls := GetClassName(hCtl)
+        if (SubStr(cls, 1, prefixLen) != classPrefix)
+            continue
+
+        ctrlNN := (A_Index <= ctrlNNs.Length()) ? ctrlNNs[A_Index] : ""
+        if (ctrlNN = "")
+            continue
+
+        ControlGetPos, , , ctrlWidth, ctrlHeight, %ctrlNN%, ahk_id %hwndTop%
+        if (ctrlWidth >= minWidth && ctrlHeight >= minHeight)
+            out .= ctrlNN " "
+    }
+
+    out := RTrim(out, " ")
+    cache[cacheKey] := { tick: A_TickCount, value: out }
+    return out
+}
+
+SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False) {
     global UIA, isWin11, blockKeys
 
     TargetControl := ""
@@ -6705,7 +6776,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     OutputVar4    := 0
     OutputVar6    := 0
     OutputVar8    := 0
-    didNavigate   := (prevPath != "" && currentPath != "" && prevPath != currentPath)
+    didNavigate   := forceExplorerWait || (prevPath != "" && currentPath != "" && prevPath != currentPath)
 
     If (initTargetClass == "")
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
@@ -6758,9 +6829,26 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             OutputVar3    := 1
             TargetControl := initFocusedCtrlNN
         }
-        Else {
-            DirectUICtrls := GetCtrlNNsByPrefix(initTargetHwnd, "DirectUIHWND")
-            SysListCtrls  := GetCtrlNNsByPrefix(initTargetHwnd, "SysListView32")
+        If ((lClassCheck != "CabinetWClass" && lClassCheck != "#32770") && TargetControl != "" && GetCtrlNNsByPrefixMinSize(initTargetHwnd, TargetControl, 400, 180) == "") {
+            TargetControl := ""
+            OutputVar1    := 0
+            OutputVar2    := 0
+            OutputVar3    := 0
+            OutputVar4    := 0
+            OutputVar6    := 0
+            OutputVar8    := 0
+        }
+
+        If (TargetControl == "") {
+            if (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
+                DirectUICtrls := GetCtrlNNsByPrefix(initTargetHwnd, "DirectUIHWND")
+                SysListCtrls  := GetCtrlNNsByPrefix(initTargetHwnd, "SysListView32")
+            }
+            else {
+                DirectUICtrls := GetCtrlNNsByPrefixMinSize(initTargetHwnd, "DirectUIHWND", 400, 180)
+                SysListCtrls  := GetCtrlNNsByPrefixMinSize(initTargetHwnd, "SysListView32", 400, 180)
+            }
+
             OutputVar1    := InStr(SysListCtrls,  "SysListView32", false) > 0
             OutputVar2    := InStr(DirectUICtrls, "DirectUIHWND2", false) > 0
             OutputVar3    := InStr(DirectUICtrls, "DirectUIHWND3", false) > 0
@@ -6842,7 +6930,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
-        Else If (TargetControl == "DirectUIHWND2" && lClassCheck == "#32770") {
+        Else If (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (didNavigate)
                 WaitForExplorerLoad(initTargetHwnd, True)
             ; tooltip, here7b targeted is %TargetControl% with init at %initFocusedCtrlNN%
@@ -7992,7 +8080,7 @@ MouseTrack() {
     ListLines On
 }
 
-ClearEditUnderMouseOnLButtonHold(holdDelay := 500, maxParentDepth := 4, moveTolerance := 3, focusDelay := 60, doubleClickTolerance := 6) {
+ClearEditUnderMouseOnLButtonHold(holdDelay := 550, maxParentDepth := 4, moveTolerance := 5, focusDelay := 60, doubleClickTolerance := 6) {
     ; Tracks when the current hold started.
     static holdStartTick     := 0
 
@@ -8173,13 +8261,9 @@ ClearEditUnderMouseOnLButtonHold(holdDelay := 500, maxParentDepth := 4, moveTole
     ; actual Ctrl+A / Delete until a later call after focusDelay has elapsed.
     if IsObject(editElement) {
         try
-        {
             editElement.SetFocus()
-        }
         catch
-        {
             return false
-        }
 
         pendingAction := true
         pendingActionTick := A_TickCount
@@ -9032,6 +9116,7 @@ FindTopMostWindow() {
     targetID := 0
 
     WinGet, winList, List,
+    currentMon := MWAGetMonitorMouseIsIn()
     Loop, %winList%
     {
         hwndID := winList%A_Index%
@@ -9044,7 +9129,6 @@ FindTopMostWindow() {
 
             If (mmState > -1) {
                 If (MonCount > 1) {
-                    currentMon          := MWAGetMonitorMouseIsIn()
                     currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
                 }
                 Else
@@ -9061,14 +9145,14 @@ FindTopMostWindow() {
 }
 
 FindSecondMostWindow(ref_hwndID := "") {
-    firstFound := False
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
-    Critical, On
 
-    targetID := 0
+    firstFound := False
+    targetID   := 0
 
     WinGet, winList, List,
+    currentMon := MWAGetMonitorMouseIsIn()
     Loop, %winList%
     {
         hwndID := winList%A_Index%
@@ -9081,31 +9165,34 @@ FindSecondMostWindow(ref_hwndID := "") {
 
             If (mmState > -1) {
                 If (MonCount > 1) {
-                    currentMon          := MWAGetMonitorMouseIsIn()
                     currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
                 }
                 Else {
                     currentMonHasActWin := True
                 }
+                ; ref_hwndID is an optional anchor window:
+                ; - blank: return the second eligible window overall
+                ; - non-blank: return the first eligible window after ref_hwndID
                 If !ref_hwndID {
                     If (!firstFound && currentMonHasActWin)
                         firstFound := True
-                    Else If (firstFound && currentMonHasActWin)
+                    Else If (firstFound && currentMonHasActWin) {
                         targetID := hwndID
                         break
+                    }
                 }
                 Else {
                     If (hwndID == ref_hwndID) {
                         firstFound := True
                     }
-                    Else If (firstFound && currentMonHasActWin)
+                    Else If (firstFound && currentMonHasActWin) {
                         targetID := hwndID
                         break
+                    }
                 }
             }
         }
     }
-    Critical, Off
     Return targetID
 }
 
