@@ -128,16 +128,14 @@ Global Opacity                             := 220     ; 255=opaque black; try 20
 ; - held/nativeDown track whether we have started a real OS-level right-click yet.
 ; - comboUsed suppresses the fallback Click, Right path when the hold was consumed by a combo.
 ; - suppressMenuOnUp dismisses the shell context menu after a successful RButton+wheel action.
-; - taskbarPassthrough keeps the entire custom RButton state machine out of taskbar clicks.
+; - taskbarPassthrough keeps the entire custom RButton state machine out of taskbar
+;   and desktop-shell clicks so those surfaces stay fully native.
 Global rightButtonHeld                     := false
 Global rightButtonComboUsed                := false
-Global rightButtonDragging                 := false
 Global rightButtonNativeDown               := false
 Global rightButtonSuppressMenuOnUp         := false
 Global rightButtonTaskbarPassthrough       := false
-Global rightButtonStartPosX                := 0
-Global rightButtonStartPosY                := 0
-Global rightButtonDragThreshold            := 10
+Global swallowNextRButtonUpFromMButtonDrag := false
 
 ; Used only for explicit title-bar chords such as LButton+RButton.
 Global suppressRightButtonLogic            := false
@@ -1430,11 +1428,161 @@ RWin::Return
 #If VolumeHover()
 $WheelUp::send {Volume_Up}
 $WheelDown::send {Volume_Down}
-#If MouseIsOverAnyTaskbarSurface()
+
+#If MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()
+/*
+HIGH-LEVEL HOTKEY RELATIONSHIPS
+===============================
+
+                                   Physical mouse input
+                                            |
+         +----------------------------------+----------------------------------+
+         |                                  |                                  |
+         |                                  |                                  |
+         |                                  |                                  |
+   LButton + RButton                    MButton                             RButton
+   on title bar                         pressed                             pressed
+         |                                  |                                  |
+         |                                  |                                  |
+         v                                  v                                  v
+A) Title-bar chord                 B) MButton move/resize              C) RButton system
+------------------                 ----------------------              ------------------
+~LButton & RButton::               $*MButton::                         surface check
+         |                                  |                                  |
+         +--> sets                          +--> becomes                       +--> taskbar or desktop shell?
+              suppressRight...                   temporary owner                   |
+              rightButtonComboUsed               of RButton                        +--> YES
+         |                                  |                                      |    ~*RButton
+         +--> if standalone                 +--> sets:                             |    native Windows right-click
+              $*RButton:: also runs         |     suspendRightButton...            |    RButton+Wheel stays native
+              and still sees the flag       |     swallowNextRButton...            |
+              it exits early as             |     WatchMButtonOverrideState        +--> NO
+              consumed/special              |                                            |
+         |                                  +--> while active, plain                     v
+         +--> cleanup handled               |     $*RButton:: / $*RButton Up::       $*RButton::
+              later by $*RButton Up         |     mostly short-circuit                   |
+              + ResetRightButtonState       |                                            +--> may be redirected by:
+                                            +--> if RButton participates                       suppressRightButtonLogic
+                                                 in resize gesture, mark                       suspendRightButtonForMButtonDrag
+                                                 next RButton Up to swallow                    stale-state cleanup
+                                            |
+                                            +--> normal exit clears temporary state
+                                            |
+                                            +--> WatchMButtonOverrideState is only
+                                                 cleanup insurance if MButton exits oddly
+
+RButton system (non-taskbar / non-desktop)
+==========================================
+
+$*RButton::
+        |
+        +--> title-bar chord already claimed this press?
+        |        |
+        |        +--> YES -> mark hold consumed, start watchdog, return
+        |
+        +--> MButton mode currently owns RButton?
+        |        |
+        |        +--> YES -> return
+        |
+        +--> otherwise start normal custom RButton hold
+                 |
+                 +--> over shell item?
+                 |        |
+                 |        +--> YES
+                 |        |      send native {RButton Down} immediately
+                 |        |      so Explorer/Desktop right-drag works
+                 |        |
+                 |        +--> NO
+                 |               keep hold script-owned
+                 |               wait for either:
+                 |               - RButton Up
+                 |               - RButton + Wheel
+                 |
+                 +--> start WatchRightButtonState
+
+
+RButton + Wheel relationship
+============================
+
+#If GetKeyState("RButton", "P")
+WheelUp:: / WheelDown::
+        |
+        +--> if taskbar/desktop passthrough hold
+        |        |
+        |        +--> send native wheel and return
+        |
+        +--> otherwise try custom action
+                 |
+                 +--> if custom action will really execute
+                          |
+                          +--> rightButtonComboUsed := true
+                          +--> rightButtonSuppressMenuOnUp := true
+                          +--> send replacement navigation keys
+                              (PgUp/PgDn/Home/End variants)
+
+
+Release / cleanup relationship
+==============================
+
+$*RButton Up::
+        |
+        +--> if MButton resize marked this Up to swallow
+        |        |
+        |        +--> consume and return
+        |
+        +--> if MButton mode still owns RButton
+        |        |
+        |        +--> return
+        |
+        +--> if title-bar chord claimed the hold
+        |        |
+        |        +--> ResetRightButtonState(false)
+        |        +--> return
+        |
+        +--> otherwise finish the normal RButton hold:
+                 |
+                 +--> if native {RButton Down} had been sent earlier
+                 |        |
+                 |        +--> send matching {RButton Up}
+                 |        +--> maybe send {Esc} if wheel combo consumed it
+                 |
+                 +--> else if hold was not consumed
+                 |        |
+                 |        +--> Click, Right
+                 |
+                 +--> ResetRightButtonState(false)
+
+
+Watchdogs
+=========
+
+WatchRightButtonState
+        |
+        +--> only protects custom RButton state
+        +--> if physical RButton is no longer down but state is still latched
+        +--> ResetRightButtonState(true)
+
+WatchMButtonOverrideState
+        |
+        +--> only protects temporary MButton ownership state
+        +--> if physical MButton is no longer down
+        +--> clear DraggingWindow / StopRecursion / suspendRightButtonForMButtonDrag
+
+
+ONE-SENTENCE MENTAL MODEL
+=========================
+
+- `~LButton & RButton` can pre-claim RButton for the title-bar chord.
+- `$*MButton::` can temporarily own and suppress normal RButton behavior.
+- `~*RButton` on taskbar/desktop just stays native.
+- otherwise `$*RButton::` owns the hold, and `WheelUp/WheelDown` may consume it.
+- `$*RButton Up::` resolves whatever owner/consumer path claimed that hold.
+
+*/
 
 ~*RButton::
-    ; Track taskbar-originated holds without taking ownership of the click itself.
-    ; The tilde lets Windows receive the real taskbar right-click natively.
+    ; Track taskbar/desktop-shell holds without taking ownership of the click itself.
+    ; The tilde lets Windows receive the real right-click natively on those surfaces.
     rightButtonTaskbarPassthrough := true
 return
 
@@ -1445,8 +1593,7 @@ return
         rightButtonTaskbarPassthrough := false
 return
 
-#If !MouseIsOverAnyTaskbarSurface()
-
+#If !MouseIsOverAnyTaskbarSurface() && !MouseIsOverDesktopShellSurface()
 $*RButton::
     ; tooltip, % "DOWN sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
 
@@ -1463,7 +1610,7 @@ $*RButton::
         suppressRightButtonLogic := false
 
     ; Heal any stale state before starting a fresh hold.
-    if (rightButtonHeld || rightButtonComboUsed || rightButtonDragging || rightButtonNativeDown)
+    if (rightButtonHeld || rightButtonComboUsed || rightButtonNativeDown)
         ResetRightButtonState(true)
 
     ; Title-bar combos consume the hold, so keep the watchdog running but skip normal behavior.
@@ -1474,11 +1621,10 @@ $*RButton::
         return
     }
 
-    ; Start a new hold in deferred mode. We only send a real RButton down immediately
+    ; Start a new script-owned hold. We only send a real RButton down immediately
     ; when the pointer is already over a shell item that must support right-drag.
     rightButtonHeld             := true
     rightButtonComboUsed        := false
-    rightButtonDragging         := false
     rightButtonNativeDown       := false
     rightButtonSuppressMenuOnUp := false
     SetTimer, WatchRightButtonState, 15
@@ -1494,14 +1640,21 @@ $*RButton::
         return
     }
 
-    ; Otherwise, defer the native right-click until the mouse actually moves far enough
-    ; to count as a drag. This prevents accidental context menus during button+wheel combos.
-    MouseGetPos, rightButtonStartPosX, rightButtonStartPosY
-    SetTimer, WatchRightButtonDrag, 10
+    ; Non-shell-item holds never become native drags. We keep the hold in script
+    ; state only so wheel combos can consume it; otherwise release falls back to
+    ; a plain Click, Right.
 return
 
 $*RButton Up::
     ; tooltip, % "UP sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
+
+    ; MButton resize/move mode may intentionally suppress RButton on the way down.
+    ; If that gesture used RButton, consume the matching up-event here so it does
+    ; not fall through to the normal Click, Right completion path.
+    if (swallowNextRButtonUpFromMButtonDrag) {
+        swallowNextRButtonUpFromMButtonDrag := false
+        return
+    }
 
     ; MButton drag mode owns the hold, so an RButton release should not complete a click here.
     if (suspendRightButtonForMButtonDrag) {
@@ -1517,7 +1670,6 @@ $*RButton Up::
         return
     }
 
-    SetTimer, WatchRightButtonDrag, Off
     SetTimer, WatchRightButtonState, Off
 
     ; If we already emitted a native RButton down, always balance it here. This is why
@@ -1579,24 +1731,23 @@ return
 #If GetKeyState("RButton", "P")
 
 WheelUp::
-    ; If the hold started on the taskbar, keep the entire RButton+wheel gesture native.
-    ; This prevents taskbar right-clicks from being repurposed into the custom paging path.
-    if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface()) {
+    ; If the hold started on the taskbar or desktop shell, keep the entire
+    ; RButton+wheel gesture native instead of repurposing it into the custom path.
+    if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()) {
         SendInput, {WheelUp}
         return
     }
 
     ; RButton+WheelUp scrolls/paginates while the hold remains "consumed" until release.
-    if (!rightButtonDragging && !VolumeHover() && !IsOverException() && !DraggingWindow) {
-        SetTimer, WatchRightButtonDrag, Off
+    if (!VolumeHover() && !IsOverException() && !DraggingWindow) {
         SetTimer, SendCtrlAddLabel, Off
 
-        targetHwnd := 0
-        targetPosX := ""
-        targetPosY := ""
-        targetWidth := ""
+        targetHwnd   := 0
+        targetPosX   := ""
+        targetPosY   := ""
+        targetWidth  := ""
         targetHeight := ""
-        zoneWidth := ""
+        zoneWidth    := ""
 
         isInScrollZone := IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12
             , targetHwnd, true
@@ -1641,24 +1792,23 @@ WheelUp::
 return
 
 WheelDown::
-    ; Same taskbar bypass as WheelUp: preserve the normal taskbar wheel behavior whenever
-    ; this RButton hold belongs to a taskbar interaction instead of the custom combo logic.
-    if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface()) {
+    ; Same bypass as WheelUp: preserve normal wheel behavior whenever this RButton hold
+    ; belongs to the taskbar or desktop shell instead of the custom combo logic.
+    if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()) {
         SendInput, {WheelDown}
         return
     }
 
     ; Same idea as WheelUp, but for downward paging/end navigation.
-    if (!rightButtonDragging && !VolumeHover() && !IsOverException() && !DraggingWindow) {
-        SetTimer, WatchRightButtonDrag, Off
+    if (!VolumeHover() && !IsOverException() && !DraggingWindow) {
         SetTimer, SendCtrlAddLabel, Off
 
-        targetHwnd := 0
-        targetPosX := ""
-        targetPosY := ""
-        targetWidth := ""
+        targetHwnd   := 0
+        targetPosX   := ""
+        targetPosY   := ""
+        targetWidth  := ""
         targetHeight := ""
-        zoneWidth := ""
+        zoneWidth    := ""
 
         isInScrollZone := IsMouseInVScrollZone_WinGetPosEx_Sys(10, 14, 12
             , targetHwnd, true
@@ -1816,9 +1966,8 @@ return
 
 ; Reset right-button script state if an up transition is missed.
 ResetRightButtonState(sendNativeUp := false) {
-    global rightButtonHeld, rightButtonComboUsed, rightButtonDragging, rightButtonNativeDown, rightButtonSuppressMenuOnUp, rightButtonTaskbarPassthrough, suppressRightButtonLogic
+    global rightButtonHeld, rightButtonComboUsed, rightButtonNativeDown, rightButtonSuppressMenuOnUp, rightButtonTaskbarPassthrough, suppressRightButtonLogic, swallowNextRButtonUpFromMButtonDrag
 
-    SetTimer, WatchRightButtonDrag, Off
     SetTimer, WatchRightButtonState, Off
 
     ; Optionally emit the missing native button-up so the shell is never left thinking
@@ -1829,13 +1978,13 @@ ResetRightButtonState(sendNativeUp := false) {
             SendInput, {Esc}
     }
 
-    rightButtonHeld             := false
-    rightButtonComboUsed        := false
-    rightButtonDragging         := false
-    rightButtonNativeDown       := false
-    rightButtonSuppressMenuOnUp := false
-    rightButtonTaskbarPassthrough := false
-    suppressRightButtonLogic    := false
+    rightButtonHeld                     := false
+    rightButtonComboUsed                := false
+    rightButtonNativeDown               := false
+    rightButtonSuppressMenuOnUp         := false
+    rightButtonTaskbarPassthrough       := false
+    suppressRightButtonLogic            := false
+    swallowNextRButtonUpFromMButtonDrag := false
 }
 
 WatchRightButtonState:
@@ -1843,32 +1992,8 @@ WatchRightButtonState:
     if (GetKeyState("RButton", "P"))
         return
 
-    if (rightButtonHeld || rightButtonComboUsed || rightButtonDragging || rightButtonNativeDown || suppressRightButtonLogic)
+    if (rightButtonHeld || rightButtonComboUsed || rightButtonNativeDown || suppressRightButtonLogic)
         ResetRightButtonState(true)
-return
-
-WatchRightButtonDrag:
-    ; Promote a deferred hold into a real drag once the pointer moves past the threshold.
-    if (!rightButtonHeld) {
-        SetTimer, WatchRightButtonDrag, Off
-        return
-    }
-
-    if (rightButtonComboUsed)
-        return
-
-    if (rightButtonNativeDown)
-        return
-
-    MouseGetPos, currentPosX, currentPosY
-
-    if (Abs(currentPosX - rightButtonStartPosX) >= rightButtonDragThreshold
-    || Abs(currentPosY - rightButtonStartPosY) >= rightButtonDragThreshold)
-    {
-        rightButtonDragging := true
-        rightButtonNativeDown := true
-        SendInput, {RButton Down}
-    }
 return
 
 AdjustColumns:
@@ -1957,6 +2082,7 @@ $*MButton::
     global DraggingWindow
 
     StopRecursion := True
+    swallowNextRButtonUpFromMButtonDrag := false
     ; While MButton window-drag mode is active, plain RButton should never enter its
     ; normal click/drag state machine. The watchdog clears this if MButton is released.
     suspendRightButtonForMButtonDrag := true
@@ -2074,6 +2200,8 @@ $*MButton::
 
         DraggingWindow := True
         isRbutton := GetKeyState("Rbutton","P")
+        if (isRbutton)
+            swallowNextRButtonUpFromMButtonDrag := true
         If (!isRbutton && isRbutton_last) {
             BlockInput, MouseMove
             sleep, 150
@@ -5136,7 +5264,7 @@ ExplorerHitTestType() {
     static ROLE_SYSTEM_SEPARATOR   := 0x0C
 
     CoordMode, Mouse, Screen
-    MouseGetPos, x, y, winHwnd
+    MouseGetPos, x, y, winHwnd, ctrlNN
     if (!winHwnd)
         return "other"
 
@@ -5145,9 +5273,13 @@ ExplorerHitTestType() {
         return "other"
 
     ; Get MSAA object under cursor
-    acc := Acc_ObjectFromPoint(x, y)
+    childId := 0
+    acc := Acc_ObjectFromPoint(childId, x, y)
     if !IsObject(acc)
         return "other"
+
+    if (childId > 0)
+        acc := Acc_CreateChildRef(acc, childId)
 
     ; Collect this object + its parents up to a small depth
     objs := []
@@ -5183,9 +5315,15 @@ ExplorerHitTestType() {
             hasToolbar := true
     }
 
-    ; --- Left navigation tree (anywhere within OUTLINEITEM subtree) ---
-    if (hasOutlineItem)
+    ; --- Left navigation tree ---
+    ; Modern shell views can sometimes expose actual file/folder items as OUTLINEITEM
+    ; too, especially through SysListView-based desktop/file views. Treat OUTLINEITEM
+    ; as navigation-tree only when the underlying control is not a list view.
+    if (hasOutlineItem && !InStr(ctrlNN, "SysListView32", True))
         return "navTreeItem"
+
+    if (startRole = ROLE_SYSTEM_OUTLINEITEM)
+        return "item"
 
     ; --- Direct checks on the object under cursor ---
     if (startRole = ROLE_SYSTEM_LIST)
@@ -6939,13 +7077,17 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
-        Else If ((lClassCheck == "CabinetWClass" || lClassCheck == "#32770") && (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True))) {
+        Else If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
             WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
             WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
             ; tooltip, here7c
             if (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
                 if (didNavigate)
                     WaitForExplorerLoad(initTargetHwnd)
+            }
+            else if (TargetControl != initFocusedCtrlNN) {
+
+                EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
             }
         }
         Else {
@@ -9848,6 +9990,16 @@ MouseIsOverAnyTaskbarSurface() {
          || windowClass == "TaskListThumbnailWnd"
          || windowClass == "Windows.UI.Core.CoreWindow"
          || windowClass == "XamlExplorerHostIslandWindow")
+}
+
+MouseIsOverDesktopShellSurface() {
+    CoordMode, Mouse, Screen
+    MouseGetPos, , , windowUnderMouseId
+    if (!windowUnderMouseId)
+        return False
+
+    WinGetClass, windowClass, ahk_id %windowUnderMouseId%
+    return (windowClass == "Progman" || windowClass == "ProgMan" || windowClass == "WorkerW")
 }
 
 MouseIsOverTaskbarTray() {
