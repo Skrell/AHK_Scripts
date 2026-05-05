@@ -137,7 +137,8 @@ Global rightButtonSuppressMenuOnUp         := false
 Global rightButtonTaskbarPassthrough       := false
 Global swallowNextRButtonUpFromMButtonDrag := false
 
-; Used only for explicit title-bar chords such as LButton+RButton.
+; Used by explicit LButton+RButton chords that should consume the normal
+; right-click flow, such as the title-bar toggle and clear-edit gesture.
 Global suppressRightButtonLogic            := false
 
 Process, Priority,, High
@@ -1441,12 +1442,12 @@ HIGH-LEVEL HOTKEY RELATIONSHIPS
          |                                  |                                  |
          |                                  |                                  |
    LButton + RButton                    MButton                             RButton
-   on title bar                         pressed                             pressed
+   chord                                pressed                             pressed
          |                                  |                                  |
          |                                  |                                  |
          v                                  v                                  v
-A) Title-bar chord                 B) MButton move/resize              C) RButton system
-------------------                 ----------------------              ------------------
+A) LButton+RButton chord           B) MButton move/resize              C) RButton system
+------------------------           ----------------------              ------------------
 ~LButton & RButton::               $*MButton::                         surface check
          |                                  |                                  |
          +--> sets                          +--> becomes                       +--> taskbar or desktop shell?
@@ -1476,7 +1477,7 @@ RButton system (non-taskbar / non-desktop)
 
 $*RButton::
         |
-        +--> title-bar chord already claimed this press?
+        +--> special LButton+RButton chord already claimed this press?
         |        |
         |        +--> YES -> mark hold consumed, start watchdog, return
         |
@@ -1534,7 +1535,7 @@ $*RButton Up::
         |        |
         |        +--> return
         |
-        +--> if title-bar chord claimed the hold
+        +--> if special LButton+RButton chord claimed the hold
         |        |
         |        +--> ResetRightButtonState(false)
         |        +--> return
@@ -1572,7 +1573,7 @@ WatchMButtonOverrideState
 ONE-SENTENCE MENTAL MODEL
 =========================
 
-- `~LButton & RButton` can pre-claim RButton for the title-bar chord.
+- `~LButton & RButton` can pre-claim RButton for special chords such as title-bar toggles or clear-edit.
 - `$*MButton::` can temporarily own and suppress normal RButton behavior.
 - `~*RButton` on taskbar/desktop just stays native.
 - otherwise `$*RButton::` owns the hold, and `WheelUp/WheelDown` may consume it.
@@ -1613,7 +1614,8 @@ $*RButton::
     if (rightButtonHeld || rightButtonComboUsed || rightButtonNativeDown)
         ResetRightButtonState(true)
 
-    ; Title-bar combos consume the hold, so keep the watchdog running but skip normal behavior.
+    ; Special LButton+RButton chords consume the hold, so keep the watchdog
+    ; running but skip normal right-click behavior.
     if (suppressRightButtonLogic) {
         rightButtonHeld      := true
         rightButtonComboUsed := true
@@ -1687,7 +1689,6 @@ $*RButton Up::
 return
 
 #If MouseIsOverTitleBar()
-
 ~LButton & RButton::
     suppressRightButtonLogic := true
     rightButtonComboUsed     := true
@@ -1724,6 +1725,26 @@ return
     BlockInput, MouseMoveOff
     Gui, GUI4Boarder: Color, %border_color%
     WinSet, AlwaysOnTop, Toggle, ahk_id %hwndId%
+return
+
+#If
+
+#If !MouseIsOverTitleBar()
+~LButton & RButton::
+    editableWindowId := 0
+    editableControlClassNN := ""
+    editableControlHwnd := 0
+    editableElement := ""
+
+    ; Claim the chord only when the pointer is actually over something editable.
+    if !GetEditableTargetUnderMouse(editableWindowId, editableControlClassNN, editableControlHwnd, editableElement)
+        return
+
+    ; Reuse the shared RButton-consumed path so this explicit clear-edit chord
+    ; does not fall through to a normal right-click on release.
+    suppressRightButtonLogic := true
+    rightButtonComboUsed     := true
+    ClearEditableTarget(editableWindowId, editableControlClassNN, editableControlHwnd, editableElement)
 return
 
 #If
@@ -6313,14 +6334,6 @@ $~LButton::
         }
     }
 
-    while (GetKeyState("Lbutton","P")
-        && !InStr(_winCtrlD, "SysListView32", True)
-        && !InStr(_winCtrlD, "DirectUIHWND",  True)
-        && !InStr(_winCtrlD, "SysTreeView32", True)
-        && !InStr(_winCtrlD, "SysHeader32",   True)) {
-        ClearEditUnderMouseOnLButtonHold()
-    }
-
     KeyWait, LButton, U T5
 
     If !(_winClassD == "CabinetWClass" || _winClassD == "#32770")  {
@@ -8226,198 +8239,49 @@ MouseTrack() {
     ListLines On
 }
 
-ClearEditUnderMouseOnLButtonHold(holdDelay := 550, maxParentDepth := 4, moveTolerance := 5, focusDelay := 60, doubleClickTolerance := 6) {
-    ; Tracks when the current hold started.
-    static holdStartTick     := 0
-
-    ; Mouse position where the current hold began.
-    static startPosX         := ""
-    static startPosY         := ""
-
-    ; Prevents the clear action from firing more than once during the same press.
-    static alreadyHandled    := false
-    ; Used for UIA-based controls that need a short delay after SetFocus()
-    ; before sending Ctrl+A / Delete.
-    static pendingAction     := false
-    static pendingActionTick := 0
-
-    ; Tracks whether the left mouse button was down on the previous call.
-    ; This lets us detect button-down and button-up transitions.
-    static wasLButtonDown    := false
-
-    ; When true, suppresses hold behavior for the current press because it
-    ; appears to be part of a double-click.
-    static suppressHold      := false
-
-    ; Records the time and position of the most recent button release.
-    ; This helps detect double-clicks based on release-to-next-press timing.
-    static lastReleaseTick   := 0
-    static lastReleasePosX   := ""
-    static lastReleasePosY   := ""
-
-    ; Records the time and position of the most recent button press.
-    ; This gives a second layer of double-click detection based on
-    ; press-to-press timing, which is often more robust.
-    static lastPressTick     := 0
-    static lastPressPosX     := ""
-    static lastPressPosY     := ""
-
-    ; Current physical state of the left mouse button.
-    currentLButtonDown       := GetKeyState("LButton", "P")
-
-    ; System double-click time in milliseconds.
-    doubleClickDelay         := DllCall("GetDoubleClickTime")
-
-    ; Do not allow the hold action to fire until BOTH:
-    ; 1) the requested holdDelay has elapsed
-    ; 2) the OS double-click window has elapsed
-    ;
-    ; This makes accidental double-click clears much less likely.
-    effectiveHoldDelay       := (holdDelay > doubleClickDelay) ? holdDelay : doubleClickDelay
-
-    ; Button is currently up.
-    if !currentLButtonDown {
-        ; If it was down on the last call, then this is a release transition,
-        ; so record the release time and position.
-        if (wasLButtonDown) {
-            MouseGetPos, lastReleasePosX, lastReleasePosY
-            lastReleaseTick := A_TickCount
-        }
-
-        ; Reset all per-press state now that the button is no longer held.
-        holdStartTick     := 0
-        startPosX         := ""
-        startPosY         := ""
-        alreadyHandled    := false
-        pendingAction     := false
-        pendingActionTick := 0
-        suppressHold      := false
-        wasLButtonDown    := false
-        return false
-    }
-
-    ; Get current mouse position and the window/control under the cursor.
+; Returns true when the mouse is currently over a classic or UIA-backed editable target.
+GetEditableTargetUnderMouse(ByRef windowId, ByRef controlClassNN, ByRef controlHwnd, ByRef editElement, maxParentDepth := 4) {
     MouseGetPos, currentPosX, currentPosY, windowId, controlClassNN
     MouseGetPos, , , , controlHwnd, 2
 
-    ; This is the initial button-down transition for a new press.
-    if !wasLButtonDown {
-        currentTick       := A_TickCount
-
-        ; Initialize tracking for this new hold.
-        holdStartTick     := currentTick
-        startPosX         := currentPosX
-        startPosY         := currentPosY
-        alreadyHandled    := false
-        pendingAction     := false
-        pendingActionTick := 0
-        suppressHold      := false
-        wasLButtonDown    := true
-
-        ; If the previous press happened recently and nearby, this may be
-        ; the second click of a double-click, so suppress hold behavior.
-        if (lastPressTick
-        && (currentTick - lastPressTick <= doubleClickDelay)
-        && Abs(currentPosX - lastPressPosX) <= doubleClickTolerance
-        && Abs(currentPosY - lastPressPosY) <= doubleClickTolerance) {
-            suppressHold := true
-        }
-
-        ; Also check recent release timing/position as another signal that
-        ; this press is part of a double-click.
-        if (lastReleaseTick
-        && (currentTick - lastReleaseTick <= doubleClickDelay)
-        && Abs(currentPosX - lastReleasePosX) <= doubleClickTolerance
-        && Abs(currentPosY - lastReleasePosY) <= doubleClickTolerance) {
-            suppressHold := true
-        }
-
-        ; Record this press so the next press can compare against it.
-        lastPressTick := currentTick
-        lastPressPosX := currentPosX
-        lastPressPosY := currentPosY
-        return false
-    }
-
-    ; If the mouse moved too far during the hold, restart the hold timer
-    ; and clear any pending one-shot handling state.
-    ;
-    ; This prevents a drag or sloppy cursor movement from being treated
-    ; as a stationary hold.
-    if (Abs(currentPosX - startPosX) > moveTolerance || Abs(currentPosY - startPosY) > moveTolerance) {
-        holdStartTick     := A_TickCount
-        startPosX         := currentPosX
-        startPosY         := currentPosY
-        alreadyHandled    := false
-        pendingAction     := false
-        pendingActionTick := 0
-        return false
-    }
-
-    ; If this press appears to be part of a double-click, do not allow
-    ; hold behavior at all for this press.
-    if (suppressHold) {
-        return false
-    }
-
-    ; Action already fired once during this press.
-    if (alreadyHandled) {
-        return false
-    }
-
-    ; Require the effective hold delay to fully elapse before taking action.
-    if ((A_TickCount - holdStartTick) < effectiveHoldDelay) {
-        return false
-    }
-
-    ; If we already focused a UIA edit control on a prior call, wait the
-    ; requested delay and then clear its contents.
-    if (pendingAction) {
-        if ((A_TickCount - pendingActionTick) < focusDelay) {
-            return false
-        }
-
-        ; Clear currently focused editable content.
-        SendInput, ^a
-        SendInput, {Delete}
-
-        alreadyHandled    := true
-        pendingAction     := false
-        pendingActionTick := 0
-        return true
-    }
-
-    ; First try classic Win32/control-based edit clearing.
-    ; If that succeeds, we are done.
-    if ClearClassicEditableControl(windowId, controlClassNN, controlHwnd) {
-        alreadyHandled := true
-        return true
-    }
-
-    ; If classic control detection did not work, try UIA from the point
-    ; under the mouse and walk upward looking for an editable ancestor.
-    elementObject := SafeUIA_ElementFromPoint(currentPosX, currentPosY, "")
     editElement := ""
 
-    if IsObject(elementObject) {
+    if RegExMatch(controlClassNN, "i)^Edit\d+$")
+        return true
+
+    if RegExMatch(controlClassNN, "i)^(RICHEDIT\w*\d+|RichEdit\w*\d+)$")
+        return true
+
+    if (controlHwnd) {
+        WinGetClass, controlClassName, ahk_id %controlHwnd%
+        if (controlClassName = "Edit" || RegExMatch(controlClassName, "i)^(RICHEDIT\w*|RichEdit\w*)$"))
+            return true
+    }
+
+    elementObject := SafeUIA_ElementFromPoint(currentPosX, currentPosY, "")
+    if IsObject(elementObject)
         editElement := FindEditableAncestor(elementObject, maxParentDepth)
-    }
 
-    ; If we found an editable UIA element, focus it first, then defer the
-    ; actual Ctrl+A / Delete until a later call after focusDelay has elapsed.
-    if IsObject(editElement) {
-        try
-            editElement.SetFocus()
-        catch
-            return false
+    return IsObject(editElement)
+}
 
-        pendingAction := true
-        pendingActionTick := A_TickCount
+; Clears the previously-resolved editable target, using classic control APIs when possible.
+ClearEditableTarget(windowId, controlClassNN, controlHwnd, editElement := "", focusDelay := 60) {
+    if ClearClassicEditableControl(windowId, controlClassNN, controlHwnd)
+        return true
+
+    if !IsObject(editElement)
         return false
-    }
 
-    ; Nothing editable was found under the cursor.
-    return false
+    try
+        editElement.SetFocus()
+    catch
+        return false
+
+    Sleep, %focusDelay%
+    SendInput, ^a
+    SendInput, {Delete}
+    return true
 }
 
 FindEditableAncestor(elementObject, maxParentDepth := 4) {
