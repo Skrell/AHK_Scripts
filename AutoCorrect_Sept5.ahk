@@ -1441,49 +1441,51 @@ HIGH-LEVEL HOTKEY RELATIONSHIPS
          |                                  |                                  |
          |                                  |                                  |
          |                                  |                                  |
-   LButton + RButton                    MButton                             RButton
-   chord                                pressed                             pressed
+   LButton + RButton                    MButton                           RButton
+   chord                                pressed                           pressed
          |                                  |                                  |
          |                                  |                                  |
          v                                  v                                  v
+
 A) LButton+RButton chord           B) MButton move/resize              C) RButton system
 ------------------------           ----------------------              ------------------
-~LButton & RButton::               $*MButton::                         surface check
-         |                                  |                                  |
-         +--> sets                          +--> becomes                       +--> taskbar or desktop shell?
-              suppressRight...                   temporary owner                   |
-              rightButtonComboUsed               of RButton                        +--> YES
-         |                                  |                                      |    ~*RButton
-         +--> if standalone                 +--> sets:                             |    native Windows right-click
-              $*RButton:: also runs         |     suspendRightButton...            |    RButton+Wheel stays native
-              and still sees the flag       |     swallowNextRButton...            |
-              it exits early as             |     WatchMButtonOverrideState        +--> NO
-              consumed/special              |                                            |
-         |                                  +--> while active, plain                     v
-         +--> cleanup handled               |     $*RButton:: / $*RButton Up::       $*RButton::
-              later by $*RButton Up         |     mostly short-circuit                   |
-              + ResetRightButtonState       |                                            +--> may be redirected by:
-                                            +--> if RButton participates                       suppressRightButtonLogic
-                                                 in resize gesture, mark                       suspendRightButtonForMButtonDrag
-                                                 next RButton Up to swallow                    stale-state cleanup
-                                            |
-                                            +--> normal exit clears temporary state
-                                            |
-                                            +--> WatchMButtonOverrideState is only
-                                                 cleanup insurance if MButton exits oddly
 
-RButton system (non-taskbar / non-desktop)
-==========================================
+~LButton & RButton::               $*MButton::                         surface / mode check
+         |                                  |                                  |
+         +--> sets                          +--> becomes                       +--> MButton-mode RButton
+              suppressRight...                   temporary owner                    capture active?
+              rightButtonComboUsed               of RButton                         |
+         |                                  |                                      +--> YES
+         +--> if standalone                 +--> sets:                             |    dedicated
+              $*RButton:: also runs         |     suspendRightButton...            |    #If suspendRight...
+              and still sees the flag       |     swallowNextRButton...            |    $*RButton:: / Up::
+              it exits early as             |     WatchMButtonOverrideState        |    own this RButton
+              consumed/special              |                                      |    completely
+         |                                  +--> while active, MButton mode        |
+         +--> cleanup handled               |     gets first claim on RButton      +--> NO
+              later by $*RButton Up         |     everywhere through its own            |
+              + ResetRightButtonState       |     dedicated $*RButton:: / Up::         v
+                                            |                                            taskbar or desktop shell?
+                                            +--> if RButton participates                    |
+                                                 in resize gesture, mark                    +--> YES
+                                                 next RButton Up to swallow                |    ~*RButton
+                                            |                                               |    native Windows right-click
+                                            +--> normal exit clears temporary state         |    RButton+Wheel stays native
+                                            |                                               |
+                                            +--> WatchMButtonOverrideState is only          +--> NO
+                                                 cleanup insurance if MButton exits oddly         |
+                                                                                                   v
+                                                                                               normal $*RButton::
+
+
+RButton system (non-taskbar / non-desktop, when not owned by MButton mode)
+===========================================================================
 
 $*RButton::
         |
         +--> special LButton+RButton chord already claimed this press?
         |        |
         |        +--> YES -> mark hold consumed, start watchdog, return
-        |
-        +--> MButton mode currently owns RButton?
-        |        |
-        |        +--> YES -> return
         |
         +--> otherwise start normal custom RButton hold
                  |
@@ -1527,15 +1529,11 @@ Release / cleanup relationship
 
 $*RButton Up::
         |
-        +--> if MButton resize marked this Up to swallow
+        +--> if MButton-mode dedicated RButton capture owns this release
         |        |
-        |        +--> consume and return
+        |        +--> consume it there and return before normal RButton logic
         |
-        +--> if MButton mode still owns RButton
-        |        |
-        |        +--> return
-        |
-        +--> if special LButton+RButton chord claimed the hold
+        +--> else if special LButton+RButton chord claimed the hold
         |        |
         |        +--> ResetRightButtonState(false)
         |        +--> return
@@ -1574,12 +1572,32 @@ ONE-SENTENCE MENTAL MODEL
 =========================
 
 - `~LButton & RButton` can pre-claim RButton for special chords such as title-bar toggles or clear-edit.
-- `$*MButton::` can temporarily own and suppress normal RButton behavior.
+- `$*MButton::` can temporarily install its own top-priority RButton owner during move/resize mode.
 - `~*RButton` on taskbar/desktop just stays native.
-- otherwise `$*RButton::` owns the hold, and `WheelUp/WheelDown` may consume it.
-- `$*RButton Up::` resolves whatever owner/consumer path claimed that hold.
-
+- otherwise the normal `$*RButton::` system owns the hold, and `WheelUp/WheelDown` may consume it.
+- release is resolved by whichever owner claimed that RButton path first.
 */
+
+#If suspendRightButtonForMButtonDrag
+$*RButton::
+    ; Give MButton move/resize mode first claim on RButton everywhere, including
+    ; Explorer/taskbar-adjacent surfaces where the normal RButton state machine
+    ; may not be eligible. This keeps the resize chord from leaking a plain
+    ; right-click when the physical release arrives later.
+    swallowNextRButtonUpFromMButtonDrag := true
+return
+
+$*RButton Up::
+    if (swallowNextRButtonUpFromMButtonDrag)
+        swallowNextRButtonUpFromMButtonDrag := false
+
+    if (!GetKeyState("MButton", "P")) {
+        suspendRightButtonForMButtonDrag := false
+        SetTimer, WatchMButtonOverrideState, Off
+    }
+return
+
+#If
 
 ~*RButton::
     ; Track taskbar/desktop-shell holds without taking ownership of the click itself.
@@ -1600,6 +1618,9 @@ $*RButton::
 
     ; While MButton window-drag mode is active, ignore plain RButton handling entirely.
     if (suspendRightButtonForMButtonDrag) {
+        ; Latch the consume-on-release flag from the actual RButton hotkey too so
+        ; MButton resize cannot miss a quick Explorer right-press between loop polls.
+        swallowNextRButtonUpFromMButtonDrag := true
         if (!GetKeyState("MButton", "P")) {
             suspendRightButtonForMButtonDrag := false
             SetTimer, WatchMButtonOverrideState, Off
@@ -2172,6 +2193,8 @@ $*MButton::
     }
 
     snapState     := ""   ; "", "left", "right"
+    dragStartX    := wx0
+    dragStartY    := wy0
     mxPrev        := mx0  ; track prior mouse X to know approach direction
     myPrev        := my0  ; track prior mouse X to know approach direction
 
@@ -2566,8 +2589,13 @@ $*MButton::
             && (abs(checkClickMy - my0) <= deltaPxTrig)) {
         Send, {Mbutton}
     }
-    Else If (wh/abs(monB-monT) > 0.95)
+    Else If (wh/abs(monB-monT) > 0.95) {
+        ; Normalize nearly full-height windows before the post-move fit helper runs.
+        ; Waiting here avoids sampling stale geometry immediately after this WinMove.
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT) + 2*abs(offsetY) + 1
+        WaitForStableWindow(hWnd)
+        WinGetPosEx(hWnd, wx0, wy0, ww, wh, offsetX, offsetY)
+    }
 
     If !startedAlwaysOnTop {
         WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
@@ -2610,6 +2638,13 @@ $*MButton::
         Critical, Off
         previousMon := stopMon
     }
+
+    WinGetPosEx(hWnd, finalWindowX, finalWindowY, finalWindowW, finalWindowH, null, null)
+    didMoveWindow := (!isRbutton
+        && (Abs(finalWindowX - dragStartX) > deltaPxTrig || Abs(finalWindowY - dragStartY) > deltaPxTrig))
+
+    if (didMoveWindow)
+        FitMovedWindowAgainstSecondMostWindow(hWnd, stopMon, 100)
 
     ; Normal exit: restore plain RButton handling before leaving MButton drag mode.
     StopRecursion := False
@@ -9154,7 +9189,7 @@ FindTopMostWindow() {
     Return targetID
 }
 
-FindSecondMostWindow(ref_hwndID := "") {
+FindSecondMostWindow(ref_hwndID := "", monitorNum := 0) {
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
 
@@ -9162,7 +9197,9 @@ FindSecondMostWindow(ref_hwndID := "") {
     targetID   := 0
 
     WinGet, winList, List,
-    currentMon := MWAGetMonitorMouseIsIn()
+    if (!monitorNum)
+        monitorNum := MWAGetMonitorMouseIsIn()
+
     Loop, %winList%
     {
         hwndID := winList%A_Index%
@@ -9175,7 +9212,7 @@ FindSecondMostWindow(ref_hwndID := "") {
 
             If (mmState > -1) {
                 If (MonCount > 1) {
-                    currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+                    currentMonHasActWin := IsWindowOnMonNum(hwndId, monitorNum)
                 }
                 Else {
                     currentMonHasActWin := True
@@ -9204,6 +9241,94 @@ FindSecondMostWindow(ref_hwndID := "") {
         }
     }
     Return targetID
+}
+
+; If a moved window is flush to one horizontal monitor edge and the next eligible
+; window beneath it in z-order is flush to the opposite edge with only a small
+; gap between them, widen the moved window so both windows meet cleanly.
+FitMovedWindowAgainstSecondMostWindow(movedHwndID, monitorNum := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50) {
+    if (!movedHwndID)
+        return false
+
+    if (!monitorNum)
+        monitorNum := MWAGetMonitorMouseIsIn()
+
+    ; Use the monitor work area so "touching the edge" means touching the usable
+    ; desktop edge rather than the monitor's raw pixel bounds.
+    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+
+    if !WinGetPosEx(movedHwndID, movedX, movedY, movedW, movedH, movedOffsetX, movedOffsetY)
+        return false
+
+    ; Only try to auto-fit when the moved window already looks intentionally docked
+    ; to the left or right side of the current monitor.
+    movedRightEdge    := movedX + movedW
+    movedTouchesLeft  := Abs(movedX - monInfoLeft) <= edgeTouchTolerance
+    movedTouchesRight := Abs(movedRightEdge - monInfoRight) <= edgeTouchTolerance
+
+    if (!movedTouchesLeft && !movedTouchesRight)
+        return false
+
+    ; Find the next eligible window below the moved one in z-order. We treat that
+    ; second-most window as the candidate partner for a side-by-side flush fit.
+    otherHwndID := FindSecondMostWindow(movedHwndID, monitorNum)
+    if (!otherHwndID || otherHwndID = movedHwndID)
+        return false
+
+    if !WinGetPosEx(otherHwndID, otherX, otherY, otherW, otherH, null, null)
+        return false
+
+    ; Require a meaningful shared vertical span so we only join windows that are
+    ; actually beside each other, not unrelated windows elsewhere on the monitor.
+    movedBottomEdge := movedY + movedH
+    otherBottomEdge := otherY + otherH
+    verticalOverlap := Min(movedBottomEdge, otherBottomEdge) - Max(movedY, otherY)
+    if (verticalOverlap < 100)
+        return false
+
+    otherRightEdge := otherX + otherW
+
+    if (movedTouchesLeft) {
+        ; Left-docked moved window: candidate must be anchored to the monitor's
+        ; right edge, with only a small gap or slight overlap between them.
+        if (Abs(otherRightEdge - monInfoRight) > edgeTouchTolerance)
+            return false
+
+        edgeGap := otherX - movedRightEdge
+        if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
+            return false
+
+        ; Preserve the moved window's non-client shadow/border offset while widening
+        ; it so its right edge lands flush against the candidate's left edge.
+        targetOuterWidth := otherX - movedX
+        if (targetOuterWidth <= 0)
+            return false
+
+        targetMoveWidth := targetOuterWidth + 2*Abs(movedOffsetX)
+        WinMove, ahk_id %movedHwndID%, , , , %targetMoveWidth%
+        return true
+    }
+
+    if (Abs(otherX - monInfoLeft) > edgeTouchTolerance)
+        return false
+
+    ; Right-docked moved window: candidate must be anchored to the monitor's
+    ; left edge, with only a small gap or slight overlap between them.
+    edgeGap := movedX - otherRightEdge
+    if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
+        return false
+
+    ; Move the window's left edge to the candidate's right edge, then recalculate
+    ; width so the moved window still ends at its existing right edge.
+    targetLeftEdge   := otherRightEdge
+    targetOuterWidth := movedRightEdge - targetLeftEdge
+    if (targetOuterWidth <= 0)
+        return false
+
+    targetMoveX     := targetLeftEdge + movedOffsetX
+    targetMoveWidth := targetOuterWidth + 2*Abs(movedOffsetX)
+    WinMove, ahk_id %movedHwndID%, , %targetMoveX%, , %targetMoveWidth%
+    return true
 }
 
 IsEditFieldActive() {
@@ -9849,11 +9974,13 @@ MouseIsOverAnyTaskbarSurface() {
         return False
 
     WinGetClass, windowClass, ahk_id %windowUnderMouseId%
-    return (windowClass == "Shell_TrayWnd"
+    isTaskbar := (windowClass == "Shell_TrayWnd"
          || windowClass == "Shell_SecondaryTrayWnd"
          || windowClass == "TaskListThumbnailWnd"
          || windowClass == "Windows.UI.Core.CoreWindow"
          || windowClass == "XamlExplorerHostIslandWindow")
+
+     return isTaskbar
 }
 
 MouseIsOverDesktopShellSurface() {
