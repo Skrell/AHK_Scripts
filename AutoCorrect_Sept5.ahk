@@ -9245,7 +9245,8 @@ FindSecondMostWindow(ref_hwndID := "", monitorNum := 0) {
 
 ; If a moved window is flush to one horizontal monitor edge and the next eligible
 ; window beneath it in z-order is flush to the opposite edge with only a small
-; gap between them, widen the moved window so both windows meet cleanly.
+; gap between them, resize the moved window so the pair meets cleanly and the
+; moved window fully spans back out to its monitor edge.
 FitMovedWindowAgainstSecondMostWindow(movedHwndID, monitorNum := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50) {
     if (!movedHwndID)
         return false
@@ -9298,14 +9299,17 @@ FitMovedWindowAgainstSecondMostWindow(movedHwndID, monitorNum := 0, edgeGapToler
         if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
             return false
 
-        ; Preserve the moved window's non-client shadow/border offset while widening
-        ; it so its right edge lands flush against the candidate's left edge.
-        targetOuterWidth := otherX - movedX
+        ; Snap the moved window fully to the monitor's left edge, then preserve
+        ; its non-client shadow/border offset while widening it so its right edge
+        ; lands flush against the candidate's left edge.
+        targetLeftEdge := monInfoLeft
+        targetOuterWidth := otherX - targetLeftEdge
         if (targetOuterWidth <= 0)
             return false
 
+        targetMoveX := targetLeftEdge + movedOffsetX
         targetMoveWidth := targetOuterWidth + 2*Abs(movedOffsetX)
-        WinMove, ahk_id %movedHwndID%, , , , %targetMoveWidth%
+        WinMove, ahk_id %movedHwndID%, , %targetMoveX%, , %targetMoveWidth%
         return true
     }
 
@@ -9318,10 +9322,12 @@ FitMovedWindowAgainstSecondMostWindow(movedHwndID, monitorNum := 0, edgeGapToler
     if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
         return false
 
-    ; Move the window's left edge to the candidate's right edge, then recalculate
-    ; width so the moved window still ends at its existing right edge.
+    ; Move the window's left edge to the candidate's right edge, then widen it so
+    ; the moved window fully reaches the monitor's right edge instead of preserving
+    ; any small inset it may have had before the fit.
     targetLeftEdge   := otherRightEdge
-    targetOuterWidth := movedRightEdge - targetLeftEdge
+    targetRightEdge  := monInfoRight
+    targetOuterWidth := targetRightEdge - targetLeftEdge
     if (targetOuterWidth <= 0)
         return false
 
