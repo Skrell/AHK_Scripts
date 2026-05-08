@@ -2644,7 +2644,7 @@ $*MButton::
         && (Abs(finalWindowX - dragStartX) > deltaPxTrig || Abs(finalWindowY - dragStartY) > deltaPxTrig))
 
     if (didMoveWindow)
-        FitMovedWindowAgainstSecondMostWindow(hWnd, stopMon, 100)
+        FitMovedWindowAgainstOthers(hWnd, stopMon, 100)
 
     ; Normal exit: restore plain RButton handling before leaving MButton drag mode.
     StopRecursion := False
@@ -2661,8 +2661,8 @@ WatchMButtonOverrideState:
     if (GetKeyState("MButton", "P"))
         return
 
-    DraggingWindow := False
-    StopRecursion := False
+    DraggingWindow                   := False
+    StopRecursion                    := False
     suspendRightButtonForMButtonDrag := false
     SetTimer, WatchMButtonOverrideState, Off
 return
@@ -9243,11 +9243,295 @@ FindSecondMostWindow(ref_hwndID := "", monitorNum := 0) {
     Return targetID
 }
 
-; If a moved window is flush to one horizontal monitor edge and the next eligible
-; window beneath it in z-order is flush to the opposite edge with only a small
-; gap between them, resize the moved window so the pair meets cleanly and the
-; moved window fully spans back out to its monitor edge.
-FitMovedWindowAgainstSecondMostWindow(movedHwndID, monitorNum := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50) {
+; Count how many work-area edges of the target monitor a window is touching within
+; the provided tolerance. This is used to identify windows that already look docked
+; to the desktop layout before we consider them as underlying fit candidates.
+_GetWindowMonitorEdgeTouchCount(windowHwnd, monitorNum := 0, edgeTouchTolerance := 50) {
+    if (!windowHwnd)
+        return 0
+
+    if (!monitorNum)
+        monitorNum := GetWindowMonitorNumber(windowHwnd)
+
+    if (monitorNum < 1)
+        return 0
+
+    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+
+    if !WinGetPosEx(windowHwnd, windowX, windowY, windowW, windowH, null, null)
+        return 0
+
+    windowRightEdge  := windowX + windowW
+    windowBottomEdge := windowY + windowH
+    edgeTouchCount   := 0
+
+    if (Abs(windowX - monInfoLeft) <= edgeTouchTolerance)
+        edgeTouchCount++
+    if (Abs(windowRightEdge - monInfoRight) <= edgeTouchTolerance)
+        edgeTouchCount++
+    if (Abs(windowY - monInfoTop) <= edgeTouchTolerance)
+        edgeTouchCount++
+    if (Abs(windowBottomEdge - monInfoBottom) <= edgeTouchTolerance)
+        edgeTouchCount++
+
+    return edgeTouchCount
+}
+
+; Probe a small grid of candidate points inside the lower-z-order window. If
+; WindowFromPoint can still hit the candidate at any sampled point, then some
+; portion of it is actually exposed to the user on the desktop right now.
+;
+; Visibility probe overview:
+;
+;   candidate rect
+;   +-----------------------------------------------------------+
+;   |       10%        30%        50%        70%        90%     |
+;   |        o----------o----------o----------o----------o      |
+;   |        |          |          |          |          |      |
+;   |  10%   o----------o----------o----------o----------o      |
+;   |        |          |          |          |          |      |
+;   |  30%   o----------o----------o----------o----------o      |
+;   |        |          |          |          |          |      |
+;   |  50%   o----------o----------o----------o----------o      |
+;   |        |          |          |          |          |      |
+;   |  70%   o----------o----------o----------o----------o      |
+;   |        |          |          |          |          |      |
+;   |  90%   o----------o----------o----------o----------o      |
+;   +-----------------------------------------------------------+
+;
+;   For each sampled point:
+;       (sampleX, sampleY)
+;            |
+;            +--> WindowFromPoint(sample)
+;            |        |
+;            |        +--> no hwnd      -> try next sample
+;            |        +--> hwnd found
+;            |               |
+;            |               +--> GetAncestor(hwnd, GA_ROOT)
+;            |               |
+;            |               +--> root = candidate hwnd ?
+;            |                        |
+;            |                        +--> YES -> return true
+;            |                        +--> NO  -> try next sample
+;            |
+;       no sampled point hits candidate root -> return false
+_HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY := "", candidateW := "", candidateH := "") {
+    if (!candidateHwndID)
+        return false
+
+    if (candidateX = "" || candidateY = "" || candidateW = "" || candidateH = "") {
+        if !WinGetPosEx(candidateHwndID, candidateX, candidateY, candidateW, candidateH, null, null)
+            return false
+    }
+
+    if (candidateW <= 0 || candidateH <= 0)
+        return false
+    VarSetCapacity(pointStruct, 8, 0)
+
+    Loop, 5
+    {
+        sampleX := candidateX + Floor((candidateW - 1) * ((A_Index * 2) - 1) / 10)
+
+        Loop, 5
+        {
+            sampleY := candidateY + Floor((candidateH - 1) * ((A_Index * 2) - 1) / 10)
+
+            NumPut(sampleX, pointStruct, 0, "Int")
+            NumPut(sampleY, pointStruct, 4, "Int")
+            pointValue := NumGet(pointStruct, 0, "Int64")
+            hitHwndID := DllCall("user32\WindowFromPoint", "Int64", pointValue, "Ptr")
+            if (!hitHwndID)
+                continue
+
+            hitRootHwndID := DllCall("GetAncestor", "Ptr", hitHwndID, "UInt", 2, "Ptr")
+            if (hitRootHwndID = candidateHwndID)
+                return true
+        }
+    }
+
+    return false
+}
+
+; Find the first window below the dragged window in z-order that is still visibly
+; exposed on the desktop, touches at least minEdgesTouched monitor work-area edges,
+; and overlaps the dragged window enough to be a plausible fit partner. When
+; fitMode is set, only candidates that satisfy that direction-specific edge and
+; gap relationship are accepted. The optional refX/refY/refW/refH override lets
+; callers evaluate multiple candidate searches against the same original release
+; rect even if the moved window itself gets resized between searches.
+FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, fitMode := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "") {
+    global lastUnderlyingWindowDebug
+    SysGet, MonCount, MonitorCount
+    DetectHiddenWindows, Off
+
+    if (!refHwndID)
+        return 0
+
+    if (!monitorNum)
+        monitorNum := GetWindowMonitorNumber(refHwndID)
+
+    if (monitorNum < 1)
+        return 0
+
+    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+
+    ; Default to the live reference window rect, but allow the caller to pin the
+    ; comparison rect to the original release geometry for multi-edge fits.
+    if (refX = "" || refY = "" || refW = "" || refH = "") {
+        if !WinGetPosEx(refHwndID, refX, refY, refW, refH, null, null)
+            return 0
+    }
+
+    firstFound                := false
+    debugLineCount            := 0
+    debugMaxLines             := 6
+    refRightEdge              := refX + refW
+    refBottomEdge             := refY + refH
+    targetID                  := 0
+    lastUnderlyingWindowDebug := ""
+
+    WinGet, winList, List,
+    Loop, %winList%
+    {
+        hwndID := winList%A_Index%
+
+        if (!firstFound) {
+            if (hwndID == refHwndID)
+                firstFound := true
+            continue
+        }
+
+        edgeTouchCount    := "-"
+        edgeGap           := "-"
+        hasExposedArea    := "-"
+        horizontalOverlap := "-"
+        rejectReason      := ""
+        sameMonitor       := True
+        verticalOverlap   := "-"
+        WinGetTitle, candidateTitle, ahk_id %hwndID%
+        if (candidateTitle = "")
+            candidateTitle := "<untitled window>"
+
+        candidateTitle := StrReplace(candidateTitle, "`r", " ")
+        candidateTitle := StrReplace(candidateTitle, "`n", " ")
+
+        if !IsAltTabWindow(hwndID)
+            rejectReason := "not-alt-tab"
+
+        if (rejectReason = "" && IsAlwaysOnTop(hwndID))
+            rejectReason := "always-on-top"
+
+        WinGet, mmState, MinMax, ahk_id %hwndID%
+        if (rejectReason = "" && mmState <= -1)
+            rejectReason := "minimized"
+
+        if (rejectReason = "" && MonCount > 1) {
+            sameMonitor := IsWindowOnMonNum(hwndID, monitorNum)
+            if (!sameMonitor)
+                rejectReason := "wrong-monitor"
+        }
+
+        if (rejectReason = "" && !WinGetPosEx(hwndID, candidateX, candidateY, candidateW, candidateH, null, null))
+            rejectReason := "no-rect"
+
+        if (rejectReason = "") {
+            edgeTouchCount := _GetWindowMonitorEdgeTouchCount(hwndID, monitorNum, edgeTouchTolerance)
+            if (edgeTouchCount < minEdgesTouched)
+                rejectReason := "edges=" edgeTouchCount
+        }
+
+        if (rejectReason = "") {
+            candidateRightEdge  := candidateX + candidateW
+            candidateBottomEdge := candidateY + candidateH
+            horizontalOverlap   := Min(refRightEdge, candidateRightEdge) - Max(refX, candidateX)
+            verticalOverlap     := Min(refBottomEdge, candidateBottomEdge) - Max(refY, candidateY)
+
+            ; fitMode narrows the generic overlap check into the exact geometric
+            ; relationship needed for that resize direction.
+            if (fitMode = "bottom") {
+                if (horizontalOverlap < minHorizontalOverlap)
+                    rejectReason := "hov"
+                else {
+                    edgeGap := refY - candidateBottomEdge
+                    if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
+                        rejectReason := "gap=" edgeGap
+                }
+            }
+            else if (fitMode = "left") {
+                if (verticalOverlap < minVerticalOverlap)
+                    rejectReason := "vov"
+                else if (Abs(candidateRightEdge - monInfoRight) > edgeTouchTolerance)
+                    rejectReason := "not-right-edge"
+                else {
+                    edgeGap := candidateX - refRightEdge
+                    if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
+                        rejectReason := "gap=" edgeGap
+                }
+            }
+            else if (fitMode = "right") {
+                if (verticalOverlap < minVerticalOverlap)
+                    rejectReason := "vov"
+                else if (Abs(candidateX - monInfoLeft) > edgeTouchTolerance)
+                    rejectReason := "not-left-edge"
+                else {
+                    edgeGap := refX - candidateRightEdge
+                    if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
+                        rejectReason := "gap=" edgeGap
+                }
+            }
+            else if (horizontalOverlap < minHorizontalOverlap && verticalOverlap < minVerticalOverlap)
+                rejectReason := "overlap"
+        }
+
+        if (rejectReason = "") {
+            hasExposedArea := _HasVisibleExposedAreaBelowWindow(hwndID, candidateX, candidateY, candidateW, candidateH)
+            if !hasExposedArea
+                rejectReason := "covered"
+        }
+
+        if (debugLineCount < debugMaxLines) {
+            debugLineCount++
+            if (rejectReason = "")
+                candidateStatus := "MATCH"
+            else
+                candidateStatus := "reject:" rejectReason
+
+            ; lastUnderlyingWindowDebug .= debugLineCount ". " candidateTitle " | edges=" edgeTouchCount " | hov=" horizontalOverlap " | vov=" verticalOverlap " | gap=" edgeGap " | exposed=" hasExposedArea " | " candidateStatus "`n"
+        }
+
+        if (rejectReason != "")
+            continue
+
+        targetID := hwndID
+        break
+    }
+
+    ; if (targetID) {
+        ; WinGetTitle, matchedWindowTitle, ahk_id %targetID%
+        ; if (matchedWindowTitle = "")
+            ; matchedWindowTitle := "<untitled window>"
+        ; lastUnderlyingWindowDebug := "Underlying match: " matchedWindowTitle "`n" lastUnderlyingWindowDebug
+    ; }
+    ; else {
+        ; if (debugLineCount = 0)
+            ; lastUnderlyingWindowDebug := "Underlying match: <none>`nNo lower-z-order candidates were evaluated."
+        ; else
+            ; lastUnderlyingWindowDebug := "Underlying match: <none>`n" lastUnderlyingWindowDebug
+    ; }
+
+    return targetID
+}
+
+RemoveToolTip:
+    ToolTip,
+return
+
+; If a moved window is flush to a monitor edge and eligible lower-z-order windows
+; beneath it are positioned close enough to form clean pairs, resize the moved
+; window so it can align vertically to one window and horizontally to another in
+; the same release, while still fully spanning back out to its monitor edge.
+FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50) {
+    global lastUnderlyingWindowDebug
     if (!movedHwndID)
         return false
 
@@ -9262,79 +9546,108 @@ FitMovedWindowAgainstSecondMostWindow(movedHwndID, monitorNum := 0, edgeGapToler
         return false
 
     ; Only try to auto-fit when the moved window already looks intentionally docked
-    ; to the left or right side of the current monitor.
-    movedRightEdge    := movedX + movedW
-    movedTouchesLeft  := Abs(movedX - monInfoLeft) <= edgeTouchTolerance
-    movedTouchesRight := Abs(movedRightEdge - monInfoRight) <= edgeTouchTolerance
+    ; to the left, right, or bottom edge of the current monitor.
+    movedRightEdge       := movedX + movedW
+    movedBottomEdge      := movedY + movedH
+    movedTouchesLeft     := Abs(movedX - monInfoLeft) <= edgeTouchTolerance
+    movedTouchesRight    := Abs(movedRightEdge - monInfoRight) <= edgeTouchTolerance
+    movedTouchesBottom   := Abs(movedBottomEdge - monInfoBottom) <= edgeTouchTolerance
 
-    if (!movedTouchesLeft && !movedTouchesRight)
+    ; Preserve the release-time geometry so each candidate search evaluates the
+    ; same original dropped position, even if the first fit branch already moved
+    ; or resized the live window.
+    originalMovedOffsetX := movedOffsetX
+    originalMovedOffsetY := movedOffsetY
+    originalMovedW       := movedW
+    originalMovedH       := movedH
+
+    if (!movedTouchesLeft && !movedTouchesRight && !movedTouchesBottom)
         return false
 
-    ; Find the next eligible window below the moved one in z-order. We treat that
-    ; second-most window as the candidate partner for a side-by-side flush fit.
-    otherHwndID := FindSecondMostWindow(movedHwndID, monitorNum)
-    if (!otherHwndID || otherHwndID = movedHwndID)
-        return false
+    didFitWindow := false
+    fitDebugText := ""
 
-    if !WinGetPosEx(otherHwndID, otherX, otherY, otherW, otherH, null, null)
-        return false
+    ; Bottom alignment is resolved first, but the candidate search is still based
+    ; on the original release rect rather than any post-resize geometry.
+    if (movedTouchesBottom) {
+        bottomHwndID      := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "bottom", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
+        ; bottomDebugText := "Bottom fit candidate:`n" lastUnderlyingWindowDebug
+        ; fitDebugText    := bottomDebugText
 
-    ; Require a meaningful shared vertical span so we only join windows that are
-    ; actually beside each other, not unrelated windows elsewhere on the monitor.
-    movedBottomEdge := movedY + movedH
-    otherBottomEdge := otherY + otherH
-    verticalOverlap := Min(movedBottomEdge, otherBottomEdge) - Max(movedY, otherY)
-    if (verticalOverlap < 100)
-        return false
+        if (bottomHwndID && bottomHwndID != movedHwndID && WinGetPosEx(bottomHwndID, otherX, otherY, otherW, otherH, null, null)) {
+            otherBottomEdge := otherY + otherH
 
-    otherRightEdge := otherX + otherW
-
-    if (movedTouchesLeft) {
-        ; Left-docked moved window: candidate must be anchored to the monitor's
-        ; right edge, with only a small gap or slight overlap between them.
-        if (Abs(otherRightEdge - monInfoRight) > edgeTouchTolerance)
-            return false
-
-        edgeGap := otherX - movedRightEdge
-        if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
-            return false
-
-        ; Snap the moved window fully to the monitor's left edge, then preserve
-        ; its non-client shadow/border offset while widening it so its right edge
-        ; lands flush against the candidate's left edge.
-        targetLeftEdge := monInfoLeft
-        targetOuterWidth := otherX - targetLeftEdge
-        if (targetOuterWidth <= 0)
-            return false
-
-        targetMoveX := targetLeftEdge + movedOffsetX
-        targetMoveWidth := targetOuterWidth + 2*Abs(movedOffsetX)
-        WinMove, ahk_id %movedHwndID%, , %targetMoveX%, , %targetMoveWidth%
-        return true
+            ; Move the moved window's top edge to the candidate's bottom edge, then
+            ; stretch it back down to the monitor's bottom work-area edge.
+            targetTopEdge     := otherBottomEdge
+            targetBottomEdge  := monInfoBottom
+            targetOuterHeight := targetBottomEdge - targetTopEdge
+            if (targetOuterHeight > 0) {
+                targetMoveY      := targetTopEdge + originalMovedOffsetY
+                targetMoveHeight := targetOuterHeight + 2*Abs(originalMovedOffsetY) + 1
+                didFitWindow     := true
+                WinMove, ahk_id %movedHwndID%, , , %targetMoveY%, , %targetMoveHeight%
+                WaitForStableWindow(movedHwndID)
+            }
+        }
     }
 
-    if (Abs(otherX - monInfoLeft) > edgeTouchTolerance)
-        return false
+    ; Side alignment is searched independently so a corner-docked release can fit
+    ; vertically to one window and horizontally to another in the same pass.
+    sideFitMode  := ""
+    sideFitLabel := ""
+    if (movedTouchesLeft) {
+        sideFitMode := "left"
+        sideFitLabel := "Left fit candidate:"
+    }
+    else if (movedTouchesRight) {
+        sideFitMode := "right"
+        sideFitLabel := "Right fit candidate:"
+    }
 
-    ; Right-docked moved window: candidate must be anchored to the monitor's
-    ; left edge, with only a small gap or slight overlap between them.
-    edgeGap := movedX - otherRightEdge
-    if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
-        return false
+    if (sideFitMode != "") {
+        sideHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, sideFitMode, edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
+        ; sideDebugText := sideFitLabel "`n" lastUnderlyingWindowDebug
+        ; if (fitDebugText = "")
+            ; fitDebugText := sideDebugText
+        ; else
+            ; fitDebugText .= "`n`n" sideDebugText
 
-    ; Move the window's left edge to the candidate's right edge, then widen it so
-    ; the moved window fully reaches the monitor's right edge instead of preserving
-    ; any small inset it may have had before the fit.
-    targetLeftEdge   := otherRightEdge
-    targetRightEdge  := monInfoRight
-    targetOuterWidth := targetRightEdge - targetLeftEdge
-    if (targetOuterWidth <= 0)
-        return false
+        if (sideHwndID && sideHwndID != movedHwndID && WinGetPosEx(sideHwndID, otherX, otherY, otherW, otherH, null, null)) {
+            otherRightEdge := otherX + otherW
 
-    targetMoveX     := targetLeftEdge + movedOffsetX
-    targetMoveWidth := targetOuterWidth + 2*Abs(movedOffsetX)
-    WinMove, ahk_id %movedHwndID%, , %targetMoveX%, , %targetMoveWidth%
-    return true
+            if (sideFitMode = "left") {
+                ; Left-docked moved window: widen it from the monitor's left edge
+                ; until it meets the candidate's left edge on the right side.
+                targetLeftEdge   := monInfoLeft
+                targetOuterWidth := otherX - targetLeftEdge
+            }
+            else {
+                ; Right-docked moved window: widen it from the candidate's right
+                ; edge until it fully reaches the monitor's right edge.
+                targetLeftEdge   := otherRightEdge
+                targetRightEdge  := monInfoRight
+                targetOuterWidth := targetRightEdge - targetLeftEdge
+            }
+
+            if (targetOuterWidth > 0) {
+                ; Preserve the original non-client offset while expanding the moved
+                ; window outward to its final fitted width.
+                targetMoveX     := targetLeftEdge + originalMovedOffsetX
+                targetMoveWidth := targetOuterWidth + 2*Abs(originalMovedOffsetX)
+                WinMove, ahk_id %movedHwndID%, , %targetMoveX%, , %targetMoveWidth%
+                didFitWindow := true
+            }
+        }
+    }
+
+    if (fitDebugText != "") {
+        lastUnderlyingWindowDebug := fitDebugText
+        ToolTip, % lastUnderlyingWindowDebug
+        SetTimer, RemoveToolTip, -3500
+    }
+
+    return didFitWindow
 }
 
 IsEditFieldActive() {
