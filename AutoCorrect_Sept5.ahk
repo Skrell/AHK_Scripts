@@ -1434,7 +1434,6 @@ $WheelDown::send {Volume_Down}
 /*
 HIGH-LEVEL HOTKEY RELATIONSHIPS
 ===============================
-
                                    Physical mouse input
                                             |
          +----------------------------------+----------------------------------+
@@ -1447,45 +1446,106 @@ HIGH-LEVEL HOTKEY RELATIONSHIPS
          |                                  |                                  |
          v                                  v                                  v
 
-A) LButton+RButton chord           B) MButton move/resize              C) RButton system
-------------------------           ----------------------              ------------------
+A) Special LButton+RButton         B) MButton move/resize               C) RButton system
+---------------------------        ----------------------               ------------------
 
-~LButton & RButton::               $*MButton::                         surface / mode check
+same chord, context decides        $*MButton:: begins                  first ownership check
          |                                  |                                  |
-         +--> sets                          +--> becomes                       +--> MButton-mode RButton
-              suppressRight...                   temporary owner                    capture active?
-              rightButtonComboUsed               of RButton                         |
-         |                                  |                                      +--> YES
-         +--> if standalone                 +--> sets:                             |    dedicated
-              $*RButton:: also runs         |     suspendRightButton...            |    #If suspendRight...
-              and still sees the flag       |     swallowNextRButton...            |    $*RButton:: / Up::
-              it exits early as             |     WatchMButtonOverrideState        |    own this RButton
-              consumed/special              |                                      |    completely
-         |                                  +--> while active, MButton mode        |
-         +--> cleanup handled               |     gets first claim on RButton      +--> NO
-              later by $*RButton Up         |     everywhere through its own            |
-              + ResetRightButtonState       |     dedicated $*RButton:: / Up::         v
-                                            |                                            taskbar or desktop shell?
-                                            +--> if RButton participates                    |
-                                                 in resize gesture, mark                    +--> YES
-                                                 next RButton Up to swallow                |    ~*RButton
-                                            |                                               |    native Windows right-click
-                                            +--> normal exit clears temporary state         |    RButton+Wheel stays native
-                                            |                                               |
-                                            +--> WatchMButtonOverrideState is only          +--> NO
-                                                 cleanup insurance if MButton exits oddly         |
-                                                                                                   v
-                                                                                               normal $*RButton::
+         +--> over title bar?               +--> becomes temporary             +--> MButton-mode dedicated
+         |        |                               owner of RButton                  RButton capture active?
+         |        +--> YES                         during drag/resize               |
+         |        |      set                                                    +--> YES
+         |        |      suppressRightButtonLogic                                 |    #If suspendRightButton...
+         |        |      rightButtonComboUsed                                     |    dedicated $*RButton:: / Up::
+         |        |      title-bar action                                         |    own this RButton completely
+         |        |
+         |        +--> if standalone $*RButton:: also runs                     +--> NO
+         |               it sees suppressRightButtonLogic                            |
+         |               and exits early as consumed                                 v
+         |
+         +--> over editable control?                                         taskbar or desktop shell?
+         |        |                                                                  |
+         |        +--> YES                                                           +--> YES
+         |        |      clear-edit action                                           |    ~*RButton
+         |        |      on hovered/focused field                                    |    native Windows right-click
+         |        |                                                                   |    RButton+Wheel stays native
+         |        +--> NO                                                             |
+         |               no special chord action                                      +--> NO
+         |                                                                                 |
+         +--> cleanup of consumed RButton path                                                v
+              later handled by $*RButton Up::                                            normal $*RButton::
 
 
-RButton system (non-taskbar / non-desktop, when not owned by MButton mode)
-===========================================================================
+MButton move/resize details
+===========================
+$*MButton::
+        |
+        +--> sets:
+        |     suspendRightButtonForMButtonDrag
+        |     swallowNextRButtonUpFromMButtonDrag := false
+        |     WatchMButtonOverrideState
+        |
+        +--> while active:
+        |     dedicated #If suspendRightButtonForMButtonDrag
+        |     $*RButton:: / $*RButton Up:: get first claim
+        |
+        +--> if RButton participates in resize gesture
+        |     mark next RButton Up to swallow
+        |
+        +--> on release after a real move:
+              FitMovedWindowAgainstOthers(...)
 
+
+Post-MButton release fit
+========================
+FitMovedWindowAgainstOthers(...)
+        |
+        +--> use original release rect as reference for candidate searches
+        |
+        +--> vertical fit branch
+        |     |
+        |     +--> top-docked?
+        |     |      look for visible lower-z-order window below
+        |     |      enough horizontal overlap
+        |     |      bottom edge within tolerance of candidate top edge
+        |     |
+        |     +--> else bottom-docked?
+        |            look for visible lower-z-order window above
+        |            enough horizontal overlap
+        |            top edge within tolerance of candidate bottom edge
+        |
+        +--> horizontal fit branch
+        |     |
+        |     +--> left-docked?
+        |     |      look for visible lower-z-order window on the right
+        |     |      enough vertical overlap
+        |     |      right-side gap/overlap within tolerance
+        |     |
+        |     +--> else right-docked?
+        |            look for visible lower-z-order window on the left
+        |            enough vertical overlap
+        |            left-side gap/overlap within tolerance
+        |
+        +--> candidate source:
+        |     FindVisibleUnderlyingEdgeTouchingWindow(...)
+        |     first qualifying lower-z-order visible candidate wins
+        |     for that fit direction
+        |
+        +--> result:
+              one vertical fit + one horizontal fit can both apply
+              in the same release
+
+
+Normal RButton system
+=====================
 $*RButton::
         |
         +--> special LButton+RButton chord already claimed this press?
         |        |
-        |        +--> YES -> mark hold consumed, start watchdog, return
+        |        +--> YES
+        |        |      mark hold consumed
+        |        |      start WatchRightButtonState
+        |        |      return
         |
         +--> otherwise start normal custom RButton hold
                  |
@@ -1497,85 +1557,79 @@ $*RButton::
                  |        |
                  |        +--> NO
                  |               keep hold script-owned
-                 |               wait for either:
+                 |               wait for:
                  |               - RButton Up
                  |               - RButton + Wheel
                  |
                  +--> start WatchRightButtonState
 
 
-RButton + Wheel relationship
-============================
-
-#If GetKeyState("RButton", "P")
-WheelUp:: / WheelDown::
+RButton + Wheel
+===============
+WheelUp:: / WheelDown:: while RButton is physically down
         |
-        +--> if taskbar/desktop passthrough hold
+        +--> taskbar/desktop passthrough hold?
         |        |
-        |        +--> send native wheel and return
+        |        +--> YES -> send native wheel
         |
-        +--> otherwise try custom action
+        +--> otherwise
+                 try custom navigation action
                  |
-                 +--> if custom action will really execute
-                          |
-                          +--> rightButtonComboUsed := true
-                          +--> rightButtonSuppressMenuOnUp := true
-                          +--> send replacement navigation keys
-                              (PgUp/PgDn/Home/End variants)
+                 +--> if action will execute
+                          rightButtonComboUsed := true
+                          rightButtonSuppressMenuOnUp := true
+                          send replacement navigation keys
 
 
-Release / cleanup relationship
-==============================
-
+Release ownership
+=================
 $*RButton Up::
         |
-        +--> if MButton-mode dedicated RButton capture owns this release
+        +--> MButton-mode dedicated capture owns this release?
         |        |
-        |        +--> consume it there and return before normal RButton logic
+        |        +--> YES -> consume there and return
         |
-        +--> else if special LButton+RButton chord claimed the hold
+        +--> else special LButton+RButton chord claimed the hold?
         |        |
-        |        +--> ResetRightButtonState(false)
-        |        +--> return
+        |        +--> YES -> ResetRightButtonState(false)
         |
-        +--> otherwise finish the normal RButton hold:
+        +--> else normal RButton release path:
                  |
-                 +--> if native {RButton Down} had been sent earlier
+                 +--> native {RButton Down} had been sent earlier?
                  |        |
-                 |        +--> send matching {RButton Up}
-                 |        +--> maybe send {Esc} if wheel combo consumed it
-                 |
-                 +--> else if hold was not consumed
+                 |        +--> YES
+                 |        |      send matching {RButton Up}
+                 |        |      maybe send {Esc}
                  |        |
-                 |        +--> Click, Right
+                 |        +--> NO
+                 |               if hold was not consumed
+                 |                   Click, Right
                  |
                  +--> ResetRightButtonState(false)
 
 
 Watchdogs
 =========
-
 WatchRightButtonState
         |
-        +--> only protects custom RButton state
-        +--> if physical RButton is no longer down but state is still latched
+        +--> protects custom RButton state
+        +--> if physical RButton is up but state is still latched
         +--> ResetRightButtonState(true)
 
 WatchMButtonOverrideState
         |
-        +--> only protects temporary MButton ownership state
-        +--> if physical MButton is no longer down
+        +--> protects temporary MButton ownership state
+        +--> if physical MButton is up
         +--> clear DraggingWindow / StopRecursion / suspendRightButtonForMButtonDrag
 
 
 ONE-SENTENCE MENTAL MODEL
 =========================
 
-- `~LButton & RButton` can pre-claim RButton for special chords such as title-bar toggles or clear-edit.
-- `$*MButton::` can temporarily install its own top-priority RButton owner during move/resize mode.
-- `~*RButton` on taskbar/desktop just stays native.
-- otherwise the normal `$*RButton::` system owns the hold, and `WheelUp/WheelDown` may consume it.
-- release is resolved by whichever owner claimed that RButton path first.
+- `LButton + RButton` is a context-sensitive special chord.
+- `MButton` temporarily installs a top-priority RButton owner during move/resize mode.
+- otherwise the normal RButton system owns the hold unless taskbar/desktop passthrough keeps it native.
+- after a real MButton move, the script may fit the moved window against visible lower-z-order neighbors on top/bottom and/or left/right edges.
 */
 
 #If suspendRightButtonForMButtonDrag
@@ -2644,7 +2698,7 @@ $*MButton::
         && (Abs(finalWindowX - dragStartX) > deltaPxTrig || Abs(finalWindowY - dragStartY) > deltaPxTrig))
 
     if (didMoveWindow)
-        FitMovedWindowAgainstOthers(hWnd, stopMon, 100)
+        FitMovedWindowAgainstOthers(hWnd, stopMon, 150, 100)
 
     ; Normal exit: restore plain RButton handling before leaving MButton drag mode.
     StopRecursion := False
@@ -9390,11 +9444,17 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
     targetID                  := 0
     lastUnderlyingWindowDebug := ""
 
+    ; WinGet List returns windows in z-order. We intentionally walk downward
+    ; from the dragged/reference window and accept the first candidate that
+    ; survives all checks for the current fit mode.
     WinGet, winList, List,
     Loop, %winList%
     {
         hwndID := winList%A_Index%
 
+        ; Ignore everything above the reference window. Once we hit the
+        ; reference hwnd, every later window is beneath it in z-order and is
+        ; therefore eligible to become an "underlying" fit candidate.
         if (!firstFound) {
             if (hwndID == refHwndID)
                 firstFound := true
@@ -9415,6 +9475,8 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
         candidateTitle := StrReplace(candidateTitle, "`r", " ")
         candidateTitle := StrReplace(candidateTitle, "`n", " ")
 
+        ; Keep the cheap exclusion checks first so obviously bad candidates do
+        ; not reach the heavier geometry and visibility probes.
         if !IsAltTabWindow(hwndID)
             rejectReason := "not-alt-tab"
 
@@ -9435,6 +9497,8 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
             rejectReason := "no-rect"
 
         if (rejectReason = "") {
+            ; Require the candidate to feel anchored to the monitor rather than
+            ; being an arbitrary floating window in the middle of the desktop.
             edgeTouchCount := _GetWindowMonitorEdgeTouchCount(hwndID, monitorNum, edgeTouchTolerance)
             if (edgeTouchCount < minEdgesTouched)
                 rejectReason := "edges=" edgeTouchCount
@@ -9447,8 +9511,23 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
             verticalOverlap     := Min(refBottomEdge, candidateBottomEdge) - Max(refY, candidateY)
 
             ; fitMode narrows the generic overlap check into the exact geometric
-            ; relationship needed for that resize direction.
-            if (fitMode = "bottom") {
+            ; relationship needed for that resize direction. A candidate is not
+            ; scored or ranked here: it simply passes or fails, and the first
+            ; passing candidate below the reference window wins.
+            if (fitMode = "top") {
+                ; Top-fit candidates must share enough left-to-right span with
+                ; the dragged window to count as the window "below" it rather
+                ; than an unrelated window off to the side. reject:hov in the
+                ; debug output means this horizontal-overlap check failed.
+                if (horizontalOverlap < minHorizontalOverlap)
+                    rejectReason := "hov"
+                else {
+                    edgeGap := candidateY - refBottomEdge
+                    if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
+                        rejectReason := "gap=" edgeGap
+                }
+            }
+            else if (fitMode = "bottom") {
                 if (horizontalOverlap < minHorizontalOverlap)
                     rejectReason := "hov"
                 else {
@@ -9484,12 +9563,16 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
         }
 
         if (rejectReason = "") {
+            ; Even if the candidate is valid geometrically, reject it if the
+            ; user cannot actually see any exposed part of it on the desktop.
             hasExposedArea := _HasVisibleExposedAreaBelowWindow(hwndID, candidateX, candidateY, candidateW, candidateH)
             if !hasExposedArea
                 rejectReason := "covered"
         }
 
         if (debugLineCount < debugMaxLines) {
+            ; Keep a short trace of the first few candidates so it is easy to
+            ; see which filter stage disqualified each window while debugging.
             debugLineCount++
             if (rejectReason = "")
                 candidateStatus := "MATCH"
@@ -9502,6 +9585,9 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
         if (rejectReason != "")
             continue
 
+        ; The current policy is "first qualifying candidate in z-order wins".
+        ; We do not currently compare multiple passing windows by smallest gap or
+        ; strongest overlap once a match is found.
         targetID := hwndID
         break
     }
@@ -9546,11 +9632,12 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         return false
 
     ; Only try to auto-fit when the moved window already looks intentionally docked
-    ; to the left, right, or bottom edge of the current monitor.
+    ; to the left, right, top, or bottom edge of the current monitor.
     movedRightEdge       := movedX + movedW
     movedBottomEdge      := movedY + movedH
     movedTouchesLeft     := Abs(movedX - monInfoLeft) <= edgeTouchTolerance
     movedTouchesRight    := Abs(movedRightEdge - monInfoRight) <= edgeTouchTolerance
+    movedTouchesTop      := Abs(movedY - monInfoTop) <= edgeTouchTolerance
     movedTouchesBottom   := Abs(movedBottomEdge - monInfoBottom) <= edgeTouchTolerance
 
     ; Preserve the release-time geometry so each candidate search evaluates the
@@ -9561,29 +9648,52 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     originalMovedW       := movedW
     originalMovedH       := movedH
 
-    if (!movedTouchesLeft && !movedTouchesRight && !movedTouchesBottom)
+    if (!movedTouchesLeft && !movedTouchesRight && !movedTouchesTop && !movedTouchesBottom)
         return false
 
     didFitWindow := false
     fitDebugText := ""
 
-    ; Bottom alignment is resolved first, but the candidate search is still based
-    ; on the original release rect rather than any post-resize geometry.
-    if (movedTouchesBottom) {
-        bottomHwndID      := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "bottom", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
+    ; Resolve and apply vertical fitting first. Top-docked windows look for a
+    ; partner below them; bottom-docked windows look for a partner above them.
+    ; The candidate search still uses the original release rect in either case.
+    if (movedTouchesTop) {
+        topHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "top", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
+        ; topDebugText := "Top fit candidate:`n" lastUnderlyingWindowDebug
+        ; fitDebugText := topDebugText
+
+        if (topHwndID && topHwndID != movedHwndID && WinGetPosEx(topHwndID, otherX, otherY, otherW, otherH, null, null)) {
+            ; Keep the same height compensation used elsewhere in the script, but
+            ; place the window at the monitor's visual top edge and size it down
+            ; until its bottom edge lands flush against the lower partner window.
+            targetTopEdge     := monInfoTop
+            targetBottomEdge  := otherY
+            targetOuterHeight := targetBottomEdge - targetTopEdge
+            if (targetOuterHeight > 0) {
+                targetMoveY      := targetTopEdge
+                targetMoveHeight := targetOuterHeight + 2*Abs(originalMovedOffsetY) + 1
+                didFitWindow     := true
+                WinMove, ahk_id %movedHwndID%, , , %targetMoveY%, , %targetMoveHeight%
+                WaitForStableWindow(movedHwndID)
+            }
+        }
+    }
+    else if (movedTouchesBottom) {
+        bottomHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "bottom", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
         ; bottomDebugText := "Bottom fit candidate:`n" lastUnderlyingWindowDebug
         ; fitDebugText    := bottomDebugText
 
         if (bottomHwndID && bottomHwndID != movedHwndID && WinGetPosEx(bottomHwndID, otherX, otherY, otherW, otherH, null, null)) {
             otherBottomEdge := otherY + otherH
 
-            ; Move the moved window's top edge to the candidate's bottom edge, then
-            ; stretch it back down to the monitor's bottom work-area edge.
+            ; Keep the same height compensation used elsewhere in the script, but
+            ; place the window at the desired visual top edge without adding the
+            ; frame offset to Y.
             targetTopEdge     := otherBottomEdge
             targetBottomEdge  := monInfoBottom
             targetOuterHeight := targetBottomEdge - targetTopEdge
             if (targetOuterHeight > 0) {
-                targetMoveY      := targetTopEdge + originalMovedOffsetY
+                targetMoveY      := targetTopEdge
                 targetMoveHeight := targetOuterHeight + 2*Abs(originalMovedOffsetY) + 1
                 didFitWindow     := true
                 WinMove, ahk_id %movedHwndID%, , , %targetMoveY%, , %targetMoveHeight%
@@ -9592,16 +9702,16 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         }
     }
 
-    ; Side alignment is searched independently so a corner-docked release can fit
-    ; vertically to one window and horizontally to another in the same pass.
+    ; Side alignment is resolved independently so a corner-docked release can fit
+    ; against one window vertically and another horizontally in the same pass.
     sideFitMode  := ""
     sideFitLabel := ""
     if (movedTouchesLeft) {
-        sideFitMode := "left"
+        sideFitMode  := "left"
         sideFitLabel := "Left fit candidate:"
     }
     else if (movedTouchesRight) {
-        sideFitMode := "right"
+        sideFitMode  := "right"
         sideFitLabel := "Right fit candidate:"
     }
 
