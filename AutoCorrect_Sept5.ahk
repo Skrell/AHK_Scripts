@@ -2249,6 +2249,8 @@ $*MButton::
     snapState     := ""   ; "", "left", "right"
     dragStartX    := wx0
     dragStartY    := wy0
+    dragStartW    := ww
+    dragStartH    := wh
     mxPrev        := mx0  ; track prior mouse X to know approach direction
     myPrev        := my0  ; track prior mouse X to know approach direction
 
@@ -2656,46 +2658,48 @@ $*MButton::
         WinSet, Transparent, Off, ahk_id %hWnd%
     }
 
-    If (GetKeyState("Ctrl","P") && startMon != stopMon && MonCount > 1) { ; mouse dragged window
-        WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-        WinGet, targetProcess, ProcessName, ahk_id %hWnd%
-        WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %cls%
-            ; Get monitor rectangles for start/stop monitors
-        SysGet, startMonInfo, Monitor, %startMon%
-        SysGet, stopMonInfo,  Monitor, %stopMon%
+    ; If (GetKeyState("Ctrl","P") && startMon != stopMon && MonCount > 1) { ; mouse dragged window
+        ; WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+        ; WinGet, targetProcess, ProcessName, ahk_id %hWnd%
+        ; WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %cls%
+            ; ; Get monitor rectangles for start/stop monitors
+        ; SysGet, startMonInfo, Monitor, %startMon%
+        ; SysGet, stopMonInfo,  Monitor, %stopMon%
 
-        dx := stopMonInfoLeft - startMonInfoLeft
-        dy := stopMonInfoTop  - startMonInfoTop
-        ; Optional: avoid weird re-entrancy from hotkey → disable other threads
-        Critical, On
-        SetWinDelay, -1
+        ; dx := stopMonInfoLeft - startMonInfoLeft
+        ; dy := stopMonInfoTop  - startMonInfoTop
+        ; ; Optional: avoid weird re-entrancy from hotkey → disable other threads
+        ; Critical, On
+        ; SetWinDelay, -1
 
-        Loop, %windowsFromProc%
-        {
-            thisId := windowsFromProc%A_Index%
+        ; Loop, %windowsFromProc%
+        ; {
+            ; thisId := windowsFromProc%A_Index%
 
-            ; Skip windows that aren't on the start monitor
-            if !IsWindowOnMonNum(thisId, startMon)
-                continue
+            ; ; Skip windows that aren't on the start monitor
+            ; if !IsWindowOnMonNum(thisId, startMon)
+                ; continue
 
-            ; Get current position/size
-            WinGetPos, wx, wy, ww, wh, ahk_id %thisId%
+            ; ; Get current position/size
+            ; WinGetPos, wx, wy, ww, wh, ahk_id %thisId%
 
-            ; Compute new coordinates on target monitor
-            newX := wx + dx
-            newY := wy + dy
+            ; ; Compute new coordinates on target monitor
+            ; newX := wx + dx
+            ; newY := wy + dy
 
-            ; Move the window directly instead of using Win+Shift+Arrow
-            WinMove, ahk_id %thisId%, , newX, newY
-        }
+            ; ; Move the window directly instead of using Win+Shift+Arrow
+            ; WinMove, ahk_id %thisId%, , newX, newY
+        ; }
 
-        Critical, Off
-        previousMon := stopMon
-    }
+        ; Critical, Off
+        ; previousMon := stopMon
+    ; }
 
     WinGetPosEx(hWnd, finalWindowX, finalWindowY, finalWindowW, finalWindowH, null, null)
-    didMoveWindow := (!isRbutton
-        && (Abs(finalWindowX - dragStartX) > deltaPxTrig || Abs(finalWindowY - dragStartY) > deltaPxTrig))
+    didMoveWindow := ( Abs(finalWindowX - dragStartX) > deltaPxTrig
+                    || Abs(finalWindowY - dragStartY) > deltaPxTrig
+                    || Abs(finalWindowW - dragStartW) > deltaPxTrig
+                    || Abs(finalWindowH - dragStartH) > deltaPxTrig)
 
     if (didMoveWindow)
         FitMovedWindowAgainstOthers(hWnd, stopMon, 150, 100)
@@ -8283,32 +8287,6 @@ MouseTrack() {
     static timeOfLastMove
 
     ListLines Off
-
-    WinGet, actwndId, ID, A
-    MouseGetPos x, y, hwndId
-    WinGetClass, classId, ahk_id %hwndId%
-    WinGet, targetProc, ProcessName, ahk_id %hwndId%
-
-    CoordMode Mouse
-
-    If (timeOfLastMove == "")
-        timeOfLastMove := A_TickCount
-
-    If ((abs(x - lastX) > 3 || abs(y - lastY) > 3) && lastX != "" && lastY != "") {
-        If !mouseMoving {
-            mouseMoving := True
-            return
-        }
-        mouseMoving := True
-        If (classId == "CabinetWClass" || classId == "Progman" || classId == "WorkerW" || classId == "#32770") {
-            timeOfLastMove := A_TickCount
-        }
-    } Else If (mouseMoving && (A_TickCount - timeOfLastMove) > 400) {
-        mouseMoving := False
-    }
-
-    lastX := x, lastY := y,
-
     If (MonCount > 1 && !GetKeyState("LButton","P")) {
         currentMon := MWAGetMonitorMouseIsIn(TaskBarHeight)
         If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
