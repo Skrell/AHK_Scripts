@@ -9390,7 +9390,9 @@ _HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY 
 ; fitMode is set, only candidates that satisfy that direction-specific edge and
 ; gap relationship are accepted. The optional refX/refY/refW/refH override lets
 ; callers evaluate multiple candidate searches against the same original release
-; rect even if the moved window itself gets resized between searches.
+; rect even if the moved window itself gets resized between searches. Note that
+; minEdgesTouched applies to the candidate/adjacent window being evaluated, not
+; to the dragged window itself.
 FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, fitMode := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "") {
     global lastUnderlyingWindowDebug
     SysGet, MonCount, MonitorCount
@@ -9635,6 +9637,8 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; Resolve and apply vertical fitting first. Top-docked windows look for a
     ; partner below them; bottom-docked windows look for a partner above them.
     ; The candidate search still uses the original release rect in either case.
+    ; The "2" passed below means the candidate window must already touch at
+    ; least two monitor work-area edges before it can qualify.
     if (movedTouchesTop) {
         topHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "top", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
         ; topDebugText := "Top fit candidate:`n" lastUnderlyingWindowDebug
@@ -9682,6 +9686,8 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
 
     ; Side alignment is resolved independently so a corner-docked release can fit
     ; against one window vertically and another horizontally in the same pass.
+    ; Again, the "2" passed into the finder below applies to the candidate
+    ; window's edge-touch count, not to the moved window's edge-touch count.
     sideFitMode  := ""
     sideFitLabel := ""
     if (movedTouchesLeft) {
