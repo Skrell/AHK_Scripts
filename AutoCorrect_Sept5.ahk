@@ -2260,7 +2260,6 @@ $*MButton::
     bottomWinEdge := wy0 + wh
 
     ; msgbox, % leftWinEdge "," rightWinEdge "-" topWinEdge "," bottomWinEdge ":" offsetX " & " offsetY
-    startMon := MWAGetMonitorMouseIsIn()
     GetMonitorRectForMouse(mx0, my0, UseWorkArea, monL, monT, monR, monB)
     If ((leftWinEdge - monL) <= SnapRange && (leftWinEdge - monL) >= 0) {
         snapState := "left"
@@ -2277,20 +2276,11 @@ $*MButton::
     Else If (mx0 >  leftWinEdge + floor(ww/2) && my0 >  wy0 + floor(wh/2))
         BR := True
 
+    BlockInput, MouseMoveOff
+
     startedAlwaysOnTop := IsAlwaysOnTop(hWnd)
     If !startedAlwaysOnTop
         WinSet, Transparent, 255, ahk_id %hWnd%
-
-    If (wh/abs(monB-monT) > 0.95) {
-        WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT)+2*abs(offsetY) + 1
-        WinGetPosEx(hWnd, wx0, wy0, ww, wh, offsetX, offsetY)
-        leftWinEdge   := wx0
-        topWinEdge    := wy0
-        rightWinEdge  := wx0 + ww
-        bottomWinEdge := wy0 + wh
-    }
-
-    BlockInput, MouseMoveOff
 
     Critical, On
     while GetKeyState("MButton", "P") {
@@ -2645,7 +2635,7 @@ $*MButton::
             && (abs(checkClickMy - my0) <= deltaPxTrig)) {
         Send, {Mbutton}
     }
-    Else If (wh/abs(monB-monT) > 0.95) {
+    Else If (wh/abs(monB-monT) > 0.90) {
         ; Normalize nearly full-height windows before the post-move fit helper runs.
         ; Waiting here avoids sampling stale geometry immediately after this WinMove.
         WinMove, ahk_id %hWnd%, , , %monT%, , abs(monB-monT) + 2*abs(offsetY) + 1
@@ -5254,10 +5244,13 @@ $~^LButton::
                         if (MonCount > 1) {
                             currentMonHasActWin := IsWindowOnMonNum(windowID, currentMon)
                             if currentMonHasActWin
-                                WinActivate, ahk_id %windowID%
+                                ; WinActivate, ahk_id %windowID%
+                                WinSet, AlwaysOnTop, On,  ahk_id %windowID%
+                                WinSet, AlwaysOnTop, Off, ahk_id %windowID%
                         }
                         else {
-                            WinActivate, ahk_id %windowID%
+                            WinSet, AlwaysOnTop, On,  ahk_id %windowID%
+                            WinSet, AlwaysOnTop, Off, ahk_id %windowID%
                         }
                     }
                 }
@@ -5322,8 +5315,10 @@ BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) 
         if (windowID = targetID)
             continue
 
-        WinActivate, ahk_id %windowID%
-        WinWaitActive, ahk_id %windowID%,, 0.15
+        ; WinActivate, ahk_id %windowID%
+        ; WinWaitActive, ahk_id %windowID%,, 0.15
+        WinSet, AlwaysOnTop, On,  ahk_id %windowID%
+        WinSet, AlwaysOnTop, Off, ahk_id %windowID%
     }
 
     WinActivate, ahk_id %targetID%
@@ -9360,6 +9355,8 @@ _HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY 
         return false
     VarSetCapacity(pointStruct, 8, 0)
 
+    totalPointsHit := 0
+
     Loop, 5
     {
         sampleX := candidateX + Floor((candidateW - 1) * ((A_Index * 2) - 1) / 10)
@@ -9374,9 +9371,11 @@ _HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY 
             hitHwndID := DllCall("user32\WindowFromPoint", "Int64", pointValue, "Ptr")
             if (!hitHwndID)
                 continue
+            else
+                totalPointsHit++
 
             hitRootHwndID := DllCall("GetAncestor", "Ptr", hitHwndID, "UInt", 2, "Ptr")
-            if (hitRootHwndID = candidateHwndID)
+            if (hitRootHwndID = candidateHwndID && totalPointsHit >= 5)
                 return true
         }
     }
@@ -9487,7 +9486,7 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
         if (rejectReason = "") {
             candidateRightEdge  := candidateX + candidateW
             candidateBottomEdge := candidateY + candidateH
-            horizontalOverlap   := Min(refRightEdge, candidateRightEdge) - Max(refX, candidateX)
+            horizontalOverlap   := Min(refRightEdge, candidateRightEdge)   - Max(refX, candidateX)
             verticalOverlap     := Min(refBottomEdge, candidateBottomEdge) - Max(refY, candidateY)
 
             ; fitMode narrows the generic overlap check into the exact geometric
@@ -9596,6 +9595,9 @@ return
 ; beneath it are positioned close enough to form clean pairs, resize the moved
 ; window so it can align vertically to one window and horizontally to another in
 ; the same release, while still fully spanning back out to its monitor edge.
+; When a top/bottom fit succeeds but no separate side-fit candidate wins, the
+; moved window can also inherit the vertical partner's width if both left/right
+; edges were already within the normal tolerance on release.
 FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50) {
     global lastUnderlyingWindowDebug
     if (!movedHwndID)
@@ -9615,24 +9617,29 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; to the left, right, top, or bottom edge of the current monitor.
     movedRightEdge       := movedX + movedW
     movedBottomEdge      := movedY + movedH
-    movedTouchesLeft     := Abs(movedX - monInfoLeft) <= edgeTouchTolerance
-    movedTouchesRight    := Abs(movedRightEdge - monInfoRight) <= edgeTouchTolerance
-    movedTouchesTop      := Abs(movedY - monInfoTop) <= edgeTouchTolerance
+    movedTouchesLeft     := Abs(movedX          - monInfoLeft)   <= edgeTouchTolerance
+    movedTouchesRight    := Abs(movedRightEdge  - monInfoRight)  <= edgeTouchTolerance
+    movedTouchesTop      := Abs(movedY          - monInfoTop)    <= edgeTouchTolerance
     movedTouchesBottom   := Abs(movedBottomEdge - monInfoBottom) <= edgeTouchTolerance
 
     ; Preserve the release-time geometry so each candidate search evaluates the
     ; same original dropped position, even if the first fit branch already moved
     ; or resized the live window.
-    originalMovedOffsetX := movedOffsetX
-    originalMovedOffsetY := movedOffsetY
-    originalMovedW       := movedW
-    originalMovedH       := movedH
+    ; originalMovedOffsetX := movedOffsetX
+    ; originalMovedOffsetY := movedOffsetY
+    ; originalMovedW       := movedW
+    ; originalMovedH       := movedH
 
     if (!movedTouchesLeft && !movedTouchesRight && !movedTouchesTop && !movedTouchesBottom)
         return false
 
-    didFitWindow := false
-    fitDebugText := ""
+    didFitWindow             := false
+    didSideFit               := false
+    didVerticalFit           := false
+    fitDebugText             := ""
+    verticalPartnerRightEdge := ""
+    verticalPartnerW         := ""
+    verticalPartnerX         := ""
 
     ; Resolve and apply vertical fitting first. Top-docked windows look for a
     ; partner below them; bottom-docked windows look for a partner above them.
@@ -9640,20 +9647,25 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; The "2" passed below means the candidate window must already touch at
     ; least two monitor work-area edges before it can qualify.
     if (movedTouchesTop) {
-        topHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "top", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
+        belowHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100,     "top", edgeGapTolerance, movedX, movedY, movedW, movedH)
         ; topDebugText := "Top fit candidate:`n" lastUnderlyingWindowDebug
         ; fitDebugText := topDebugText
 
-        if (topHwndID && topHwndID != movedHwndID && WinGetPosEx(topHwndID, otherX, otherY, otherW, otherH, null, null)) {
+        if (belowHwndID && belowHwndID != movedHwndID && WinGetPosEx(belowHwndID, belowWinX, belowWinY, belowWinW, belowWinH, null, null)) {
+            verticalPartnerRightEdge := belowWinX + belowWinW
+            verticalPartnerW         := belowWinW
+            verticalPartnerX         := belowWinX
+
             ; Keep the same height compensation used elsewhere in the script, but
             ; place the window at the monitor's visual top edge and size it down
             ; until its bottom edge lands flush against the lower partner window.
             targetTopEdge     := monInfoTop
-            targetBottomEdge  := otherY
+            targetBottomEdge  := belowWinY
             targetOuterHeight := targetBottomEdge - targetTopEdge
             if (targetOuterHeight > 0) {
                 targetMoveY      := targetTopEdge
-                targetMoveHeight := targetOuterHeight + 2*Abs(originalMovedOffsetY) + 1
+                targetMoveHeight := targetOuterHeight + 2*Abs(movedOffsetY) + 1
+                didVerticalFit   := true
                 didFitWindow     := true
                 WinMove, ahk_id %movedHwndID%, , , %targetMoveY%, , %targetMoveHeight%
                 WaitForStableWindow(movedHwndID)
@@ -9661,22 +9673,26 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         }
     }
     else if (movedTouchesBottom) {
-        bottomHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "bottom", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
+        aboveHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "bottom", edgeGapTolerance, movedX, movedY, movedW, movedH)
         ; bottomDebugText := "Bottom fit candidate:`n" lastUnderlyingWindowDebug
         ; fitDebugText    := bottomDebugText
 
-        if (bottomHwndID && bottomHwndID != movedHwndID && WinGetPosEx(bottomHwndID, otherX, otherY, otherW, otherH, null, null)) {
-            otherBottomEdge := otherY + otherH
+        if (aboveHwndID && aboveHwndID != movedHwndID && WinGetPosEx(aboveHwndID, aboveWinX, aboveWinY, aboveWinW, aboveWinH, null, null)) {
+            aboveWinBottomEdge       := aboveWinY + aboveWinH
+            verticalPartnerRightEdge := aboveWinX + aboveWinW
+            verticalPartnerW         := aboveWinW
+            verticalPartnerX         := aboveWinX
 
             ; Keep the same height compensation used elsewhere in the script, but
             ; place the window at the desired visual top edge without adding the
             ; frame offset to Y.
-            targetTopEdge     := otherBottomEdge
+            targetTopEdge     := aboveWinBottomEdge
             targetBottomEdge  := monInfoBottom
             targetOuterHeight := targetBottomEdge - targetTopEdge
             if (targetOuterHeight > 0) {
                 targetMoveY      := targetTopEdge
-                targetMoveHeight := targetOuterHeight + 2*Abs(originalMovedOffsetY) + 1
+                targetMoveHeight := targetOuterHeight + 2*Abs(movedOffsetY) + 1
+                didVerticalFit   := true
                 didFitWindow     := true
                 WinMove, ahk_id %movedHwndID%, , , %targetMoveY%, , %targetMoveHeight%
                 WaitForStableWindow(movedHwndID)
@@ -9707,19 +9723,19 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         ; else
             ; fitDebugText .= "`n`n" sideDebugText
 
-        if (sideHwndID && sideHwndID != movedHwndID && WinGetPosEx(sideHwndID, otherX, otherY, otherW, otherH, null, null)) {
-            otherRightEdge := otherX + otherW
+        if (sideHwndID && sideHwndID != movedHwndID && WinGetPosEx(sideHwndID, sideWinX, sideWinY, sideWinW, sideWinH, null, null)) {
+            sideRightEdge := sideWinX + sideWinW
 
             if (sideFitMode = "left") {
                 ; Left-docked moved window: widen it from the monitor's left edge
                 ; until it meets the candidate's left edge on the right side.
                 targetLeftEdge   := monInfoLeft
-                targetOuterWidth := otherX - targetLeftEdge
+                targetOuterWidth := sideWinX - targetLeftEdge
             }
             else {
                 ; Right-docked moved window: widen it from the candidate's right
                 ; edge until it fully reaches the monitor's right edge.
-                targetLeftEdge   := otherRightEdge
+                targetLeftEdge   := sideRightEdge
                 targetRightEdge  := monInfoRight
                 targetOuterWidth := targetRightEdge - targetLeftEdge
             }
@@ -9727,11 +9743,27 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
             if (targetOuterWidth > 0) {
                 ; Preserve the original non-client offset while expanding the moved
                 ; window outward to its final fitted width.
-                targetMoveX     := targetLeftEdge + originalMovedOffsetX
-                targetMoveWidth := targetOuterWidth + 2*Abs(originalMovedOffsetX)
+                targetMoveX     := targetLeftEdge + movedOffsetX
+                targetMoveWidth := targetOuterWidth + 2*Abs(movedOffsetX)
+                didSideFit      := true
                 WinMove, ahk_id %movedHwndID%, , %targetMoveX%, , %targetMoveWidth%
                 didFitWindow := true
             }
+        }
+    }
+
+    ; If a top/bottom fit succeeded but no left/right partner qualified, allow
+    ; the moved window to inherit the vertical partner's width when both of its
+    ; vertical edges were already nearly aligned with that partner at release.
+    if (   didVerticalFit && !didSideFit
+        && Abs(movedX         - verticalPartnerX)         <= edgeTouchTolerance
+        && Abs(movedRightEdge - verticalPartnerRightEdge) <= edgeTouchTolerance)
+    {
+        targetMoveX     := verticalPartnerX + movedOffsetX
+        targetMoveWidth := verticalPartnerW + 2*Abs(movedOffsetX)
+        if (targetMoveWidth > 0) {
+            WinMove, ahk_id %movedHwndID%, , %targetMoveX%, , %targetMoveWidth%
+            didFitWindow := true
         }
     }
 
