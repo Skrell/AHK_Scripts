@@ -9487,7 +9487,7 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
         if (rejectReason = "") {
             candidateRightEdge  := candidateX + candidateW
             candidateBottomEdge := candidateY + candidateH
-            horizontalOverlap   := Min(refRightEdge, candidateRightEdge)   - Max(refX, candidateX)
+            horizontalOverlap   := Min(refRightEdge,   candidateRightEdge) - Max(refX, candidateX)
             verticalOverlap     := Min(refBottomEdge, candidateBottomEdge) - Max(refY, candidateY)
 
             ; fitMode narrows the generic overlap check into the exact geometric
@@ -9519,8 +9519,6 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
             else if (fitMode = "left") {
                 if (verticalOverlap < minVerticalOverlap)
                     rejectReason := "vov"
-                else if (Abs(candidateRightEdge - monInfoRight) > edgeTouchTolerance)
-                    rejectReason := "not-right-edge"
                 else {
                     edgeGap := candidateX - refRightEdge
                     if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
@@ -9530,8 +9528,6 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
             else if (fitMode = "right") {
                 if (verticalOverlap < minVerticalOverlap)
                     rejectReason := "vov"
-                else if (Abs(candidateX - monInfoLeft) > edgeTouchTolerance)
-                    rejectReason := "not-left-edge"
                 else {
                     edgeGap := refX - candidateRightEdge
                     if (edgeGap < -edgeTouchTolerance || edgeGap > edgeGapTolerance)
@@ -9559,7 +9555,7 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
             else
                 candidateStatus := "reject:" rejectReason
 
-            ; lastUnderlyingWindowDebug .= debugLineCount ". " candidateTitle " | edges=" edgeTouchCount " | hov=" horizontalOverlap " | vov=" verticalOverlap " | gap=" edgeGap " | exposed=" hasExposedArea " | " candidateStatus "`n"
+            lastUnderlyingWindowDebug .= debugLineCount ". " candidateTitle " | edges=" edgeTouchCount " | hov=" horizontalOverlap " | vov=" verticalOverlap " | gap=" edgeGap " | exposed=" hasExposedArea " | " candidateStatus "`n"
         }
 
         if (rejectReason != "")
@@ -9649,8 +9645,8 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; least two monitor work-area edges before it can qualify.
     if (movedTouchesTop) {
         belowHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100,     "top", edgeGapTolerance, movedX, movedY, movedW, movedH)
-        ; topDebugText := "Top fit candidate:`n" lastUnderlyingWindowDebug
-        ; fitDebugText := topDebugText
+        topDebugText := "Top fit candidate:`n" lastUnderlyingWindowDebug
+        fitDebugText := topDebugText
 
         if (belowHwndID && belowHwndID != movedHwndID && WinGetPosEx(belowHwndID, belowWinX, belowWinY, belowWinW, belowWinH, null, null)) {
             verticalPartnerRightEdge := belowWinX + belowWinW
@@ -9675,8 +9671,8 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     }
     else if (movedTouchesBottom) {
         aboveHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "bottom", edgeGapTolerance, movedX, movedY, movedW, movedH)
-        ; bottomDebugText := "Bottom fit candidate:`n" lastUnderlyingWindowDebug
-        ; fitDebugText    := bottomDebugText
+        bottomDebugText := "Bottom fit candidate:`n" lastUnderlyingWindowDebug
+        fitDebugText    := bottomDebugText
 
         if (aboveHwndID && aboveHwndID != movedHwndID && WinGetPosEx(aboveHwndID, aboveWinX, aboveWinY, aboveWinW, aboveWinH, null, null)) {
             aboveWinBottomEdge       := aboveWinY + aboveWinH
@@ -9718,11 +9714,11 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
 
     if (sideFitMode != "") {
         sideHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, sideFitMode, edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
-        ; sideDebugText := sideFitLabel "`n" lastUnderlyingWindowDebug
-        ; if (fitDebugText = "")
-            ; fitDebugText := sideDebugText
-        ; else
-            ; fitDebugText .= "`n`n" sideDebugText
+        sideDebugText := sideFitLabel "`n" lastUnderlyingWindowDebug
+        if (fitDebugText = "")
+            fitDebugText := sideDebugText
+        else
+            fitDebugText .= "`n`n" sideDebugText
 
         if (sideHwndID && sideHwndID != movedHwndID && WinGetPosEx(sideHwndID, sideWinX, sideWinY, sideWinW, sideWinH, null, null)) {
             sideRightEdge := sideWinX + sideWinW
@@ -9768,11 +9764,11 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         }
     }
 
-    if (fitDebugText != "") {
-        lastUnderlyingWindowDebug := fitDebugText
-        ToolTip, % lastUnderlyingWindowDebug
-        SetTimer, RemoveToolTip, -3500
-    }
+    ; if (fitDebugText != "") {
+        ; lastUnderlyingWindowDebug := fitDebugText
+        ; ToolTip, % lastUnderlyingWindowDebug
+        ; SetTimer, RemoveToolTip, -5000
+    ; }
 
     return didFitWindow
 }
