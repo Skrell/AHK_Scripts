@@ -9356,6 +9356,7 @@ _HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY 
     VarSetCapacity(pointStruct, 8, 0)
 
     totalPointsHit := 0
+    totalPointsRequired := 15
 
     Loop, 5
     {
@@ -9368,14 +9369,14 @@ _HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY 
             NumPut(sampleX, pointStruct, 0, "Int")
             NumPut(sampleY, pointStruct, 4, "Int")
             pointValue := NumGet(pointStruct, 0, "Int64")
-            hitHwndID := DllCall("user32\WindowFromPoint", "Int64", pointValue, "Ptr")
+            hitHwndID  := DllCall("user32\WindowFromPoint", "Int64", pointValue, "Ptr")
             if (!hitHwndID)
                 continue
             else
                 totalPointsHit++
 
             hitRootHwndID := DllCall("GetAncestor", "Ptr", hitHwndID, "UInt", 2, "Ptr")
-            if (hitRootHwndID = candidateHwndID && totalPointsHit >= 5)
+            if (hitRootHwndID = candidateHwndID && totalPointsHit >= totalPointsRequired)
                 return true
         }
     }
