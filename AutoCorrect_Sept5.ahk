@@ -2648,43 +2648,6 @@ $*MButton::
         WinSet, Transparent, Off, ahk_id %hWnd%
     }
 
-    ; If (GetKeyState("Ctrl","P") && startMon != stopMon && MonCount > 1) { ; mouse dragged window
-        ; WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-        ; WinGet, targetProcess, ProcessName, ahk_id %hWnd%
-        ; WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %cls%
-            ; ; Get monitor rectangles for start/stop monitors
-        ; SysGet, startMonInfo, Monitor, %startMon%
-        ; SysGet, stopMonInfo,  Monitor, %stopMon%
-
-        ; dx := stopMonInfoLeft - startMonInfoLeft
-        ; dy := stopMonInfoTop  - startMonInfoTop
-        ; ; Optional: avoid weird re-entrancy from hotkey → disable other threads
-        ; Critical, On
-        ; SetWinDelay, -1
-
-        ; Loop, %windowsFromProc%
-        ; {
-            ; thisId := windowsFromProc%A_Index%
-
-            ; ; Skip windows that aren't on the start monitor
-            ; if !IsWindowOnMonNum(thisId, startMon)
-                ; continue
-
-            ; ; Get current position/size
-            ; WinGetPos, wx, wy, ww, wh, ahk_id %thisId%
-
-            ; ; Compute new coordinates on target monitor
-            ; newX := wx + dx
-            ; newY := wy + dy
-
-            ; ; Move the window directly instead of using Win+Shift+Arrow
-            ; WinMove, ahk_id %thisId%, , newX, newY
-        ; }
-
-        ; Critical, Off
-        ; previousMon := stopMon
-    ; }
-
     WinGetPosEx(hWnd, finalWindowX, finalWindowY, finalWindowW, finalWindowH, null, null)
     didMoveWindow := ( Abs(finalWindowX - dragStartX) > deltaPxTrig
                     || Abs(finalWindowY - dragStartY) > deltaPxTrig
@@ -5191,81 +5154,70 @@ Lbutton Up::
     Return
 #If
 
-#If MouseIsOverTaskbarWidgets() || MouseIsOverTitleBar()
+#If MouseIsOverTaskbarWidgets()
 $~^LButton::
     global MonCount
     Thread, NoTimers, True
     StopRecursion := True
 
-    clickedTaskbar  := MouseIsOverTaskbarWidgets()
-    clickedTitleBar := MouseIsOverTitleBar()
-
     DetectHiddenWindows, Off
     SysGet, MonCount, MonitorCount
 
-    if (clickedTaskbar) {
-        Send, {Ctrl UP}
-        KeyWait, LButton, U T3
-        Sleep, 125
-        targetID := FindTopMostWindow()
-        WinGetClass, targetClass, ahk_id %targetID%
-        WinSet, AlwaysOnTop, On, ahk_id %targetID%
+    Send, {Ctrl UP}
 
-        if (targetClass != "Windows.UI.Core.CoreWindow"
-        &&  targetClass != "TaskListThumbnailWnd"
-        &&  targetClass != "XamlExplorerHostIslandWindow") {
+    KeyWait, LButton, U T3
+    Sleep, 125
 
-            WinGet, targetProcess, ProcessName, ahk_id %targetID%
+    targetID := FindTopMostWindow()
+    WinGetClass, targetClass, ahk_id %targetID%
+    WinSet, AlwaysOnTop, On, ahk_id %targetID%
 
-            WinGet, windowList, List, ahk_exe %targetProcess% ahk_class %targetClass%
-            listCount := windowList
+    if (targetClass != "Windows.UI.Core.CoreWindow"
+    &&  targetClass != "TaskListThumbnailWnd"
+    &&  targetClass != "XamlExplorerHostIslandWindow") {
 
-            if (listCount < 2) {
-                Tooltip, Only %listCount% Window(s) found!
-                sleep, 1500
-                Tooltip,
-            }
-            else {
-                currentMon := MWAGetMonitorMouseIsIn()
-                Loop, %windowList%
-                {
-                    windowID := windowList%A_Index%
-                    WinGet, windowState, MinMax, ahk_id %windowID%
+        WinGet, targetProcess, ProcessName, ahk_id %targetID%
 
-                    if (windowState == -1) {
-                        winMonNum := GetWindowMonitorNumber(windowID)
+        WinGet, windowList, List, ahk_exe %targetProcess% ahk_class %targetClass%
+        listCount := windowList
 
-                        If (winMonNum == currentMon) {
-                            WinRestore, ahk_id %windowID%
-                            sleep, 100
-                        }
-                    }
-                    else if (windowState == 0) {
-                        if (MonCount > 1) {
-                            currentMonHasActWin := IsWindowOnMonNum(windowID, currentMon)
-                            if currentMonHasActWin
-                                ; WinActivate, ahk_id %windowID%
-                                WinSet, AlwaysOnTop, On,  ahk_id %windowID%
-                                WinSet, AlwaysOnTop, Off, ahk_id %windowID%
-                        }
-                        else {
-                            WinSet, AlwaysOnTop, On,  ahk_id %windowID%
-                            WinSet, AlwaysOnTop, Off, ahk_id %windowID%
-                        }
+        if (listCount < 2) {
+            Tooltip, Only %listCount% Window(s) found!
+            sleep, 1500
+            Tooltip,
+        }
+        else {
+            currentMon := MWAGetMonitorMouseIsIn()
+            Loop, %windowList%
+            {
+                windowID := windowList%A_Index%
+                WinGet, windowState, MinMax, ahk_id %windowID%
+
+                if (windowState == -1) {
+                    winMonNum := GetWindowMonitorNumber(windowID)
+
+                    If (winMonNum == currentMon) {
+                        WinRestore, ahk_id %windowID%
+                        sleep, 100
                     }
                 }
-                WinActivate, ahk_id %targetID%
-                WinSet, AlwaysOnTop, Off, ahk_id %targetID%
+                    else if (windowState == 0) {
+                    if (MonCount > 1) {
+                        currentMonHasActWin := IsWindowOnMonNum(windowID, currentMon)
+                        if currentMonHasActWin
+                            ; WinActivate, ahk_id %windowID%
+                            WinSet, AlwaysOnTop, On,  ahk_id %windowID%
+                            WinSet, AlwaysOnTop, Off, ahk_id %windowID%
+                    }
+                    else {
+                        WinSet, AlwaysOnTop, On,  ahk_id %windowID%
+                        WinSet, AlwaysOnTop, Off, ahk_id %windowID%
+                    }
+                }
             }
+            WinActivate, ahk_id %targetID%
+            WinSet, AlwaysOnTop, Off, ahk_id %targetID%
         }
-    }
-    else if (clickedTitleBar) {
-        Send, {Ctrl UP}
-        targetID := FindTopMostWindow()
-        WinGetClass, targetClass, ahk_id %targetID%
-        WinGet, targetProcess, ProcessName, ahk_id %targetID%
-        currentMon := MWAGetMonitorMouseIsIn()
-        BringAppWindowsOnMonitorToTop(targetProcess, targetClass, currentMon, targetID)
     }
 
     KeyWait, Ctrl, U
@@ -5274,6 +5226,28 @@ $~^LButton::
     StopRecursion := False
     Thread, NoTimers, False
 Return
+#If
+
+#If MouseIsOverTitleBar()
+$^LButton::
+    Thread, NoTimers, True
+    StopRecursion := True
+
+    Send, {Ctrl UP}
+
+    MouseGetPos, , , targetID
+    WinActivate, ahk_id %targetID%
+    WinGetClass, targetClass, ahk_id %targetID%
+    WinGet, targetProcess, ProcessName, ahk_id %targetID%
+    currentMon := MWAGetMonitorMouseIsIn()
+
+    BringAppWindowsOnMonitorToTop(targetProcess, targetClass, currentMon, targetID)
+
+    KeyWait, Ctrl, U
+    FixModifiers()
+    StopRecursion := False
+    Thread, NoTimers, False
+return
 #If
 
 BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) {
@@ -9356,7 +9330,7 @@ _HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY 
     VarSetCapacity(pointStruct, 8, 0)
 
     totalPointsHit := 0
-    totalPointsRequired := 15
+    totalPointsRequired := 12
 
     Loop, 5
     {
@@ -9387,13 +9361,13 @@ _HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY 
 ; Find the first window below the dragged window in z-order that is still visibly
 ; exposed on the desktop, touches at least minEdgesTouched monitor work-area edges,
 ; and overlaps the dragged window enough to be a plausible fit partner. When
-; fitMode is set, only candidates that satisfy that direction-specific edge and
+; isFitToDragged is set, only candidates that satisfy that direction-specific edge and
 ; gap relationship are accepted. The optional refX/refY/refW/refH override lets
 ; callers evaluate multiple candidate searches against the same original release
 ; rect even if the moved window itself gets resized between searches. Note that
 ; minEdgesTouched applies to the candidate/adjacent window being evaluated, not
 ; to the dragged window itself.
-FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, fitMode := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "") {
+FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, isFitToDragged := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "") {
     global lastUnderlyingWindowDebug
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
@@ -9490,11 +9464,11 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
             horizontalOverlap   := Min(refRightEdge,   candidateRightEdge) - Max(refX, candidateX)
             verticalOverlap     := Min(refBottomEdge, candidateBottomEdge) - Max(refY, candidateY)
 
-            ; fitMode narrows the generic overlap check into the exact geometric
+            ; isFitToDragged narrows the generic overlap check into the exact geometric
             ; relationship needed for that resize direction. A candidate is not
             ; scored or ranked here: it simply passes or fails, and the first
             ; passing candidate below the reference window wins.
-            if (fitMode = "top") {
+            if (isFitToDragged = "top") {
                 ; Top-fit candidates must share enough left-to-right span with
                 ; the dragged window to count as the window "below" it rather
                 ; than an unrelated window off to the side. reject:hov in the
@@ -9507,7 +9481,7 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
                         rejectReason := "gap=" edgeGap
                 }
             }
-            else if (fitMode = "bottom") {
+            else if (isFitToDragged = "bottom") {
                 if (horizontalOverlap < minHorizontalOverlap)
                     rejectReason := "hov"
                 else {
@@ -9516,7 +9490,7 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
                         rejectReason := "gap=" edgeGap
                 }
             }
-            else if (fitMode = "left") {
+            else if (isFitToDragged = "left") {
                 if (verticalOverlap < minVerticalOverlap)
                     rejectReason := "vov"
                 else {
@@ -9525,7 +9499,7 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
                         rejectReason := "gap=" edgeGap
                 }
             }
-            else if (fitMode = "right") {
+            else if (isFitToDragged = "right") {
                 if (verticalOverlap < minVerticalOverlap)
                     rejectReason := "vov"
                 else {
@@ -9630,13 +9604,16 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     if (!movedTouchesLeft && !movedTouchesRight && !movedTouchesTop && !movedTouchesBottom)
         return false
 
-    didFitWindow             := false
-    didSideFit               := false
-    didVerticalFit           := false
-    fitDebugText             := ""
-    verticalPartnerRightEdge := ""
-    verticalPartnerW         := ""
-    verticalPartnerX         := ""
+    didFitWindow               := false
+    didSideFit                 := false
+    didVerticalFit             := false
+    fitDebugText               := ""
+    sidePartnerBottomEdge      := ""
+    sidePartnerH               := ""
+    sidePartnerY               := ""
+    verticalPartnerRightEdge   := ""
+    verticalPartnerW           := ""
+    verticalPartnerX           := ""
 
     ; Resolve and apply vertical fitting first. Top-docked windows look for a
     ; partner below them; bottom-docked windows look for a partner above them.
@@ -9701,19 +9678,19 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; against one window vertically and another horizontally in the same pass.
     ; Again, the "2" passed into the finder below applies to the candidate
     ; window's edge-touch count, not to the moved window's edge-touch count.
-    sideFitMode  := ""
+    sideisFitToDragged  := ""
     sideFitLabel := ""
     if (movedTouchesLeft) {
-        sideFitMode  := "left"
+        sideisFitToDragged  := "left"
         sideFitLabel := "Left fit candidate:"
     }
     else if (movedTouchesRight) {
-        sideFitMode  := "right"
+        sideisFitToDragged  := "right"
         sideFitLabel := "Right fit candidate:"
     }
 
-    if (sideFitMode != "") {
-        sideHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, sideFitMode, edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
+    if (sideisFitToDragged != "") {
+        sideHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, sideisFitToDragged, edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
         sideDebugText := sideFitLabel "`n" lastUnderlyingWindowDebug
         if (fitDebugText = "")
             fitDebugText := sideDebugText
@@ -9721,9 +9698,12 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
             fitDebugText .= "`n`n" sideDebugText
 
         if (sideHwndID && sideHwndID != movedHwndID && WinGetPosEx(sideHwndID, sideWinX, sideWinY, sideWinW, sideWinH, null, null)) {
+            sidePartnerBottomEdge := sideWinY + sideWinH
+            sidePartnerH          := sideWinH
+            sidePartnerY          := sideWinY
             sideRightEdge := sideWinX + sideWinW
 
-            if (sideFitMode = "left") {
+            if (sideisFitToDragged = "left") {
                 ; Left-docked moved window: widen it from the monitor's left edge
                 ; until it meets the candidate's left edge on the right side.
                 targetLeftEdge   := monInfoLeft
@@ -9760,6 +9740,22 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         targetMoveWidth := verticalPartnerW + 2*Abs(movedOffsetX)
         if (targetMoveWidth > 0) {
             WinMove, ahk_id %movedHwndID%, , %targetMoveX%, , %targetMoveWidth%
+            didFitWindow := true
+        }
+    }
+
+    ; Mirror the top/bottom width-inheritance fallback for left/right fits. If a
+    ; side fit succeeded but no separate vertical partner qualified, allow the
+    ; moved window to inherit the side partner's height when both of its
+    ; horizontal edges were already nearly aligned with that partner at release.
+    if (   didSideFit && !didVerticalFit
+        && Abs(movedY         - sidePartnerY)          <= edgeTouchTolerance
+        && Abs(movedBottomEdge - sidePartnerBottomEdge) <= edgeTouchTolerance)
+    {
+        targetMoveY      := sidePartnerY
+        targetMoveHeight := sidePartnerH + 2*Abs(movedOffsetY) + 1
+        if (targetMoveHeight > 0) {
+            WinMove, ahk_id %movedHwndID%, , , %targetMoveY%, , %targetMoveHeight%
             didFitWindow := true
         }
     }
@@ -11890,6 +11886,7 @@ SetTitleMatchMode, 2
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
+::chats::
 ::stdio::
 ::yt::
 ::git::
@@ -12189,22 +12186,38 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
-:?:succesful::successful
-:?:successfull::successful
-:?:succsessfull::successful
-:?:sucesful::successful
+:?:uccessful::successful
+:?:sccessful::successful
 :?:sucessful::successful
-:?:sucessfull::successful
-:?:succesfully::successfully
-:?:succesfully::successfully
-:?:succesfuly::successfully
-:?:successfuly::successfully
-:?:successfulyl::successfully
-:?:successully::successfully
-:?:sucesfully::successfully
-:?:sucesfuly::successfully
+:?:succssful::successful
+:?:succesful::successful
+:?:successul::successful
+:?:successfl::successful
+:?:successfu::successful
+:?:usccessful::successful
+:?:scucessful::successful
+:?:sucecssful::successful
+:?:succsesful::successful
+:?:succesfsul::successful
+:?:successufl::successful
+:?:successflu::successful
+:?:uccessfully::successfully
+:?:sccessfully::successfully
 :?:sucessfully::successfully
-:?:sucessfuly::successfully
+:?:succssfully::successfully
+:?:succesfully::successfully
+:?:successully::successfully
+:?:successflly::successfully
+:?:successfuly::successfully
+:?:successfull::successfully
+:?:usccessfully::successfully
+:?:scucessfully::successfully
+:?:sucecssfully::successfully
+:?:succsesfully::successfully
+:?:succesfsully::successfully
+:?:successuflly::successfully
+:?:successfluly::successfully
+:?:successfulyl::successfully
 :?:bilites::bilities
 :?:bilties::bilities
 :?:blities::bilities
@@ -12270,6 +12283,17 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:gruond::ground
 :?:gronud::ground
 :?:groudn::ground
+:?:gounds::grounds
+:?:grunds::grounds
+:?:gronds::grounds
+:?:grouds::grounds
+:?:grouns::grounds
+:?:rgounds::grounds
+:?:gorunds::grounds
+:?:gruonds::grounds
+:?:gronuds::grounds
+:?:groudns::grounds
+:?:grounsd::grounds
 :?:aliyt::ality
 :?:laity::ality
 :?:altiy::ality
