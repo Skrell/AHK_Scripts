@@ -2802,7 +2802,6 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     blockKeys   := False
-    FixModifiers()
     Critical, Off
 Return
 
@@ -2850,7 +2849,6 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     blockKeys   := False
-    FixModifiers()
     Critical, Off
 Return
 #If
@@ -2860,10 +2858,84 @@ ControlExist(ctrl, winTitle := "", winText := "") {
     Return !!hCtl
 }
 
+; Replaces the current selection in a classic Edit/RichEdit control using
+; control messages so WrapClipboardText can avoid the slower app-level ^v path.
+_FastInsertWrappedTextIntoClassicControl(windowId, controlClassNN, controlHwnd, text) {
+    static emReplaceSel := 0x00C2
+
+    replacementText := StrReplace(text, "`r")
+    replacementText := StrReplace(replacementText, "`n", "`r`n")
+
+    VarSetCapacity(replacementBuffer, (StrLen(replacementText) + 1) * 2, 0)
+    StrPut(replacementText, &replacementBuffer, "UTF-16")
+
+    if RegExMatch(controlClassNN, "i)^Edit\d+$") {
+        ControlFocus, %controlClassNN%, ahk_id %windowId%
+        SendMessage, %emReplaceSel%, 1, &replacementBuffer, %controlClassNN%, ahk_id %windowId%
+        return (ErrorLevel != "FAIL")
+    }
+
+    if RegExMatch(controlClassNN, "i)^(RICHEDIT\w*\d+|RichEdit\w*\d+)$") {
+        ControlFocus, %controlClassNN%, ahk_id %windowId%
+        SendMessage, %emReplaceSel%, 1, &replacementBuffer, %controlClassNN%, ahk_id %windowId%
+        return (ErrorLevel != "FAIL")
+    }
+
+    if (controlHwnd) {
+        WinGetClass, controlClassName, ahk_id %controlHwnd%
+
+        if (controlClassName = "Edit" || RegExMatch(controlClassName, "i)^(RICHEDIT\w*|RichEdit\w*)$")) {
+            ControlFocus, , ahk_id %controlHwnd%
+            SendMessage, %emReplaceSel%, 1, &replacementBuffer, , ahk_id %controlHwnd%
+            return (ErrorLevel != "FAIL")
+        }
+    }
+
+    return false
+}
+
+; Resolves the currently-focused classic editable control, if there is one.
+_GetFastInsertWrappedTextTarget(ByRef windowId, ByRef controlClassNN, ByRef controlHwnd) {
+    WinGet, windowId, ID, A
+    if !windowId
+        return false
+
+    ControlGetFocus, controlClassNN, ahk_id %windowId%
+    controlHwnd := 0
+
+    if (controlClassNN != "")
+        ControlGet, controlHwnd, Hwnd,, %controlClassNN%, ahk_id %windowId%
+
+    if RegExMatch(controlClassNN, "i)^Edit\d+$")
+        return true
+
+    if RegExMatch(controlClassNN, "i)^(RICHEDIT\w*\d+|RichEdit\w*\d+)$")
+        return true
+
+    if (controlHwnd) {
+        WinGetClass, controlClassName, ahk_id %controlHwnd%
+        if (controlClassName = "Edit" || RegExMatch(controlClassName, "i)^(RICHEDIT\w*|RichEdit\w*)$"))
+            return true
+    }
+
+    return false
+}
+
+; Attempts a fast classic-control replacement before falling back to clipboard
+; paste for unknown or non-Win32 editable targets.
+TryFastInsertWrappedText(text) {
+    if !_GetFastInsertWrappedTextTarget(windowId, controlClassNN, controlHwnd)
+        return false
+
+    return _FastInsertWrappedTextIntoClassicControl(windowId, controlClassNN, controlHwnd, text)
+}
+
 ; Wraps clipboard text and preserves a single trailing space outside the wrapper.
 WrapClipboardText(leftText, rightText) {
     Send, ^!+m
+
     clipboardText    := Clip()
+
     hasTrailingSpace := SubStr(clipboardText, 0) == " "
     wrappedText      := RTrim(clipboardText, " ")
 
@@ -2871,7 +2943,9 @@ WrapClipboardText(leftText, rightText) {
     if (hasTrailingSpace)
         wrappedText .= " "
 
-    Clip(wrappedText)
+    if !TryFastInsertWrappedText(wrappedText)
+        Clip(wrappedText)
+
     Send, ^!+m
 }
 
@@ -8926,20 +9000,25 @@ Clip(Text := "", Reselect := "", Restore := "")
         SetTimer, ClipRestore, Off
         Return
     } else {
+        clipResult := ""
+        isReadCall := (Text = "")
+
         if !Stored {
             Stored := True
             ; ClipboardAll must be on its own line in v1
             BackUpClip := ClipboardAll
         } else {
-            ; cancel any pendingQ restore (run immediately in v2 code with 0)
+            ; cancel any pending restore before starting a new clipboard transaction
             SetTimer, ClipRestore, Off
         }
 
-        clearStartTick := A_TickCount
-        Clipboard := ""
-        clearMs := A_TickCount - clearStartTick
+        if (isReadCall) {
+            ; Clear only before reads so ClipWait measures the fresh ^c result.
+            ; Write calls can replace the clipboard directly without this extra churn.
+            clearStartTick := A_TickCount
+            Clipboard := ""
+            clearMs := A_TickCount - clearStartTick
 
-        if (Text = "") {
             SendInput, ^c
             if (clearMs > 50) {
                 ClipWait, 0.6, 1
@@ -8956,18 +9035,21 @@ Clip(Text := "", Reselect := "", Restore := "")
         ; schedule a one-shot restore in ~700ms
         SetTimer, ClipRestore, -700
 
-        if (Text = "") {
-            ; return the copied text, normalizing CR
-            return LastClip := StrReplace(Clipboard, "`r")
-            } else if ((Reselect = True) || (Reselect && (StrLen(Text) < 3000))) {
-            Text := StrReplace(Text, "`r")
-            SendInput, % "{Shift Down}{Left " StrLen(Text) "}{Shift Up}"
+        if (isReadCall) {
+            ; return the copied text, normalizing CR only when present
+            clipResult := Clipboard
+            if InStr(clipResult, "`r")
+                clipResult := StrReplace(clipResult, "`r")
+            LastClip := clipResult
+        } else {
+            if ((Reselect = True) || (Reselect && (StrLen(Text) < 3000))) {
+                Text := StrReplace(Text, "`r")
+                SendInput, % "{Shift Down}{Left " StrLen(Text) "}{Shift Up}"
+            }
         }
     }
-    return
+    return clipResult
 }
-
-; v1 uses a label for timers; call the function in "restore" mode.
 ClipRestore:
     Clip("", "", "RESTORE")
 return
@@ -9330,10 +9412,13 @@ _HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY 
     VarSetCapacity(pointStruct, 8, 0)
 
     totalPointsHit := 0
-    totalPointsRequired := 12
+    totalPointsRequired := 6
 
     Loop, 5
     {
+        ; As A_Index runs 1..5, ((A_Index * 2) - 1) yields 1,3,5,7,9. Dividing
+        ; by 10 places the X probe at 10%,30%,50%,70%,90% of the candidate's
+        ; interior width rather than exactly on the outer edges.
         sampleX := candidateX + Floor((candidateW - 1) * ((A_Index * 2) - 1) / 10)
 
         Loop, 5
