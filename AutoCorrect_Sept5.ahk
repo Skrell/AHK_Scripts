@@ -99,6 +99,10 @@ Global lastHotkeyTyped                     := ""
 Global DraggingWindow                      := False
 Global allowDoubleClicks                   := True
 Global disableSendCtrlHwnd                 := ""
+Global lButtonResizeSyncActive             := False
+Global lButtonResizeSyncDraggedHwnd        := 0
+Global lButtonResizeSyncHit                := 0
+Global lButtonResizeSyncPartners           := []
 Global trayClickPosX                       := 0
 Global trayClickPosY                       := 0
 
@@ -434,12 +438,32 @@ comInitd := InitCOM_STA()
 accInitd := Acc_Init()
 
 10_Minutes := 60000*10
-; SetTimer MouseTrack, 10
+SetTimer MouseTrack, 20
 SetTimer KeyTrack, 25
 SetTimer MasterTimer, %10_Minutes%
 
 Return
 
+DisableTimers:
+    SetTimer, KeyTrack,   Off
+    SetTimer, MouseTrack, Off
+Return
+
+EnableTimers:
+    SetTimer, KeyTrack,   On
+    SetTimer, MouseTrack, On
+Return
+
+WatchLButtonResizeSync:
+    if (!lButtonResizeSyncActive || !GetKeyState("LButton", "P")) {
+        EndLButtonResizeSync()
+        SetTimer, WatchLButtonResizeSync, Off
+        GoSub, EnableTimers
+        return
+    }
+
+    UpdateLButtonResizeSync()
+Return
 ; ==========================================================================================================================================
 ; -----------------------------------------------          START OF APPLICATION           --------------------------------------------------
 ; ==========================================================================================================================================
@@ -1199,7 +1223,7 @@ WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll 
 
     ; -------- 1) Find the shell view's item list (works across Explorer + dialogs)
     ; Try List first (Explorer "Items View"), then DataGrid/Table (some dialogs), then Tree (rare)
-    for _, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
+    for controlTypeIndex, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
         items := root.FindFirstBy("ControlType=" . ctlType)
         if (items)
             break
@@ -1527,7 +1551,7 @@ FitMovedWindowAgainstOthers(...)
         |            left-side gap/overlap within tolerance
         |
         +--> candidate source:
-        |     FindVisibleUnderlyingEdgeTouchingWindow(...)
+        |     FindVisibleEdgeTouchingWindow(...)
         |     first qualifying lower-z-order visible candidate wins
         |     for that fit direction
         |
@@ -3607,8 +3631,7 @@ AltupCleanup:
     Thread, NoTimers, False
     Critical, Off
     Gui, WindowTitle: Destroy
-    ; SetTimer, MouseTrack, On
-    SetTimer, KeyTrack,   On
+    GoSub, EnableTimers
 Return
 ;============================================================================================================================
 SortAllWins:
@@ -4292,8 +4315,7 @@ LaunchWinFind:
         {
             StopRecursion    := False
             SearchingWindows := False
-            SetTimer, KeyTrack,   On
-            ; SetTimer, MouseTrack, On
+            GoSub, EnableTimers
             Return
         }
         Else
@@ -4336,8 +4358,7 @@ LaunchWinFind:
 
                 StopRecursion := False
                 SearchingWindows := False
-                SetTimer, KeyTrack, On
-                ; SetTimer, MouseTrack, On
+                GoSub, EnableTimers
                 Return
             }
 
@@ -4425,8 +4446,7 @@ LaunchWinFind:
 
         SearchingWindows := False
         StopRecursion    := False
-        SetTimer, KeyTrack,   On
-        ; SetTimer, MouseTrack, On
+        GoSub, EnableTimers
     }
     KeyWait, Ctrl, U T10
 Return
@@ -5616,7 +5636,7 @@ Dialog_IsDetails_UIA_ByPoint(dlgHwnd := "") {
     probes := [[70,45],[60,45],[80,45],[70,55],[60,55],[80,55],[75,35],[75,65],[55,50],[85,50]]
 
     items := ""
-    for _, p in probes
+    for probeIndex, p in probes
     {
         px := wx + (ww * p[1] // 100)
         py := wy + (wh * p[2] // 100)
@@ -6334,8 +6354,7 @@ GetClassName(hwnd)
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
 $~LButton::
     tooltip,
-    ; SetTimer, MouseTrack, Off
-    SetTimer, KeyTrack,   Off
+    GoSub, DisableTimers
 
     HotString("Reset")
 
@@ -6343,22 +6362,14 @@ $~LButton::
     MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
     WinGetClass, _winClassD, ahk_id %_winIdD%
 
-    ; If (   _winClassD != "CabinetWClass"
-        ; && _winClassD != "#32770"
-        ; && _winClassD != "Chrome_WidgetWin_1"
-        ; && !InStr(_winCtrlD, "SysListView32", True)
-        ; && !InStr(_winCtrlD, "DirectUIHWND",  True)
-        ; && !InStr(_winCtrlD, "SysTreeView32", True)
-        ; && !InStr(_winCtrlD, "SysHeader32",   True)) {
-
-        ; SetTimer, MouseTrack, On
-        ; SetTimer, KeyTrack,   On
-        ; Return
-    ; }
+    ; When the press starts on a plain resizable edge that is already flush to a
+    ; visible adjacent window, let the native resize happen and mirror the
+    ; partner window with a short timer until LButton is released.
+    if (TryStartLButtonResizeSync(lbX1, lbY1, _winIdD))
+        return
 
     If (disableSendCtrlHwnd == _winIdD) {
-        ; SetTimer, MouseTrack, On
-        SetTimer, KeyTrack,   On
+        GoSub, EnableTimers
         Return
     }
     Else If (!WinExist("ahk_id " . disableSendCtrlHwnd))
@@ -6392,8 +6403,7 @@ $~LButton::
             currentPath    := ""
             Loop,20 {
                 If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
-                    ; SetTimer, MouseTrack, On
-                    SetTimer, KeyTrack,   On
+                    GoSub, EnableTimers
                     Return
                 }
                 currentPath := GetExplorerPath(_winIdD)
@@ -6418,8 +6428,7 @@ $~LButton::
                 SendCtrlAdd(_winIdD, , , _winClassD)
         }
 
-        ; SetTimer, MouseTrack, On
-        SetTimer, KeyTrack,   On
+        GoSub, EnableTimers
         If isBlankSpaceNonExplorer
             isBlankSpaceNonExplorer := False
         If isBlankSpaceExplorer
@@ -6456,8 +6465,7 @@ $~LButton::
             If (!isColumnHeader && (isBlankSpaceExplorer || isItemClick)) {
                 Loop,20 {
                     If (WinExist("A") != _winIdD) {
-                        ; SetTimer, MouseTrack, On
-                        SetTimer, KeyTrack,   On
+                        GoSub, EnableTimers
                         Return
                     }
                     prevPath := GetExplorerPath(_winIdD)
@@ -6568,8 +6576,7 @@ $~LButton::
 
             If (ctype == "") {
 
-                ; SetTimer, MouseTrack, On
-                SetTimer, KeyTrack,   On
+                GoSub, EnableTimers
                 Return
             }
             ; tooltip, % pt.CurrentControlType "-" pt.CurrentName "-" pt.CurrentLocalizedControlType
@@ -6619,8 +6626,7 @@ $~LButton::
         disableSendCtrlHwnd := _winIdU
     }
 
-    ; SetTimer, MouseTrack, On
-    SetTimer, KeyTrack,   On
+    GoSub, EnableTimers
 Return
 #If
 
@@ -6955,7 +6961,7 @@ KeyExistsInHKCU(subkey) {
 HasWin10ExplorerOverride() {
     win10ExplorerGUIDs := ["{2aa9162e-c906-4dd9-ad0b-3d24a8eef5a0}", "{6480100b-5a83-4d1e-9f69-8ae5a88e9a33}"]
     base := "Software\Classes\CLSID\"
-    for _, guid in win10ExplorerGUIDs {
+    for explorerGuidIndex, guid in win10ExplorerGUIDs {
         subkey := base . guid . "\InProcServer32"
         if (KeyExistsInHKCU(subkey))
             return true
@@ -8325,7 +8331,7 @@ Return
 }
 
 MouseTrack() {
-    global MonCount, mouseMoving, currentMon, previousMon, StopRecursion, TaskBarHeight
+    global MonCount, currentMon, previousMon, StopRecursion, TaskBarHeight
     static x, y, lastX, lastY, taskview
     static timeOfLastMove
 
@@ -8585,15 +8591,251 @@ IsPointOnCaption(x := "", y := "", hwnd := "") {
         return hit
     else
         return 0
+}
 
-    ; ; Exclude top resize edge regardless of DPI
-    ; if (hit == 12        ; HTTOP
-     ; || hit == 13        ; HTTOPLEFT
-     ; || hit == 14)       ; HTTOPRIGHT
-        ; return False
+; Arm a temporary live-resize partner only when the current LButton press starts
+; on a plain left/right/top/bottom resize edge and that edge is already within
+; the normal fit tolerance of one or more visible adjacent windows.
+TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
+    global lButtonResizeSyncActive
+    global lButtonResizeSyncDraggedHwnd
+    global lButtonResizeSyncHit
+    global lButtonResizeSyncPartners
 
-    ; ; Only accept true caption area
-    ; return (hit == 2)    ; HTCAPTION
+    static HTBOTTOM := 15  ; Non-client bottom resize border.
+    static HTLEFT   := 10  ; Non-client left resize border.
+    static HTRIGHT  := 11  ; Non-client right resize border.
+    static HTTOP    := 12  ; Non-client top resize border.
+
+    if (xPos = "" || yPos = "" || hwnd = "")
+        MouseGetPos, xPos, yPos, hwnd
+
+    if (!hwnd)
+        return false
+
+    draggedHwndID := DllCall("GetAncestor", "Ptr", hwnd, "UInt", 2, "Ptr")
+    if (!draggedHwndID)
+        return false
+
+    edgeHit := IsPointOnCaption(xPos, yPos, draggedHwndID)
+    if (edgeHit != HTLEFT && edgeHit != HTRIGHT && edgeHit != HTTOP && edgeHit != HTBOTTOM)
+        return false
+
+    if !WinGetPosEx(draggedHwndID, draggedX, draggedY, draggedW, draggedH, null, null)
+        return false
+
+    monitorNum := GetWindowMonitorNumber(draggedHwndID)
+    if (monitorNum < 1)
+        return false
+
+    ; Live resize-sync should only arm when the partner already looks flush to
+    ; the dragged edge, so use tighter edge/gap tolerances than the broader
+    ; post-release fit helpers use.
+    liveResizeEdgeGapTolerance   := 10
+    liveResizeEdgeTouchTolerance := 10
+
+    partnerSearchMode := ""
+    if (edgeHit = HTLEFT)
+        partnerSearchMode := "right"
+    else if (edgeHit = HTRIGHT)
+        partnerSearchMode := "left"
+    else if (edgeHit = HTTOP)
+        partnerSearchMode := "bottom"
+    else if (edgeHit = HTBOTTOM)
+        partnerSearchMode := "top"
+
+    partnerHwndIDs := FindVisibleEdgeTouchingWindows(draggedHwndID, monitorNum, liveResizeEdgeTouchTolerance, 2, 100, 100, partnerSearchMode, liveResizeEdgeGapTolerance, draggedX, draggedY, draggedW, draggedH)
+    if (!IsObject(partnerHwndIDs) || !partnerHwndIDs.MaxIndex())
+        return false
+
+    lButtonResizeSyncPartners := []
+    for partnerIndex, partnerHwndID in partnerHwndIDs {
+        if (!partnerHwndID || partnerHwndID = draggedHwndID)
+            continue
+
+        if !WinGetPosEx(partnerHwndID, partnerX, partnerY, partnerW, partnerH, null, null)
+            continue
+
+        ; partnerInfo is the per-partner live-resize record. It keeps the
+        ; partner hwnd plus the far edge that must stay anchored while the
+        ; dragged window moves the shared edge during sync updates.
+        partnerInfo := { hwnd: partnerHwndID }
+        if (edgeHit = HTLEFT)
+            partnerInfo.fixedEdge := partnerX
+        else if (edgeHit = HTRIGHT)
+            partnerInfo.fixedEdge := partnerX + partnerW
+        else if (edgeHit = HTTOP)
+            partnerInfo.fixedEdge := partnerY
+        else
+            partnerInfo.fixedEdge := partnerY + partnerH
+
+        lButtonResizeSyncPartners.Push(partnerInfo)
+    }
+
+    if (!lButtonResizeSyncPartners.MaxIndex())
+        return false
+
+    lButtonResizeSyncActive      := true
+    lButtonResizeSyncDraggedHwnd := draggedHwndID
+    lButtonResizeSyncHit         := edgeHit
+
+    SetTimer, WatchLButtonResizeSync, 10
+    return true
+}
+
+; Clear the temporary state used to mirror an adjacent window during a native
+; LButton edge resize. Timer shutdown and timer re-enabling are handled by the
+; caller so this helper can also be used as an internal guard path.
+EndLButtonResizeSync() {
+    global lButtonResizeSyncActive
+    global lButtonResizeSyncDraggedHwnd
+    global lButtonResizeSyncHit
+    global lButtonResizeSyncPartners
+
+    lButtonResizeSyncActive            := false
+    lButtonResizeSyncDraggedHwnd       := 0
+    lButtonResizeSyncHit               := 0
+    lButtonResizeSyncPartners          := []
+}
+
+; While a native edge resize is in progress, keep each matched adjacent window's
+; facing edge flush with the dragged window and preserve every partner's far edge
+; so only the shared boundary moves.
+UpdateLButtonResizeSync() {
+    global lButtonResizeSyncActive
+    global lButtonResizeSyncDraggedHwnd
+    global lButtonResizeSyncHit
+    global lButtonResizeSyncPartners
+
+    static HTBOTTOM := 15  ; Non-client bottom resize border.
+    static HTLEFT   := 10  ; Non-client left resize border.
+    static HTRIGHT  := 11  ; Non-client right resize border.
+    static HTTOP    := 12  ; Non-client top resize border.
+
+    if (!lButtonResizeSyncActive || !IsObject(lButtonResizeSyncPartners) || !lButtonResizeSyncPartners.MaxIndex())
+        return false
+
+    ; The dragged window owns the live edge being moved by the user. If it goes
+    ; away mid-resize, stop driving partner windows immediately.
+    if (!WinExist("ahk_id " . lButtonResizeSyncDraggedHwnd)) {
+        EndLButtonResizeSync()
+        return false
+    }
+
+    ; Refresh the dragged window's geometry on each timer tick so every partner
+    ; follows the exact edge the user is currently moving.
+    if !WinGetPosEx(lButtonResizeSyncDraggedHwnd, draggedX, draggedY, draggedW, draggedH, null, null) {
+        EndLButtonResizeSync()
+        return false
+    }
+
+    draggedRightEdge  := draggedX + draggedW
+    draggedBottomEdge := draggedY + draggedH
+    didResizeAny      := false
+    validPartners     := []
+
+    for partnerIndex, partnerInfo in lButtonResizeSyncPartners {
+        partnerHwndID      := partnerInfo.hwnd
+        partnerFixedEdge   := partnerInfo.fixedEdge
+        ; Only issue WinMove when the target rect actually changed. This avoids
+        ; redundant no-op resizes, which is especially important for heavier
+        ; windows like Explorer that repaint more expensively.
+        shouldMovePartner  := false
+
+        if (!partnerHwndID || !WinExist("ahk_id " . partnerHwndID))
+            continue
+
+        ; partnerOffsetX / partnerOffsetY convert between the visual outer edges
+        ; we reason about and the window rect coordinates WinMove expects.
+        if !WinGetPosEx(partnerHwndID, partnerX, partnerY, partnerW, partnerH, partnerOffsetX, partnerOffsetY)
+            continue
+
+        if (lButtonResizeSyncHit = HTRIGHT) {
+            ; Keep the partner's far-right edge fixed and slide only the shared
+            ; left edge so it stays flush with the dragged window's right edge.
+            targetLeftEdge    := draggedRightEdge
+            targetRightEdge   := partnerFixedEdge
+            targetOuterWidth  := targetRightEdge - targetLeftEdge
+            if (targetOuterWidth <= 0)
+                continue
+
+            targetMoveX       := targetLeftEdge + partnerOffsetX
+            targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
+            shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
+            if (shouldMovePartner)
+                WinMove, ahk_id %partnerHwndID%, , %targetMoveX%, , %targetMoveWidth%
+        }
+        else if (lButtonResizeSyncHit = HTLEFT) {
+            ; Keep the partner's far-left edge fixed and slide only the shared
+            ; right edge so it stays flush with the dragged window's left edge.
+            targetLeftEdge    := partnerFixedEdge
+            targetRightEdge   := draggedX
+            targetOuterWidth  := targetRightEdge - targetLeftEdge
+            if (targetOuterWidth <= 0)
+                continue
+
+            targetMoveX       := targetLeftEdge + partnerOffsetX
+            targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
+            shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
+            if (shouldMovePartner)
+                WinMove, ahk_id %partnerHwndID%, , %targetMoveX%, , %targetMoveWidth%
+        }
+        else if (lButtonResizeSyncHit = HTBOTTOM) {
+            ; Keep the partner's far-bottom edge fixed and move only the shared
+            ; top edge so it stays flush with the dragged window's bottom edge.
+            targetTopEdge     := draggedBottomEdge
+            targetBottomEdge  := partnerFixedEdge
+            targetOuterHeight := targetBottomEdge - targetTopEdge
+            if (targetOuterHeight <= 0)
+                continue
+
+            targetMoveY       := targetTopEdge
+            ; The script's vertical offset conversion needs the established +1
+            ; pixel compensation. Without it, the visual bottom edge commonly
+            ; lands one pixel short after the frame-offset math is applied.
+            targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
+            shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
+            if (shouldMovePartner)
+                WinMove, ahk_id %partnerHwndID%, , , %targetMoveY%, , %targetMoveHeight%
+        }
+        else if (lButtonResizeSyncHit = HTTOP) {
+            ; Keep the partner's far-top edge fixed and move only the shared
+            ; bottom edge so it stays flush with the dragged window's top edge.
+            targetTopEdge     := partnerFixedEdge
+            targetBottomEdge  := draggedY
+            targetOuterHeight := targetBottomEdge - targetTopEdge
+            if (targetOuterHeight <= 0)
+                continue
+
+            targetMoveY       := targetTopEdge
+            ; As above, preserve the script's vertical offset conversion pattern,
+            ; including the +1 pixel bottom-edge compensation.
+            targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
+            shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
+            if (shouldMovePartner)
+                WinMove, ahk_id %partnerHwndID%, , , %targetMoveY%, , %targetMoveHeight%
+        }
+        else {
+            EndLButtonResizeSync()
+            return false
+        }
+
+        if (shouldMovePartner)
+            didResizeAny := true
+        ; Keep only partners that still exist and still participate in a valid
+        ; live sync relationship on this timer tick.
+        validPartners.Push(partnerInfo)
+    }
+
+    lButtonResizeSyncPartners := validPartners
+    ; If nothing valid remains, stop the live sync instead of spinning the timer
+    ; with no partner windows left to drive.
+    if (!lButtonResizeSyncPartners.MaxIndex()) {
+        EndLButtonResizeSync()
+        return false
+    }
+
+    return didResizeAny
 }
 
 MouseIsOverCaptionButtons(xPos := "", yPos := "") {
@@ -9398,7 +9640,7 @@ _GetWindowMonitorEdgeTouchCount(windowHwnd, monitorNum := 0, edgeTouchTolerance 
 ;            |                        +--> NO  -> try next sample
 ;            |
 ;       no sampled point hits candidate root -> return false
-_HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY := "", candidateW := "", candidateH := "") {
+_HasVisibleExposedAreaWindow(candidateHwndID, candidateX := "", candidateY := "", candidateW := "", candidateH := "") {
     if (!candidateHwndID)
         return false
 
@@ -9443,49 +9685,41 @@ _HasVisibleExposedAreaBelowWindow(candidateHwndID, candidateX := "", candidateY 
     return false
 }
 
-; Find the first window below the dragged window in z-order that is still visibly
-; exposed on the desktop, touches at least minEdgesTouched monitor work-area edges,
-; and overlaps the dragged window enough to be a plausible fit partner. When
-; isFitToDragged is set, only candidates that satisfy that direction-specific edge and
-; gap relationship are accepted. The optional refX/refY/refW/refH override lets
-; callers evaluate multiple candidate searches against the same original release
-; rect even if the moved window itself gets resized between searches. Note that
-; minEdgesTouched applies to the candidate/adjacent window being evaluated, not
-; to the dragged window itself.
-FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, isFitToDragged := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "") {
-    global lastUnderlyingWindowDebug
+; Shared worker for both edge-touching finders. It performs the common z-order
+; scan, candidate filtering, overlap/gap validation, and exposed-area checks.
+; The wrappers below decide whether to keep only the first match or every match,
+; and whether to retain the short debug trace used by post-release fitting.
+_FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", keepAllMatches := false, collectDebugTrace := false) {
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
 
+    result := { debugText: "", matches: [] }
+
     if (!refHwndID)
-        return 0
+        return result
 
     if (!monitorNum)
         monitorNum := GetWindowMonitorNumber(refHwndID)
 
     if (monitorNum < 1)
-        return 0
-
-    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+        return result
 
     ; Default to the live reference window rect, but allow the caller to pin the
     ; comparison rect to the original release geometry for multi-edge fits.
     if (refX = "" || refY = "" || refW = "" || refH = "") {
         if !WinGetPosEx(refHwndID, refX, refY, refW, refH, null, null)
-            return 0
+            return result
     }
 
-    firstFound                := false
-    debugLineCount            := 0
-    debugMaxLines             := 6
-    refRightEdge              := refX + refW
-    refBottomEdge             := refY + refH
-    targetID                  := 0
-    lastUnderlyingWindowDebug := ""
+    debugLineCount := 0
+    debugMaxLines  := 6
+    firstFound     := false
+    refBottomEdge  := refY + refH
+    refRightEdge   := refX + refW
 
     ; WinGet List returns windows in z-order. We intentionally walk downward
-    ; from the dragged/reference window and accept the first candidate that
-    ; survives all checks for the current fit mode.
+    ; from the dragged/reference window. The wrappers decide whether that means
+    ; "first passing candidate wins" or "collect every passing candidate".
     WinGet, winList, List,
     Loop, %winList%
     {
@@ -9549,11 +9783,11 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
             horizontalOverlap   := Min(refRightEdge,   candidateRightEdge) - Max(refX, candidateX)
             verticalOverlap     := Min(refBottomEdge, candidateBottomEdge) - Max(refY, candidateY)
 
-            ; isFitToDragged narrows the generic overlap check into the exact geometric
+            ; candidateTargetEdge narrows the generic overlap check into the exact geometric
             ; relationship needed for that resize direction. A candidate is not
             ; scored or ranked here: it simply passes or fails, and the first
             ; passing candidate below the reference window wins.
-            if (isFitToDragged = "top") {
+            if (candidateTargetEdge = "top") {
                 ; Top-fit candidates must share enough left-to-right span with
                 ; the dragged window to count as the window "below" it rather
                 ; than an unrelated window off to the side. reject:hov in the
@@ -9566,7 +9800,7 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
                         rejectReason := "gap=" edgeGap
                 }
             }
-            else if (isFitToDragged = "bottom") {
+            else if (candidateTargetEdge = "bottom") {
                 if (horizontalOverlap < minHorizontalOverlap)
                     rejectReason := "hov"
                 else {
@@ -9575,7 +9809,7 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
                         rejectReason := "gap=" edgeGap
                 }
             }
-            else if (isFitToDragged = "left") {
+            else if (candidateTargetEdge = "left") {
                 if (verticalOverlap < minVerticalOverlap)
                     rejectReason := "vov"
                 else {
@@ -9584,7 +9818,7 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
                         rejectReason := "gap=" edgeGap
                 }
             }
-            else if (isFitToDragged = "right") {
+            else if (candidateTargetEdge = "right") {
                 if (verticalOverlap < minVerticalOverlap)
                     rejectReason := "vov"
                 else {
@@ -9600,47 +9834,67 @@ FindVisibleUnderlyingEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTol
         if (rejectReason = "") {
             ; Even if the candidate is valid geometrically, reject it if the
             ; user cannot actually see any exposed part of it on the desktop.
-            hasExposedArea := _HasVisibleExposedAreaBelowWindow(hwndID, candidateX, candidateY, candidateW, candidateH)
+            hasExposedArea := _HasVisibleExposedAreaWindow(hwndID, candidateX, candidateY, candidateW, candidateH)
             if !hasExposedArea
                 rejectReason := "covered"
         }
 
-        if (debugLineCount < debugMaxLines) {
+        if (collectDebugTrace && debugLineCount < debugMaxLines) {
             ; Keep a short trace of the first few candidates so it is easy to
             ; see which filter stage disqualified each window while debugging.
             debugLineCount++
             if (rejectReason = "")
                 candidateStatus := "MATCH"
-            else
+                else
                 candidateStatus := "reject:" rejectReason
 
-            lastUnderlyingWindowDebug .= debugLineCount ". " candidateTitle " | edges=" edgeTouchCount " | hov=" horizontalOverlap " | vov=" verticalOverlap " | gap=" edgeGap " | exposed=" hasExposedArea " | " candidateStatus "`n"
+            result.debugText .= debugLineCount ". " candidateTitle " | edges=" edgeTouchCount " | hov=" horizontalOverlap " | vov=" verticalOverlap " | gap=" edgeGap " | exposed=" hasExposedArea " | " candidateStatus "`n"
         }
 
         if (rejectReason != "")
             continue
 
-        ; The current policy is "first qualifying candidate in z-order wins".
-        ; We do not currently compare multiple passing windows by smallest gap or
-        ; strongest overlap once a match is found.
-        targetID := hwndID
-        break
+        result.matches.Push(hwndID)
+        if (!keepAllMatches)
+            break
     }
 
-    ; if (targetID) {
-        ; WinGetTitle, matchedWindowTitle, ahk_id %targetID%
-        ; if (matchedWindowTitle = "")
-            ; matchedWindowTitle := "<untitled window>"
-        ; lastUnderlyingWindowDebug := "Underlying match: " matchedWindowTitle "`n" lastUnderlyingWindowDebug
-    ; }
-    ; else {
-        ; if (debugLineCount = 0)
-            ; lastUnderlyingWindowDebug := "Underlying match: <none>`nNo lower-z-order candidates were evaluated."
-        ; else
-            ; lastUnderlyingWindowDebug := "Underlying match: <none>`n" lastUnderlyingWindowDebug
-    ; }
+    return result
+}
 
-    return targetID
+; Find the first window below the dragged window in z-order that is still visibly
+; exposed on the desktop, touches at least minEdgesTouched monitor work-area edges,
+; and overlaps the dragged window enough to be a plausible fit partner. When
+; candidateTargetEdge is set, only candidates that satisfy that direction-specific edge and
+; gap relationship are accepted. The optional refX/refY/refW/refH override lets
+; callers evaluate multiple candidate searches against the same original release
+; rect even if the moved window itself gets resized between searches. Note that
+; minEdgesTouched applies to the candidate/adjacent window being evaluated, not
+; to the dragged window itself.
+FindVisibleEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", collectDebugTrace := false) {
+    global lastUnderlyingWindowDebug
+
+    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, false, collectDebugTrace)
+    if (collectDebugTrace)
+        lastUnderlyingWindowDebug := scanResult.debugText
+    else
+        lastUnderlyingWindowDebug := ""
+
+    if (!scanResult.matches.MaxIndex())
+        return 0
+
+    ; The current post-release policy remains "first qualifying candidate in
+    ; z-order wins". This wrapper intentionally returns just that first match.
+    return scanResult.matches[1]
+}
+
+; This live-resize helper keeps the existing single-candidate finder untouched
+; for release-time fit logic, but collects every lower-z-order window that passes
+; the same geometry and visibility checks so one dragged edge can stay flush with
+; multiple adjacent windows at once.
+FindVisibleEdgeTouchingWindows(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "") {
+    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, false)
+    return scanResult.matches
 }
 
 RemoveToolTip:
@@ -9654,7 +9908,7 @@ return
 ; When a top/bottom fit succeeds but no separate side-fit candidate wins, the
 ; moved window can also inherit the vertical partner's width if both left/right
 ; edges were already within the normal tolerance on release.
-FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50) {
+FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50, collectDebugTrace := false) {
     global lastUnderlyingWindowDebug
     if (!movedHwndID)
         return false
@@ -9673,10 +9927,10 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; to the left, right, top, or bottom edge of the current monitor.
     movedRightEdge       := movedX + movedW
     movedBottomEdge      := movedY + movedH
-    movedTouchesLeft     := Abs(movedX          - monInfoLeft)   <= edgeTouchTolerance
-    movedTouchesRight    := Abs(movedRightEdge  - monInfoRight)  <= edgeTouchTolerance
-    movedTouchesTop      := Abs(movedY          - monInfoTop)    <= edgeTouchTolerance
-    movedTouchesBottom   := Abs(movedBottomEdge - monInfoBottom) <= edgeTouchTolerance
+    movedDocksToLeft     := Abs(movedX          - monInfoLeft)   <= edgeTouchTolerance
+    movedDocksToRight    := Abs(movedRightEdge  - monInfoRight)  <= edgeTouchTolerance
+    movedDocksToTop      := Abs(movedY          - monInfoTop)    <= edgeTouchTolerance
+    movedDocksToBottom   := Abs(movedBottomEdge - monInfoBottom) <= edgeTouchTolerance
 
     ; Preserve the release-time geometry so each candidate search evaluates the
     ; same original dropped position, even if the first fit branch already moved
@@ -9686,7 +9940,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; originalMovedW       := movedW
     ; originalMovedH       := movedH
 
-    if (!movedTouchesLeft && !movedTouchesRight && !movedTouchesTop && !movedTouchesBottom)
+    if (!movedDocksToLeft && !movedDocksToRight && !movedDocksToTop && !movedDocksToBottom)
         return false
 
     didFitWindow               := false
@@ -9705,10 +9959,12 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; The candidate search still uses the original release rect in either case.
     ; The "2" passed below means the candidate window must already touch at
     ; least two monitor work-area edges before it can qualify.
-    if (movedTouchesTop) {
-        belowHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100,     "top", edgeGapTolerance, movedX, movedY, movedW, movedH)
-        topDebugText := "Top fit candidate:`n" lastUnderlyingWindowDebug
-        fitDebugText := topDebugText
+    if (movedDocksToTop) {
+        belowHwndID := FindVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100,     "top", edgeGapTolerance, movedX, movedY, movedW, movedH, collectDebugTrace)
+        if (collectDebugTrace) {
+            topDebugText := "Top fit candidate:`n" lastUnderlyingWindowDebug
+            fitDebugText := topDebugText
+        }
 
         if (belowHwndID && belowHwndID != movedHwndID && WinGetPosEx(belowHwndID, belowWinX, belowWinY, belowWinW, belowWinH, null, null)) {
             verticalPartnerRightEdge := belowWinX + belowWinW
@@ -9731,10 +9987,12 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
             }
         }
     }
-    else if (movedTouchesBottom) {
-        aboveHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "bottom", edgeGapTolerance, movedX, movedY, movedW, movedH)
-        bottomDebugText := "Bottom fit candidate:`n" lastUnderlyingWindowDebug
-        fitDebugText    := bottomDebugText
+    else if (movedDocksToBottom) {
+        aboveHwndID := FindVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, "bottom", edgeGapTolerance, movedX, movedY, movedW, movedH, collectDebugTrace)
+        if (collectDebugTrace) {
+            bottomDebugText := "Bottom fit candidate:`n" lastUnderlyingWindowDebug
+            fitDebugText    := bottomDebugText
+        }
 
         if (aboveHwndID && aboveHwndID != movedHwndID && WinGetPosEx(aboveHwndID, aboveWinX, aboveWinY, aboveWinW, aboveWinH, null, null)) {
             aboveWinBottomEdge       := aboveWinY + aboveWinH
@@ -9763,32 +10021,34 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; against one window vertically and another horizontally in the same pass.
     ; Again, the "2" passed into the finder below applies to the candidate
     ; window's edge-touch count, not to the moved window's edge-touch count.
-    sideisFitToDragged  := ""
+    candidateTargetEdge  := ""
     sideFitLabel := ""
-    if (movedTouchesLeft) {
-        sideisFitToDragged  := "left"
+    if (movedDocksToLeft) {
+        candidateTargetEdge  := "left"
         sideFitLabel := "Left fit candidate:"
     }
-    else if (movedTouchesRight) {
-        sideisFitToDragged  := "right"
+    else if (movedDocksToRight) {
+        candidateTargetEdge  := "right"
         sideFitLabel := "Right fit candidate:"
     }
 
-    if (sideisFitToDragged != "") {
-        sideHwndID := FindVisibleUnderlyingEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, sideisFitToDragged, edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH)
-        sideDebugText := sideFitLabel "`n" lastUnderlyingWindowDebug
-        if (fitDebugText = "")
-            fitDebugText := sideDebugText
-        else
-            fitDebugText .= "`n`n" sideDebugText
+    if (candidateTargetEdge != "") {
+        sideHwndID := FindVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, candidateTargetEdge, edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH, collectDebugTrace)
+        if (collectDebugTrace) {
+            sideDebugText := sideFitLabel "`n" lastUnderlyingWindowDebug
+            if (fitDebugText = "")
+                fitDebugText := sideDebugText
+            else
+                fitDebugText .= "`n`n" sideDebugText
+        }
 
         if (sideHwndID && sideHwndID != movedHwndID && WinGetPosEx(sideHwndID, sideWinX, sideWinY, sideWinW, sideWinH, null, null)) {
             sidePartnerBottomEdge := sideWinY + sideWinH
             sidePartnerH          := sideWinH
             sidePartnerY          := sideWinY
-            sideRightEdge := sideWinX + sideWinW
+            sideRightEdge         := sideWinX + sideWinW
 
-            if (sideisFitToDragged = "left") {
+            if (candidateTargetEdge = "left") {
                 ; Left-docked moved window: widen it from the monitor's left edge
                 ; until it meets the candidate's left edge on the right side.
                 targetLeftEdge   := monInfoLeft
@@ -9845,11 +10105,11 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         }
     }
 
-    ; if (fitDebugText != "") {
-        ; lastUnderlyingWindowDebug := fitDebugText
-        ; ToolTip, % lastUnderlyingWindowDebug
-        ; SetTimer, RemoveToolTip, -5000
-    ; }
+    if (fitDebugText != "") {
+        lastUnderlyingWindowDebug := fitDebugText
+        ToolTip, % lastUnderlyingWindowDebug
+        SetTimer, RemoveToolTip, -5000
+    }
 
     return didFitWindow
 }
@@ -10014,14 +10274,14 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
 ;------------------------------------------------------------------------------
 DynaRun(TempScript, pipename="")
 {
-   static _:="uint",@:="Ptr"
+   static ptrType:="Ptr", uintType:="uint", uintPointerType:="uint *"
    If pipename =
       name := "AHK" A_TickCount
    Else
       name := pipename
 
-   __PIPE_GA_ := DllCall("CreateNamedPipe","str","\\.\pipe\" name,_,2,_,0,_,255,_,0,_,0,@,0,@,0)
-   __PIPE_    := DllCall("CreateNamedPipe","str","\\.\pipe\" name,_,2,_,0,_,255,_,0,_,0,@,0,@,0)
+   __PIPE_GA_ := DllCall("CreateNamedPipe","str","\\.\pipe\" name,uintType,2,uintType,0,uintType,255,uintType,0,uintType,0,ptrType,0,ptrType,0)
+   __PIPE_    := DllCall("CreateNamedPipe","str","\\.\pipe\" name,uintType,2,uintType,0,uintType,255,uintType,0,uintType,0,ptrType,0,ptrType,0)
 
    If (__PIPE_=-1 or __PIPE_GA_=-1)
       Return 0
@@ -10034,15 +10294,15 @@ DynaRun(TempScript, pipename="")
    If ErrorLevel
       MsgBox, 262144, ERROR,% "Could not open file:`n" __AHK_EXE_ """\\.\pipe\" name """"
 
-   DllCall("ConnectNamedPipe",@,__PIPE_GA_,@,0)
-   DllCall("CloseHandle",@,__PIPE_GA_)
-   DllCall("ConnectNamedPipe",@,__PIPE_,@,0)
+   DllCall("ConnectNamedPipe",ptrType,__PIPE_GA_,ptrType,0)
+   DllCall("CloseHandle",ptrType,__PIPE_GA_)
+   DllCall("ConnectNamedPipe",ptrType,__PIPE_,ptrType,0)
    script := (A_IsUnicode ? chr(0xfeff) : (chr(239) . chr(187) . chr(191))) TempScript
 
-   If !DllCall("WriteFile",@,__PIPE_,"str",script,_,(StrLen(script)+1)*(A_IsUnicode ? 2 : 1),_ "*",0,@,0)
-        Return A_LastError,DllCall("CloseHandle",@,__PIPE_)
+   If !DllCall("WriteFile",ptrType,__PIPE_,"str",script,uintType,(StrLen(script)+1)*(A_IsUnicode ? 2 : 1),uintPointerType,0,ptrType,0)
+        Return A_LastError,DllCall("CloseHandle",ptrType,__PIPE_)
 
-   DllCall("CloseHandle",@,__PIPE_)
+   DllCall("CloseHandle",ptrType,__PIPE_)
 
    Return PID
 }
