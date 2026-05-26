@@ -10307,61 +10307,29 @@ DynaRun(TempScript, pipename="")
    Return PID
 }
 
-DialogHasAddressBar(hwndDlg)
-{
-    local cls, listH, h, hTxt, hasAddress, acc, txt
+MoveMouseToDefaultDialogButton(hwndDlg := "", moveSpeed := 0) {
+    static BS_PUSHBUTTON     := 0x00000000
+    static BS_DEFPUSHBUTTON  := 0x00000001
+    static BS_SPLITBUTTON    := 0x0000000C
+    static BS_DEFSPLITBUTTON := 0x0000000D
+    static BS_COMMANDLINK    := 0x0000000E
+    static BS_DEFCOMMANDLINK := 0x0000000F
+    static BS_TYPEMASK       := 0x0000000F
 
-    if (!hwndDlg || !DllCall("user32\IsWindow", "Ptr", hwndDlg, "Int"))
-        return False
-
-    WinGetClass, cls, ahk_id %hwndDlg%
-    if (cls != "#32770")
-        return False
-
-    ; Quick scan: look for ToolbarWindow32 children
-    WinGet, listH, ControlListHwnd, ahk_id %hwndDlg%
-    hasAddress := False
-
-    Loop, Parse, listH, `n, `r
-    {
-        h := A_LoopField + 0
-        if (!h)
-            continue
-
-        if (GetClassName(h) != "ToolbarWindow32")
-            continue
-
-        ; Fast heuristic: Win11 often labels it "Address Band"
-        hTxt := GetWindowTextTimeout(h, 25)
-        if (hTxt = "Address Band")
-            return True
-
-        ; If text isn't useful, confirm via MSAA subtree (bounded & cheap)
-        acc := Acc_ObjectFromWindow(h)
-        if !IsObject(acc)
-            continue
-
-        txt := Acc_FindLikelyAddressMarker(acc, 60)
-        if (txt)
-            return True
-    }
-
-    return False
-}
-
-MoveMouseToDefaultDialogButton(hwndDlg := "", moveSpeed := 0)
-{
-    static BS_DEFPUSHBUTTON := 0x00000001
-    static DC_HASDEFID      := 0x534B
-    static DM_GETDEFID      := 0x0400
-    static GWL_STYLE        := -16
-    static SMTO_ABORTIFHUNG := 0x0002
+    static DC_HASDEFID       := 0x534B
+    static DM_GETDEFID       := 0x0400
+    static GWL_STYLE         := -16
+    static SMTO_ABORTIFHUNG  := 0x0002
 
     ; If no dialog was supplied, target the current active window.
     if (!hwndDlg)
         WinGet, hwndDlg, ID, A
 
     if (!hwndDlg || !DllCall("user32\IsWindow", "Ptr", hwndDlg, "Int"))
+        return 0
+
+    ; This function is intentionally limited to classic Win32 dialog windows.
+    if (GetClassName(hwndDlg) != "#32770")
         return 0
 
     btnHwnd       := 0
@@ -10376,61 +10344,74 @@ MoveMouseToDefaultDialogButton(hwndDlg := "", moveSpeed := 0)
         , "Ptr", 0
         , "Ptr", 0
         , "UInt", SMTO_ABORTIFHUNG
-        , "UInt", 50
+        , "UInt", 100
         , "UPtr*", msgResult)
 
     if (ok && (((msgResult >> 16) & 0xFFFF) = DC_HASDEFID))
         defaultCtrlId := msgResult & 0xFFFF
 
-    WinGet, listH, ControlListHwnd, ahk_id %hwndDlg%
-    Loop, Parse, listH, `n, `r
-    {
-        h := A_LoopField + 0
-        if (!h)
-            continue
+    ; First try the control ID returned by DM_GETDEFID.
+    ; This is the most authoritative method for standard #32770 dialogs.
+    if (defaultCtrlId) {
+        h := DllCall("user32\GetDlgItem", "Ptr", hwndDlg, "Int", defaultCtrlId, "Ptr")
 
-        if (GetClassName(h) != "Button")
-            continue
-
-        if !DllCall("user32\IsWindowVisible", "Ptr", h, "Int")
-            continue
-
-        if !DllCall("user32\IsWindowEnabled", "Ptr", h, "Int")
-            continue
-
-        if (!firstButton)
-            firstButton := h
-
-        if (defaultCtrlId && DllCall("user32\GetDlgCtrlID", "Ptr", h, "Int") = defaultCtrlId) {
+        if (IsUsableDialogPushButton(h)) {
             btnHwnd := h
-            break
         }
-
-        style := DllCall(A_PtrSize = 8 ? "user32\GetWindowLongPtrW" : "user32\GetWindowLongW"
-            , "Ptr", h
-            , "Int", GWL_STYLE
-            , "Ptr")
-
-        if (!btnHwnd && ((style & 0xF) = BS_DEFPUSHBUTTON))
-            btnHwnd := h
     }
 
-    if (!btnHwnd)
-        btnHwnd := firstButton
+    ; If DM_GETDEFID did not produce a usable hwnd, scan the child controls.
+    ; This catches dialogs where the default style is visible but DM_GETDEFID fails.
+    if (!btnHwnd) {
+        WinGet, listH, ControlListHwnd, ahk_id %hwndDlg%
 
+        Loop, Parse, listH, `n, `r
+        {
+            h := A_LoopField + 0
+            if (!h)
+                continue
+
+            if (!IsUsableDialogPushButton(h))
+                continue
+
+            style := DllCall(A_PtrSize = 8 ? "user32\GetWindowLongPtrW" : "user32\GetWindowLongW"
+                , "Ptr", h
+                , "Int", GWL_STYLE
+                , "Ptr")
+
+            buttonType := style & BS_TYPEMASK
+
+            ; Remember the first real push-like button only as an internal reference.
+            ; We do NOT automatically use it unless it is actually a default style.
+            if (!firstButton)
+                firstButton := h
+
+            if (buttonType = BS_DEFPUSHBUTTON
+             || buttonType = BS_DEFSPLITBUTTON
+             || buttonType = BS_DEFCOMMANDLINK) {
+                btnHwnd := h
+                break
+            }
+        }
+    }
+
+    ; Safer behavior:
+    ; If no actual default button was found, do not guess.
     if (!btnHwnd)
         return 0
 
     WinGetPos, bx, by, bw, bh, ahk_id %btnHwnd%
-    if (bw = "" || bh = "")
+    if (bw = "" || bh = "" || bw <= 0 || bh <= 0)
         return 0
 
     targetPosX := bx + Floor(bw / 2)
     targetPosY := by + Floor(bh / 2)
 
     if (moveSpeed > 0) {
+        oldCoordModeMouse := A_CoordModeMouse
         CoordMode, Mouse, Screen
         MouseMove, %targetPosX%, %targetPosY%, %moveSpeed%
+        CoordMode, Mouse, %oldCoordModeMouse%
     }
     else {
         DllCall("user32\SetCursorPos", "Int", targetPosX, "Int", targetPosY)
@@ -10439,8 +10420,64 @@ MoveMouseToDefaultDialogButton(hwndDlg := "", moveSpeed := 0)
     return btnHwnd
 }
 
-GetDialogBreadcrumbText(hwndDlg)
-{
+IsUsableDialogPushButton(h) {
+    static GWL_STYLE         := -16
+    static BS_PUSHBUTTON     := 0x00000000
+    static BS_DEFPUSHBUTTON  := 0x00000001
+    static BS_SPLITBUTTON    := 0x0000000C
+    static BS_DEFSPLITBUTTON := 0x0000000D
+    static BS_COMMANDLINK    := 0x0000000E
+    static BS_DEFCOMMANDLINK := 0x0000000F
+    static BS_TYPEMASK       := 0x0000000F
+
+    if (!h)
+        return false
+
+    if (!DllCall("user32\IsWindow", "Ptr", h, "Int"))
+        return false
+
+    if (GetClassName(h) != "Button")
+        return false
+
+    if (!DllCall("user32\IsWindowVisible", "Ptr", h, "Int"))
+        return false
+
+    if (!DllCall("user32\IsWindowEnabled", "Ptr", h, "Int"))
+        return false
+
+    style := DllCall(A_PtrSize = 8 ? "user32\GetWindowLongPtrW" : "user32\GetWindowLongW"
+        , "Ptr", h
+        , "Int", GWL_STYLE
+        , "Ptr")
+
+    buttonType := style & BS_TYPEMASK
+
+    ; Only accept push-like buttons.
+    ; This avoids accidentally targeting checkboxes, radio buttons, or group boxes.
+    return (buttonType = BS_PUSHBUTTON
+         || buttonType = BS_DEFPUSHBUTTON
+         || buttonType = BS_SPLITBUTTON
+         || buttonType = BS_DEFSPLITBUTTON
+         || buttonType = BS_COMMANDLINK
+         || buttonType = BS_DEFCOMMANDLINK)
+}
+
+GetClassName(hwnd) {
+    VarSetCapacity(className, 256 * 2, 0)
+
+    len := DllCall("user32\GetClassNameW"
+        , "Ptr", hwnd
+        , "Ptr", &className
+        , "Int", 256
+        , "Int")
+
+    if (!len)
+        return ""
+
+    return StrGet(&className, len, "UTF-16")
+}
+
+GetDialogBreadcrumbText(hwndDlg) {
     static cache := {}   ; hwndDlg -> toolbar hwnd
     tbHwnd := 0
 
@@ -10484,8 +10521,7 @@ GetDialogBreadcrumbText(hwndDlg)
     return ""
 }
 
-GetWindowTextTimeout(hwndCtl, timeoutMs := 25)
-{
+GetWindowTextTimeout(hwndCtl, timeoutMs := 25) {
     static WM_GETTEXT := 0x0D
     static WM_GETTEXTLENGTH := 0x0E
     static SMTO_ABORTIFHUNG := 0x0002
@@ -10520,8 +10556,7 @@ GetWindowTextTimeout(hwndCtl, timeoutMs := 25)
     return StrGet(&buf, "UTF-16")
 }
 
-ResolveDialogBreadcrumbToolbar(hwndDlg, excludeHwnd := 0)
-{
+ResolveDialogBreadcrumbToolbar(hwndDlg, excludeHwnd := 0) {
     ; Fast path: common ctrlNNs (may vary, but cheap to try)
     ControlGet, h1, Hwnd,, ToolbarWindow323, ahk_id %hwndDlg%
     if (h1 && h1 != excludeHwnd)
@@ -10547,8 +10582,7 @@ ResolveDialogBreadcrumbToolbar(hwndDlg, excludeHwnd := 0)
     return 0
 }
 
-GetExplorerPath(hwnd := "")
-{
+GetExplorerPath(hwnd := "") {
     global isWin11
 
     static shellApp := ""
@@ -10566,8 +10600,7 @@ GetExplorerPath(hwnd := "")
 
     WinGetClass, winClass, ahk_id %hwnd%
 
-    if (winClass = "#32770")
-    {
+    if (winClass = "#32770") {
         ; On Win11 this is usually the best path (your GetDialogBreadcrumbText caches toolbar handles).
         return GetDialogBreadcrumbText(hwnd)
     }
@@ -10576,8 +10609,7 @@ GetExplorerPath(hwnd := "")
         return ""
 
     ; Keep your Win10 behavior intact
-    if (!isWin11)
-    {
+    if (!isWin11) {
         WinGetTitle, expTitle, ahk_id %hwnd%
 
         if (   InStr(expTitle, "This PC"    , True)
@@ -10596,8 +10628,7 @@ GetExplorerPath(hwnd := "")
         return expTitle
     }
 
-    if !IsObject(shellApp)
-    {
+    if !IsObject(shellApp) {
         try
             shellApp := ComObjCreate("Shell.Application")
         catch
@@ -10615,8 +10646,7 @@ GetExplorerPath(hwnd := "")
         cacheItem := cacheMap[hwnd]
 
     ; Cheap throttle: if called repeatedly in a tight Loop, return cached value briefly
-    if (IsObject(cacheItem))
-    {
+    if (IsObject(cacheItem)) {
         if (A_TickCount - cacheItem.lastTick < 10)
         {
             if (cacheItem.activeTabHwnd = activeTabHwnd)
@@ -10680,14 +10710,12 @@ GetExplorerPath(hwnd := "")
             break
         }
     }
-    catch
-    {
+    catch {
         foundWin := ""
         foundPath := ""
     }
 
-    if (foundPath != "")
-    {
+    if (foundPath != "") {
         cacheMap[hwnd] := { "activeTabHwnd": activeTabHwnd, "shellWin": foundWin, "lastPath": foundPath, "lastTick": A_TickCount }
         return foundPath
     }
@@ -10698,13 +10726,11 @@ GetExplorerPath(hwnd := "")
     toolbarHwnd2 := 0
 
     ControlGet, toolbarHwnd1, Hwnd,, ToolbarWindow323, ahk_id %hwnd%
-    if (toolbarHwnd1)
-    {
+    if (toolbarHwnd1) {
         dirText := GetWindowTextTimeout(toolbarHwnd1, 25)
     }
 
-    if (dirText = "" || dirText = "Address Band")
-    {
+    if (dirText = "" || dirText = "Address Band") {
         ControlGet, toolbarHwnd2, Hwnd,, ToolbarWindow324, ahk_id %hwnd%
         if (toolbarHwnd2)
             dirText := GetWindowTextTimeout(toolbarHwnd2, 25)
