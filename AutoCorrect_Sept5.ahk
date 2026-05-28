@@ -1534,24 +1534,24 @@ FitMovedWindowAgainstOthers(...)
         +--> vertical fit branch
         |     |
         |     +--> top-docked?
-        |     |      look for visible lower-z-order window on the bottom side
+        |     |      look for adjacent visible window on the bottom side
         |     |      enough horizontal overlap
         |     |      bottom edge within tolerance of candidate top edge
         |     |
         |     +--> else bottom-docked?
-        |            look for visible lower-z-order window on the top side
+        |            look for adjacent visible window on the top side
         |            enough horizontal overlap
         |            top edge within tolerance of candidate bottom edge
         |
         +--> horizontal fit branch
         |     |
         |     +--> left-docked?
-        |     |      look for visible lower-z-order window on the right
+        |     |      look for adjacent visible window on the right
         |     |      enough vertical overlap
         |     |      right-side gap/overlap within tolerance
         |     |
         |     +--> else right-docked?
-        |            look for visible lower-z-order window on the left
+        |            look for adjacent visible window on the left
         |            enough vertical overlap
         |            left-side gap/overlap within tolerance
         |
@@ -1658,7 +1658,7 @@ ONE-SENTENCE MENTAL MODEL
 - `LButton + RButton` is a context-sensitive special chord.
 - `MButton` temporarily installs a top-priority RButton owner during move/resize mode.
 - otherwise the normal RButton system owns the hold unless taskbar/desktop passthrough keeps it native.
-- after a real MButton move, the script may fit the moved window against visible lower-z-order neighbors on top/bottom and/or left/right edges.
+- after a real MButton move, the script may fit the moved window against adjacent visible neighbors on top/bottom and/or left/right edges, then fall back to one docked window below it in z-order when needed.
 */
 
 #If suspendRightButtonForMButtonDrag
@@ -10735,7 +10735,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     didFindAdjacentPartner := (adjacentVerticalHwndID || adjacentSideHwndID)
 
     ; Phase 2: only if no adjacent partner qualified on either axis, fall back
-    ; to the first visible docked window below the moved window in z-order. Only
+    ; to the first docked window below the moved window in z-order. Only
     ; that one window is inspected, and it donates width and/or height only when
     ; the released window's corresponding edge pairs are already within
     ; tolerance.
