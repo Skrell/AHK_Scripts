@@ -1502,7 +1502,9 @@ same chord, context decides        $*MButton:: begins                  first own
          |               no special chord action                                      +--> NO
          |                                                                                 |
          +--> cleanup of consumed RButton path                                                v
-              later handled by $*RButton Up::                                            normal $*RButton::
+              later handled by $*RButton Up::                                            ~*RButton passthrough tracker
+                                                                                           marks shell/taskbar-native holds
+                                                                                           then normal $*RButton:: decides
 
 
 MButton move/resize details
@@ -1597,7 +1599,8 @@ RButton + Wheel
 ===============
 WheelUp:: / WheelDown:: while RButton is physically down
         |
-        +--> taskbar/desktop passthrough hold?
+        +--> hold marked as taskbar/desktop passthrough,
+        |    or mouse currently over taskbar/desktop shell?
         |        |
         |        +--> YES -> send native wheel
         |
