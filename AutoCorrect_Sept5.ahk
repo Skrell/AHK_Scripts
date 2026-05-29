@@ -1537,17 +1537,24 @@ Post-MButton release fit
 FitMovedWindowAgainstOthers(...)
         |
         +--> use original release rect as reference for candidate searches
+        |     (FitMovedWindowAgainstOthers)
         |
         +--> vertical fit branch
         |     |
         |     +--> top-docked?
         |     |      look for adjacent visible window on the bottom side
+        |     |      via _FindBestVisibleEdgeTouchingWindow(..., "top")
+        |     |      sampled visible % must meet threshold
+        |     |      filtered by _FindVisibleEdgeTouchingWindowsCore(...)
         |     |      candidate must touch at least 1 monitor edge
         |     |      enough horizontal overlap
         |     |      bottom edge within tolerance of candidate top edge
         |     |
         |     +--> else bottom-docked?
         |            look for adjacent visible window on the top side
+        |            via _FindBestVisibleEdgeTouchingWindow(..., "bottom")
+        |            sampled visible % must meet threshold
+        |            filtered by _FindVisibleEdgeTouchingWindowsCore(...)
         |            candidate must touch at least 1 monitor edge
         |            enough horizontal overlap
         |            top edge within tolerance of candidate bottom edge
@@ -1556,20 +1563,39 @@ FitMovedWindowAgainstOthers(...)
         |     |
         |     +--> left-docked?
         |     |      look for adjacent visible window on the right
+        |     |      via _FindBestVisibleEdgeTouchingWindow(..., "left")
+        |     |      sampled visible % must meet threshold
+        |     |      filtered by _FindVisibleEdgeTouchingWindowsCore(...)
         |     |      candidate must touch at least 1 monitor edge
         |     |      enough vertical overlap
         |     |      right-side gap/overlap within tolerance
         |     |
         |     +--> else right-docked?
         |            look for adjacent visible window on the left
+        |            via _FindBestVisibleEdgeTouchingWindow(..., "right")
+        |            sampled visible % must meet threshold
+        |            filtered by _FindVisibleEdgeTouchingWindowsCore(...)
         |            candidate must touch at least 1 monitor edge
         |            enough vertical overlap
         |            left-side gap/overlap within tolerance
         |
+        |     +--> else top/bottom-docked only?
+        |            probe both left and right adjacent sides
+        |            via _FindBestVisibleEdgeTouchingWindow(..., "right"/"left")
+        |            sampled visible % must meet threshold
+        |            candidates must touch at least 1 monitor edge
+        |            enough vertical overlap
+        |            choose the smaller valid side gap
+        |            via _GetEdgeTouchingWindowScore(...)
+        |            break ties by larger vertical overlap
+        |
         +--> candidate source:
         |     geometry-first adjacent fit across all z-order
+        |     with sampled visible % filtering
+        |     in _FindVisibleEdgeTouchingWindowsCore(...)
         |     fallback uses the first docked window below
         |     the moved window in z-order that also overlaps
+        |     via _FindFirstDockedWindowBelowInZOrder(...)
         |     the moved window on at least one axis
         |
         +--> result:
@@ -10256,18 +10282,35 @@ _GetWindowMonitorEdgeTouchCount(windowHwnd, monitorNum := 0) {
 ;            |
 ;            +--> WindowFromPoint(sample)
 ;            |        |
-;            |        +--> no hwnd      -> try next sample
+;            |        +--> no hwnd      -> candidateVisibleHits unchanged
 ;            |        +--> hwnd found
 ;            |               |
 ;            |               +--> GetAncestor(hwnd, GA_ROOT)
 ;            |               |
 ;            |               +--> root = candidate hwnd ?
 ;            |                        |
-;            |                        +--> YES -> return true
+;            |                        +--> YES -> candidateVisibleHits++
 ;            |                        +--> NO  -> try next sample
 ;            |
-;       no sampled point hits candidate root -> return false
-_HasVisibleExposedAreaWindow(candidateHwndID, candidateX := "", candidateY := "", candidateW := "", candidateH := "") {
+;       neededHits := ceil(requiredVisiblePercent * totalSamplePoints / 100)
+;            |
+;            +--> during sampling:
+;            |        |
+;            |        +--> candidateVisibleHits >= neededHits ?
+;            |        |           |
+;            |        |           +--> YES -> return true early
+;            |        |
+;            |        +--> candidateVisibleHits + remainingSamplePoints < neededHits ?
+;            |                    |
+;            |                    +--> YES -> return false early
+;            |
+;       visiblePercent := candidateVisibleHits / totalSamplePoints * 100
+;            |
+;            +--> visiblePercent >= requiredVisiblePercent ?
+;                        |
+;                        +--> YES -> return true
+;                        +--> NO  -> return false
+_HasVisibleExposedAreaWindow(candidateHwndID, candidateX := "", candidateY := "", candidateW := "", candidateH := "", requiredVisiblePercent := 20, visibilityGridSize := 5, ByRef visiblePercent := "", ByRef visiblePercentBoundType := "") {
     if (!candidateHwndID)
         return false
 
@@ -10278,45 +10321,72 @@ _HasVisibleExposedAreaWindow(candidateHwndID, candidateX := "", candidateY := ""
 
     if (candidateW <= 0 || candidateH <= 0)
         return false
+
+    requiredVisiblePercent := Max(0, Min(100, requiredVisiblePercent))
+    visibilityGridSize := Max(1, Floor(visibilityGridSize))
     VarSetCapacity(pointStruct, 8, 0)
 
-    totalPointsHit := 0
-    totalPointsRequired := 6
+    candidateVisibleHits := 0
+    checkedSamplePoints  := 0
+    neededHits           := 0
+    totalSamplePoints := visibilityGridSize * visibilityGridSize
+    visiblePercentBoundType := ""
+    neededHits := Ceil((requiredVisiblePercent * totalSamplePoints) / 100.0)
 
-    Loop, 5
+    if (neededHits <= 0) {
+        visiblePercent := 0
+        visiblePercentBoundType := "min"
+        return true
+    }
+
+    Loop, %visibilityGridSize%
     {
-        ; As A_Index runs 1..5, ((A_Index * 2) - 1) yields 1,3,5,7,9. Dividing
-        ; by 10 places the X probe at 10%,30%,50%,70%,90% of the candidate's
-        ; interior width rather than exactly on the outer edges.
-        sampleX := candidateX + Floor((candidateW - 1) * ((A_Index * 2) - 1) / 10)
+        ; Sample the interior at evenly spaced midpoints so the probe stays off
+        ; the exact outer frame while still covering the full client footprint.
+        sampleColumn := A_Index
+        sampleX := candidateX + Floor((candidateW - 1) * ((sampleColumn * 2) - 1) / (visibilityGridSize * 2))
 
-        Loop, 5
+        Loop, %visibilityGridSize%
         {
-            sampleY := candidateY + Floor((candidateH - 1) * ((A_Index * 2) - 1) / 10)
+            sampleRow := A_Index
+            sampleY := candidateY + Floor((candidateH - 1) * ((sampleRow * 2) - 1) / (visibilityGridSize * 2))
+            checkedSamplePoints++
 
             NumPut(sampleX, pointStruct, 0, "Int")
             NumPut(sampleY, pointStruct, 4, "Int")
             pointValue := NumGet(pointStruct, 0, "Int64")
             hitHwndID  := DllCall("user32\WindowFromPoint", "Int64", pointValue, "Ptr")
-            if (!hitHwndID)
-                continue
-            else
-                totalPointsHit++
+            if (hitHwndID) {
+                hitRootHwndID := DllCall("GetAncestor", "Ptr", hitHwndID, "UInt", 2, "Ptr")
+                if (hitRootHwndID = candidateHwndID)
+                    candidateVisibleHits++
+            }
 
-            hitRootHwndID := DllCall("GetAncestor", "Ptr", hitHwndID, "UInt", 2, "Ptr")
-            if (hitRootHwndID = candidateHwndID && totalPointsHit >= totalPointsRequired)
+            if (candidateVisibleHits >= neededHits) {
+                visiblePercent := (candidateVisibleHits * 100.0) / totalSamplePoints
+                visiblePercentBoundType := "min"
                 return true
+            }
+
+            remainingSamplePoints := totalSamplePoints - checkedSamplePoints
+            if ((candidateVisibleHits + remainingSamplePoints) < neededHits) {
+                visiblePercent := ((candidateVisibleHits + remainingSamplePoints) * 100.0) / totalSamplePoints
+                visiblePercentBoundType := "max"
+                return false
+            }
         }
     }
 
-    return false
+    visiblePercent := totalSamplePoints > 0 ? ((candidateVisibleHits * 100.0) / totalSamplePoints) : 0
+    visiblePercentBoundType := ""
+    return (visiblePercent >= requiredVisiblePercent)
 }
 
 ; Shared worker for both edge-touching finders. It performs the common z-order
 ; scan, candidate filtering, overlap/gap validation, and exposed-area checks.
 ; The wrappers below decide whether to keep only the first match or every match,
 ; whether to retain the short debug trace used by post-release fitting.
-_FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", keepAllMatches := false, collectDebugTrace := false, scanAllZOrder := false) {
+_FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", keepAllMatches := false, collectDebugTrace := false, scanAllZOrder := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
 
@@ -10371,6 +10441,8 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
         rejectReason      := ""
         sameMonitor       := True
         verticalOverlap   := "-"
+        visiblePercent    := "-"
+        visiblePercentBoundType := ""
         WinGetTitle, candidateTitle, ahk_id %hwndID%
         if (candidateTitle = "")
             candidateTitle := "<untitled window>"
@@ -10463,11 +10535,11 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
         }
 
         if (rejectReason = "") {
-            ; Even if the candidate is valid geometrically, reject it if the
-            ; user cannot actually see any exposed part of it on the desktop.
-            hasExposedArea := _HasVisibleExposedAreaWindow(hwndID, candidateX, candidateY, candidateW, candidateH)
+            ; Even if the candidate is valid geometrically, reject it unless a
+            ; meaningful sampled percentage of it is still visible on screen.
+            hasExposedArea := _HasVisibleExposedAreaWindow(hwndID, candidateX, candidateY, candidateW, candidateH, requiredVisiblePercent, visibilityGridSize, visiblePercent, visiblePercentBoundType)
             if !hasExposedArea
-                rejectReason := "covered"
+                rejectReason := "visible" ((visiblePercentBoundType = "max") ? "<=" : "=") Round(visiblePercent, 1) "%"
         }
 
         if (collectDebugTrace && debugLineCount < debugMaxLines) {
@@ -10479,7 +10551,15 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
                 else
                 candidateStatus := "reject:" rejectReason
 
-            result.debugText .= debugLineCount ". " candidateTitle " | edges=" edgeTouchCount " | hov=" horizontalOverlap " | vov=" verticalOverlap " | gap=" edgeGap " | exposed=" hasExposedArea " | " candidateStatus "`n"
+            if (visiblePercent = "-")
+                displayVisiblePercent := visiblePercent
+            else if (visiblePercentBoundType = "min")
+                displayVisiblePercent := ">=" Round(visiblePercent, 1) "%"
+            else if (visiblePercentBoundType = "max")
+                displayVisiblePercent := "<=" Round(visiblePercent, 1) "%"
+            else
+                displayVisiblePercent := Round(visiblePercent, 1) "%"
+            result.debugText .= debugLineCount ". " candidateTitle " | edges=" edgeTouchCount " | hov=" horizontalOverlap " | vov=" verticalOverlap " | gap=" edgeGap " | visible=" displayVisiblePercent " | " candidateStatus "`n"
         }
 
         if (rejectReason != "")
@@ -10498,10 +10578,10 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
 ; fitting, prefer the nearest eligible window below the reference window in
 ; z-order before considering deeper matches, then break ties by the smallest
 ; absolute gap and the largest overlap in that active dimension.
-_FindBestVisibleEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 0, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", collectDebugTrace := false) {
+_FindBestVisibleEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 0, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", collectDebugTrace := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
     global lastBelowZOrderWindowDebug
 
-    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, collectDebugTrace, true)
+    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, collectDebugTrace, true, requiredVisiblePercent, visibilityGridSize)
     if (collectDebugTrace)
         lastBelowZOrderWindowDebug := scanResult.debugText
     else
@@ -10583,6 +10663,42 @@ _FindBestVisibleEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchToleranc
     }
 
     return bestHwndID
+}
+
+; Compute the active-axis gap and overlap score for a candidate that already
+; passed the visible edge-touching geometry filters.
+_GetEdgeTouchingWindowScore(refX, refY, refW, refH, candidateHwndID, candidateTargetEdge, ByRef absGap, ByRef overlapScore) {
+    if !WinGetPosEx(candidateHwndID, candidateX, candidateY, candidateW, candidateH, null, null)
+        return false
+
+    candidateBottomEdge := candidateY + candidateH
+    candidateRightEdge  := candidateX + candidateW
+    refBottomEdge       := refY + refH
+    refRightEdge        := refX + refW
+    horizontalOverlap   := Min(refRightEdge, candidateRightEdge) - Max(refX, candidateX)
+    verticalOverlap     := Min(refBottomEdge, candidateBottomEdge) - Max(refY, candidateY)
+
+    if (candidateTargetEdge = "top") {
+        edgeGap      := candidateY - refBottomEdge
+        overlapScore := horizontalOverlap
+    }
+    else if (candidateTargetEdge = "bottom") {
+        edgeGap      := refY - candidateBottomEdge
+        overlapScore := horizontalOverlap
+    }
+    else if (candidateTargetEdge = "left") {
+        edgeGap      := candidateX - refRightEdge
+        overlapScore := verticalOverlap
+    }
+    else if (candidateTargetEdge = "right") {
+        edgeGap      := refX - candidateRightEdge
+        overlapScore := verticalOverlap
+    }
+    else
+        return false
+
+    absGap := Abs(edgeGap)
+    return true
 }
 
 ; Return only the first docked window below the reference window in z-order
@@ -10697,16 +10813,16 @@ _FindFirstDockedWindowBelowInZOrder(refHwndID, monitorNum := 0, edgeTouchToleran
 ; for release-time fit logic, but collects every lower-z-order window that passes
 ; the same geometry and visibility checks so one dragged edge can stay flush with
 ; multiple adjacent windows at once.
-FindVisibleEdgeTouchingWindows(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "") {
-    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, false)
+FindVisibleEdgeTouchingWindows(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
+    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, false, false, requiredVisiblePercent, visibilityGridSize)
     return scanResult.matches
 }
 
 ; This live-resize helper uses the same geometry and visibility checks as the
 ; standard multi-match finder, but it scans all visible docked windows on the
 ; monitor instead of only windows below the reference window in z-order.
-FindVisibleEdgeTouchingWindowsAnyZOrder(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "") {
-    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, false, true)
+FindVisibleEdgeTouchingWindowsAnyZOrder(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
+    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, false, true, requiredVisiblePercent, visibilityGridSize)
     return scanResult.matches
 }
 
@@ -10723,36 +10839,43 @@ return
 ; +----------------------------------+
 ; | Is the released window docked to |
 ; | monitor left/right/top/bottom?   |
+; | (FitMovedWindowAgainstOthers)    |
 ; +----------------------------------+
         ; |
    ; yes  v
-; +----------------------------------+
-; | Phase 1: adjacent-fit scan       |
-; |                                  |
-; | Search all visible windows for   |
-; | edge matches within tolerance    |
-; | and at least 1 touched monitor   |
-; | edge                             |
-; |                                  |
-; | vertical axis:                   |
-; | - partner on top/bottom          |
-; | horizontal axis:                 |
-; | - partner on left/right          |
-; +----------------------------------+
+; +---------------------------------------------+
+; | Phase 1: adjacent-fit scan                  |
+; |                                             |
+; | _FindBestVisibleEdgeTouchingWindow          |
+; | -> _FindVisibleEdgeTouchingWindowsCore(...) |
+; |                                             |
+; | Search all adjacent visible                 |
+; | windows for edge matches within             |
+; | tolerance, at least 1 touched               |
+; | monitor edge, and sampled                   |
+; | visible % above threshold                   |
+; |                                             |
+; | vertical axis:                              |
+; | - partner on top/bottom                     |
+; | horizontal axis:                            |
+; | - partner on left/right                     |
+; +---------------------------------------------+
         ; |
-        ; +----------------------+
-        ; | any adjacent match?  |
-        ; +----------------------+
+        ; +----------------------------+
+        ; | any adjacent match?        |
+        ; +----------------------------+
            ; | yes                    | no
            ; v                        v
-; +------------------------+   +----------------------------------+
-; | Resize to adjacent     |   | Phase 2 fallback                 |
-; | partners per axis      |   |                                  |
-; |                        |   | Find first docked window         |
-; | width from left/right  |   | below the released window        |
-; | height from top/bottom |   | in z-order that overlaps on      |
-; +------------------------+   | at least one axis                |
-                           ; +----------------------------------+
+; +------------------------+   +-----------------------------------------------+
+; | Resize to adjacent     |   | Phase 2 fallback                              |
+; | partners per axis      |   |                                               |
+; |                        |   | Find first docked window                      |
+; | width from left/right  |   | below the released window                     |
+; |                        |   | via _FindFirstDockedWindowBelowInZOrder(...)  |
+; |                        |   |                                               |
+; | height from top/bottom |   | in z-order that overlaps on at least one axis |
+; +------------------------+   |                                               |
+                           ;   +-----------------------------------------------+
                                       ; |
                                       ; v
                            ; +----------------------------------+
@@ -10773,6 +10896,7 @@ return
         ; |
         ; v
 ; Take FIRST docked window below in z-order
+; via _FindFirstDockedWindowBelowInZOrder(...)
 ; that overlaps on at least one axis
         ; |
         ; v
@@ -10843,6 +10967,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     fitDebugText                := ""
     sideCandidateTargetEdge     := ""
     sideFitLabel                := ""
+    sideFitUsesReleasedOuterEdge := false
     sidePartnerBottomEdge       := ""
     sidePartnerH                := ""
     sidePartnerY                := ""
@@ -10867,8 +10992,8 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         sideFitLabel                := "Right-edge"
     }
 
-    ; Phase 1: find any adjacent visible windows by geometry alone. These
-    ; candidates do not need to be docked; they only need to satisfy the normal
+    ; Phase 1: find any adjacent visible windows by geometry first. Candidates
+    ; must still touch at least one monitor edge, then satisfy the normal
     ; overlap and edge-gap tolerances for the requested fit direction.
     if (verticalCandidateTargetEdge != "") {
         adjacentVerticalHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 100, 100, verticalCandidateTargetEdge, edgeGapTolerance, movedX, movedY, movedW, movedH, collectDebugTrace)
@@ -10889,6 +11014,68 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
                 fitDebugText := sideDebugText
             else
                 fitDebugText .= "`n`n" sideDebugText
+        }
+    }
+    else if (movedDocksToTop || movedDocksToBottom) {
+        leftSideCandidateHwndID  := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "right", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH, collectDebugTrace)
+        if (collectDebugTrace)
+            leftSideDebugText := "Left-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+        else
+            leftSideDebugText := ""
+
+        rightSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "left", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH, collectDebugTrace)
+        if (collectDebugTrace)
+            rightSideDebugText := "Right-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+        else
+            rightSideDebugText := ""
+
+        leftSideGap := ""
+        leftSideOverlap := ""
+        rightSideGap := ""
+        rightSideOverlap := ""
+
+        if (leftSideCandidateHwndID)
+            _GetEdgeTouchingWindowScore(movedX, movedY, originalMovedW, originalMovedH, leftSideCandidateHwndID, "right", leftSideGap, leftSideOverlap)
+        if (rightSideCandidateHwndID)
+            _GetEdgeTouchingWindowScore(movedX, movedY, originalMovedW, originalMovedH, rightSideCandidateHwndID, "left", rightSideGap, rightSideOverlap)
+
+        if (leftSideCandidateHwndID && rightSideCandidateHwndID) {
+            if (leftSideGap < rightSideGap || (leftSideGap = rightSideGap && leftSideOverlap >= rightSideOverlap)) {
+                adjacentSideHwndID          := leftSideCandidateHwndID
+                sideCandidateTargetEdge     := "right"
+                sideFitLabel                := "Left-side"
+                sideFitUsesReleasedOuterEdge := true
+            }
+            else {
+                adjacentSideHwndID          := rightSideCandidateHwndID
+                sideCandidateTargetEdge     := "left"
+                sideFitLabel                := "Right-side"
+                sideFitUsesReleasedOuterEdge := true
+            }
+        }
+        else if (leftSideCandidateHwndID) {
+            adjacentSideHwndID          := leftSideCandidateHwndID
+            sideCandidateTargetEdge     := "right"
+            sideFitLabel                := "Left-side"
+            sideFitUsesReleasedOuterEdge := true
+        }
+        else if (rightSideCandidateHwndID) {
+            adjacentSideHwndID          := rightSideCandidateHwndID
+            sideCandidateTargetEdge     := "left"
+            sideFitLabel                := "Right-side"
+            sideFitUsesReleasedOuterEdge := true
+        }
+
+        if (collectDebugTrace) {
+            if (fitDebugText = "")
+                fitDebugText := leftSideDebugText
+            else if (leftSideDebugText != "")
+                fitDebugText .= "`n`n" leftSideDebugText
+
+            if (fitDebugText = "")
+                fitDebugText := rightSideDebugText
+            else if (rightSideDebugText != "")
+                fitDebugText .= "`n`n" rightSideDebugText
         }
     }
 
@@ -10956,7 +11143,23 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         sidePartnerY          := sideWinY
         sideRightEdge         := sideWinX + sideWinW
 
-        if (sideCandidateTargetEdge = "left") {
+        if (sideFitUsesReleasedOuterEdge) {
+            if (sideCandidateTargetEdge = "left") {
+                ; Top/bottom-docked moved window: keep its released left edge
+                ; fixed and resize its right edge until it reaches the partner.
+                targetLeftEdge   := movedX
+                targetOuterWidth := sideWinX - targetLeftEdge
+            }
+            else {
+                ; Top/bottom-docked moved window: keep its released right edge
+                ; fixed and move/resize its left edge until it reaches the
+                ; partner on the left side.
+                targetLeftEdge   := sideRightEdge
+                targetRightEdge  := movedRightEdge
+                targetOuterWidth := targetRightEdge - targetLeftEdge
+            }
+        }
+        else if (sideCandidateTargetEdge = "left") {
             ; Left-docked moved window: widen it from the monitor's left edge
             ; until it meets the candidate's left edge on the right side.
             targetLeftEdge   := monInfoLeft
