@@ -101,6 +101,8 @@ Global allowDoubleClicks                   := True
 Global disableSendCtrlHwnd                 := ""
 Global lButtonResizeSyncActive             := False
 Global lButtonResizeSyncDraggedHwnd        := 0
+Global lButtonResizeSyncDraggedStartedAlwaysOnTop := False
+Global lButtonResizeSyncDraggedTransparent := False
 Global lButtonResizeSyncHit                := 0
 Global lButtonResizeSyncLastDraggedH       := ""
 Global lButtonResizeSyncLastDraggedW       := ""
@@ -124,7 +126,7 @@ Global hHookMouse
 ; --- Config ---
 Global UseWorkArea                         := true   ; true = monitor work area (ignores taskbar). false = full monitor.
 Global SnapRange                           := 20     ; px: distance from edge to begin snapping
-Global BreakAway                           := 60     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+Global BreakAway                           := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
 Global ReleaseAway                         := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
@@ -1541,6 +1543,10 @@ FitMovedWindowAgainstOthers(...)
         |
         +--> vertical fit branch
         |     |
+        |     +--> verticalPartnerEdgeToMatch
+        |     |      = which partner top/bottom edge must face
+        |     |        the moved window on the vertical axis
+        |     |
         |     +--> top-docked?
         |     |      look for adjacent visible window on the bottom side
         |     |      via _FindBestVisibleEdgeTouchingWindow(..., "top")
@@ -1560,6 +1566,10 @@ FitMovedWindowAgainstOthers(...)
         |            top edge within tolerance of candidate bottom edge
         |
         +--> horizontal fit branch
+        |     |
+        |     +--> horizontalPartnerEdgeToMatch
+        |     |      = which partner left/right edge must face
+        |     |        the moved window on the horizontal axis
         |     |
         |     +--> left-docked?
         |     |      look for adjacent visible window on the right
@@ -1590,7 +1600,8 @@ FitMovedWindowAgainstOthers(...)
         |            break ties by larger vertical overlap
         |
         +--> candidate source:
-        |     geometry-first adjacent fit across all z-order
+        |     geometry-first adjacent 2D partner fit
+        |     without z-order restriction
         |     with sampled visible % filtering
         |     in _FindVisibleEdgeTouchingWindowsCore(...)
         |     fallback uses the first docked window below
@@ -9075,6 +9086,8 @@ _TrackLiveResizeSyncTopmostState(hwndID, ByRef topmostStates) {
 ; |                                  |
 ; | - peers/partners promoted first  |
 ; | - dragged window promoted last   |
+; | - dragged window fades once a    |
+; |   real resize is underway        |
 ; +----------------------------------+
         ; |
         ; v
@@ -9122,6 +9135,8 @@ _TrackLiveResizeSyncTopmostState(hwndID, ByRef topmostStates) {
 TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
+    global lButtonResizeSyncDraggedStartedAlwaysOnTop
+    global lButtonResizeSyncDraggedTransparent
     global lButtonResizeSyncHit
     global lButtonResizeSyncLastDraggedH
     global lButtonResizeSyncLastDraggedW
@@ -9209,7 +9224,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
         if !WinGetPosEx(sameSidePeerHwndID, sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH, null, null)
             continue
 
-        partnerHwndIDs := FindVisibleEdgeTouchingWindowsAnyZOrder(sameSidePeerHwndID, monitorNum, liveResizeEdgeTouchTolerance, 1, 100, 100, partnerSearchMode, liveResizeEdgeGapTolerance, sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH)
+        partnerHwndIDs := Find2DEdgePartnerWindows(sameSidePeerHwndID, monitorNum, liveResizeEdgeTouchTolerance, 1, 100, 100, partnerSearchMode, liveResizeEdgeGapTolerance, sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH)
         if (!IsObject(partnerHwndIDs) || !partnerHwndIDs.MaxIndex())
             continue
 
@@ -9240,12 +9255,16 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
 
     lButtonResizeSyncActive        := true
     lButtonResizeSyncDraggedHwnd   := draggedHwndID
+    lButtonResizeSyncDraggedStartedAlwaysOnTop := IsAlwaysOnTop(draggedHwndID)
+    lButtonResizeSyncDraggedTransparent := false
     lButtonResizeSyncHit           := edgeHit
     lButtonResizeSyncLastDraggedH  := draggedH
     lButtonResizeSyncLastDraggedW  := draggedW
     lButtonResizeSyncLastDraggedX  := draggedX
     lButtonResizeSyncLastDraggedY  := draggedY
     lButtonResizeSyncTopmostStates := _CaptureLiveResizeSyncTopmostStates(draggedHwndID, lButtonResizeSyncPartners)
+    if !lButtonResizeSyncDraggedStartedAlwaysOnTop
+        WinSet, Transparent, 255, ahk_id %draggedHwndID%
 
     SetTimer, WatchLButtonResizeSync, 10
     return true
@@ -9258,6 +9277,8 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
 EndLButtonResizeSync() {
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
+    global lButtonResizeSyncDraggedStartedAlwaysOnTop
+    global lButtonResizeSyncDraggedTransparent
     global lButtonResizeSyncHit
     global lButtonResizeSyncLastDraggedH
     global lButtonResizeSyncLastDraggedW
@@ -9266,9 +9287,16 @@ EndLButtonResizeSync() {
     global lButtonResizeSyncPartners
     global lButtonResizeSyncTopmostStates
 
+    if (   lButtonResizeSyncDraggedHwnd
+        && !lButtonResizeSyncDraggedStartedAlwaysOnTop
+        && WinExist("ahk_id " . lButtonResizeSyncDraggedHwnd))
+        WinSet, Transparent, Off, ahk_id %lButtonResizeSyncDraggedHwnd%
+
     _RestoreLiveResizeSyncTopmostStates(lButtonResizeSyncTopmostStates, lButtonResizeSyncDraggedHwnd)
     lButtonResizeSyncActive            := false
     lButtonResizeSyncDraggedHwnd       := 0
+    lButtonResizeSyncDraggedStartedAlwaysOnTop := false
+    lButtonResizeSyncDraggedTransparent := false
     lButtonResizeSyncHit               := 0
     lButtonResizeSyncLastDraggedH      := ""
     lButtonResizeSyncLastDraggedW      := ""
@@ -9285,6 +9313,8 @@ EndLButtonResizeSync() {
 UpdateLButtonResizeSync() {
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
+    global lButtonResizeSyncDraggedStartedAlwaysOnTop
+    global lButtonResizeSyncDraggedTransparent
     global lButtonResizeSyncHit
     global lButtonResizeSyncLastDraggedH
     global lButtonResizeSyncLastDraggedW
@@ -9324,6 +9354,11 @@ UpdateLButtonResizeSync() {
     lButtonResizeSyncLastDraggedW := draggedW
     lButtonResizeSyncLastDraggedX := draggedX
     lButtonResizeSyncLastDraggedY := draggedY
+
+    if (!lButtonResizeSyncDraggedStartedAlwaysOnTop && !lButtonResizeSyncDraggedTransparent) {
+        WinSet, Transparent, 180, ahk_id %lButtonResizeSyncDraggedHwnd%
+        lButtonResizeSyncDraggedTransparent := true
+    }
 
     draggedRightEdge  := draggedX + draggedW
     draggedBottomEdge := draggedY + draggedH
@@ -10386,7 +10421,7 @@ _HasVisibleExposedAreaWindow(candidateHwndID, candidateX := "", candidateY := ""
 ; scan, candidate filtering, overlap/gap validation, and exposed-area checks.
 ; The wrappers below decide whether to keep only the first match or every match,
 ; whether to retain the short debug trace used by post-release fitting.
-_FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", keepAllMatches := false, collectDebugTrace := false, scanAllZOrder := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
+_FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", keepAllMatches := false, collectDebugTrace := false, restrictToBelowRefHwndID := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
 
@@ -10426,7 +10461,7 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
         ; The release-time fit helpers intentionally only consider windows below
         ; the reference window in z-order. Live resize can opt into scanning all
         ; visible docked windows instead so partner discovery is purely geometric.
-        if (!scanAllZOrder) {
+        if (!restrictToBelowRefHwndID) {
             if (!firstFound) {
                 if (hwndID == refHwndID)
                     firstFound := true
@@ -10809,19 +10844,17 @@ _FindFirstDockedWindowBelowInZOrder(refHwndID, monitorNum := 0, edgeTouchToleran
     return 0
 }
 
-; This live-resize helper keeps the existing single-candidate finder untouched
-; for release-time fit logic, but collects every lower-z-order window that passes
-; the same geometry and visibility checks so one dragged edge can stay flush with
-; multiple adjacent windows at once.
-FindVisibleEdgeTouchingWindows(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
+; Collect every visible 2D edge-partner candidate that passes the same geometry
+; and visibility checks as the single-candidate finder, but only from windows
+; below the reference window in z-order.
+Find2DEdgePartnerWindowsBelowReferenceInZOrder(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
     scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, false, false, requiredVisiblePercent, visibilityGridSize)
     return scanResult.matches
 }
 
-; This live-resize helper uses the same geometry and visibility checks as the
-; standard multi-match finder, but it scans all visible docked windows on the
-; monitor instead of only windows below the reference window in z-order.
-FindVisibleEdgeTouchingWindowsAnyZOrder(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
+; Collect every visible 2D edge-partner candidate that passes the same geometry
+; and visibility checks, without restricting the candidate pool by z-order.
+Find2DEdgePartnerWindows(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
     scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, false, true, requiredVisiblePercent, visibilityGridSize)
     return scanResult.matches
 }
@@ -10918,8 +10951,10 @@ return
 
 ; If a moved window is flush to a monitor edge, first try to fit it against any
 ; adjacent visible windows whose edges already fall within the normal geometric
-; tolerances. Only if no adjacent partner qualifies on either axis do we fall
-; back to docked windows below the moved window in z-order.
+; tolerances. The vertical/horizontal partner-edge match selectors below name
+; the candidate partner edge to align against, not the moved window's edge.
+; Only if no adjacent partner qualifies on either axis do we fall back to
+; docked windows below the moved window in z-order.
 ; When a top/bottom fit succeeds but no separate left/right fit wins, the moved
 ; window can also inherit the vertical partner's width if both left/right edges
 ; were already within the normal tolerance on release.
@@ -10957,48 +10992,49 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     if (!movedDocksToLeft && !movedDocksToRight && !movedDocksToTop && !movedDocksToBottom)
         return false
 
-    adjacentSideHwndID          := 0
-    adjacentVerticalHwndID      := 0
-    didFitWindow                := false
-    didSideFit                  := false
-    didVerticalFit              := false
-    didFindAdjacentPartner      := false
-    fallbackTemplateHwndID      := 0
-    fitDebugText                := ""
-    sideCandidateTargetEdge     := ""
-    sideFitLabel                := ""
+    adjacentSideHwndID           := 0
+    adjacentVerticalHwndID       := 0
+    didFitWindow                 := false
+    didSideFit                   := false
+    didVerticalFit               := false
+    didFindAdjacentPartner       := false
+    fallbackTemplateHwndID       := 0
+    fitDebugText                 := ""
+    horizontalPartnerEdgeToMatch := ""
+    sideFitLabel                 := ""
     sideFitUsesReleasedOuterEdge := false
-    sidePartnerBottomEdge       := ""
-    sidePartnerH                := ""
-    sidePartnerY                := ""
-    verticalCandidateTargetEdge := ""
-    verticalPartnerRightEdge    := ""
-    verticalPartnerW            := ""
-    verticalPartnerX            := ""
+    sidePartnerBottomEdge        := ""
+    sidePartnerH                 := ""
+    sidePartnerY                 := ""
+    verticalPartnerEdgeToMatch   := ""
+    verticalPartnerRightEdge     := ""
+    verticalPartnerW             := ""
+    verticalPartnerX             := ""
 
     ; Resolve candidate directions first so the adjacent phase can inspect both
     ; axes before deciding whether the lower-z-order docked fallback is needed.
     if (movedDocksToTop)
-        verticalCandidateTargetEdge := "top"
+        verticalPartnerEdgeToMatch := "top"
     else if (movedDocksToBottom)
-        verticalCandidateTargetEdge := "bottom"
+        verticalPartnerEdgeToMatch := "bottom"
 
     if (movedDocksToLeft) {
-        sideCandidateTargetEdge     := "left"
-        sideFitLabel                := "Left-edge"
+        horizontalPartnerEdgeToMatch := "left"
+        sideFitLabel                 := "Left-edge"
     }
     else if (movedDocksToRight) {
-        sideCandidateTargetEdge     := "right"
-        sideFitLabel                := "Right-edge"
+        horizontalPartnerEdgeToMatch := "right"
+        sideFitLabel                 := "Right-edge"
     }
 
-    ; Phase 1: find any adjacent visible windows by geometry first. Candidates
-    ; must still touch at least one monitor edge, then satisfy the normal
-    ; overlap and edge-gap tolerances for the requested fit direction.
-    if (verticalCandidateTargetEdge != "") {
-        adjacentVerticalHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 100, 100, verticalCandidateTargetEdge, edgeGapTolerance, movedX, movedY, movedW, movedH, collectDebugTrace)
+    ; Phase 1: find any adjacent visible windows by geometry first. The match
+    ; selector strings identify which partner edge must face the moved window
+    ; on that axis. Candidates must still touch at least one monitor edge, then
+    ; satisfy the normal overlap and edge-gap tolerances for that direction.
+    if (verticalPartnerEdgeToMatch != "") {
+        adjacentVerticalHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, verticalPartnerEdgeToMatch, edgeGapTolerance, movedX, movedY, movedW, movedH, collectDebugTrace)
         if (collectDebugTrace) {
-            if (verticalCandidateTargetEdge = "top")
+            if (verticalPartnerEdgeToMatch = "top")
                 verticalDebugText := "Top-edge adjacent fit candidate:`n" lastBelowZOrderWindowDebug
             else
                 verticalDebugText := "Bottom-edge adjacent fit candidate:`n" lastBelowZOrderWindowDebug
@@ -11006,8 +11042,8 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         }
     }
 
-    if (sideCandidateTargetEdge != "") {
-        adjacentSideHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 100, 100, sideCandidateTargetEdge, edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH, collectDebugTrace)
+    if (horizontalPartnerEdgeToMatch != "") {
+        adjacentSideHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 100, 100, horizontalPartnerEdgeToMatch, edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH, collectDebugTrace)
         if (collectDebugTrace) {
             sideDebugText := sideFitLabel " adjacent fit candidate:`n" lastBelowZOrderWindowDebug
             if (fitDebugText = "")
@@ -11041,28 +11077,28 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
 
         if (leftSideCandidateHwndID && rightSideCandidateHwndID) {
             if (leftSideGap < rightSideGap || (leftSideGap = rightSideGap && leftSideOverlap >= rightSideOverlap)) {
-                adjacentSideHwndID          := leftSideCandidateHwndID
-                sideCandidateTargetEdge     := "right"
-                sideFitLabel                := "Left-side"
+                adjacentSideHwndID           := leftSideCandidateHwndID
+                horizontalPartnerEdgeToMatch := "right"
+                sideFitLabel                 := "Left-side"
                 sideFitUsesReleasedOuterEdge := true
             }
             else {
-                adjacentSideHwndID          := rightSideCandidateHwndID
-                sideCandidateTargetEdge     := "left"
-                sideFitLabel                := "Right-side"
+                adjacentSideHwndID           := rightSideCandidateHwndID
+                horizontalPartnerEdgeToMatch := "left"
+                sideFitLabel                 := "Right-side"
                 sideFitUsesReleasedOuterEdge := true
             }
         }
         else if (leftSideCandidateHwndID) {
             adjacentSideHwndID          := leftSideCandidateHwndID
-            sideCandidateTargetEdge     := "right"
-            sideFitLabel                := "Left-side"
+            horizontalPartnerEdgeToMatch := "right"
+            sideFitLabel                 := "Left-side"
             sideFitUsesReleasedOuterEdge := true
         }
         else if (rightSideCandidateHwndID) {
-            adjacentSideHwndID          := rightSideCandidateHwndID
-            sideCandidateTargetEdge     := "left"
-            sideFitLabel                := "Right-side"
+            adjacentSideHwndID           := rightSideCandidateHwndID
+            horizontalPartnerEdgeToMatch := "left"
+            sideFitLabel                 := "Right-side"
             sideFitUsesReleasedOuterEdge := true
         }
 
@@ -11108,7 +11144,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         verticalPartnerW         := verticalWinW
         verticalPartnerX         := verticalWinX
 
-        if (verticalCandidateTargetEdge = "top") {
+        if (verticalPartnerEdgeToMatch = "top") {
             ; Place the window at the monitor's visual top edge and size it down
             ; until its bottom edge lands flush against the bottom-side partner.
             targetTopEdge     := monInfoTop
@@ -11144,7 +11180,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         sideRightEdge         := sideWinX + sideWinW
 
         if (sideFitUsesReleasedOuterEdge) {
-            if (sideCandidateTargetEdge = "left") {
+            if (horizontalPartnerEdgeToMatch = "left") {
                 ; Top/bottom-docked moved window: keep its released left edge
                 ; fixed and resize its right edge until it reaches the partner.
                 targetLeftEdge   := movedX
@@ -11159,7 +11195,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
                 targetOuterWidth := targetRightEdge - targetLeftEdge
             }
         }
-        else if (sideCandidateTargetEdge = "left") {
+        else if (horizontalPartnerEdgeToMatch = "left") {
             ; Left-docked moved window: widen it from the monitor's left edge
             ; until it meets the candidate's left edge on the right side.
             targetLeftEdge   := monInfoLeft
