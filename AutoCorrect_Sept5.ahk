@@ -44,96 +44,96 @@ SetBatchLines,   -1 ; Remove AHK's built-in "cooperate with the OS" sleeps
 SetWinDelay,      1 ;
 SetControlDelay,  1 ;
 
-Global CurrentDesktop                      := 1
-Global mouseMoving                         := False
-Global CanceledWinSwap                     := False
-Global ValidWindows                        := []
-Global GroupedWindows                      := []
-Global MinimizedWindows                    := []
-Global PrevActiveWindows                   := []
-Global allWinArray                         := []
-Global cycleCount                          := 1
+Global CurrentDesktop                             := 1
+Global mouseMoving                                := False
+Global CanceledWinSwap                            := False
+Global ValidWindows                               := []
+Global GroupedWindows                             := []
+Global MinimizedWindows                           := []
+Global PrevActiveWindows                          := []
+Global allWinArray                                := []
+Global cycleCount                                 := 1
 ; Alt+Tab/Alt+` can receive the next cycle key while DrawWindowTitlePopup() is still
 ; building the GUI. Buffer that press here so the loop consumes it instead of losing it.
-Global bufferedCycleAdvance                := False
-Global startHighlight                      := False
-Global border_thickness                    := 4
-Global border_color                        := 0xFF00FF
-Global hitTAB                              := False
-Global hitTilde                            := False
-Global SearchingWindows                    := False
-Global UserInputTrimmed                    := ""
-Global memotext                            := ""
-Global totalMenuItemCount                  := 0
-Global onlyTitleFound                      := ""
-Global CancelClose                         := False
-Global DrawingRect                         := False
-Global LclickSelected                      := False
-Global currMonHeight                       := 0
-Global currMonWidth                        := 0
-Global LbuttonEnabled                      := True
-Global X_PriorPriorHotKey                  :=
-Global StopAutoFix                         := False
-Global disableEnter                        := False
-Global EVENT_SYSTEM_MENUPOPUPSTART         := 0x0006
-Global EVENT_SYSTEM_MENUPOPUPEND           := 0x0007
-Global TimeOfLastHotkeyTyped               := A_TickCount
-Global currentMon                          := 0
-Global previousMon                         := 0
-Global targetDesktop                       := 0
-Global currentPath                         := ""
-Global prevPath                            := ""
-Global _winCtrlD                           := ""
-Global MbuttonIsEnter                      := False
-Global suspendRightButtonForMButtonDrag    := False
-Global lastActWinID                        :=
-Global WindowTitleID                       :=
-Global keys                                := "abcdefghijklmnopqrstuvwxyz"
-Global numbers                             := "0123456789"
-Global DoubleClickTime                     := DllCall("GetDoubleClickTime")
-Global SingleClickTime                     := floor(DllCall("GetDoubleClickTime") * 0.5)
-Global isWin11                             := DetectWin11()
-Global isModernExplorerInReg               := IsExplorerModern()
-Global TaskBarHeight                       := 0
-Global lastHotkeyTyped                     := ""
-Global DraggingWindow                      := False
-Global allowDoubleClicks                   := True
-Global disableSendCtrlHwnd                 := ""
-Global lButtonResizeSyncActive             := False
-Global lButtonResizeSyncDraggedHwnd        := 0
+Global bufferedCycleAdvance                       := False
+Global startHighlight                             := False
+Global border_thickness                           := 4
+Global border_color                               := 0xFF00FF
+Global hitTAB                                     := False
+Global hitTilde                                   := False
+Global SearchingWindows                           := False
+Global UserInputTrimmed                           := ""
+Global memotext                                   := ""
+Global totalMenuItemCount                         := 0
+Global onlyTitleFound                             := ""
+Global CancelClose                                := False
+Global DrawingRect                                := False
+Global LclickSelected                             := False
+Global currMonHeight                              := 0
+Global currMonWidth                               := 0
+Global LbuttonEnabled                             := True
+Global X_PriorPriorHotKey                         :=
+Global StopAutoFix                                := False
+Global disableEnter                               := False
+Global EVENT_SYSTEM_MENUPOPUPSTART                := 0x0006
+Global EVENT_SYSTEM_MENUPOPUPEND                  := 0x0007
+Global TimeOfLastHotkeyTyped                      := A_TickCount
+Global currentMon                                 := 0
+Global previousMon                                := 0
+Global targetDesktop                              := 0
+Global currentPath                                := ""
+Global prevPath                                   := ""
+Global _winCtrlD                                  := ""
+Global MbuttonIsEnter                             := False
+Global suspendRightButtonForMButtonDrag           := False
+Global lastActWinID                               :=
+Global WindowTitleID                              :=
+Global keys                                       := "abcdefghijklmnopqrstuvwxyz"
+Global numbers                                    := "0123456789"
+Global DoubleClickTime                            := DllCall("GetDoubleClickTime")
+Global SingleClickTime                            := floor(DllCall("GetDoubleClickTime") * 0.5)
+Global isWin11                                    := DetectWin11()
+Global isModernExplorerInReg                      := IsExplorerModern()
+Global TaskBarHeight                              := 0
+Global lastHotkeyTyped                            := ""
+Global DraggingWindow                             := False
+Global allowDoubleClicks                          := True
+Global disableSendCtrlHwnd                        := ""
+Global lButtonResizeSyncActive                    := False
+Global lButtonResizeSyncDraggedHwnd               := 0
 Global lButtonResizeSyncDraggedStartedAlwaysOnTop := False
-Global lButtonResizeSyncDraggedTransparent := False
-Global lButtonResizeSyncHit                := 0
-Global lButtonResizeSyncLastDraggedH       := ""
-Global lButtonResizeSyncLastDraggedW       := ""
-Global lButtonResizeSyncLastDraggedX       := ""
-Global lButtonResizeSyncLastDraggedY       := ""
-Global lButtonResizeSyncPartners           := []
-Global lButtonResizeSyncTopmostStates      := {}
-Global trayClickPosX                       := 0
-Global trayClickPosY                       := 0
+Global lButtonResizeSyncDraggedTransparent        := False
+Global lButtonResizeSyncHit                       := 0
+Global lButtonResizeSyncLastDraggedH              := ""
+Global lButtonResizeSyncLastDraggedW              := ""
+Global lButtonResizeSyncLastDraggedX              := ""
+Global lButtonResizeSyncLastDraggedY              := ""
+Global lButtonResizeSyncPartners                  := []
+Global lButtonResizeSyncTopmostStates             := {}
+Global trayClickPosX                              := 0
+Global trayClickPosY                              := 0
 
 
-Global hActWin                             := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
-Global UIA                                 := UIA_Interface() ; Initialize UIA interface
+Global hActWin                                    := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+Global UIA                                        := UIA_Interface() ; Initialize UIA interface
 ; Turn key blocking ON/OFF
-Global StopRecursion                       := False
-Global blockKeys                           := False
-Global blockMouse                          := False
-Global gExiting                            := False
+Global StopRecursion                              := False
+Global blockKeys                                  := False
+Global blockMouse                                 := False
+Global gExiting                                   := False
 Global hHookKbd
 Global hHookMouse
 ; --- Config ---
-Global UseWorkArea                         := true   ; true = monitor work area (ignores taskbar). false = full monitor.
-Global SnapRange                           := 20     ; px: distance from edge to begin snapping
-Global BreakAway                           := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
-Global ReleaseAway                         := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
+Global UseWorkArea                                := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+Global SnapRange                                  := 20     ; px: distance from edge to begin snapping
+Global BreakAway                                  := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+Global ReleaseAway                                := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
-Global skipClasses                         := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
+Global skipClasses                                := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
 ; === Settings ===
-Global Opacity                             := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
+Global Opacity                                    := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 
 ; Right-button state machine:
 ; - held/nativeDown track whether we have started a real OS-level right-click yet.
@@ -3786,14 +3786,13 @@ $!+Tab::
             }
 
             GoSub, Altup
-
-            Overlay_Hide(30)
-
-            GoSub, AltupCleanup
-
-
-            FixModifiers()
         }
+
+        Overlay_Hide(30)
+
+        GoSub, AltupCleanup
+
+        FixModifiers()
     }
 Return
 
@@ -3845,13 +3844,13 @@ Return
             }
 
             GoSub, Altup
-
-            Overlay_Hide(30)
-
-            GoSub, AltupCleanup
-
-            FixModifiers()
         }
+
+        Overlay_Hide(30)
+
+        GoSub, AltupCleanup
+
+        FixModifiers()
     }
 Return
 
@@ -3870,6 +3869,7 @@ $!x::
     sleep, 1000
     tooltip,
     GoSub, Altup
+    GoSub, AltupCleanup
     FixModifiers()
 Return
 #If
@@ -4192,47 +4192,97 @@ CycleAppWindows(activeProcessName, activeClass) {
 
     global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, Opacity, bufferedCycleAdvance
 
-    windowsToMinimize    := []
+    activeCurrentMonitorWindowIndex := 0
+    CurrentMonitorMinimizedWindows := []
+    CurrentMonitorWindows          := []
+    OtherMonitorMinimizedWindows   := []
+    windowsToMinimize              := []
     ; Same buffering idea as Cycle(): Alt+` can miss a fast repeat while the popup GUI is drawing.
     bufferedCycleAdvance := False
 
     UpdateValidWindows()
 
-    currentMon := MWAGetMonitorMouseIsIn()
-    cycleCount := 2
+    currentMon       := MWAGetMonitorMouseIsIn()
+    cycleCount       := 2
+    GroupedWindows   := [] ; GroupedWindows = [active visible, other visible, current-monitor minimized, other-monitor minimized]
+    MinimizedWindows := []
+    WinGet, activeHwndID, ID, A
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
 
+    ; Build three explicit cycle phases:
+    ; 1) visible sibling windows on the current monitor
+    ; 2) minimized sibling windows whose restored monitor is the current monitor
+    ; 3) minimized sibling windows whose restored monitor is another monitor
+    ; This keeps minimized windows out of the cycle until the visible current-
+    ; monitor sibling windows have already been shown.
     Critical, On
     Loop, %windowsListWithSameProcessAndClass%
     {
         hwndID := windowsListWithSameProcessAndClass%A_Index%
         WinGetTitle, tit, ahk_id %hwndID%
         WinGet, mmState, MinMax, ahk_id %hwndID%
-        If (MonCount > 1 && mmState > -1) {
+
+        If (mmState == -1) {
+            ; Minimized windows are classified by the monitor they would restore
+            ; onto, not by their current minimized icon state.
+            restoredMon := GetWindowMonitorNumber(hwndID)
+            If (restoredMon = currentMon)
+                CurrentMonitorMinimizedWindows.Push(hwndID)
+            Else
+                OtherMonitorMinimizedWindows.Push(hwndID)
+            continue
+        }
+
+        If (MonCount > 1) {
             currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
         }
-        Else If (mmState > -1) {
+        Else {
             currentMonHasActWin := True
         }
 
-        If (currentMonHasActWin && tit != ""  && mmState > -1) {
-            GroupedWindows.push(hwndID)
-        }
-        Else If (mmState == -1) {
-            MinimizedWindows.push(hwndID)
+        If (currentMonHasActWin && tit != "")
+            CurrentMonitorWindows.Push(hwndID)
+    }
+    ; Rotate phase 1 so the active window becomes GroupedWindows[1]. Since the
+    ; cycle starts from slot 2, the first Alt+` advance lands on the next visible
+    ; current-monitor sibling window instead of immediately restoring a minimized
+    ; sibling from phases 2 or 3.
+    for idx, grpHwndID in CurrentMonitorWindows {
+        If (grpHwndID = activeHwndID) {
+            activeCurrentMonitorWindowIndex := idx
+            break
         }
     }
-    ; add minimized windows to the end of the GroupedWindows array so they can be selected too but afterwards
-    for idx, minHwndID in MinimizedWindows {
-        found := False
-        for jdx, grpHwndID in GroupedWindows {
-            if (grpHwndID = minHwndID) {
-                found := True
-                break
-            }
+    If (activeCurrentMonitorWindowIndex > 0) {
+        ; Rebuild phase 1 starting from the active visible sibling window.
+        ; This makes GroupedWindows[1] the active window, so the existing
+        ; cycleCount := 2 startup behavior advances first to the next visible
+        ; current-monitor sibling instead of jumping into a minimized phase.
+        Loop, % CurrentMonitorWindows.Length()
+        {
+            ; Walk forward from the active window's array position and wrap back
+            ; to the front once we pass the end. The result is a rotated copy of
+            ; CurrentMonitorWindows that preserves the original sibling order.
+            reorderedIndex := activeCurrentMonitorWindowIndex + A_Index - 1
+            If (reorderedIndex > CurrentMonitorWindows.Length())
+                reorderedIndex := reorderedIndex - CurrentMonitorWindows.Length()
+            GroupedWindows.Push(CurrentMonitorWindows[reorderedIndex])
         }
-        if (!found)
-            GroupedWindows.push(minHwndID)
+    }
+    Else {
+        for idx, grpHwndID in CurrentMonitorWindows
+            GroupedWindows.Push(grpHwndID)
+    }
+    ; Append the minimized phases only after the visible phase. MinimizedWindows
+    ; tracks exactly which windows should be returned to the minimized state when
+    ; the user releases Alt after previewing them in the cycle.
+    for idx, minHwndID in CurrentMonitorMinimizedWindows {
+        GroupedWindows.Push(minHwndID)
+        MinimizedWindows.Push(minHwndID)
+    }
+    for idx, minHwndID in OtherMonitorMinimizedWindows {
+        GroupedWindows.Push(minHwndID)
+        MinimizedWindows.Push(minHwndID)
     }
     Critical, Off
 
@@ -4314,7 +4364,11 @@ CycleAppWindows(activeProcessName, activeClass) {
 
             Loop
             {
-                If !IsWindowOnMonNum(gwHwndId, currentMon) {
+                WinGet, mmState, MinMax, ahk_id %gwHwndId%
+                ; Flattening the three phases into GroupedWindows means phase 3 can
+                ; legally contain minimized windows restored to another monitor.
+                ; Only visible windows are still constrained to the current monitor.
+                If (mmState > -1 && !IsWindowOnMonNum(gwHwndId, currentMon)) {
                     cycleCount++
                     If (cycleCount > numWindows)
                         cycleCount := 1
@@ -9253,16 +9307,16 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     if (!lButtonResizeSyncPartners.MaxIndex())
         return false
 
-    lButtonResizeSyncActive        := true
-    lButtonResizeSyncDraggedHwnd   := draggedHwndID
+    lButtonResizeSyncActive                    := true
+    lButtonResizeSyncDraggedHwnd               := draggedHwndID
     lButtonResizeSyncDraggedStartedAlwaysOnTop := IsAlwaysOnTop(draggedHwndID)
-    lButtonResizeSyncDraggedTransparent := false
-    lButtonResizeSyncHit           := edgeHit
-    lButtonResizeSyncLastDraggedH  := draggedH
-    lButtonResizeSyncLastDraggedW  := draggedW
-    lButtonResizeSyncLastDraggedX  := draggedX
-    lButtonResizeSyncLastDraggedY  := draggedY
-    lButtonResizeSyncTopmostStates := _CaptureLiveResizeSyncTopmostStates(draggedHwndID, lButtonResizeSyncPartners)
+    lButtonResizeSyncDraggedTransparent        := false
+    lButtonResizeSyncHit                       := edgeHit
+    lButtonResizeSyncLastDraggedH              := draggedH
+    lButtonResizeSyncLastDraggedW              := draggedW
+    lButtonResizeSyncLastDraggedX              := draggedX
+    lButtonResizeSyncLastDraggedY              := draggedY
+    lButtonResizeSyncTopmostStates             := _CaptureLiveResizeSyncTopmostStates(draggedHwndID, lButtonResizeSyncPartners)
     if !lButtonResizeSyncDraggedStartedAlwaysOnTop
         WinSet, Transparent, 255, ahk_id %draggedHwndID%
 
@@ -9293,17 +9347,17 @@ EndLButtonResizeSync() {
         WinSet, Transparent, Off, ahk_id %lButtonResizeSyncDraggedHwnd%
 
     _RestoreLiveResizeSyncTopmostStates(lButtonResizeSyncTopmostStates, lButtonResizeSyncDraggedHwnd)
-    lButtonResizeSyncActive            := false
-    lButtonResizeSyncDraggedHwnd       := 0
+    lButtonResizeSyncActive                    := false
+    lButtonResizeSyncDraggedHwnd               := 0
     lButtonResizeSyncDraggedStartedAlwaysOnTop := false
-    lButtonResizeSyncDraggedTransparent := false
-    lButtonResizeSyncHit               := 0
-    lButtonResizeSyncLastDraggedH      := ""
-    lButtonResizeSyncLastDraggedW      := ""
-    lButtonResizeSyncLastDraggedX      := ""
-    lButtonResizeSyncLastDraggedY      := ""
-    lButtonResizeSyncPartners          := []
-    lButtonResizeSyncTopmostStates     := {}
+    lButtonResizeSyncDraggedTransparent        := false
+    lButtonResizeSyncHit                       := 0
+    lButtonResizeSyncLastDraggedH              := ""
+    lButtonResizeSyncLastDraggedW              := ""
+    lButtonResizeSyncLastDraggedX              := ""
+    lButtonResizeSyncLastDraggedY              := ""
+    lButtonResizeSyncPartners                  := []
+    lButtonResizeSyncTopmostStates             := {}
 }
 
 ; While a native edge resize is in progress, keep each matched same-side peer
@@ -9591,11 +9645,14 @@ IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
     X := Y := W := H := 0
     WinGet, state, MinMax, ahk_id %thisWindowHwnd%
 
-    If (state == -1)
-        Return True
-
     if (targetMonNum < 1)
         Return False
+
+    ; Minimized windows do not have a meaningful current on-screen rect, so use
+    ; their restored placement monitor instead of claiming they belong to every
+    ; monitor.
+    If (state == -1)
+        Return (GetWindowMonitorNumber(thisWindowHwnd) = targetMonNum)
 
     ; WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
     WinGetPosEx(thisWindowHwnd, X, Y, W, H)
@@ -9610,36 +9667,6 @@ IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
     overlapRatio := ((max(X, workAreaLeft) - min(X+W, workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom))) / (W * H)
     Critical, Off
     Return (overlapRatio > 0.50)
-}
-
-FindMonNumForWindows(thisWindowHwnd) {
-    X := Y := W := H := 0
-    WinGet, state, MinMax, ahk_id %thisWindowHwnd%
-
-    If (state == -1)
-        Return -1
-
-    ;Get number of monitor
-    SysGet, monCount, MonitorCount
-
-    ; WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
-    WinGetPosEx(thisWindowHwnd, X, Y, W, H)
-    ;Iterate through each monitor
-    Loop, %monCount% {
-        Critical, On
-        ;Get Monitor working area
-        SysGet, workArea, Monitor, % A_Index
-
-        ;Check If the focus window in on the current monitor index
-        ; https://math.stackexchange.com/questions/2449221/calculating-percentage-of-overlap-between-two-rectangles
-        If (((max(X, workAreaLeft) - min(X+W,workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom)))/(W*H) > 0.50 ) {
-
-            Critical, Off
-            Return A_Index
-        }
-    }
-    Critical, Off
-    Return 0
 }
 
 GetWindowMonitorNumber(windowHwnd) {
