@@ -74,7 +74,20 @@ Global currMonWidth                               := 0
 Global LbuttonEnabled                             := True
 Global X_PriorPriorHotKey                         :=
 Global StopAutoFix                                := False
+; Let specific blockKeys call sites skip the hook's one-time FixModifiers() pass
+; when they need held modifiers to remain logically intact.
+Global blockKeysSkipFixOnEnter                    := False
+; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
+; is occasionally interpreted as a literal v by the target editor.
+Global clipPreferExplicitCtrlV                    := False
 Global disableEnter                               := False
+; Deferred typing correction state so punctuation and capitalization rewrites can
+; happen just after the live keypress cycle settles instead of on the triggering
+; key event itself.
+Global pendingFixSlashAction                      := ""
+Global pendingFixSlashHwnd                        := 0
+Global pendingHotyHwnd                            := 0
+Global pendingHotyReplacement                     := ""
 Global EVENT_SYSTEM_MENUPOPUPSTART                := 0x0006
 Global EVENT_SYSTEM_MENUPOPUPEND                  := 0x0007
 Global TimeOfLastHotkeyTyped                      := A_TickCount
@@ -370,6 +383,12 @@ TooltipExpr =
 ; The first line of code below is the set of letters, digits, and/or symbols
 ; that are eligible for this type of correction.  Customize if you wish:
 
+; Restrict typing-manipulation hooks to editable typing contexts so they do not
+; intercept ordinary non-editable app input.
+#If ShouldRunTypingAutoFix()
+#If
+Hotkey, If, ShouldRunTypingAutoFix()
+
 HotKey, ~/,  Marktime_FixSlash
 HotKey, ~',  Hoty ;'
 HotKey, ~?,  Hoty
@@ -391,6 +410,8 @@ Loop Parse, numbers
 {
     Hotkey, % "~" . A_LoopField, Marktime_Hoty_FixSlash, On
 }
+
+Hotkey, If
 
 Send #^{Left}
 sleep, 50
@@ -611,13 +632,15 @@ InitVDA()
 ; --------------------------------------------------
 ; ---- Low-level hardware key filter ----
 ; --------------------------------------------------
-; Common filter logic for keyboard - Yes, your hook can create the stuck modifier by swallowing physical KEYUP.
+; Common filter logic for keyboard while blockKeys is active.
+; Some blockKeys call sites deliberately skip the hook's one-time FixModifiers()
+; pass so held Ctrl/Shift can stay logically intact during short edit sequences.
 ; --------------------------------------------------
 LL_KeyboardHook(nCode, wParam, lParam)
 {
-    ; When blockKeys := true, you return 1 for everything physical, including key-up messages.
+    ; While blockKeys := true, swallow only physical KEYDOWN / SYSKEYDOWN events.
     ; If the user releases LCtrl while blocking is active, Windows never receives the LCtrl-up → Ctrl stays down.
-    global blockKeys, hHookKbd
+    global blockKeys, blockKeysSkipFixOnEnter, hHookKbd
     static blockedPressCount = 0
     static didFixOnEnter = false
 
@@ -653,10 +676,15 @@ LL_KeyboardHook(nCode, wParam, lParam)
     if (!didFixOnEnter)
     {
         didFixOnEnter := true
-        FixModifiers()
+        if (!blockKeysSkipFixOnEnter)
+            FixModifiers()
     }
 
-    ; After 10 physical key presses, disable blocking and allow typing again
+    ; Allow physical key-up events through while blocking so real key cycles can complete.
+    if (wParam = 0x0101 || wParam = 0x0105)  ; WM_KEYUP / WM_SYSKEYUP
+        return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+
+    ; After repeated physical key presses, disable blocking and allow typing again.
     ; (Count only physical KEYDOWN / SYSKEYDOWN so KEYUP events don't inflate the count.)
     if (wParam = 0x0100 || wParam = 0x0104)  ; WM_KEYDOWN / WM_SYSKEYDOWN
     {
@@ -822,11 +850,38 @@ Return
 Hoty:
     CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey < 999) ? CapCount + 1 : 1 ; note that CapCount is ALWAYS at least 1
     If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
-        Send % "{Left}{BS}" . SubStr(A_PriorHotKey,3,1) . "{Right}"
+        pendingHotyHwnd        := WinExist("A")
+        pendingHotyReplacement := SubStr(A_PriorHotKey,3,1)
+        SetTimer, FlushPendingHotyReplacement, -40
         CapCount := 1
     }
     If StopAutoFix
         X_PriorPriorHotKey :=
+Return
+
+FlushPendingHotyReplacement:
+    if (!pendingHotyReplacement)
+        Return
+
+    ; Let the physical key cycle settle before rewriting the prior capital letter.
+    if (A_TimeIdlePhysical < 40 || StopAutoFix)
+    {
+        SetTimer, FlushPendingHotyReplacement, -40
+        Return
+    }
+
+    if (!WinActive("ahk_id " . pendingHotyHwnd))
+    {
+        pendingHotyHwnd        := 0
+        pendingHotyReplacement := ""
+        Return
+    }
+
+    StopAutoFix            := True
+    Send % "{Left}{BS}" . pendingHotyReplacement . "{Right}"
+    StopAutoFix            := False
+    pendingHotyHwnd        := 0
+    pendingHotyReplacement := ""
 Return
 
 FixSlash:
@@ -836,17 +891,49 @@ FixSlash:
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
     If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
-        Send, % "{BS}{BS}{?}{SPACE}"
+        pendingFixSlashAction := "space"
+        pendingFixSlashHwnd := WinExist("A")
+        SetTimer, FlushPendingFixSlash, -40
         disableEnter := False
     }
     Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$Enter" && A_TimeSincePriorHotkey<999)) {
-        Send, % "{BS}{?}{ENTER}"
+        pendingFixSlashAction := "enter"
+        pendingFixSlashHwnd := WinExist("A")
+        SetTimer, FlushPendingFixSlash, -40
         disableEnter := False
     }
     If IsPriorHotKeyLowerCase()   ; as long as a letter key is pressed we record the priorprior hotkey
         X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1) ; record the letter key pressed
     If IsPriorHotKeyCapital()
         X_PriorPriorHotKey := Substr(A_PriorHotkey,3,1) ; record only the letter key pressed If captialized
+Return
+
+FlushPendingFixSlash:
+    if (!pendingFixSlashAction)
+        Return
+
+    ; Let the physical key cycle settle before rewriting slash punctuation.
+    if (A_TimeIdlePhysical < 40 || StopAutoFix)
+    {
+        SetTimer, FlushPendingFixSlash, -40
+        Return
+    }
+
+    if (!WinActive("ahk_id " . pendingFixSlashHwnd))
+    {
+        pendingFixSlashAction := ""
+        pendingFixSlashHwnd   := 0
+        Return
+    }
+
+    StopAutoFix           := True
+    if (pendingFixSlashAction = "space")
+        Send, % "{BS}{BS}{?}{SPACE}"
+    else if (pendingFixSlashAction = "enter")
+        Send, % "{BS}{?}{ENTER}"
+    StopAutoFix           := False
+    pendingFixSlashAction := ""
+    pendingFixSlashHwnd   := 0
 Return
 
 IsPriorHotKeyLetterKey() {
@@ -2867,25 +2954,41 @@ Return
         Send, {Esc}
 
     Critical, On
-    StopAutoFix := True
-    blockKeys   := True
+    StopAutoFix             := True
+    caretRectKeyBeforeMove  := ""
+    ; Let the trigger key finish before entering blocked mode so held modifiers
+    ; can remain down while repeated D taps still retrigger the hotkey cleanly.
+    KeyWait, d, T0.25
+    blockKeysSkipFixOnEnter := True
+    blockKeys               := True
 
+    ; Let each movement burst finish visually before issuing the next key so the
+    ; delete-line sequence relies less on fixed timing alone.
+    GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Down}
-    sleep, 10
+    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
+    GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Home}{Home}
-    sleep, 10
-    Send, +{up}
-    sleep, 10
-    Send, +{Home}
+    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
+    GetActiveCaretRectKey(caretRectKeyBeforeMove)
+    ; Use explicit Shift down/up pairs instead of +{Up}/+{Home} so the
+    ; synthetic selection does not leave Shift logically stuck afterward.
+    Send, {Shift Down}{Up}{Shift Up}
+    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
+    GetActiveCaretRectKey(caretRectKeyBeforeMove)
+    Send, {Shift Down}{Home}{Shift Up}
     ; Send, {End}
     ; Send, +{Home}+{Home}+{Home}
-    sleep, 10
+    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
     Send, {Delete}
+    blockKeys               := False
+    blockKeysSkipFixOnEnter := False
+    ; Clear any synthetic Shift latch left by the selection sends.
+    SendInput, {Shift Up}
 
     ; Your environment reset
     Hotstring("Reset")
-    StopAutoFix := False
-    blockKeys   := False
+    StopAutoFix             := False
     Critical, Off
 Return
 
@@ -2894,47 +2997,107 @@ Return
         Send, {Esc}
 
     Critical, On
-    StopAutoFix := True
-    blockKeys   := True
-    ; If there's no caret (e.g., not in a text field), pass through native Ctrl+Shift+D.
+    StopAutoFix                 := True
+    caretRectKeyBeforeMove      := ""
+    ; If there's no caret (e.g., not in a text field), pass through native Ctrl+D.
     if (A_CaretX = "")
     {
-        Send ^+d
+        StopAutoFix             := False
+        blockKeys               := False
+        blockKeysSkipFixOnEnter := False
+        Critical, Off
+        Send ^d
         Return
     }
-    Send, {Ctrl Up}
+    ; Let the trigger key finish before entering blocked mode so held Ctrl can
+    ; remain down while repeated D taps still retrigger the hotkey cleanly.
+    KeyWait, d, T0.25
+    blockKeysSkipFixOnEnter     := True
+    blockKeys                   := True
 
-    ; 1) Go to absolute start of the line and select it
-    Send, {Home}{Home}
-    Sleep, 10
-    Send, +{End}
-    Sleep, 10
+    didFastInsert                  := False
+    didRestoreCaretWithMessages    := False
+    fastInsertControlClassNN       := ""
+    fastInsertControlHwnd          := 0
+    fastInsertWindowId             := 0
+    originalFastInsertLineStartIdx := -1
+    if _GetFastInsertWrappedTextTarget(fastInsertWindowId, fastInsertControlClassNN, fastInsertControlHwnd)
+        ; Save the exact original line-start index so the fast message-based
+        ; insert path can put the caret back on that same logical line later.
+        _GetCurrentLineStartIndexInClassicControl(fastInsertWindowId, fastInsertControlClassNN, fastInsertControlHwnd, originalFastInsertLineStartIdx)
+
+    ; 1) Go to absolute start of the line and select it with one plain-navigation
+    ; burst so held Ctrl cannot slip back in between the selection keys.
+    GetActiveCaretRectKey(caretRectKeyBeforeMove)
+    Send, {Ctrl Up}{Home}{Home}{Shift Down}{End}{Shift Up}
+    blockKeys                   := False
+    blockKeysSkipFixOnEnter     := False
+    if GetKeyState("Ctrl", "P")
+        Send, {Ctrl Down}
+    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
 
     ; 2) Copy the line text via your clipboard-safe helper
-    lineText := Clip()   ; returns the copied text, clipboard will auto-restore later
+    lineText                    := Clip()   ; returns the copied text, clipboard will auto-restore later
+    if (lineText = "")
+    {
+        ; Abort before the Enter step if selection/copy failed so this hotkey
+        ; does not degrade into inserting blank lines on repeated presses.
+        Clip("", "", "RESTORE")
+        Hotstring("Reset")
+        StopAutoFix             := False
+        Critical, Off
+        Return
+    }
 
     ; 3) Insert a newline and paste the duplicate line BELOW
-    Send, {End}
-    Sleep, 10
-    Send, {Enter}
-    Sleep, 10
-    Send, +{Home}
-    Sleep, 10
-    Clip(lineText)       ; paste via helper (keeps clipboard safe)
-    Sleep, 10
+    blockKeysSkipFixOnEnter     := True
+    blockKeys                   := True
+    GetActiveCaretRectKey(caretRectKeyBeforeMove)
+    Send, {Ctrl Up}{End}{Enter}{Shift Down}{Home}{Shift Up}
+    blockKeys                   := False
+    blockKeysSkipFixOnEnter     := False
+    if GetKeyState("Ctrl", "P")
+        Send, {Ctrl Down}
+    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
+    GetActiveCaretRectKey(caretRectKeyBeforeMove)
+    if (fastInsertWindowId || fastInsertControlHwnd || fastInsertControlClassNN != "")
+        didFastInsert := _FastInsertWrappedTextIntoClassicControl(fastInsertWindowId, fastInsertControlClassNN, fastInsertControlHwnd, lineText)
+    if !didFastInsert
+    {
+        ; Some editors are picky about paste timing/chords here, so force the
+        ; clipboard helper onto the stricter explicit Ctrl+V path for this step.
+        clipPreferExplicitCtrlV := True
+        Clip(lineText)       ; paste via helper when no classic control path is available
+        clipPreferExplicitCtrlV := False
+    }
+    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 30)
+    if (didFastInsert && originalFastInsertLineStartIdx >= 0)
+        ; After a fast EM_REPLACESEL insert, restore directly to the saved line
+        ; start instead of trying to infer the original position by keystrokes.
+        didRestoreCaretWithMessages := _MoveCaretToIndexInClassicControl(fastInsertWindowId, fastInsertControlClassNN, fastInsertControlHwnd, originalFastInsertLineStartIdx)
 
     ; 4) Return caret to the original line at column 1 (reliably cross-editor)
-    Send, {Up} ; {Home}{Home}
-    Sleep, 100
-    ; Optional: if you prefer immediate clipboard restore instead of the ~700ms timer, uncomment:
+    if !didRestoreCaretWithMessages
+    {
+        blockKeysSkipFixOnEnter := True
+        blockKeys               := True
+        GetActiveCaretRectKey(caretRectKeyBeforeMove)
+        Send, {Ctrl Up}{Up} ; {Home}{Home}
+        blockKeys               := False
+        blockKeysSkipFixOnEnter := False
+        if GetKeyState("Ctrl", "P")
+            Send, {Ctrl Down}
+        WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 60, 2, 100)
+    }
+    ; Optional                  : if you prefer immediate clipboard restore instead of the ~700ms timer, uncomment:
     ; Clip("", "", "RESTORE")
 
     ; Your environment reset
     Hotstring("Reset")
-    StopAutoFix := False
-    blockKeys   := False
+    StopAutoFix                 := False
     Critical, Off
 Return
+
 #If
 
 ControlExist(ctrl, winTitle := "", winText := "") {
@@ -3003,6 +3166,59 @@ _GetFastInsertWrappedTextTarget(ByRef windowId, ByRef controlClassNN, ByRef cont
     }
 
     return false
+}
+
+; Captures the exact logical line-start caret index in a classic Edit/RichEdit
+; control so later restoration can return to the original line precisely.
+_GetCurrentLineStartIndexInClassicControl(windowId, controlClassNN, controlHwnd, ByRef lineStartIndex) {
+    static emGetSel := 0x00B0
+    static emLineFromChar := 0x00C9
+    static emLineIndex := 0x00BB
+    lineStartIndex := -1
+
+    targetHwnd := controlHwnd
+    if (!targetHwnd && controlClassNN != "")
+        ControlGet, targetHwnd, Hwnd,, %controlClassNN%, ahk_id %windowId%
+    if !targetHwnd
+        return false
+
+    ControlFocus, , ahk_id %targetHwnd%
+    VarSetCapacity(selectionStart, 4, 0)
+    VarSetCapacity(selectionEnd, 4, 0)
+    DllCall("SendMessage", "Ptr", targetHwnd, "UInt", emGetSel, "Ptr", &selectionStart, "Ptr", &selectionEnd, "Ptr")
+
+    caretIndex := NumGet(selectionStart, 0, "Int")
+    if (caretIndex < 0)
+        return false
+
+    currentLineNumber := DllCall("SendMessage", "Ptr", targetHwnd, "UInt", emLineFromChar, "Ptr", caretIndex, "Ptr", 0, "Int")
+    if (currentLineNumber < 0)
+        return false
+
+    lineStartIndex := DllCall("SendMessage", "Ptr", targetHwnd, "UInt", emLineIndex, "Ptr", currentLineNumber, "Ptr", 0, "Int")
+    if (lineStartIndex < 0)
+        return false
+
+    return true
+}
+
+; Moves the caret to an exact character index in a classic Edit/RichEdit
+; control after a synchronous EM_REPLACESEL insertion.
+_MoveCaretToIndexInClassicControl(windowId, controlClassNN, controlHwnd, caretIndex) {
+    static emSetSel := 0x00B1
+
+    targetHwnd := controlHwnd
+    if (!targetHwnd && controlClassNN != "")
+        ControlGet, targetHwnd, Hwnd,, %controlClassNN%, ahk_id %windowId%
+    if !targetHwnd
+        return false
+
+    if (caretIndex < 0)
+        return false
+
+    ControlFocus, , ahk_id %targetHwnd%
+    DllCall("SendMessage", "Ptr", targetHwnd, "UInt", emSetSel, "Ptr", caretIndex, "Ptr", caretIndex, "Ptr")
+    return true
 }
 
 ; Attempts a fast classic-control replacement before falling back to clipboard
@@ -3913,8 +4129,8 @@ $!Lbutton::
         Send, {LAlt UP}
         Send, {Click, left}
         Send, {ENTER}
-        sleep, 275
         blockKeys := False
+        sleep, 275
     }
 Return
 
@@ -6367,6 +6583,54 @@ ControlGetFocusEx(tidTarget, hwndTarget, timeoutMs := 15)
     return false
 }
 
+; Returns a stable string key for the active thread's caret rectangle, if exposed.
+GetActiveCaretRectKey(ByRef caretRectKey, ByRef caretHwnd := 0)
+{
+    WinGet, activeHwnd, ID, A
+    if !activeHwnd
+    {
+        caretHwnd := 0
+        caretRectKey := ""
+        return false
+    }
+
+    tid := DllCall("user32\GetWindowThreadProcessId", "Ptr", activeHwnd, "UInt*", 0, "UInt")
+    if !tid
+    {
+        caretHwnd := 0
+        caretRectKey := ""
+        return false
+    }
+
+    size := 8 + (A_PtrSize * 6) + 16
+    VarSetCapacity(gui, size, 0)
+    NumPut(size, gui, 0, "UInt")
+
+    ok := DllCall("user32\GetGUIThreadInfo", "UInt", tid, "Ptr", &gui, "Int")
+    if (!ok)
+    {
+        caretHwnd := 0
+        caretRectKey := ""
+        return false
+    }
+
+    caretHwnd := NumGet(gui, 8 + (A_PtrSize * 5), "Ptr")
+    if !caretHwnd
+    {
+        caretRectKey := ""
+        return false
+    }
+
+    rectOffset := 8 + (A_PtrSize * 6)
+    caretLeft   := NumGet(gui, rectOffset + 0,  "Int")
+    caretTop    := NumGet(gui, rectOffset + 4,  "Int")
+    caretRight  := NumGet(gui, rectOffset + 8,  "Int")
+    caretBottom := NumGet(gui, rectOffset + 12, "Int")
+
+    caretRectKey := caretHwnd "|" caretLeft "|" caretTop "|" caretRight "|" caretBottom
+    return true
+}
+
 ; Returns the focused ClassNN for a top-level window once focus has settled inside it.
 GetCtrlNNFromHwnd(hwndTop, hwndCtl)
 {
@@ -6437,6 +6701,59 @@ EnsureFocusedHwnd(hwndTarget, totalMs := 60, refocusEveryMs := 15)
     }
 
     return ControlGetFocusEx(tidTarget, hwndTarget, 0)
+}
+
+; Waits for the active caret rectangle to change and then stabilize, with a sleep fallback.
+WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove := "", timeoutMs := 35, stablePollCount := 2, fallbackSleepMs := 10)
+{
+    if (caretRectKeyBeforeMove = "")
+    {
+        ; If the editor never exposed a caret rect, fall back immediately to the
+        ; old fixed sleep instead of burning the full polling timeout first.
+        if (fallbackSleepMs > 0)
+            Sleep, %fallbackSleepMs%
+        return false
+    }
+
+    currentCaretRectKey := ""
+    lastMovedCaretRectKey := ""
+    sawCaretMove := false
+    stableSampleCount := 0
+    startTick := A_TickCount
+
+    Loop
+    {
+        if GetActiveCaretRectKey(currentCaretRectKey)
+        {
+            if (sawCaretMove || currentCaretRectKey != caretRectKeyBeforeMove)
+            {
+                sawCaretMove := true
+
+                ; Require the moved caret rect to stay unchanged for multiple
+                ; polls so we do not advance on an intermediate animation step.
+                if (currentCaretRectKey = lastMovedCaretRectKey)
+                    stableSampleCount += 1
+                else
+                {
+                    lastMovedCaretRectKey := currentCaretRectKey
+                    stableSampleCount := 1
+                }
+
+                if (stableSampleCount >= stablePollCount)
+                    return true
+            }
+        }
+
+        if ((A_TickCount - startTick) >= timeoutMs)
+            break
+
+        Sleep, 0
+    }
+
+    if (fallbackSleepMs > 0)
+        Sleep, %fallbackSleepMs%
+
+    return false
 }
 ; Why that's faster
     ; One-time ControlGet and minimal focus calls
@@ -8401,9 +8718,12 @@ KeyTrack() {
             ; A_PriorKey and Loops - How It Works
             ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a Loop.
             ; You can read A_PriorKey at any point in the Loop, and it will show the most recent key pressed up to that moment.
+            ; Require a short physical-idle gap before blocking keys so we do not
+            ; enter blockKeys in the middle of the user's final keydown/keyup cycle.
             ; tooltip, % "lastKey- " . A_PriorKey . " - " . A_TickCount-TimeOfLastHotkeyTyped
             If (   TimeOfLastHotkeyTyped
                 && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
+                && (A_TimeIdlePhysical >= 50)
                 && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
                 && (   InStr(keys,    Substr(A_ThisHotkey,2), false)
                     || InStr(numbers, Substr(A_ThisHotkey,2), false)
@@ -9943,8 +10263,16 @@ HasVal(haystack, needle) {
 ; Paste text and restore the user's clipboard afterward.
 ; Uses a short one-shot timer to avoid paste race conditions.
 ;========================
+_SendClipboardPaste()
+{
+    ; Always send an explicit Ctrl+V chord for callers that opt into this path.
+    ; Some modern editors misread {Blind}v and occasionally type a literal v.
+    SendInput, {Ctrl Down}v{Ctrl Up}
+}
+
 Clip(Text := "", Reselect := "", Restore := "")
 {
+    global clipPreferExplicitCtrlV
     static BackUpClip := "", Stored := False, LastClip := "", Restored := ""
 
     if (Restore) {
@@ -9982,7 +10310,10 @@ Clip(Text := "", Reselect := "", Restore := "")
         } else {
             Clipboard := LastClip := Text
             ClipWait, 10
-            SendInput, ^v
+            if (clipPreferExplicitCtrlV)
+                _SendClipboardPaste()
+            else
+                SendInput, ^v
             Sleep, 20  ; small buffer in case more keystrokes (e.g., Enter) follow a paste
         }
 
@@ -11981,6 +12312,32 @@ IsGoogleDocWindow() {
         Return True
     Else
         Return False
+}
+
+; Returns true only when typing auto-fix hooks should be active for the current
+; focused target.
+ShouldRunTypingAutoFix() {
+    global StopAutoFix
+
+    if (StopAutoFix)
+        return false
+
+    if (IsGoogleDocWindow())
+        return false
+
+    if WinActive("ahk_exe Code.exe")
+        return false
+
+    if WinActive("ahk_exe notepad++.exe")
+        return false
+
+    if WinActive("ahk_exe EXCEL.EXE")
+        return false
+
+    if WinActive("ahk_exe WINWORD.EXE")
+        return false
+
+    return IsCaretInEdit()
 }
 
 IsEditCtrl() {
