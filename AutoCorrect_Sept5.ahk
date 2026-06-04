@@ -635,10 +635,26 @@ InitVDA()
 ; Common filter logic for keyboard while blockKeys is active.
 ; Some blockKeys call sites deliberately skip the hook's one-time FixModifiers()
 ; pass so held Ctrl/Shift can stay logically intact during short edit sequences.
+;
+; Why physical KEYUP events must be allowed through:
+;   Normal key lifecycle:
+;     physical c down -> WM_KEYDOWN(c) -> WM_CHAR("c") -> WM_KEYUP(c)
+;     -> editor/framework closes the c key cycle cleanly
+;
+;   Broken old blockKeys lifecycle:
+;     physical c down -> WM_KEYDOWN(c) -> WM_CHAR("c") -> blockKeys swallows WM_KEYUP(c)
+;     -> next input transition arrives (Send / modifier cleanup / next real key)
+;     -> editor/framework still has stale "c is down" state
+;     -> input reconciliation can misfire as one extra "c" or a stuck modifier
+;
+; Many apps assume Windows delivers a sane KEYDOWN -> CHAR -> KEYUP lifecycle.
+; Once a low-level hook violates that assumption, behavior becomes framework-specific
+; and can show up as duplicate first letters instead of a clean infinite repeat.
 ; --------------------------------------------------
 LL_KeyboardHook(nCode, wParam, lParam)
 {
     ; While blockKeys := true, swallow only physical KEYDOWN / SYSKEYDOWN events.
+    ; Current behavior lets physical KEYUP / SYSKEYUP pass so the active app can close the key cycle.
     ; If the user releases LCtrl while blocking is active, Windows never receives the LCtrl-up → Ctrl stays down.
     global blockKeys, blockKeysSkipFixOnEnter, hHookKbd
     static blockedPressCount = 0
@@ -14264,7 +14280,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:critiz::criticiz
 :*:desicant::desiccant
 :*:desicat::desiccat
-:*:disparat::disparit
 :*:dissapoint::disappoint
 :*:divsion::division
 :*:dcument::document
@@ -17899,6 +17914,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::incredably::incredibly
 ::os::so
 ::HSL::HLS
+::hls::HLS
+::disparite::disparate
+::formated::formatted
 ;------------------------------------------------------------------------------
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
