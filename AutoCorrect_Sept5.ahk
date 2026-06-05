@@ -76,7 +76,7 @@ Global X_PriorPriorHotKey                         :=
 Global StopAutoFix                                := False
 ; Let specific blockKeys call sites skip the hook's one-time FixModifiers() pass
 ; when they need held modifiers to remain logically intact.
-Global blockKeysSkipFixOnEnter                    := False
+Global skipFixModifiersOnNextBlock                    := False
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
 Global clipPreferExplicitCtrlV                    := False
@@ -656,9 +656,9 @@ LL_KeyboardHook(nCode, wParam, lParam)
     ; While blockKeys := true, swallow only physical KEYDOWN / SYSKEYDOWN events.
     ; Current behavior lets physical KEYUP / SYSKEYUP pass so the active app can close the key cycle.
     ; If the user releases LCtrl while blocking is active, Windows never receives the LCtrl-up → Ctrl stays down.
-    global blockKeys, blockKeysSkipFixOnEnter, hHookKbd
+    global blockKeys, skipFixModifiersOnNextBlock, hHookKbd
     static blockedPressCount = 0
-    static didFixOnEnter = false
+    static didRunBlockEntryFixModifiers = false
 
     ; do not process / do not block / do not modify this event
     if (nCode < 0)
@@ -682,17 +682,17 @@ LL_KeyboardHook(nCode, wParam, lParam)
     if (!blockKeys)
     {
         blockedPressCount := 0
-        didFixOnEnter := false
+        didRunBlockEntryFixModifiers := false
         return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
     }
 
     ; IMPORTANT CHANGE:
     ; Call FixModifiers() only once when entering the blocking state (not on every hook event),
     ; otherwise modifiers will feel "broken" because they're constantly being forced up.
-    if (!didFixOnEnter)
+    if (!didRunBlockEntryFixModifiers)
     {
-        didFixOnEnter := true
-        if (!blockKeysSkipFixOnEnter)
+        didRunBlockEntryFixModifiers := true
+        if (!skipFixModifiersOnNextBlock)
             FixModifiers()
     }
 
@@ -711,7 +711,7 @@ LL_KeyboardHook(nCode, wParam, lParam)
         {
             blockKeys := false
             blockedPressCount := 0
-            didFixOnEnter := false
+            didRunBlockEntryFixModifiers := false
 
             ; Let this key through so typing resumes immediately
             return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
@@ -2975,7 +2975,7 @@ Return
     ; Let the trigger key finish before entering blocked mode so held modifiers
     ; can remain down while repeated D taps still retrigger the hotkey cleanly.
     KeyWait, d, T0.25
-    blockKeysSkipFixOnEnter := True
+    skipFixModifiersOnNextBlock := True
     blockKeys               := True
 
     ; Let each movement burst finish visually before issuing the next key so the
@@ -2998,7 +2998,7 @@ Return
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
     Send, {Delete}
     blockKeys               := False
-    blockKeysSkipFixOnEnter := False
+    skipFixModifiersOnNextBlock := False
     ; Clear any synthetic Shift latch left by the selection sends.
     SendInput, {Shift Up}
 
@@ -3020,7 +3020,7 @@ Return
     {
         StopAutoFix             := False
         blockKeys               := False
-        blockKeysSkipFixOnEnter := False
+        skipFixModifiersOnNextBlock := False
         Critical, Off
         Send ^d
         Return
@@ -3028,7 +3028,7 @@ Return
     ; Let the trigger key finish before entering blocked mode so held Ctrl can
     ; remain down while repeated D taps still retrigger the hotkey cleanly.
     KeyWait, d, T0.25
-    blockKeysSkipFixOnEnter     := True
+    skipFixModifiersOnNextBlock     := True
     blockKeys                   := True
 
     didFastInsert                  := False
@@ -3047,7 +3047,7 @@ Return
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Ctrl Up}{Home}{Home}{Shift Down}{End}{Shift Up}
     blockKeys                   := False
-    blockKeysSkipFixOnEnter     := False
+    skipFixModifiersOnNextBlock     := False
     if GetKeyState("Ctrl", "P")
         Send, {Ctrl Down}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
@@ -3066,12 +3066,12 @@ Return
     }
 
     ; 3) Insert a newline and paste the duplicate line BELOW
-    blockKeysSkipFixOnEnter     := True
+    skipFixModifiersOnNextBlock     := True
     blockKeys                   := True
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Ctrl Up}{End}{Enter}{Shift Down}{Home}{Shift Up}
     blockKeys                   := False
-    blockKeysSkipFixOnEnter     := False
+    skipFixModifiersOnNextBlock     := False
     if GetKeyState("Ctrl", "P")
         Send, {Ctrl Down}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
@@ -3095,12 +3095,12 @@ Return
     ; 4) Return caret to the original line at column 1 (reliably cross-editor)
     if !didRestoreCaretWithMessages
     {
-        blockKeysSkipFixOnEnter := True
+        skipFixModifiersOnNextBlock := True
         blockKeys               := True
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
         Send, {Ctrl Up}{Up} ; {Home}{Home}
         blockKeys               := False
-        blockKeysSkipFixOnEnter := False
+        skipFixModifiersOnNextBlock := False
         if GetKeyState("Ctrl", "P")
             Send, {Ctrl Down}
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 60, 2, 100)
