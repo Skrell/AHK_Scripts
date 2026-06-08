@@ -11262,10 +11262,17 @@ return
 ; | monitor edge, and sampled                   |
 ; | visible % above threshold                   |
 ; |                                             |
-; | vertical axis:                              |
-; | - partner on top/bottom                     |
-; | horizontal axis:                            |
-; | - partner on left/right                     |
+; | direct axis matches:                        |
+; | - top/bottom-docked -> top/bottom partner   |
+; | - left/right-docked -> left/right partner   |
+; |                                             |
+; | mirrored corner-partner matches:            |
+; | - top/bottom-docked -> left/right partner   |
+; |   while keeping released outer left/right   |
+; |   edge fixed                                |
+; | - left/right-docked -> top/bottom partner   |
+; |   while keeping released outer top/bottom   |
+; |   edge fixed                                |
 ; +---------------------------------------------+
         ; |
         ; +----------------------------+
@@ -11366,24 +11373,25 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     if (!movedDocksToLeft && !movedDocksToRight && !movedDocksToTop && !movedDocksToBottom)
         return false
 
-    adjacentSideHwndID           := 0
-    adjacentVerticalHwndID       := 0
-    didFitWindow                 := false
-    didSideFit                   := false
-    didVerticalFit               := false
-    didFindAdjacentPartner       := false
-    fallbackTemplateHwndID       := 0
-    fitDebugText                 := ""
-    horizontalPartnerEdgeToMatch := ""
-    sideFitLabel                 := ""
-    sideFitUsesReleasedOuterEdge := false
-    sidePartnerBottomEdge        := ""
-    sidePartnerH                 := ""
-    sidePartnerY                 := ""
-    verticalPartnerEdgeToMatch   := ""
-    verticalPartnerRightEdge     := ""
-    verticalPartnerW             := ""
-    verticalPartnerX             := ""
+    adjacentSideHwndID               := 0
+    adjacentVerticalHwndID           := 0
+    didFitWindow                     := false
+    didSideFit                       := false
+    didVerticalFit                   := false
+    didFindAdjacentPartner           := false
+    fallbackTemplateHwndID           := 0
+    fitDebugText                     := ""
+    horizontalPartnerEdgeToMatch     := ""
+    sideFitLabel                     := ""
+    sideFitUsesReleasedOuterEdge     := false
+    sidePartnerBottomEdge            := ""
+    sidePartnerH                     := ""
+    sidePartnerY                     := ""
+    verticalPartnerEdgeToMatch       := ""
+    verticalFitUsesReleasedOuterEdge := false
+    verticalPartnerRightEdge         := ""
+    verticalPartnerW                 := ""
+    verticalPartnerX                 := ""
 
     ; Resolve candidate directions first so the adjacent phase can inspect both
     ; axes before deciding whether the lower-z-order docked fallback is needed.
@@ -11405,6 +11413,9 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; selector strings identify which partner edge must face the moved window
     ; on that axis. Candidates must still touch at least one monitor edge, then
     ; satisfy the normal overlap and edge-gap tolerances for that direction.
+    ; If the moved window touches only one monitor axis, the mirrored branch on
+    ; the other axis can still use a corner-docked partner by keeping the moved
+    ; window's released outer edge fixed and sizing inward toward that partner.
     if (verticalPartnerEdgeToMatch != "") {
         adjacentVerticalHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, verticalPartnerEdgeToMatch, edgeGapTolerance, movedX, movedY, movedW, movedH, collectDebugTrace)
         if (collectDebugTrace) {
@@ -11413,6 +11424,64 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
             else
                 verticalDebugText := "Bottom-edge adjacent fit candidate:`n" lastBelowZOrderWindowDebug
             fitDebugText := verticalDebugText
+        }
+    }
+    else if (movedDocksToLeft || movedDocksToRight) {
+        topSideCandidateHwndID    := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "bottom", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH, collectDebugTrace)
+        if (collectDebugTrace)
+            topSideDebugText := "Top-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+        else
+            topSideDebugText := ""
+
+        bottomSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "top", edgeGapTolerance, movedX, movedY, originalMovedW, originalMovedH, collectDebugTrace)
+        if (collectDebugTrace)
+            bottomSideDebugText := "Bottom-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+        else
+            bottomSideDebugText := ""
+
+        bottomSideGap := ""
+        bottomSideOverlap := ""
+        topSideGap := ""
+        topSideOverlap := ""
+
+        if (topSideCandidateHwndID)
+            _GetEdgeTouchingWindowScore(movedX, movedY, originalMovedW, originalMovedH, topSideCandidateHwndID, "bottom", topSideGap, topSideOverlap)
+        if (bottomSideCandidateHwndID)
+            _GetEdgeTouchingWindowScore(movedX, movedY, originalMovedW, originalMovedH, bottomSideCandidateHwndID, "top", bottomSideGap, bottomSideOverlap)
+
+        if (topSideCandidateHwndID && bottomSideCandidateHwndID) {
+            if (topSideGap < bottomSideGap || (topSideGap = bottomSideGap && topSideOverlap >= bottomSideOverlap)) {
+                adjacentVerticalHwndID           := topSideCandidateHwndID
+                verticalFitUsesReleasedOuterEdge := true
+                verticalPartnerEdgeToMatch       := "bottom"
+            }
+            else {
+                adjacentVerticalHwndID           := bottomSideCandidateHwndID
+                verticalFitUsesReleasedOuterEdge := true
+                verticalPartnerEdgeToMatch       := "top"
+            }
+        }
+        else if (topSideCandidateHwndID) {
+            adjacentVerticalHwndID           := topSideCandidateHwndID
+            verticalFitUsesReleasedOuterEdge := true
+            verticalPartnerEdgeToMatch       := "bottom"
+        }
+        else if (bottomSideCandidateHwndID) {
+            adjacentVerticalHwndID           := bottomSideCandidateHwndID
+            verticalFitUsesReleasedOuterEdge := true
+            verticalPartnerEdgeToMatch       := "top"
+        }
+
+        if (collectDebugTrace) {
+            if (fitDebugText = "")
+                fitDebugText := topSideDebugText
+            else if (topSideDebugText != "")
+                fitDebugText .= "`n`n" topSideDebugText
+
+            if (fitDebugText = "")
+                fitDebugText := bottomSideDebugText
+            else if (bottomSideDebugText != "")
+                fitDebugText .= "`n`n" bottomSideDebugText
         }
     }
 
@@ -11510,26 +11579,45 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     verticalHwndID := adjacentVerticalHwndID
     sideHwndID     := adjacentSideHwndID
 
-    ; Resolve and apply vertical fitting first. Top-docked windows fit against a
-    ; partner on their bottom side; bottom-docked windows fit against a partner
-    ; on their top side.
+    ; Resolve and apply vertical fitting first. Top/bottom-docked windows span
+    ; from the monitor edge to the opposing partner. Left/right-only windows use
+    ; the mirrored special case: keep their released outer top/bottom edge fixed
+    ; and size inward toward an above/below corner-docked partner.
     if (verticalHwndID && verticalHwndID != movedHwndID && WinGetPosEx(verticalHwndID, verticalWinX, verticalWinY, verticalWinW, verticalWinH, null, null)) {
         verticalPartnerRightEdge := verticalWinX + verticalWinW
         verticalPartnerW         := verticalWinW
         verticalPartnerX         := verticalWinX
+        verticalWinBottomEdge    := verticalWinY + verticalWinH
 
-        if (verticalPartnerEdgeToMatch = "top") {
-            ; Place the window at the monitor's visual top edge and size it down
-            ; until its bottom edge lands flush against the bottom-side partner.
+        if (verticalFitUsesReleasedOuterEdge) {
+            if (verticalPartnerEdgeToMatch = "top") {
+                ; Left/right-docked moved window: keep its released top edge
+                ; fixed and resize its bottom edge until it reaches the partner
+                ; below it.
+                targetTopEdge     := movedY
+                targetBottomEdge  := verticalWinY
+                targetOuterHeight := targetBottomEdge - targetTopEdge
+            }
+            else {
+                ; Left/right-docked moved window: keep its released bottom edge
+                ; fixed and move/resize its top edge until it reaches the
+                ; partner above it.
+                targetTopEdge     := verticalWinBottomEdge
+                targetBottomEdge  := movedBottomEdge
+                targetOuterHeight := targetBottomEdge - targetTopEdge
+            }
+        }
+        else if (verticalPartnerEdgeToMatch = "top") {
+            ; Top-docked moved window: place it at the monitor's visual top edge
+            ; and size it down until its bottom edge lands flush against the
+            ; bottom-side partner.
             targetTopEdge     := monInfoTop
             targetBottomEdge  := verticalWinY
             targetOuterHeight := targetBottomEdge - targetTopEdge
         }
         else {
-            verticalWinBottomEdge := verticalWinY + verticalWinH
-
-            ; Place the window at the desired visual top edge without adding the
-            ; frame offset to Y, then let it span down to the monitor bottom.
+            ; Bottom-docked moved window: place it at the partner's lower edge,
+            ; then let it span down to the monitor bottom.
             targetTopEdge     := verticalWinBottomEdge
             targetBottomEdge  := monInfoBottom
             targetOuterHeight := targetBottomEdge - targetTopEdge
