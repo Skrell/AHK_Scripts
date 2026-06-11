@@ -289,13 +289,54 @@ Gui, GUI4Boarder: +HwndHighlighter
 Gui, GUI4Boarder: +AlwaysOnTop +Toolwindow -Caption +Owner +Lastfound
 Gui, GUI4Boarder: Color, %border_color%
 
-; --- Auto-execute example (create once) ---
-global overlayFadeToken := 0
+; --- Overlay GUI init (create once at startup) ---
+;
+; Overlay lifecycle for !Tab / !`:
+;   Script startup
+;      |
+;      +--> Gui, Overlay:New
+;      |
+;      +--> Overlay_Prewarm()
+;            |
+;            +--> Overlay_SetAlpha(0)
+;            +--> Gui, Overlay:Show 1x1 transparent
+;
+;   First real preview during !Tab / !`
+;      |
+;      +--> Overlay_ShowHole(...)
+;            |
+;            +--> Overlay_CancelFade()
+;            +--> Gui, Overlay:Show on target monitor
+;            +--> Overlay_SetHoleRegion_WorkArea(...)
+;            +--> Overlay_FadeTo(..., allowModifierAbort := True)
+;
+;   Repeated cycling while Alt remains held
+;      |
+;      +--> Overlay_MoveHole(...)
+;            |
+;            +--> reuse the same overlay window
+;            +--> update the hole region in place
+;
+;   Alt released / cycle ends
+;      |
+;      +--> Overlay_Hide(...)
+;            |
+;            +--> Overlay_FadeTo(..., allowModifierAbort := False)
+;            +--> reset full region
+;            +--> Gui, Overlay:Hide
+;
+;   Fresh !Tab / !` during hide fade
+;      |
+;      +--> Overlay_ShowHole(...)
+;            |
+;            +--> Overlay_CancelFade() stops the old hide fade
+;            +--> new preview takes over immediately
+global overlayFadeToken    := 0
 global overlayAlphaCurrent := 0
-global overlayHwnd := 0
-global overlayKeyColor := "FF00FF"      ; RGB hex string
-global overlayHoleCtrl := "OverlayHole"
-global overlayIsReady := False
+global overlayHwnd         := 0
+global overlayKeyColor     := "FF00FF"      ; RGB hex string
+global overlayHoleCtrl     := "OverlayHole"
+global overlayIsReady      := False
 
 Gui, Overlay:New, +AlwaysOnTop -Caption +ToolWindow +E0x20 +HwndoverlayHwnd
 Gui, Overlay:Color, 000000
@@ -303,7 +344,7 @@ Gui, Overlay:Color, 000000
 ; Solid filled rectangle in key color
 Gui, Overlay:Add, Text, x0 y0 w1 h1 v%overlayHoleCtrl% Background%overlayKeyColor%
 
-Overlay_Hide()
+Overlay_Prewarm()
 overlayIsReady := True
 
 WinGet, allwindows, List
@@ -1982,26 +2023,6 @@ return
     BlockInput, MouseMoveOff
     Gui, GUI4Boarder: Color, %border_color%
     WinSet, AlwaysOnTop, Toggle, ahk_id %hwndId%
-return
-
-#If
-
-#If !MouseIsOverTitleBar()
-~LButton & RButton::
-    editableWindowId := 0
-    editableControlClassNN := ""
-    editableControlHwnd := 0
-    editableElement := ""
-
-    ; Claim the chord only when the pointer is actually over something editable.
-    if !GetEditableTargetUnderMouse(editableWindowId, editableControlClassNN, editableControlHwnd, editableElement)
-        return
-
-    ; Reuse the shared RButton-consumed path so this explicit clear-edit chord
-    ; does not fall through to a normal right-click on release.
-    suppressRightButtonLogic := true
-    rightButtonComboUsed     := true
-    ClearEditableTarget(editableWindowId, editableControlClassNN, editableControlHwnd, editableElement)
 return
 
 #If
@@ -4001,6 +4022,14 @@ $!+Tab::
         Thread, NoTimers, True
         StopRecursion   := True
 
+        ; !Tab overlay sequencing:
+        ;   hotkey -> Cycle() picks/activates target -> Overlay_ShowHole(...)
+        ;          -> repeated Tab presses call Overlay_MoveHole(...)
+        ;          -> release Alt calls Overlay_Hide(...)
+        ;
+        ; The preview/show fades are modifier-abortable so they stop once the
+        ; cycle keys are no longer held. The hide fade is the opposite: it is
+        ; allowed to finish after Alt release unless a fresh cycle cancels it.
         firstDraw       := True
         hitTAB          := True
 
@@ -4033,6 +4062,10 @@ Return
         Thread, NoTimers, True
         StopRecursion  := True
 
+        ; !` uses the same overlay flow as !Tab:
+        ;   CycleAppWindows() activates the sibling window and calls
+        ;   Overlay_ShowHole(...), later ` presses move the existing hole via
+        ;   Overlay_MoveHole(...), and release/cancel routes through Overlay_Hide(...).
         firstDraw       := True
         hitTilde        := True
         hitTab          := False
@@ -4425,19 +4458,19 @@ CycleAppWindows(activeProcessName, activeClass) {
     global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, Opacity, bufferedCycleAdvance
 
     activeCurrentMonitorWindowIndex := 0
-    CurrentMonitorMinimizedWindows := []
-    CurrentMonitorWindows          := []
-    OtherMonitorMinimizedWindows   := []
-    windowsToMinimize              := []
+    CurrentMonitorMinimizedWindows  := []
+    CurrentMonitorWindows           := []
+    OtherMonitorMinimizedWindows    := []
+    windowsToMinimize               := []
     ; Same buffering idea as Cycle(): Alt+` can miss a fast repeat while the popup GUI is drawing.
-    bufferedCycleAdvance := False
+    bufferedCycleAdvance            := False
+    currentMon                      := MWAGetMonitorMouseIsIn()
+    cycleCount                      := 2
+    GroupedWindows                  := [] ; GroupedWindows = [active visible, other visible, current-monitor minimized, other-monitor minimized]
+    MinimizedWindows                := []
 
     UpdateValidWindows()
 
-    currentMon       := MWAGetMonitorMouseIsIn()
-    cycleCount       := 2
-    GroupedWindows   := [] ; GroupedWindows = [active visible, other visible, current-monitor minimized, other-monitor minimized]
-    MinimizedWindows := []
     WinGet, activeHwndID, ID, A
     WinGet, windowsListWithSameProcessAndClass, List, ahk_exe %activeProcessName% ahk_class %activeClass%
 
@@ -4801,8 +4834,8 @@ ActivateWindow:
     Gui, ShadowFrFull:  Hide
     DetectHiddenWindows, On
     thisMenuItem := ""
-    result := {}
-    CalcID :=
+    result       := {}
+    CalcID       :=
 
     If (totalMenuItemCount == 1 && onlyTitleFound != "")
         thisMenuItem := onlyTitleFound
@@ -5075,7 +5108,7 @@ Overlay_CancelFade() {
     return overlayFadeToken
 }
 
-Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "") {
+Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "", allowModifierAbort := True) {
     global overlayFadeToken, overlayAlphaCurrent
 
     localFadeToken := Overlay_CancelFade()
@@ -5101,7 +5134,9 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "") {
             If (localFadeToken != overlayFadeToken)
                 return
 
-            If !GetKeyState("LAlt","P") && !GetKeyState("Esc","P") {
+            ; Show/preview fades should stop immediately once the cycle keys are up,
+            ; but hide fades are allowed to finish unless a newer fade supersedes them.
+            If (allowModifierAbort && !GetKeyState("LAlt","P") && !GetKeyState("Esc","P")) {
                 Overlay_SetAlpha(overlayHwnd, alphaTarget)
                 break
             }
@@ -5419,15 +5454,38 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     return 1
 }
 
+Overlay_Prewarm() {
+    global overlayAlphaCurrent, overlayHwnd
+
+    if (!overlayHwnd)
+        return 0
+
+    ; Pre-show the overlay once at startup as a tiny fully transparent window.
+    ; This keeps the first real Alt+Tab / Alt+` preview from paying the first
+    ; visible Show/composition cost during the live switch animation.
+    regFull := DllCall("gdi32\CreateRectRgn"
+        , "int", 0, "int", 0
+        , "int", 1, "int", 1
+        , "ptr")
+    DllCall("user32\SetWindowRgn", "ptr", overlayHwnd, "ptr", regFull, "int", True)
+
+    Overlay_SetAlpha(overlayHwnd, 0)
+    Gui, Overlay:Show, x0 y0 w1 h1 NA
+    overlayAlphaCurrent := 0
+
+    return 1
+}
+
 Overlay_Hide(fadeMs := 100) {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
 
     if (!overlayIsReady || !overlayHwnd)
         return
 
-    ; Cancel any in-progress fade, then fade out
+    ; Let the hide fade continue after Alt/Esc release. A new preview can still
+    ; interrupt it immediately because Overlay_FadeTo() uses the fade token.
     Overlay_CancelFade()
-    Overlay_FadeTo(overlayHwnd, 0, fadeMs, overlayAlphaCurrent)
+    Overlay_FadeTo(overlayHwnd, 0, fadeMs, overlayAlphaCurrent, False)
 
     ; Reset to full region (no hole)
     regFull := DllCall("gdi32\CreateRectRgn"
@@ -7456,9 +7514,19 @@ GetCtrlNNsByPrefixMinSize(hwndTop, classPrefix, minWidth := 400, minHeight := 18
 {
     static cache := {}
 
+    ; The caller gives us a top-level window HWND and asks:
+    ;   "Which child controls in this window have a class name that starts with
+    ;    classPrefix and are at least minWidth x minHeight?"
+    ; Return format is a space-delimited CtrlNN list such as:
+    ;   "DirectUIHWND2 DirectUIHWND3"
+
     if (!hwndTop)
         return ""
 
+    ; Cache by full query shape because this helper can be called repeatedly
+    ; while Explorer/dialog UI is settling. The cache is intentionally short-
+    ; lived so rapidly repeated probes can reuse the last scan without letting
+    ; stale control layouts linger for long.
     cacheKey := hwndTop "|" classPrefix "|" minWidth "|" minHeight
     if (cache.HasKey(cacheKey)) {
         cacheItem := cache[cacheKey]
@@ -7466,32 +7534,46 @@ GetCtrlNNsByPrefixMinSize(hwndTop, classPrefix, minWidth := 400, minHeight := 18
             return cacheItem.value
     }
 
+    ; Pull both the textual CtrlNN list and the HWND list from the same window.
+    ; These two lists are positionally aligned, so entry N in ControlList should
+    ; correspond to entry N in ControlListHwnd.
     WinGet, listC, ControlList,     ahk_id %hwndTop%
     WinGet, listH, ControlListHwnd, ahk_id %hwndTop%
     prefixLen := StrLen(classPrefix)
     ctrlNNs   := StrSplit(RTrim(listC, "`r`n"), "`n", "`r")
     ctrlHwnds := StrSplit(RTrim(listH, "`r`n"), "`n", "`r")
 
+    ; Build the output as a flat space-delimited list because the current call
+    ; sites mainly use InStr(...) membership checks against specific CtrlNNs.
     out := ""
     Loop, % ctrlHwnds.Length()
     {
+        ; ControlListHwnd can contain blank/non-numeric entries in edge cases.
+        ; Normalize to a numeric HWND and skip anything invalid.
         hCtl := ctrlHwnds[A_Index] + 0
         if (!hCtl)
             continue
 
+        ; Filter first by the real runtime class name from the child HWND
+        ; rather than trusting the CtrlNN text alone.
         cls := GetClassName(hCtl)
         if (SubStr(cls, 1, prefixLen) != classPrefix)
             continue
 
+        ; Map the matching HWND back to its CtrlNN name from the parallel list.
         ctrlNN := (A_Index <= ctrlNNs.Length()) ? ctrlNNs[A_Index] : ""
         if (ctrlNN = "")
             continue
 
+        ; Ignore tiny helper/host controls. The caller only wants substantial
+        ; panes such as the main Explorer/list content regions.
         ControlGetPos, , , ctrlWidth, ctrlHeight, %ctrlNN%, ahk_id %hwndTop%
         if (ctrlWidth >= minWidth && ctrlHeight >= minHeight)
             out .= ctrlNN " "
     }
 
+    ; Trim the trailing separator, then cache the completed result for the next
+    ; near-term identical query.
     out := RTrim(out, " ")
     cache[cacheKey] := { tick: A_TickCount, value: out }
     return out
@@ -8794,131 +8876,6 @@ MouseTrack() {
         }
     }
     ListLines On
-}
-
-; Returns true when the mouse is currently over a classic or UIA-backed editable target.
-GetEditableTargetUnderMouse(ByRef windowId, ByRef controlClassNN, ByRef controlHwnd, ByRef editElement, maxParentDepth := 4) {
-    MouseGetPos, currentPosX, currentPosY, windowId, controlClassNN
-    MouseGetPos, , , , controlHwnd, 2
-
-    editElement := ""
-
-    if RegExMatch(controlClassNN, "i)^Edit\d+$")
-        return true
-
-    if RegExMatch(controlClassNN, "i)^(RICHEDIT\w*\d+|RichEdit\w*\d+)$")
-        return true
-
-    if (controlHwnd) {
-        WinGetClass, controlClassName, ahk_id %controlHwnd%
-        if (controlClassName = "Edit" || RegExMatch(controlClassName, "i)^(RICHEDIT\w*|RichEdit\w*)$"))
-            return true
-    }
-
-    elementObject := SafeUIA_ElementFromPoint(currentPosX, currentPosY, "")
-    if IsObject(elementObject)
-        editElement := FindEditableAncestor(elementObject, maxParentDepth)
-
-    return IsObject(editElement)
-}
-
-; Clears the previously-resolved editable target, using classic control APIs when possible.
-ClearEditableTarget(windowId, controlClassNN, controlHwnd, editElement := "", focusDelay := 60) {
-    if ClearClassicEditableControl(windowId, controlClassNN, controlHwnd)
-        return true
-
-    if !IsObject(editElement)
-        return false
-
-    try
-        editElement.SetFocus()
-    catch
-        return false
-
-    Sleep, %focusDelay%
-    SendInput, ^a
-    SendInput, {Delete}
-    return true
-}
-
-FindEditableAncestor(elementObject, maxParentDepth := 4) {
-    currentElement := elementObject
-    depthIndex := 0
-
-    while (IsObject(currentElement) && depthIndex <= maxParentDepth) {
-        localizedControlType := SafeUIA_GetLocalizedControlType(currentElement, "")
-        if (localizedControlType = "edit") {
-            return currentElement
-        }
-
-        currentElement := SafeUIA_GetParent(currentElement)
-        depthIndex++
-    }
-
-    return ""
-}
-
-ClearClassicEditableControl(windowId, controlClassNN, controlHwnd) {
-    static emSetSel := 0x00B1
-    static emReplaceSel := 0x00C2
-    static wmClear := 0x0303
-
-    if RegExMatch(controlClassNN, "i)^Edit\d+$") {
-        ControlFocus, %controlClassNN%, ahk_id %windowId%
-        ControlSetText, %controlClassNN%, , ahk_id %windowId%
-        return true
-    }
-
-    if RegExMatch(controlClassNN, "i)^(RICHEDIT\w*\d+|RichEdit\w*\d+)$") {
-        ControlFocus, %controlClassNN%, ahk_id %windowId%
-
-        ; Select everything
-        SendMessage, %emSetSel%, 0, -1, %controlClassNN%, ahk_id %windowId%
-
-        ; First try WM_CLEAR on the current selection
-        SendMessage, %wmClear%, 0, 0, %controlClassNN%, ahk_id %windowId%
-
-        ControlGetText, controlText, %controlClassNN%, ahk_id %windowId%
-        if (controlText = "")
-            return true
-
-        ; Fallback: select everything again and replace with empty text
-        SendMessage, %emSetSel%, 0, -1, %controlClassNN%, ahk_id %windowId%
-        VarSetCapacity(emptyText, 2, 0)
-        SendMessage, %emReplaceSel%, 1, &emptyText, %controlClassNN%, ahk_id %windowId%
-
-        ControlGetText, controlText, %controlClassNN%, ahk_id %windowId%
-        return (controlText = "")
-    }
-
-    if (controlHwnd) {
-        WinGetClass, controlClassName, ahk_id %controlHwnd%
-
-        if (controlClassName = "Edit") {
-            ControlSetText, , , ahk_id %controlHwnd%
-            return true
-        }
-
-        if RegExMatch(controlClassName, "i)^(RICHEDIT\w*|RichEdit\w*)$") {
-            ControlFocus, , ahk_id %controlHwnd%
-
-            SendMessage, %emSetSel%, 0, -1, , ahk_id %controlHwnd%
-            SendMessage, %wmClear%, 0, 0, , ahk_id %controlHwnd%
-
-            ControlGetText, controlText, , ahk_id %controlHwnd%
-            if (controlText = "")
-                return true
-
-            SendMessage, %emSetSel%, 0, -1, , ahk_id %controlHwnd%
-            VarSetCapacity(emptyText, 2, 0)
-            SendMessage, %emReplaceSel%, 1, &emptyText, , ahk_id %controlHwnd%
-
-            ControlGetText, controlText, , ahk_id %controlHwnd%
-            return (controlText = "")
-        }
-    }
-
-    return false
 }
 
 MouseIsOverTitleBar(xPos := "", yPos := "", excludeCaptions := True) {
@@ -14276,6 +14233,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:emnt::ment
 :?:mnet::ment
 :?:metn::ment
+:?:emtn::ment
+:?:emtns::ments
 :?:emnts::ments
 :?:oitn::oint
 :?:kgin::king
@@ -14330,12 +14289,11 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:alit::ality
 :?:daiton::dation
 :?:aiton::ation
-:?:emtn::ment
-:?:emtns::ments
 :?:ioins::ions
 :?:ceis::cies
 :?:eses::esses
 :?:tn::nt
+:?:toir:itor
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -16159,6 +16117,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's taste::its taste
 ::it's territory::its territory
 ::it's texture::its texture
+::it's time::its time
 ::it's users::its users
 ::it's value::its value
 ::it's values::its values
