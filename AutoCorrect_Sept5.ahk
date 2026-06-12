@@ -74,9 +74,27 @@ Global currMonWidth                               := 0
 Global LbuttonEnabled                             := True
 Global X_PriorPriorHotKey                         :=
 Global StopAutoFix                                := False
+; Cache the typing-auto-fix eligibility decision so most keystrokes avoid the
+; slower UIA/MSAA focus probes.
+; Last allow/deny result returned by the typing-auto-fix gate.
+Global typingAutoFixCacheAllowed                  := False
+; Focused control name used to decide whether the cached result still applies.
+Global typingAutoFixCacheCtrl                     := ""
+; Active window handle associated with the cached focus/editability decision.
+Global typingAutoFixCacheHwnd                     := 0
+; Short reason string describing why the current cache entry passed or failed.
+Global typingAutoFixCacheReason                   := ""
+; Tick count when the cache entry was last refreshed.
+Global typingAutoFixCacheTick                     := 0
+; Maximum age for a same-window/same-control fast cache hit.
+Global typingAutoFixFastTtlMs                     := 125
+; Minimum gap before repeating slower UIA/MSAA probes for unchanged focus.
+Global typingAutoFixSlowPathMs                    := 400
+; Tick count of the last slow UIA/MSAA probe attempt.
+Global typingAutoFixSlowProbeTick                 := 0
 ; Let specific blockKeys call sites skip the hook's one-time FixModifiers() pass
 ; when they need held modifiers to remain logically intact.
-Global skipFixModifiersOnNextBlock                    := False
+Global skipFixModifiersOnNextBlock                := False
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
 Global clipPreferExplicitCtrlV                    := False
@@ -88,8 +106,6 @@ Global pendingFixSlashAction                      := ""
 Global pendingFixSlashHwnd                        := 0
 Global pendingHotyHwnd                            := 0
 Global pendingHotyReplacement                     := ""
-Global EVENT_SYSTEM_MENUPOPUPSTART                := 0x0006
-Global EVENT_SYSTEM_MENUPOPUPEND                  := 0x0007
 Global TimeOfLastHotkeyTyped                      := A_TickCount
 Global currentMon                                 := 0
 Global previousMon                                := 0
@@ -424,8 +440,10 @@ TooltipExpr =
 ; The first line of code below is the set of letters, digits, and/or symbols
 ; that are eligible for this type of correction.  Customize if you wish:
 
-; Restrict typing-manipulation hooks to editable typing contexts so they do not
-; intercept ordinary non-editable app input.
+; Restrict dynamically registered typing-manipulation hooks to editable typing
+; contexts so they do not intercept ordinary non-editable app input.
+; In AHK v1, `Hotkey, If, ShouldRunTypingAutoFix()` must match an existing
+; `#If ShouldRunTypingAutoFix()` expression somewhere in the file.
 #If ShouldRunTypingAutoFix()
 #If
 Hotkey, If, ShouldRunTypingAutoFix()
@@ -2991,13 +3009,13 @@ Return
         Send, {Esc}
 
     Critical, On
-    StopAutoFix             := True
-    caretRectKeyBeforeMove  := ""
+    StopAutoFix                 := True
+    caretRectKeyBeforeMove      := ""
     ; Let the trigger key finish before entering blocked mode so held modifiers
     ; can remain down while repeated D taps still retrigger the hotkey cleanly.
     KeyWait, d, T0.25
     skipFixModifiersOnNextBlock := True
-    blockKeys               := True
+    blockKeys                   := True
 
     ; Let each movement burst finish visually before issuing the next key so the
     ; delete-line sequence relies less on fixed timing alone.
@@ -3018,14 +3036,14 @@ Return
     ; Send, +{Home}+{Home}+{Home}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
     Send, {Delete}
-    blockKeys               := False
+    blockKeys                   := False
     skipFixModifiersOnNextBlock := False
     ; Clear any synthetic Shift latch left by the selection sends.
     SendInput, {Shift Up}
 
     ; Your environment reset
     Hotstring("Reset")
-    StopAutoFix             := False
+    StopAutoFix                 := False
     Critical, Off
 Return
 
@@ -3039,8 +3057,8 @@ Return
     ; If there's no caret (e.g., not in a text field), pass through native Ctrl+D.
     if (A_CaretX = "")
     {
-        StopAutoFix             := False
-        blockKeys               := False
+        StopAutoFix                 := False
+        blockKeys                   := False
         skipFixModifiersOnNextBlock := False
         Critical, Off
         Send ^d
@@ -3049,8 +3067,8 @@ Return
     ; Let the trigger key finish before entering blocked mode so held Ctrl can
     ; remain down while repeated D taps still retrigger the hotkey cleanly.
     KeyWait, d, T0.25
-    skipFixModifiersOnNextBlock     := True
-    blockKeys                   := True
+    skipFixModifiersOnNextBlock    := True
+    blockKeys                      := True
 
     didFastInsert                  := False
     didRestoreCaretWithMessages    := False
@@ -3068,7 +3086,7 @@ Return
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Ctrl Up}{Home}{Home}{Shift Down}{End}{Shift Up}
     blockKeys                   := False
-    skipFixModifiersOnNextBlock     := False
+    skipFixModifiersOnNextBlock := False
     if GetKeyState("Ctrl", "P")
         Send, {Ctrl Down}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
@@ -3087,12 +3105,12 @@ Return
     }
 
     ; 3) Insert a newline and paste the duplicate line BELOW
-    skipFixModifiersOnNextBlock     := True
+    skipFixModifiersOnNextBlock := True
     blockKeys                   := True
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Ctrl Up}{End}{Enter}{Shift Down}{Home}{Shift Up}
     blockKeys                   := False
-    skipFixModifiersOnNextBlock     := False
+    skipFixModifiersOnNextBlock := False
     if GetKeyState("Ctrl", "P")
         Send, {Ctrl Down}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
@@ -3117,10 +3135,10 @@ Return
     if !didRestoreCaretWithMessages
     {
         skipFixModifiersOnNextBlock := True
-        blockKeys               := True
+        blockKeys                   := True
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
         Send, {Ctrl Up}{Up} ; {Home}{Home}
-        blockKeys               := False
+        blockKeys                   := False
         skipFixModifiersOnNextBlock := False
         if GetKeyState("Ctrl", "P")
             Send, {Ctrl Down}
@@ -7345,9 +7363,9 @@ Return
 SendWindow:
     global movehWndId
     global targetDesktop
-    moveLeftConst := -1
+    moveLeftConst  := -1
     moveRightConst := 1
-    moveConst := 0
+    moveConst      := 0
 
     DetectHiddenWindows, On
 
@@ -11227,6 +11245,8 @@ return
 ; | - top/bottom-docked -> left/right partner   |
 ; |   while keeping released outer left/right   |
 ; |   edge fixed                                |
+; |   (also covers full-monitor-height windows  |
+; |   that touch top+bottom but not left/right) |
 ; | - left/right-docked -> top/bottom partner   |
 ; |   while keeping released outer top/bottom   |
 ; |   edge fixed                                |
@@ -12375,36 +12395,228 @@ IsGoogleDocWindow() {
         Return False
 }
 
+; Typing-stability rationale for the gating/cache functions below:
+; 1) `Hotkey, If` / `#If` expressions are evaluated on AHK's main thread, so a
+;    slow editability probe can buffer live keyboard input and show up as delayed
+;    or bursty typing.
+; 2) `ShouldRunTypingAutoFix()` therefore uses a short same-window/same-control
+;    cache so most keystrokes avoid repeated UIA/MSAA checks while you are still
+;    typing in the same target.
+; 3) `ShouldRunHotstringAutoCorrect()` keeps the giant hotstring table out of
+;    excluded apps, modal/search states, and non-editable targets so thousands
+;    of replacements are not active unless the user is really typing into an
+;    editable surface.
+; 4) These functions mainly reduce lag, buffered output, and garbled rewrites
+;    caused by expensive hook gating. They are separate from the `blockKeys`
+;    fixes, which addressed duplicate-character issues caused by broken key
+;    down/up lifecycles.
+; Recompute whether typing auto-fix hooks should be active for the current
+; focus target. This is the only path that is allowed to pay for slower UIA/MSAA
+; editability checks.
+RefreshTypingAutoFixContext(activeHwnd := 0, ctrl := "", nowTick := "") {
+    global typingAutoFixCacheAllowed
+    global typingAutoFixCacheCtrl
+    global typingAutoFixCacheHwnd
+    global typingAutoFixCacheReason
+    global typingAutoFixCacheTick
+    global typingAutoFixSlowPathMs
+    global typingAutoFixSlowProbeTick
+
+    ; Resolve the current foreground window if the caller did not provide one.
+    if !activeHwnd {
+        WinGet, activeHwnd, ID, A
+        if !activeHwnd
+            return _TypingAutoFixSetCache(0, "", false, "no_active_window", nowTick)
+    }
+
+    ; Capture the focused control name once so every downstream check can reuse it.
+    if (ctrl = "")
+        ControlGetFocus, ctrl, ahk_id %activeHwnd%
+
+    ; Normalize the timestamp so all cache writes for this pass share one tick value.
+    if (nowTick = "")
+        nowTick := A_TickCount
+
+    ; Cheap process-level exclusions should exit before any focus/editability probing.
+    WinGet, processName, ProcessName, ahk_id %activeHwnd%
+    if (_TypingAutoFixIsExcludedProcess(processName))
+        return _TypingAutoFixSetCache(activeHwnd, ctrl, false, "excluded_process", nowTick)
+
+    ; Google Docs/Sheets keep their own editing model and are intentionally excluded.
+    WinGetTitle, title, ahk_id %activeHwnd%
+    if (InStr(title, "Google Sheets", False) || InStr(title, "Google Docs", False))
+        return _TypingAutoFixSetCache(activeHwnd, ctrl, false, "google_docs", nowTick)
+
+    ; Classic Win32 edit controls are the cheapest positive match, so allow them immediately.
+    ctrlClass := ""
+    if (_TypingAutoFixTryGetFocusedControlClass(activeHwnd, ctrl, ctrlClass)) {
+        if (_TypingAutoFixIsClassicEditClass(ctrlClass))
+            return _TypingAutoFixSetCache(activeHwnd, ctrl, true, "classic_edit", nowTick)
+    }
+
+    ; Once the window/control pair is unchanged, reuse the prior decision until the
+    ; slower UIA/MSAA re-probe interval expires.
+    contextChanged := (activeHwnd != typingAutoFixCacheHwnd || ctrl != typingAutoFixCacheCtrl)
+    if (!contextChanged && (nowTick - typingAutoFixSlowProbeTick) < typingAutoFixSlowPathMs)
+        return _TypingAutoFixSetCache(activeHwnd, ctrl, typingAutoFixCacheAllowed, typingAutoFixCacheReason, nowTick)
+
+    ; A new context or expired slow-path TTL means it is time to refresh accessibility state.
+    typingAutoFixSlowProbeTick := nowTick
+
+    ; UIA is the preferred slow-path signal for custom editors that expose editability.
+    if (UIA_IsFocusedEditable())
+        return _TypingAutoFixSetCache(activeHwnd, ctrl, true, "uia_editable", nowTick)
+
+    ; MSAA stays as a weaker fallback when UIA is missing or incomplete.
+    if (MSAA_IsFocusedEditable())
+        return _TypingAutoFixSetCache(activeHwnd, ctrl, true, "msaa_editable", nowTick)
+
+    ; No cheap or accessibility-based edit signal was found, so disable the hooks.
+    return _TypingAutoFixSetCache(activeHwnd, ctrl, false, "not_editable", nowTick)
+}
+
 ; Returns true only when typing auto-fix hooks should be active for the current
 ; focused target.
 ShouldRunTypingAutoFix() {
     global StopAutoFix
+    global typingAutoFixCacheAllowed
+    global typingAutoFixCacheCtrl
+    global typingAutoFixCacheHwnd
+    global typingAutoFixCacheTick
+    global typingAutoFixFastTtlMs
 
+    ; Script-driven sends temporarily disable typing hooks through StopAutoFix.
     if (StopAutoFix)
         return false
 
+    ; Without a foreground window there is no stable context to attach the hooks to.
+    WinGet, activeHwnd, ID, A
+    if !activeHwnd
+        return false
+
+    ; The focused control name is part of the cache key because one window can host
+    ; both editable and non-editable child controls.
+    ControlGetFocus, ctrl, ahk_id %activeHwnd%
+    nowTick := A_TickCount
+
+    ; Fast path: identical window/control within the short TTL reuses the cached result.
+    if (activeHwnd = typingAutoFixCacheHwnd
+     && ctrl = typingAutoFixCacheCtrl
+     && (nowTick - typingAutoFixCacheTick) <= typingAutoFixFastTtlMs)
+        return typingAutoFixCacheAllowed
+
+    ; Slow path: refresh the context and rewrite the cache before returning.
+    return RefreshTypingAutoFixContext(activeHwnd, ctrl, nowTick)
+}
+
+; Returns true only when the large hotstring autocorrect table should be active
+; for the current focus target.
+ShouldRunHotstringAutoCorrect() {
+    global SearchingWindows
+    global hitTAB
+    global hitTilde
+    global StopAutoFix
+
+    ; Suspend the hotstring table during window-search / Alt-Tab style modes and while
+    ; the script is intentionally suppressing auto-fix side effects.
+    if (SearchingWindows || hitTAB || hitTilde || StopAutoFix)
+        return false
+
+    ; Modifier-held states are intentionally excluded so navigation chords do not
+    ; accidentally trigger word replacements.
+    if (GetKeyState("LAlt", "P") || GetKeyState("Control", "P"))
+        return false
+
+    ; Browser-based Google editors have their own text stack and are intentionally excluded.
     if (IsGoogleDocWindow())
         return false
 
-    if WinActive("ahk_exe Code.exe")
+    ; If there is no active window, there is no hotstring context to attach to.
+    WinGet, activeHwnd, ID, A
+    if !activeHwnd
         return false
 
-    if WinActive("ahk_exe notepad++.exe")
+    ; Cheap process exclusions keep the giant hotstring table out of terminals and
+    ; known apps where raw typing stability matters more.
+    WinGet, processName, ProcessName, ahk_id %activeHwnd%
+    if (_HotstringAutoCorrectIsExcludedProcess(processName))
         return false
 
-    if WinActive("ahk_exe EXCEL.EXE")
+    ; Preserve the existing behavior that keeps the giant hotstring table out
+    ; of plain Edit controls while still allowing richer/custom editors through
+    ; the cached editability gate below.
+    if (IsEditCtrl())
         return false
 
-    if WinActive("ahk_exe WINWORD.EXE")
-        return false
-
-    return IsCaretInEdit()
+    ; Reuse the cached editability decision so custom editors only carry the hotstring
+    ; table when the focused target actually looks editable.
+    ControlGetFocus, ctrl, ahk_id %activeHwnd%
+    return RefreshTypingAutoFixContext(activeHwnd, ctrl, A_TickCount)
 }
 
 IsEditCtrl() {
     ControlGetFocus, whatCtrl, A
 
     Return InStr(whatCtrl,"Edit", True) && !InStr(whatCtrl, "Rich", True)
+}
+
+; Keep the hotstring table out of console/terminal-style apps where raw typing
+; stability matters more than word replacement.
+_HotstringAutoCorrectIsExcludedProcess(processName) {
+    return (processName = "bash.exe"
+         || processName = "cmd.exe"
+         || processName = "Code.exe"
+         || processName = "Conhost.exe"
+         || processName = "mintty.exe"
+         || processName = "notepad++.exe")
+}
+
+_TypingAutoFixIsClassicEditClass(ctrlClass) {
+    return (ctrlClass = "Edit"
+         || ctrlClass = "RichEdit20A"
+         || ctrlClass = "RichEdit20W"
+         || ctrlClass = "RICHEDIT50W")
+}
+
+_TypingAutoFixIsExcludedProcess(processName) {
+    return (processName = "Code.exe"
+         || processName = "EXCEL.EXE"
+         || processName = "notepad++.exe"
+         || processName = "WINWORD.EXE")
+}
+
+; Persist the current decision so the hotkey predicate can usually return with a
+; cheap same-window/same-control cache hit.
+_TypingAutoFixSetCache(activeHwnd, ctrl, allowed, reason, nowTick := "") {
+    global typingAutoFixCacheAllowed
+    global typingAutoFixCacheCtrl
+    global typingAutoFixCacheHwnd
+    global typingAutoFixCacheReason
+    global typingAutoFixCacheTick
+
+    if (nowTick = "")
+        nowTick := A_TickCount
+
+    typingAutoFixCacheAllowed := allowed
+    typingAutoFixCacheCtrl    := ctrl
+    typingAutoFixCacheHwnd    := activeHwnd
+    typingAutoFixCacheReason  := reason
+    typingAutoFixCacheTick    := nowTick
+
+    return allowed
+}
+
+_TypingAutoFixTryGetFocusedControlClass(activeHwnd, ctrl, ByRef ctrlClass) {
+    ctrlClass := ""
+    if (ctrl = "")
+        return false
+
+    ControlGet, hCtrl, Hwnd,, %ctrl%, ahk_id %activeHwnd%
+    if !hCtrl
+        return false
+
+    WinGetClass, ctrlClass, ahk_id %hCtrl%
+    return (ctrlClass != "")
 }
 
 MouseIsOverAnyTaskbarSurface() {
@@ -13797,21 +14009,7 @@ SetTitleMatchMode, 2
 
 
 #InputLevel 10
-#If    !WinActive("ahk_exe notepad++.exe")
-    && !WinActive("ahk_exe Code.exe")
-    && !WinActive("ahk_exe cmd.exe")
-    && !WinActive("ahk_exe Conhost.exe")
-    && !WinActive("ahk_exe bash.exe")
-    && !WinActive("ahk_exe mintty.exe")
-    && !SearchingWindows
-    && !hitTAB
-    && !hitTilde
-    && !GetKeyState("LAlt","P")
-    && !GetKeyState("Control","P")
-    && !StopAutoFix
-    && !IsGoogleDocWindow()
-    && !IsEditCtrl()
-
+#If ShouldRunHotstringAutoCorrect()
 #Hotstring R  ; Set the default to be "raw mode" (might not actually be relied upon by anything yet).
 
 ;------------------------------------------------------------------------------
