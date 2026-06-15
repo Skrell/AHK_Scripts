@@ -12382,23 +12382,9 @@ IsGoogleDocWindow() {
         Return False
 }
 
-; Typing-stability rationale for the gating/cache functions below:
-; 1) `Hotkey, If` / `#If` expressions are evaluated on AHK's main thread, so a
-;    slow editability probe can buffer live keyboard input and show up as delayed
-;    or bursty typing.
-; 2) `ShouldRunTypingAutoFix()` therefore uses a short same-window/same-control
-;    cache so most keystrokes avoid repeated UIA/MSAA checks while you are still
-;    typing in the same target.
-; 3) `ShouldRunHotstringAutoCorrect()` keeps the giant hotstring table out of
-;    excluded apps, modal/search states, and non-editable targets so thousands
-;    of replacements are not active unless the user is really typing into an
-;    editable surface.
-; 4) These functions mainly reduce lag, buffered output, and garbled rewrites
-;    caused by expensive hook gating. They are separate from the `blockKeys`
-;    fixes, which addressed duplicate-character issues caused by broken key
-;    down/up lifecycles.
 ; Recompute whether typing auto-fix hooks should be active for the current
-; focus target. This is the only path that is allowed to pay for slower UIA/MSAA
+; focus target.
+; This is the only path that is allowed to pay for slower UIA/MSAA
 ; editability checks.
 RefreshTypingAutoFixContext(activeHwnd := 0, ctrl := "", nowTick := "") {
     global typingAutoFixCacheAllowed
@@ -12462,6 +12448,24 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrl := "", nowTick := "") {
     return _TypingAutoFixSetCache(activeHwnd, ctrl, false, "not_editable", nowTick)
 }
 
+; ----------------------------------------------------------------------------
+; Typing-stability rationale for the gating/cache functions below:
+; 1) `Hotkey, If` / `#If` expressions are evaluated on AHK's main thread, so a
+;    slow editability probe can buffer live keyboard input and show up as delayed
+;    or bursty typing.
+; 2) `ShouldRunTypingAutoFix()` therefore uses a short same-window/same-control
+;    cache so most keystrokes avoid repeated UIA/MSAA checks while you are still
+;    typing in the same target.
+; 3) `ShouldRunHotstringAutoCorrect()` keeps the giant hotstring table out of
+;    excluded apps, modal/search states, and non-editable targets so thousands
+;    of replacements are not active unless the user is really typing into an
+;    editable surface.
+; 4) In practice this helps because each avoided slow probe shortens the time
+;    AHK spends inside per-keystroke gating. That means fewer real key events
+;    pile up waiting for the script thread, less delayed/bursty output appears
+;    after the thread catches up, and fewer rewrite routines run against text
+;    that has already advanced beyond the original keystroke context.
+; ------------------------------------------------------------------------------
 ; Returns true only when typing auto-fix hooks should be active for the current
 ; focused target.
 ShouldRunTypingAutoFix() {
