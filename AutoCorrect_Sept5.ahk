@@ -92,9 +92,6 @@ Global typingAutoFixFastTtlMs                     := 125
 Global typingAutoFixSlowPathMs                    := 400
 ; Tick count of the last slow UIA/MSAA probe attempt.
 Global typingAutoFixSlowProbeTick                 := 0
-; Let specific blockKeys call sites skip the hook's one-time FixModifiers() pass
-; when they need held modifiers to remain logically intact.
-Global skipFixModifiersOnNextBlock                := False
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
 Global clipPreferExplicitCtrlV                    := False
@@ -692,8 +689,6 @@ InitVDA()
 ; ---- Low-level hardware key filter ----
 ; --------------------------------------------------
 ; Common filter logic for keyboard while blockKeys is active.
-; Some blockKeys call sites deliberately skip the hook's one-time FixModifiers()
-; pass so held Ctrl/Shift can stay logically intact during short edit sequences.
 ;
 ; Why physical KEYUP events must be allowed through:
 ;   Normal key lifecycle:
@@ -713,11 +708,12 @@ InitVDA()
 LL_KeyboardHook(nCode, wParam, lParam)
 {
     ; While blockKeys := true, swallow only physical KEYDOWN / SYSKEYDOWN events.
-    ; Current behavior lets physical KEYUP / SYSKEYUP pass so the active app can close the key cycle.
-    ; If the user releases LCtrl while blocking is active, Windows never receives the LCtrl-up → Ctrl stays down.
-    global blockKeys, skipFixModifiersOnNextBlock, hHookKbd
+    ; Current behavior lets physical KEYUP / SYSKEYUP pass so the active app can
+    ; close the real key cycle cleanly.
+    ; The warning below describes the old failure mode that happened when
+    ; blockKeys swallowed physical KEYUP. The current hook allows KEYUP through.
+    global blockKeys, hHookKbd
     static blockedPressCount = 0
-    static didRunBlockEntryFixModifiers = false
 
     ; do not process / do not block / do not modify this event
     if (nCode < 0)
@@ -741,18 +737,7 @@ LL_KeyboardHook(nCode, wParam, lParam)
     if (!blockKeys)
     {
         blockedPressCount := 0
-        didRunBlockEntryFixModifiers := false
         return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
-    }
-
-    ; IMPORTANT CHANGE:
-    ; Call FixModifiers() only once when entering the blocking state (not on every hook event),
-    ; otherwise modifiers will feel "broken" because they're constantly being forced up.
-    if (!didRunBlockEntryFixModifiers)
-    {
-        didRunBlockEntryFixModifiers := true
-        if (!skipFixModifiersOnNextBlock)
-            FixModifiers()
     }
 
     ; Allow physical key-up events through while blocking so real key cycles can complete.
@@ -768,9 +753,8 @@ LL_KeyboardHook(nCode, wParam, lParam)
         ; After 10 physical key presses, disable blocking and allow typing again
         if (blockedPressCount >= 20)
         {
-            blockKeys := false
+            EndBlockKeys()
             blockedPressCount := 0
-            didRunBlockEntryFixModifiers := false
 
             ; Let this key through so typing resumes immediately
             return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
@@ -782,12 +766,12 @@ LL_KeyboardHook(nCode, wParam, lParam)
 }
 
 ; --------------------------------------------------
-; Common filter logic for mouse - Yes, your hook can create the stuck modifier by swallowing physical KEYUP.
+; Common filter logic for mouse-side blocking during drag / resize gestures.
 ; --------------------------------------------------
 LL_MouseHook(nCode, wParam, lParam)
 {
-    ; When blockKeys := true, you return 1 for everything physical, including key-up messages.
-    ; If the user releases LCtrl while blocking is active, Windows never receives the LCtrl-up → Ctrl stays down.
+    ; blockMouse swallows physical mouse messages for the active gesture while
+    ; keyboard-side blockKeys now lets physical KEYUP / SYSKEYUP pass through.
     global blockMouse, hHookMouse
 
     if (nCode < 0)
@@ -1290,13 +1274,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
         If (vWinClass == "wxWindowNR" && vWinProc == "clipdiary-portable.exe") {
             EnsureFocusedCtrlNN(hWnd, "Edit1", 60, 10)
-            blockKeys := True
+            BeginBlockKeys()
             Send, {LCtrl UP}
             Send, {LShift UP}
             Send, {. UP}
             Send, {Backspace}
             ControlFocus, Edit1, ahk_id %hWnd%
-            blockKeys := False
+            EndBlockKeys()
         }
 
         If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
@@ -2314,10 +2298,10 @@ WatchRightButtonState:
 return
 
 AdjustColumns:
-    blockKeys := true
+    BeginBlockKeys()
     Send, ^{NumpadAdd}
-    blockKeys := false
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Ctrl")
 return
 
 MbuttonTimer:
@@ -3014,8 +2998,7 @@ Return
     ; Let the trigger key finish before entering blocked mode so held modifiers
     ; can remain down while repeated D taps still retrigger the hotkey cleanly.
     KeyWait, d, T0.25
-    skipFixModifiersOnNextBlock := True
-    blockKeys                   := True
+    BeginBlockKeys()
 
     ; Let each movement burst finish visually before issuing the next key so the
     ; delete-line sequence relies less on fixed timing alone.
@@ -3036,8 +3019,7 @@ Return
     ; Send, +{Home}+{Home}+{Home}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
     Send, {Delete}
-    blockKeys                   := False
-    skipFixModifiersOnNextBlock := False
+    EndBlockKeys()
     ; Clear any synthetic Shift latch left by the selection sends.
     SendInput, {Shift Up}
 
@@ -3058,8 +3040,7 @@ Return
     if (A_CaretX = "")
     {
         StopAutoFix                 := False
-        blockKeys                   := False
-        skipFixModifiersOnNextBlock := False
+        EndBlockKeys()
         Critical, Off
         Send ^d
         Return
@@ -3067,8 +3048,7 @@ Return
     ; Let the trigger key finish before entering blocked mode so held Ctrl can
     ; remain down while repeated D taps still retrigger the hotkey cleanly.
     KeyWait, d, T0.25
-    skipFixModifiersOnNextBlock    := True
-    blockKeys                      := True
+    BeginBlockKeys()
 
     didFastInsert                  := False
     didRestoreCaretWithMessages    := False
@@ -3085,8 +3065,7 @@ Return
     ; burst so held Ctrl cannot slip back in between the selection keys.
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Ctrl Up}{Home}{Home}{Shift Down}{End}{Shift Up}
-    blockKeys                   := False
-    skipFixModifiersOnNextBlock := False
+    EndBlockKeys()
     if GetKeyState("Ctrl", "P")
         Send, {Ctrl Down}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
@@ -3105,12 +3084,10 @@ Return
     }
 
     ; 3) Insert a newline and paste the duplicate line BELOW
-    skipFixModifiersOnNextBlock := True
-    blockKeys                   := True
+    BeginBlockKeys()
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Ctrl Up}{End}{Enter}{Shift Down}{Home}{Shift Up}
-    blockKeys                   := False
-    skipFixModifiersOnNextBlock := False
+    EndBlockKeys()
     if GetKeyState("Ctrl", "P")
         Send, {Ctrl Down}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
@@ -3134,12 +3111,10 @@ Return
     ; 4) Return caret to the original line at column 1 (reliably cross-editor)
     if !didRestoreCaretWithMessages
     {
-        skipFixModifiersOnNextBlock := True
-        blockKeys                   := True
+        BeginBlockKeys()
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
         Send, {Ctrl Up}{Up} ; {Home}{Home}
-        blockKeys                   := False
-        skipFixModifiersOnNextBlock := False
+        EndBlockKeys()
         if GetKeyState("Ctrl", "P")
             Send, {Ctrl Down}
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 60, 2, 100)
@@ -3348,126 +3323,126 @@ Return
 !+':: ;'
     Critical, On
     StopAutoFix := True
-    blockKeys   := True
+    BeginBlockKeys()
 
     WrapClipboardText("""", """")
 
     Hotstring("Reset")
     StopAutoFix := False
-    blockKeys   := False
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Shift Alt")
     Critical, Off
 Return
 
 !+[::
     Critical, On
     StopAutoFix := True
-    blockKeys   := True
+    BeginBlockKeys()
 
     WrapClipboardText("{", "}")
 
     Hotstring("Reset")
     StopAutoFix := False
-    blockKeys   := False
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Shift Alt")
     Critical, Off
 Return
 
 !+]::
     Critical, On
     StopAutoFix := True
-    blockKeys   := True
+    BeginBlockKeys()
 
     WrapClipboardText("{", "}")
 
     Hotstring("Reset")
     StopAutoFix := False
-    blockKeys   := False
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Shift Alt")
     Critical, Off
 Return
 
 !+<::
     Critical, On
     StopAutoFix := True
-    blockKeys   := True
+    BeginBlockKeys()
 
     WrapClipboardText("<", ">")
 
     Hotstring("Reset")
     StopAutoFix := False
-    blockKeys   := False
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Shift Alt")
     Critical, Off
 Return
 
 !+>::
     Critical, On
     StopAutoFix := True
-    blockKeys   := True
+    BeginBlockKeys()
 
     WrapClipboardText("<", ">")
 
     Hotstring("Reset")
     StopAutoFix := False
-    blockKeys   := False
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Shift Alt")
     Critical, Off
 Return
 
 !+(::
     Critical, On
     StopAutoFix := True
-    blockKeys   := True
+    BeginBlockKeys()
 
     WrapClipboardText("(", ")")
 
     Hotstring("Reset")
     StopAutoFix := False
-    blockKeys   := False
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Shift Alt")
     Critical, Off
 Return
 
 !+)::
     Critical, On
     StopAutoFix := True
-    blockKeys   := True
+    BeginBlockKeys()
 
     WrapClipboardText("(", ")")
 
     Hotstring("Reset")
     StopAutoFix := False
-    blockKeys   := False
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Shift Alt")
     Critical, Off
 Return
 
 !+b::
     Critical, On
     StopAutoFix := True
-    blockKeys   := True
+    BeginBlockKeys()
 
     WrapClipboardText("\b", "\b")
 
     Hotstring("Reset")
     StopAutoFix := False
-    blockKeys   := False
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Shift Alt")
     Critical, Off
 Return
 
 !+5::
     Critical, On
     StopAutoFix := True
-    blockKeys   := True
+    BeginBlockKeys()
 
     WrapClipboardText("%", "%")
 
     Hotstring("Reset")
     StopAutoFix := False
-    blockKeys   := False
-    FixModifiers()
+    EndBlockKeys()
+    FixReleasedModifiers("Shift Alt")
     Critical, Off
 Return
 
@@ -3795,7 +3770,6 @@ Return
     total := GetDesktopCount()
     tooltip, class is %cl% of %total% desktops
     DetectHiddenWindows, Off
-    FixModifiers()
 Return
 
 #1::
@@ -3803,7 +3777,7 @@ Return
     StopRecursion := True
     GoSub, SwitchToVD1
     StopRecursion := False
-    FixModifiers()
+    FixReleasedModifiers("Ctrl Win")
     Critical, Off
 Return
 
@@ -3833,7 +3807,7 @@ Return
     StopRecursion := True
     GoSub, SwitchToVD2
     StopRecursion := False
-    FixModifiers()
+    FixReleasedModifiers("Ctrl Win")
     Critical, Off
 Return
 
@@ -3864,7 +3838,7 @@ Return
     Critical, On
     StopRecursion := True
     GoSub, SwitchToVD3
-    FixModifiers()
+    FixReleasedModifiers("Ctrl Win")
     StopRecursion := False
     Critical, Off
 Return
@@ -3897,7 +3871,7 @@ Return
     StopRecursion := True
     GoSub, SwitchToVD4
     StopRecursion := False
-    FixModifiers()
+    FixReleasedModifiers("Ctrl Win")
     Critical, Off
 Return
 
@@ -3931,14 +3905,14 @@ Altup:
     If startHighlight && !CanceledWinSwap {
         WinGet, actWndID, ID, A
         If (LclickSelected && hitTAB && !hitTilde && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
-            blockKeys := True
+            BeginBlockKeys()
             GoSub, SortAllWins
-            blockKeys := False
+            EndBlockKeys()
         }
         Else If ((GroupedWindows.length() > 2)  && actWndID != ValidWindows[1]) {
-            blockKeys := True
+            BeginBlockKeys()
             GoSub, SortGroupedWins ; currently, GroupedWindows == ValidWindows for alt+tab but not for alt+`
-            blockKeys := False
+            EndBlockKeys()
         }
     }
 Return
@@ -4071,7 +4045,7 @@ $!+Tab::
 
         GoSub, AltupCleanup
 
-        FixModifiers()
+        FixReleasedModifiers("Alt")
     }
 Return
 
@@ -4133,7 +4107,7 @@ Return
 
         GoSub, AltupCleanup
 
-        FixModifiers()
+        FixReleasedModifiers("Alt")
     }
 Return
 
@@ -4153,7 +4127,7 @@ $!x::
     tooltip,
     GoSub, Altup
     GoSub, AltupCleanup
-    FixModifiers()
+    FixReleasedModifiers("Alt")
 Return
 #If
 
@@ -4185,18 +4159,18 @@ $!Lbutton::
 
                 GoSub, AltupCleanup
 
-                FixModifiers()
+                FixReleasedModifiers("Alt")
                 break
             }
             sleep, 5
         }
     }
     Else If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550)) {
-        blockKeys := True
+        BeginBlockKeys()
         Send, {LAlt UP}
         Send, {Click, left}
         Send, {ENTER}
-        blockKeys := False
+        EndBlockKeys()
         sleep, 275
     }
 Return
@@ -5737,7 +5711,7 @@ $~^LButton::
     }
 
     KeyWait, Ctrl, U
-    FixModifiers()
+    FixReleasedModifiers("Ctrl")
 
     StopRecursion := False
     Thread, NoTimers, False
@@ -5760,7 +5734,7 @@ $^LButton::
     BringAppWindowsOnMonitorToTop(targetProcess, targetClass, currentMon, targetID)
 
     KeyWait, Ctrl, U
-    FixModifiers()
+    FixReleasedModifiers("Ctrl")
     StopRecursion := False
     Thread, NoTimers, False
 return
@@ -7798,13 +7772,13 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
 
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
-            blockKeys := True
+            BeginBlockKeys()
 
             Send, ^{NumpadAdd}
 
             If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
                 sleep, 125
-                blockKeys := False
+                EndBlockKeys()
 
                 If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd)
                     Return
@@ -7812,8 +7786,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 ; Use bounded focus+verify instead of 200 iterations
                 EnsureFocusedCtrlNN(initTargetHwnd, initFocusedCtrlNN, 120, 15)
             }
-            blockKeys := False
-            FixModifiers()
+            EndBlockKeys()
+            FixReleasedModifiers("Ctrl")
         }
     }
 Return
@@ -8787,36 +8761,49 @@ FrameShadow(HGui) {
 ; --------------------------------------------------------------------------------
 ; --------------------   ChatGPT -------------------------------------------------
 ; --------------------------------------------------------------------------------
-FixModifiers() {
-    ; Release all common modifiers (both sides where relevant)
-    SendInput, {Blind}{sc02A up}{sc036 up}          ; L/R Shift
-    SendInput, {Blind}{sc01D up}{sc11D up}          ; L/R Ctrl (11D = extended)
-    SendInput, {Blind}{sc038 up}{sc138 up}          ; L/R Alt  (138 = extended)
-    SendInput, {Blind}{sc15B up}{sc15C up}          ; L/R Win  (extended)
+BeginBlockKeys() {
+    Global blockKeys
 
-    Sleep, 10
+    ; Start a new key-blocking session. Modifier cleanup is now handled only
+    ; by explicit call sites, not implicitly by the keyboard hook.
+    blockKeys := True
+}
 
-    ; Optional verification + second pass (covers rare timing races)
-    if ( GetKeyState("LShift") || GetKeyState("RShift")
-      || GetKeyState("LCtrl")  || GetKeyState("RCtrl")
-      || GetKeyState("LAlt")   || GetKeyState("RAlt")
-      || GetKeyState("LWin")   || GetKeyState("RWin") )
-    {
-        if (!GetKeyState("LShift","P"))
+EndBlockKeys() {
+    Global blockKeys
+
+    ; End the current key-blocking session.
+    blockKeys := False
+}
+
+; Release only the named modifiers that are no longer physically held so call
+; sites can reconcile just the modifier family they actually disturbed.
+FixReleasedModifiers(modifiers := "Shift Alt Ctrl Win") {
+    if (InStr(modifiers, "Shift")) {
+        if (!GetKeyState("LShift", "P"))
             SendInput, {Blind}{sc02A up}
-        if (!GetKeyState("RShift","P"))
+        if (!GetKeyState("RShift", "P"))
             SendInput, {Blind}{sc036 up}
-        if (!GetKeyState("LCtrl","P"))
+    }
+
+    if (InStr(modifiers, "Ctrl")) {
+        if (!GetKeyState("LCtrl", "P"))
             SendInput, {Blind}{sc01D up}
-        if (!GetKeyState("RCtrl","P"))
+        if (!GetKeyState("RCtrl", "P"))
             SendInput, {Blind}{sc11D up}
-        if (!GetKeyState("LAlt","P"))
+    }
+
+    if (InStr(modifiers, "Alt")) {
+        if (!GetKeyState("LAlt", "P"))
             SendInput, {Blind}{sc038 up}
-        if (!GetKeyState("RAlt","P"))
+        if (!GetKeyState("RAlt", "P"))
             SendInput, {Blind}{sc138 up}
-        if (!GetKeyState("LWin","P"))
+    }
+
+    if (InStr(modifiers, "Win")) {
+        if (!GetKeyState("LWin", "P"))
             SendInput, {Blind}{sc15B up}
-        if (!GetKeyState("RWin","P"))
+        if (!GetKeyState("RWin", "P"))
             SendInput, {Blind}{sc15C up}
     }
 }
