@@ -918,6 +918,23 @@ Hoty:
         X_PriorPriorHotKey :=
 Return
 
+; Deferred Hoty rewrite:
+; live key event -> store intended replacement -> one-shot timer -> wait for
+; brief physical idle -> verify same window still owns focus -> perform rewrite
+;
+; Why this exists:
+; user types      : A  A  a
+; immediate fix   :     +--> {Left}{BS}A{Right} while the "a" key cycle may
+;                       still be finishing
+; risk            : main-thread hotkey gating + live caret movement can make
+;                   the rewrite run against a half-settled text state
+; result          : delayed output, bursty output, or a garbled correction
+;
+; Safer path:
+; A  A  a
+; |  |  +--> queue replacement only
+; |  |      +--> timer retries until A_TimeIdlePhysical is calm
+; |  |          +--> rewrite after the real keypress is finished
 FlushPendingHotyReplacement:
     if (!pendingHotyReplacement)
         Return
@@ -967,6 +984,24 @@ FixSlash:
         X_PriorPriorHotKey := Substr(A_PriorHotkey,3,1) ; record only the letter key pressed If captialized
 Return
 
+; Deferred FixSlash rewrite:
+; letter -> "/" -> Space or Enter
+;              +--> queue slash rewrite intent instead of backspacing on the
+;                   same live Space / Enter event
+;
+; Why this exists:
+; immediate fix on live Space / Enter can race with:
+; - the real punctuation key cycle finishing
+; - caret movement caused by Space / Enter
+; - other typing auto-fix logic already running on the main thread
+;
+; Timer flow:
+; detect "/ " or "/{Enter}"
+;         +--> store action + active hwnd
+;             +--> timer waits for physical idle and StopAutoFix = false
+;                 +--> same window still active?
+;                     +--> yes: send final backspace/rewrite sequence
+;                     +--> no : drop stale rewrite
 FlushPendingFixSlash:
     if (!pendingFixSlashAction)
         Return
@@ -3279,11 +3314,56 @@ WrapClipboardText(leftText, rightText) {
     Send, ^!+m
 }
 
+; Swap a selected true/false literal to the opposite value while preserving only
+; the exact lower/title-case forms supported by this hotkey.
+_SwapSelectedBooleanLiteral() {
+    global clipPreferExplicitCtrlV
+
+    selectedText := Clip()
+    if (selectedText = "")
+        return false
+
+    if (selectedText == "true")
+        replacementText := "false"
+    else if (selectedText == "True")
+        replacementText := "False"
+    else if (selectedText == "false")
+        replacementText := "true"
+    else if (selectedText == "False")
+        replacementText := "True"
+    else
+        return false
+
+    if !TryFastInsertWrappedText(replacementText) {
+        clipPreferExplicitCtrlV := True
+        Clip(replacementText)
+        clipPreferExplicitCtrlV := False
+    }
+
+    return true
+}
+
 !a::
     StopAutoFix := True
     Send, {Home}
     Hotstring("Reset")
     StopAutoFix := False
+Return
+
+; Swap a selected true/false literal and keep its capitalization style.
+!s::
+    Critical, On
+    StopAutoFix := True
+    BeginBlockKeys()
+
+    if !_SwapSelectedBooleanLiteral()
+        Clip("", "", "RESTORE")
+
+    Hotstring("Reset")
+    StopAutoFix := False
+    EndBlockKeys()
+    FixReleasedModifiers("Alt")
+    Critical, Off
 Return
 
 !;::
@@ -14073,6 +14153,8 @@ SetTitleMatchMode, 2
 ::unalign::
 ::unbenign::
 ::verisign::
+::inlining::
+::inlined::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
