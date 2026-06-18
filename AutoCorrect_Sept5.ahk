@@ -129,6 +129,7 @@ Global lButtonResizeSyncActive                    := False
 Global lButtonResizeSyncDraggedHwnd               := 0
 Global lButtonResizeSyncDraggedStartedAlwaysOnTop := False
 Global lButtonResizeSyncDraggedTransparent        := False
+Global lButtonResizeSyncFullHeightOppositeMoveOnly := False
 Global lButtonResizeSyncHit                       := 0
 Global lButtonResizeSyncLastDraggedH              := ""
 Global lButtonResizeSyncLastDraggedW              := ""
@@ -149,6 +150,8 @@ Global blockMouse                                 := False
 Global gExiting                                   := False
 Global hHookKbd
 Global hHookMouse
+Global deferredModifierFixModifiers               := ""
+Global deferredModifierFixRemaining               := 0
 ; --- Config ---
 Global UseWorkArea                                := true   ; true = monitor work area (ignores taskbar). false = full monitor.
 Global SnapRange                                  := 20     ; px: distance from edge to begin snapping
@@ -2973,8 +2976,10 @@ Return
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
     Send, {Delete}
     EndBlockKeys()
-    ; Clear any synthetic Shift latch left by the selection sends.
-    SendInput, {Shift Up}
+    ; Reconcile any synthetic modifier-up/down imbalance left by the selection
+    ; and navigation sends without disturbing modifiers that are still held.
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
 
     ; Your environment reset
     Hotstring("Reset")
@@ -2996,6 +3001,8 @@ Return
         EndBlockKeys()
         Critical, Off
         Send ^d
+        FixReleasedModifiers("Shift Alt Ctrl")
+        ScheduleModifierReconciliation("Shift Alt Ctrl")
         Return
     }
     ; Let the trigger key finish before entering blocked mode so held Ctrl can
@@ -3033,6 +3040,8 @@ Return
         Hotstring("Reset")
         StopAutoFix             := False
         Critical, Off
+        FixReleasedModifiers("Shift Alt Ctrl")
+        ScheduleModifierReconciliation("Shift Alt Ctrl")
         Return
     }
 
@@ -3078,6 +3087,8 @@ Return
     ; Your environment reset
     Hotstring("Reset")
     StopAutoFix                 := False
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -8806,6 +8817,34 @@ FixReleasedModifiers(modifiers := "Shift Alt Ctrl Win") {
     }
 }
 
+; Re-check modifier-up state shortly after a hotkey returns so a physical key-up
+; that happens just after the immediate cleanup still gets reconciled.
+RunDeferredModifierReconciliation() {
+    Global deferredModifierFixModifiers
+    Global deferredModifierFixRemaining
+
+    if (deferredModifierFixModifiers = "" || deferredModifierFixRemaining <= 0)
+        return
+
+    FixReleasedModifiers(deferredModifierFixModifiers)
+    deferredModifierFixRemaining -= 1
+    if (deferredModifierFixRemaining > 0)
+        SetTimer, RunDeferredModifierReconciliation, -75
+    else
+        deferredModifierFixModifiers := ""
+}
+
+ScheduleModifierReconciliation(modifiers := "Shift Alt Ctrl", passCount := 6) {
+    Global deferredModifierFixModifiers
+    Global deferredModifierFixRemaining
+
+    deferredModifierFixModifiers := modifiers
+    if (deferredModifierFixRemaining < passCount)
+        deferredModifierFixRemaining := passCount
+
+    SetTimer, RunDeferredModifierReconciliation, -40
+}
+
 KeyTrack() {
     global keys, numbers, StopAutoFix, TimeOfLastHotkeyTyped, blockKeys
 
@@ -9160,6 +9199,39 @@ _IsFullMonitorHeightWindow(hwndID, monitorNum) {
             && Abs(winBottomEdge - monInfoBottom) <= strictDockEdgeTolerance)
 }
 
+; Return true when the dragged window's far horizontal edge is already docked
+; at live-resize start to a visible window whose facing edge is already flush
+; to it. This is evaluated once up front so the live drag does not switch
+; modes mid-resize.
+_IsLiveResizeFarEdgeDocked(hwndID, monitorNum, edgeHit, refX := "", refY := "", refW := "", refH := "") {
+    static HTLEFT  := 10  ; Non-client left resize border.
+    static HTRIGHT := 11  ; Non-client right resize border.
+
+    liveResizeFarEdgeGapTolerance    := 10
+    liveResizeFarEdgeTouchTolerance  := 10
+    liveResizeFarEdgeVerticalOverlap := 100
+
+    if (!hwndID || monitorNum < 1)
+        return false
+
+    if (refX = "" || refY = "" || refW = "" || refH = "") {
+        if !WinGetPosEx(hwndID, refX, refY, refW, refH, null, null)
+            return false
+    }
+
+    if (edgeHit = HTRIGHT) {
+        candidateTargetEdge := "right"
+    }
+    else if (edgeHit = HTLEFT) {
+        candidateTargetEdge := "left"
+    }
+    else
+        return false
+
+    dockPartnerHwndIDs := Find2DEdgePartnerWindows(hwndID, monitorNum, liveResizeFarEdgeTouchTolerance, 0, 0, liveResizeFarEdgeVerticalOverlap, candidateTargetEdge, liveResizeFarEdgeGapTolerance, refX, refY, refW, refH)
+    return (IsObject(dockPartnerHwndIDs) && dockPartnerHwndIDs.MaxIndex())
+}
+
 ; Decide whether two windows belong to the same live-resize peer group for the
 ; dragged edge. Horizontal drags group vertically contiguous windows whose left
 ; and right edges already match closely; vertical drags do the mirror image for
@@ -9277,16 +9349,23 @@ _ApplyLiveResizeSyncPendingMoves(pendingMoves) {
     }
 
     ; Horizontal shared-edge sync must not touch height, and vertical sync must
-    ; not touch width. If any pending move is axis-specific, apply the whole set
-    ; with WinMove so blank parameters preserve the untouched axis exactly.
+    ; not touch width. Move-only horizontal updates are stricter still: they
+    ; must not pass width at all. If any pending move is axis-specific, apply
+    ; the whole set with WinMove so blank parameters preserve the untouched axis
+    ; exactly.
     if (hasAxisSpecificMove) {
         for pendingIndex, pendingMove in pendingMoves {
             pendingAxis   := pendingMove.axis
             pendingHwndID := pendingMove.hwnd
 
             if (pendingAxis = "horizontal") {
-                pendingW := pendingMove.w
                 pendingX := pendingMove.x
+                if (pendingMove.moveOnly) {
+                    WinMove, ahk_id %pendingHwndID%, , %pendingX%
+                    continue
+                }
+
+                pendingW := pendingMove.w
                 WinMove, ahk_id %pendingHwndID%, , %pendingX%, , %pendingW%
                 continue
             }
@@ -9527,6 +9606,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncDraggedStartedAlwaysOnTop
     global lButtonResizeSyncDraggedTransparent
+    global lButtonResizeSyncFullHeightOppositeMoveOnly
     global lButtonResizeSyncHit
     global lButtonResizeSyncLastDraggedH
     global lButtonResizeSyncLastDraggedW
@@ -9560,6 +9640,9 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     monitorNum := GetWindowMonitorNumber(draggedHwndID)
     if (monitorNum < 1)
         return false
+
+    draggedIsFullHeight := (   (edgeHit = HTLEFT || edgeHit = HTRIGHT)
+                            && _IsFullMonitorHeightWindow(draggedHwndID, monitorNum))
 
     ; Live resize-sync should only arm when the partner already looks flush to
     ; the dragged edge, so use tighter edge/gap tolerances than the broader
@@ -9647,6 +9730,8 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     lButtonResizeSyncDraggedHwnd               := draggedHwndID
     lButtonResizeSyncDraggedStartedAlwaysOnTop := IsAlwaysOnTop(draggedHwndID)
     lButtonResizeSyncDraggedTransparent        := false
+    lButtonResizeSyncFullHeightOppositeMoveOnly := (   draggedIsFullHeight
+                                                    && !_IsLiveResizeFarEdgeDocked(draggedHwndID, monitorNum, edgeHit, draggedX, draggedY, draggedW, draggedH))
     lButtonResizeSyncHit                       := edgeHit
     lButtonResizeSyncLastDraggedH              := draggedH
     lButtonResizeSyncLastDraggedW              := draggedW
@@ -9669,6 +9754,7 @@ EndLButtonResizeSync() {
     global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncDraggedStartedAlwaysOnTop
     global lButtonResizeSyncDraggedTransparent
+    global lButtonResizeSyncFullHeightOppositeMoveOnly
     global lButtonResizeSyncHit
     global lButtonResizeSyncLastDraggedH
     global lButtonResizeSyncLastDraggedW
@@ -9687,6 +9773,7 @@ EndLButtonResizeSync() {
     lButtonResizeSyncDraggedHwnd               := 0
     lButtonResizeSyncDraggedStartedAlwaysOnTop := false
     lButtonResizeSyncDraggedTransparent        := false
+    lButtonResizeSyncFullHeightOppositeMoveOnly := false
     lButtonResizeSyncHit                       := 0
     lButtonResizeSyncLastDraggedH              := ""
     lButtonResizeSyncLastDraggedW              := ""
@@ -9698,13 +9785,14 @@ EndLButtonResizeSync() {
 
 ; While a native edge resize is in progress, keep each matched same-side peer
 ; and opposite-side partner in sync with the dragged window. Peers mirror the
-; dragged edge directly, while opposite-side partners preserve their far edge so
-; only the shared boundary moves.
+; dragged edge directly, while opposite-side partners either preserve their far
+; edge or preserve their current size, depending on the cached full-height mode.
 UpdateLButtonResizeSync() {
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncDraggedStartedAlwaysOnTop
     global lButtonResizeSyncDraggedTransparent
+    global lButtonResizeSyncFullHeightOppositeMoveOnly
     global lButtonResizeSyncHit
     global lButtonResizeSyncLastDraggedH
     global lButtonResizeSyncLastDraggedW
@@ -9760,6 +9848,7 @@ UpdateLButtonResizeSync() {
         partnerHwndID      := partnerInfo.hwnd
         partnerFixedEdge   := partnerInfo.fixedEdge
         partnerRole        := partnerInfo.role
+        usedMoveOnlyPartnerHandling := false
         ; Only issue WinMove when the target rect actually changed. This avoids
         ; redundant no-op resizes, which is especially important for heavier
         ; windows like Explorer that repaint more expensively.
@@ -9781,6 +9870,17 @@ UpdateLButtonResizeSync() {
                 targetLeftEdge  := partnerFixedEdge
                 targetRightEdge := draggedRightEdge
             }
+            else if (lButtonResizeSyncFullHeightOppositeMoveOnly) {
+                ; Full-height horizontal drags that started without a docked far
+                ; edge keep the opposite partner's width fixed and slide the
+                ; whole window so its left edge remains flush to the dragged
+                ; right edge.
+                targetMoveX       := draggedRightEdge + partnerOffsetX
+                usedMoveOnlyPartnerHandling := true
+                shouldMovePartner := (partnerX != targetMoveX)
+                if (shouldMovePartner)
+                    pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, x: targetMoveX })
+            }
             else {
                 ; Opposite-side partners keep their far-right edge fixed and
                 ; slide only the shared left edge so it stays flush with the
@@ -9789,15 +9889,17 @@ UpdateLButtonResizeSync() {
                 targetRightEdge := partnerFixedEdge
             }
 
-            targetOuterWidth  := targetRightEdge - targetLeftEdge
-            if (targetOuterWidth <= 0)
-                continue
+            if (!usedMoveOnlyPartnerHandling) {
+                targetOuterWidth  := targetRightEdge - targetLeftEdge
+                if (targetOuterWidth <= 0)
+                    continue
 
-            targetMoveX       := targetLeftEdge + partnerOffsetX
-            targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
-            shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
-            if (shouldMovePartner)
-                pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
+                targetMoveX       := targetLeftEdge + partnerOffsetX
+                targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
+                shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
+                if (shouldMovePartner)
+                    pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
+            }
         }
         else if (lButtonResizeSyncHit = HTLEFT) {
             if (partnerRole = "peer") {
@@ -9807,6 +9909,21 @@ UpdateLButtonResizeSync() {
                 targetLeftEdge  := draggedX
                 targetRightEdge := partnerFixedEdge
             }
+            else if (lButtonResizeSyncFullHeightOppositeMoveOnly) {
+                ; Mirror the right-edge rule above: preserve the opposite
+                ; partner's width and shift it so its right edge stays flush to
+                ; the dragged left edge.
+                partnerOuterWidth := partnerW - 2*Abs(partnerOffsetX)
+                if (partnerOuterWidth <= 0)
+                    continue
+
+                targetLeftEdge    := draggedX - partnerOuterWidth
+                targetMoveX       := targetLeftEdge + partnerOffsetX
+                usedMoveOnlyPartnerHandling := true
+                shouldMovePartner := (partnerX != targetMoveX)
+                if (shouldMovePartner)
+                    pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, x: targetMoveX })
+            }
             else {
                 ; Opposite-side partners keep their far-left edge fixed and
                 ; slide only the shared right edge so it stays flush with the
@@ -9815,15 +9932,17 @@ UpdateLButtonResizeSync() {
                 targetRightEdge := draggedX
             }
 
-            targetOuterWidth  := targetRightEdge - targetLeftEdge
-            if (targetOuterWidth <= 0)
-                continue
+            if (!usedMoveOnlyPartnerHandling) {
+                targetOuterWidth  := targetRightEdge - targetLeftEdge
+                if (targetOuterWidth <= 0)
+                    continue
 
-            targetMoveX       := targetLeftEdge + partnerOffsetX
-            targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
-            shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
-            if (shouldMovePartner)
-                pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
+                targetMoveX       := targetLeftEdge + partnerOffsetX
+                targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
+                shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
+                if (shouldMovePartner)
+                    pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
+            }
         }
         else if (lButtonResizeSyncHit = HTBOTTOM) {
             if (partnerRole = "peer") {
@@ -11293,7 +11412,9 @@ return
 ; - gap side: edgeGapTolerance
 ; - [candidate] must touch at least 2 monitor edges
 ; - Being near the left/right monitor edge alone does NOT trigger resize-to-monitor-edge
-; - Horizontal resize here happens only if a separate left/right side-partner check succeeds
+; - A separate left/right side-partner check can still apply horizontal fitting
+; - CASE 1 side-partner result for a top-only release: move-first, resize only on monitor overflow
+; - CASE 1 corner-docked mirrored side-fit result: keep the released outer edge fixed and resize inward
 ; - Otherwise, the window must already count as left-docked or right-docked within strictDockEdgeTolerance for monitor-edge width fitting to apply
 
 
@@ -11336,7 +11457,9 @@ return
 ; - gap side: edgeGapTolerance
 ; - [candidate] must touch at least 2 monitor edges
 ; - Being near the left/right monitor edge alone does NOT trigger resize-to-monitor-edge
-; - Horizontal resize here happens only if a separate left/right side-partner check succeeds
+; - A separate left/right side-partner check can still apply horizontal fitting
+; - CASE 2 side-partner result for a bottom-only release: move-first, resize only on monitor overflow
+; - CASE 2 corner-docked mirrored side-fit result: keep the released outer edge fixed and resize inward
 ; - Otherwise, the window must already count as left-docked or right-docked within strictDockEdgeTolerance for monitor-edge width fitting to apply
 
 
@@ -11489,15 +11612,16 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; Only try to auto-fit when the moved window already looks intentionally
     ; docked to the left, right, top, or bottom edge of the current monitor.
     strictDockEdgeTolerance := 3
-    movedRightEdge       := movedX + movedW
-    movedBottomEdge      := movedY + movedH
-    movedDocksToLeft     := Abs(movedX          - monInfoLeft)   <= strictDockEdgeTolerance
-    movedDocksToRight    := Abs(movedRightEdge  - monInfoRight)  <= strictDockEdgeTolerance
-    movedDocksToTop      := Abs(movedY          - monInfoTop)    <= strictDockEdgeTolerance
-    movedDocksToBottom   := Abs(movedBottomEdge - monInfoBottom) <= strictDockEdgeTolerance
-    isFullHeightWindow    := _IsFullMonitorHeightWindow(movedHwndID, monitorNum)
-    isFullWidthWindow     := (movedDocksToLeft && movedDocksToRight)
-    fullHeightSideFitMode := (isFullHeightWindow && !isFullWidthWindow)
+    movedRightEdge          := movedX + movedW
+    movedBottomEdge         := movedY + movedH
+    movedDocksToLeft        := Abs(movedX          - monInfoLeft)   <= strictDockEdgeTolerance
+    movedDocksToRight       := Abs(movedRightEdge  - monInfoRight)  <= strictDockEdgeTolerance
+    movedDocksToTop         := Abs(movedY          - monInfoTop)    <= strictDockEdgeTolerance
+    movedDocksToBottom      := Abs(movedBottomEdge - monInfoBottom) <= strictDockEdgeTolerance
+    isFullHeightWindow      := _IsFullMonitorHeightWindow(movedHwndID, monitorNum)
+    isFullWidthWindow       := (movedDocksToLeft && movedDocksToRight)
+    fullHeightSideFitMode      := (isFullHeightWindow && !isFullWidthWindow)
+    topBottomOnlySideMoveMode  := (!isFullHeightWindow && (movedDocksToTop || movedDocksToBottom) && !movedDocksToLeft && !movedDocksToRight)
 
     ; Preserve the release-time geometry so each candidate search evaluates the
     ; same original dropped position, even if the first fit branch already moved
@@ -11519,11 +11643,11 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     horizontalPartnerEdgeToMatch     := ""
     sideFitLabel                     := ""
     sideFitUsesReleasedOuterEdge     := false
-    fullHeightSideMoveTargetX        := ""
+    sideMoveOnlyTargetX              := ""
     sidePartnerBottomEdge            := ""
     sidePartnerH                     := ""
     sidePartnerY                     := ""
-    usedFullHeightSideMoveOnlyFit    := false
+    usedSideMoveOnlyFit              := false
     verticalPartnerEdgeToMatch       := ""
     verticalFitUsesReleasedOuterEdge := false
     verticalPartnerRightEdge         := ""
@@ -11559,9 +11683,11 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; on that axis. Candidates must still touch the required monitor edges for
     ; that branch, then satisfy the normal overlap and edge-gap tolerances for
     ; that direction.
-    ; If the moved window touches only one monitor axis, the mirrored branch on
-    ; the other axis can still use a corner-docked partner by keeping the moved
-    ; window's released outer edge fixed and sizing inward toward that partner.
+    ; If the moved window touches only one monitor axis, the mirrored CASE 1 /
+    ; CASE 2 branch on the other axis can still fit against a partner.
+    ; Top-only/bottom-only releases use move-first there, while corner-docked
+    ; releases keep the released outer edge fixed and size inward toward that
+    ; partner.
     ; CASE 1 / CASE 2:
     ; top-docked or bottom-docked moved window searches for one vertical partner.
     if (verticalPartnerEdgeToMatch != "") {
@@ -11860,33 +11986,34 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         sidePartnerY          := sideWinY
         sideRightEdge         := sideWinX + sideWinW
 
-        if (sideFitUsesReleasedOuterEdge) {
+        if (sideFitUsesReleasedOuterEdge && !topBottomOnlySideMoveMode) {
             if (horizontalPartnerEdgeToMatch = "left") {
-                ; Top/bottom-docked moved window: keep its released left edge
-                ; fixed and resize its right edge until it reaches the partner.
+                ; Top/bottom plus side-docked moved window: keep its released
+                ; left edge fixed and resize its right edge until it reaches
+                ; the partner.
                 targetLeftEdge   := movedX
                 targetOuterWidth := sideWinX - targetLeftEdge
             }
             else {
-                ; Top/bottom-docked moved window: keep its released right edge
-                ; fixed and move/resize its left edge until it reaches the
-                ; partner on the left side.
+                ; Top/bottom plus side-docked moved window: keep its released
+                ; right edge fixed and move/resize its left edge until it
+                ; reaches the partner on the left side.
                 targetLeftEdge   := sideRightEdge
                 targetRightEdge  := movedRightEdge
                 targetOuterWidth := targetRightEdge - targetLeftEdge
             }
         }
         else if (horizontalPartnerEdgeToMatch = "left") {
-            ; CASE 3A / CASE 4A apply logic:
-            ; move-only first for full-height side fits unless already monitor-docked.
-            if (fullHeightSideFitMode) {
-                ; Full-height windows keep the normal left-edge resize only when
-                ; the released window was already intentionally left-docked.
-                ; Otherwise preserve width and shift the whole window first.
+            ; CASE 3A / CASE 1 / CASE 2 right-side partner path:
+            ; full-height windows keep the normal left-edge resize only when
+            ; the released window was already intentionally left-docked.
+            ; Otherwise, and for CASE 1 / CASE 2 top-only or bottom-only
+            ; releases, preserve width and shift the whole window first.
+            if (fullHeightSideFitMode || topBottomOnlySideMoveMode) {
                 targetLeftEdge   := monInfoLeft
                 targetOuterWidth := sideWinX - targetLeftEdge
-                if (!movedDocksToLeft)
-                    fullHeightSideMoveTargetX := sideWinX - movedW + movedOffsetX
+                if (topBottomOnlySideMoveMode || !movedDocksToLeft)
+                    sideMoveOnlyTargetX := sideWinX - movedW + movedOffsetX
             }
             else {
                 ; Left-docked moved window: widen it from the monitor's left edge
@@ -11896,15 +12023,14 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
             }
         }
         else {
-            if (fullHeightSideFitMode) {
-                ; Mirror the left-edge rule for right-docked full-height
-                ; windows: resize only when the release was already right-docked,
-                ; otherwise try a width-preserving shift first.
+            if (fullHeightSideFitMode || topBottomOnlySideMoveMode) {
+                ; CASE 4A / CASE 1 / CASE 2 left-side partner path:
+                ; mirror the left-edge move-first rule for left-side partners.
                 targetLeftEdge   := sideRightEdge
                 targetRightEdge  := monInfoRight
                 targetOuterWidth := targetRightEdge - targetLeftEdge
-                if (!movedDocksToRight)
-                    fullHeightSideMoveTargetX := sideRightEdge + movedOffsetX
+                if (topBottomOnlySideMoveMode || !movedDocksToRight)
+                    sideMoveOnlyTargetX := sideRightEdge + movedOffsetX
             }
             else {
                 ; Right-docked moved window: widen it from the candidate's right
@@ -11915,23 +12041,24 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
             }
         }
 
-        ; CASE 3A / CASE 4A move-first verification:
+        ; CASE 3A / CASE 4A / CASE 1 / CASE 2 move-first verification:
         ; accept the shift only if the post-move window still stays on-monitor.
-        if (fullHeightSideMoveTargetX != "") {
-            WinMove, ahk_id %movedHwndID%, , %fullHeightSideMoveTargetX%
+        if (sideMoveOnlyTargetX != "") {
+            WinMove, ahk_id %movedHwndID%, , %sideMoveOnlyTargetX%
             WaitForStableWindow(movedHwndID)
             if (WinGetPosEx(movedHwndID, movedPostMoveX, movedPostMoveY, movedPostMoveW, movedPostMoveH, null, null)) {
                 movedPostMoveRightEdge  := movedPostMoveX + movedPostMoveW
                 if (   movedPostMoveX >= (monInfoLeft - strictDockEdgeTolerance)
                     && movedPostMoveRightEdge <= (monInfoRight + strictDockEdgeTolerance))
                 {
-                    usedFullHeightSideMoveOnlyFit := true
-                    didSideFit                    := true
-                    didFitWindow                  := true
+                    usedSideMoveOnlyFit := true
+                    didSideFit          := true
+                    didFitWindow        := true
                 }
             }
         }
-        if (!usedFullHeightSideMoveOnlyFit && targetOuterWidth > 0) {
+        if (!usedSideMoveOnlyFit && targetOuterWidth > 0) {
+            ; CASE 3A / CASE 4A / CASE 1 / CASE 2 resize fallback:
             ; Preserve the original non-client offset while expanding the moved
             ; window outward to its final fitted width.
             targetMoveX     := targetLeftEdge + movedOffsetX
@@ -12002,7 +12129,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; side fit succeeded but no separate vertical partner qualified, allow the
     ; moved window to inherit the side partner's height when both of its
     ; horizontal edges were already nearly aligned with that partner at release.
-    if (   didSideFit && !didVerticalFit && !usedFullHeightSideMoveOnlyFit && !fullHeightSideFitMode
+    if (   didSideFit && !didVerticalFit && !usedSideMoveOnlyFit && !fullHeightSideFitMode
         && Abs(movedY         - sidePartnerY)          <= edgeTouchTolerance
         && Abs(movedBottomEdge - sidePartnerBottomEdge) <= edgeTouchTolerance)
     {
