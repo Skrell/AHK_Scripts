@@ -2420,6 +2420,10 @@ $*MButton::
     rightWinEdge  := wx0 + ww
     bottomWinEdge := wy0 + wh
 
+    ; Resolve the monitor/work-area rectangle under the initial press point.
+    ; These bounds become the reference frame for early snap-state detection:
+    ; compare the window's current left/right edges against monL/monR to see
+    ; whether the drag started already docked near the monitor edge.
     ; msgbox, % leftWinEdge "," rightWinEdge "-" topWinEdge "," bottomWinEdge ":" offsetX " & " offsetY
     GetMonitorRectForMouse(mx0, my0, UseWorkArea, monL, monT, monR, monB)
     If ((leftWinEdge - monL) <= SnapRange && (leftWinEdge - monL) >= 0) {
@@ -2558,10 +2562,41 @@ $*MButton::
             }
         }
 
+        ; Re-resolve the monitor/work-area rectangle under the current mouse
+        ; position. During a cross-monitor drag, monL/monT/monR/monB can change
+        ; from one loop iteration to the next, so all snap thresholds, max
+        ; travel distances, and confinement math below stay tied to the monitor
+        ; the cursor is currently in rather than the one where the drag started.
         GetMonitorRectForMouse(mx, my, UseWorkArea, monL, monT, monR, monB)
+        ; monW/monH are the active monitor dimensions used by the near-full-
+        ; height heuristic and the later mouse-confinement calls.
         monW  := monR-monL
         monH  := monB-monT
+        ; Compare the live window height against the active monitor height so
+        ; nearly full-height drags stay pinned vertically to this monitor's
+        ; top/bottom work-area bounds instead of floating freely.
         isNearFullMonitorHeight := (wh / Abs(monB - monT) > 0.90)
+        ; Translate the returned monitor edges into the window's legal travel
+        ; box on this monitor. minX/minY anchor movement to monL/monT, while
+        ; maxY/maxHD/maxHU/maxWL/maxWR limit how far the window can move or grow
+        ; before it would overshoot monR/monB or the opposite monitor edge.
+        ;
+        ; Current monitor/work area                Current window outer frame
+        ; monL                                  monR
+        ;  |--------------------------------------|
+        ;  |   wx0                         wx0+ww |
+        ;  |    |----------------------------|    |
+        ;  |    |                            |    |
+        ;  |    |                            |    |
+        ;  |    |----------------------------|    |
+        ;  |   wy0                      wy0+wh    |
+        ;  |                                      |
+        ; monT                                  monB
+        ;
+        ; maxHD = monB      - wy0      ; top edge down to monitor bottom
+        ; maxHU = (wy0+wh)  - monT     ; window bottom up to monitor top
+        ; maxWL = (wx0+ww)  - monL     ; window right edge left to monitor left
+        ; maxWR = monR      - wx0      ; monitor right edge right from window left
         ; Vertical allowable range for current monitor
         minX  := monL
         minY  := monT
@@ -8862,8 +8897,8 @@ KeyTrack() {
             ; enter blockKeys in the middle of the user's final keydown/keyup cycle.
             ; tooltip, % "lastKey- " . A_PriorKey . " - " . A_TickCount-TimeOfLastHotkeyTyped
             If (   TimeOfLastHotkeyTyped
-                && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
-                && (A_TimeIdlePhysical >= 50)
+                ; && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
+                && (A_TimeIdlePhysical >= 150)
                 && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
                 && (   InStr(keys,    Substr(A_ThisHotkey,2), false)
                     || InStr(numbers, Substr(A_ThisHotkey,2), false)
