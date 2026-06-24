@@ -96,6 +96,39 @@ Global typingAutoFixSlowProbeTick                 := 0
 ; is occasionally interpreted as a literal v by the target editor.
 Global clipPreferExplicitCtrlV                    := False
 Global disableEnter                               := False
+; Window class for the most recent Explorer/file-dialog wheel target so the
+; deferred adjust step can confirm the queued request still points at the same shell UI.
+Global pendingAdjustColumnsClass                  := ""
+; Control under the mouse when the wheel event was queued; used as a hint before
+; resolving the final DirectUI/ListView target at send time.
+Global pendingAdjustColumnsCtrl                   := ""
+; Top-level Explorer or #32770 dialog HWND that should receive the deferred
+; Ctrl+NumpadAdd once scrolling has gone quiet.
+Global pendingAdjustColumnsHwnd                   := 0
+; Tick count of the most recent qualifying wheel event so AdjustColumns can defer
+; work until the user pauses scrolling and cancel if wheel activity resumes.
+Global pendingAdjustColumnsLastWheelTick          := 0
+; Minimum quiet period after the last wheel event before attempting Explorer
+; column auto-fit; this avoids interrupting fast continuous scrolling.
+Global pendingAdjustColumnsQuietMs                := 110
+; Monotonic request token incremented on each qualifying wheel event so older
+; deferred timers can detect they were superseded and exit without sending.
+Global pendingAdjustColumnsRequestId              := 0
+; Short retry delay used when the timer wakes up before scrolling is truly quiet,
+; allowing fast re-checks without doing focus/send work on every wheel tick.
+Global pendingAdjustColumnsRetryMs                := 35
+; Cached final Explorer target ClassNN for the most recent wheel-adjust window so
+; repeated pause/resume cycles can skip DirectUI/ListView rediscovery work.
+Global pendingAdjustColumnsTargetCacheCtrl        := ""
+; Top-level window HWND that owns the cached Explorer target ClassNN; the cache is
+; only valid when a later wheel-adjust request points at this same shell window.
+Global pendingAdjustColumnsTargetCacheHwnd        := 0
+; Tick count when the cached Explorer target was last confirmed, limiting reuse to
+; a short burst where the folder view structure is unlikely to have changed.
+Global pendingAdjustColumnsTargetCacheTick        := 0
+; Maximum age for the cached Explorer target before AdjustColumns falls back to
+; full target resolution to avoid using a stale DirectUI/ListView guess.
+Global pendingAdjustColumnsTargetCacheTtlMs       := 350
 ; Deferred typing correction state so punctuation and capitalization rewrites can
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
@@ -2145,8 +2178,10 @@ $~WheelUp::
     stopRecursion := true
     Critical, Off
     Sleep, -1
+    isOverTaskbarBlank := MouseIsOverTaskbarBlank()
+    isOverTitleBar     := MouseIsOverTitleBar()
 
-    if (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
+    if (!isOverTitleBar && !isOverTaskbarBlank)
     {
         MouseGetPos,,, windowId, wheelControl
         WinGetClass, hoverClass, ahk_id %windowId%
@@ -2154,18 +2189,23 @@ $~WheelUp::
 
         if (hoverClass != "ProgMan"
          && hoverClass != "WorkerW"
-         && hoverClass != "Notepad++"
          && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+         && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
          && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
          && (wheelControl == "SysListView321"
           || wheelControl == "DirectUIHWND2"
           || wheelControl == "DirectUIHWND3"))
         {
+            pendingAdjustColumnsClass         := hoverClass
+            pendingAdjustColumnsCtrl          := wheelControl
+            pendingAdjustColumnsHwnd          := windowId
+            pendingAdjustColumnsLastWheelTick := A_TickCount
+            pendingAdjustColumnsRequestId += 1
             SetTimer, AdjustColumns, Off
-            SetTimer, AdjustColumns, -125
+            SetTimer, AdjustColumns, -110
         }
     }
-    else if (MouseIsOverTaskbarBlank())
+    else if (isOverTaskbarBlank)
     {
         Send, #^{Left}
         Sleep, 1000
@@ -2179,8 +2219,10 @@ $~WheelDown::
     stopRecursion := true
     Critical, Off
     Sleep, -1
+    isOverTaskbarBlank := MouseIsOverTaskbarBlank()
+    isOverTitleBar     := MouseIsOverTitleBar()
 
-    if (!MouseIsOverTitleBar() && !MouseIsOverTaskbarBlank())
+    if (!isOverTitleBar && !isOverTaskbarBlank)
     {
         MouseGetPos,,, windowId, wheelControl
         WinGetClass, hoverClass, ahk_id %windowId%
@@ -2188,18 +2230,23 @@ $~WheelDown::
 
         if (hoverClass != "ProgMan"
          && hoverClass != "WorkerW"
-         && hoverClass != "Notepad++"
          && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+         && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
          && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
          && (wheelControl == "SysListView321"
           || wheelControl == "DirectUIHWND2"
           || wheelControl == "DirectUIHWND3"))
         {
+            pendingAdjustColumnsClass         := hoverClass
+            pendingAdjustColumnsCtrl          := wheelControl
+            pendingAdjustColumnsHwnd          := windowId
+            pendingAdjustColumnsLastWheelTick := A_TickCount
+            pendingAdjustColumnsRequestId += 1
             SetTimer, AdjustColumns, Off
-            SetTimer, AdjustColumns, -125
+            SetTimer, AdjustColumns, -110
         }
     }
-    else if (MouseIsOverTitleBar())
+    else if (isOverTitleBar)
     {
         blockMouse := true
         MouseGetPos,,, windowHwnd, controlHwnd, 2
@@ -2209,7 +2256,7 @@ $~WheelDown::
         blockMouse := false
         return
     }
-    else if (MouseIsOverTaskbarBlank())
+    else if (isOverTaskbarBlank)
     {
         Send, #^{Right}
         Sleep, 1000
@@ -2253,11 +2300,187 @@ WatchRightButtonState:
         ResetRightButtonState(true)
 return
 
+; Wheel-driven Explorer column auto-fit runs through this deferred timer instead of
+; sending Ctrl+NumpadAdd directly from WheelUp/WheelDown. The delay lets rapid scroll
+; bursts animate normally, then fires only after a short quiet gap and cancels itself
+; if newer wheel input arrives first.
 AdjustColumns:
-    BeginBlockKeys()
-    Send, ^{NumpadAdd}
-    EndBlockKeys()
-    FixReleasedModifiers("Ctrl")
+    currentRequestId := 0
+    TargetControl := ""
+    TargetControlHwnd := 0
+    OutputVar1 := 0
+    OutputVar2 := 0
+    OutputVar3 := 0
+    OutputVar4 := 0
+    OutputVar6 := 0
+    OutputVar8 := 0
+
+    ; If the wheel hook never captured a valid Explorer target, there is nothing to do.
+    if (!pendingAdjustColumnsRequestId || !pendingAdjustColumnsHwnd || pendingAdjustColumnsCtrl == "")
+        return
+
+    ; Snapshot the request token once so every later stage can cheaply detect that a
+    ; newer wheel event replaced this work item while the timer was resolving targets
+    ; or attempting focus. This is the main stale-work guard for pause/resume scrolls.
+    currentRequestId := pendingAdjustColumnsRequestId
+
+    ; Defer any focus/send work until wheel activity has actually paused. If more
+    ; scrolling is still happening, re-arm a short retry instead of interfering with it.
+    if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < pendingAdjustColumnsQuietMs) {
+        SetTimer, AdjustColumns, % -pendingAdjustColumnsRetryMs
+        return
+    }
+
+    ; Only operate on the currently active Explorer/dialog window. This keeps the
+    ; deferred send from acting on a stale hover target after activation changed.
+    if (WinExist("A") != pendingAdjustColumnsHwnd)
+        return
+
+    WinGetClass, adjustClassNow, ahk_id %pendingAdjustColumnsHwnd%
+    if (adjustClassNow != pendingAdjustColumnsClass || (adjustClassNow != "CabinetWClass" && adjustClassNow != "#32770"))
+        return
+
+    ; Reuse the last resolved target for a short burst on the same Explorer window
+    ; before falling back to the heavier SendCtrlAdd()-derived discovery below. This
+    ; is safe because the cache is validated against both HWND ownership and control
+    ; existence, and it avoids repeated ControlList scans during stop-and-go scrolling.
+    if (pendingAdjustColumnsTargetCacheHwnd = pendingAdjustColumnsHwnd
+     && pendingAdjustColumnsTargetCacheCtrl != ""
+     && (A_TickCount - pendingAdjustColumnsTargetCacheTick) < pendingAdjustColumnsTargetCacheTtlMs) {
+        ControlGet, TargetControlHwnd, Hwnd,, % pendingAdjustColumnsTargetCacheCtrl, ahk_id %pendingAdjustColumnsHwnd%
+        if (TargetControlHwnd)
+            TargetControl := pendingAdjustColumnsTargetCacheCtrl
+    }
+
+    ; Mirror the DirectUI/ListView discovery from SendCtrlAdd() on purpose instead of
+    ; calling SendCtrlAdd() directly. Reusing the full helper made wheel scrolling feel
+    ; janky, but modern Explorer still needs the same target-resolution heuristics to
+    ; decide which DirectUIHWND*/SysListView32 should receive Ctrl+NumpadAdd.
+    if (TargetControl == "") {
+        DirectUICtrls := GetCtrlNNsByPrefix(pendingAdjustColumnsHwnd, "DirectUIHWND")
+        SysListCtrls := GetCtrlNNsByPrefix(pendingAdjustColumnsHwnd, "SysListView32")
+        OutputVar1 := InStr(SysListCtrls, "SysListView32", false) > 0
+        OutputVar2 := InStr(DirectUICtrls, "DirectUIHWND2", false) > 0
+        OutputVar3 := InStr(DirectUICtrls, "DirectUIHWND3", false) > 0
+        OutputVar4 := InStr(DirectUICtrls, "DirectUIHWND4", false) > 0
+        OutputVar6 := InStr(DirectUICtrls, "DirectUIHWND6", false) > 0
+        OutputVar8 := InStr(DirectUICtrls, "DirectUIHWND8", false) > 0
+
+        ; Prefer the hovered control when it is already a stable known target. For the
+        ; more ambiguous DirectUIHWND2/3 case, fall through to the copied SendCtrlAdd()
+        ; heuristics below because modern Explorer often reports a hover control that is
+        ; not the one that ultimately handles the adjust-columns shortcut.
+        if (InStr(pendingAdjustColumnsCtrl, "SysListView32", True)) {
+            TargetControl := pendingAdjustColumnsCtrl
+        }
+        else if (pendingAdjustColumnsCtrl == "DirectUIHWND4" && OutputVar4) {
+            TargetControl := pendingAdjustColumnsCtrl
+        }
+        else if (pendingAdjustColumnsCtrl == "DirectUIHWND6" && OutputVar6) {
+            TargetControl := pendingAdjustColumnsCtrl
+        }
+        else if (pendingAdjustColumnsCtrl == "DirectUIHWND8" && OutputVar8) {
+            TargetControl := pendingAdjustColumnsCtrl
+        }
+
+        ; This selection block is intentionally derived from SendCtrlAdd(). It preserves the
+        ; existing Explorer-specific choice order while keeping the wheel path lightweight.
+        if (TargetControl == "" && (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)) {
+            if (OutputVar1 == 1) {
+                TargetControl := "SysListView321"
+            }
+            else if ((OutputVar2 == 1 && OutputVar3 == 1 && !OutputVar4 && !OutputVar6 && !OutputVar8)
+                    && (adjustClassNow == "CabinetWClass" || adjustClassNow == "#32770")) {
+                OutHeight2 := 0
+                OutHeight3 := 0
+
+                ; This Win11 DirectUIHWND2-vs-3 probe is copied from SendCtrlAdd(). Explorer
+                ; frequently exposes multiple large DirectUI panes, so preserving the same
+                ; sizing heuristic avoids regressing whichever pane currently handles the key.
+                if isWin11 {
+                    ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %pendingAdjustColumnsHwnd%
+                    if (GetWindowRectEx(hCtl, L, T, R, B)) {
+                        OutHeight2 := B - T
+                    }
+                }
+                else {
+                    ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %pendingAdjustColumnsHwnd%, , , ,
+                }
+
+                if (adjustClassNow == "CabinetWClass" && !isModernExplorerInReg)
+                    ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %pendingAdjustColumnsHwnd%, , , ,
+
+                if (adjustClassNow == "CabinetWClass" && (!isWin11 || !isModernExplorerInReg))
+                    TargetControl := "DirectUIHWND3"
+                else
+                    TargetControl := "DirectUIHWND2"
+            }
+            else if (OutputVar2 == 1) {
+                TargetControl := "DirectUIHWND2"
+            }
+            else if (OutputVar3 == 1) {
+                TargetControl := "DirectUIHWND3"
+            }
+            else if (OutputVar4) {
+                TargetControl := "DirectUIHWND4"
+            }
+            else if (OutputVar6) {
+                TargetControl := "DirectUIHWND6"
+            }
+            else if (OutputVar8) {
+                TargetControl := "DirectUIHWND8"
+            }
+        }
+    }
+
+    ; If target resolution succeeds, use the richer Explorer-specific focus path. If it
+    ; does not, fall back to the older AutoCorrect_Sept5_works.ahk behavior, which still
+    ; successfully aligned columns in modern Explorer when the details pane already had a
+    ; real item focus. That older version simply delayed and sent Ctrl+NumpadAdd to the
+    ; active window, so resolution/focus is best-effort here rather than a hard gate.
+    if (TargetControl != "") {
+        ; Resolve the final target HWND once so the cached target can be validated before
+        ; any focus/send work continues.
+        if (!TargetControlHwnd)
+            ControlGet, TargetControlHwnd, Hwnd,, %TargetControl%, ahk_id %pendingAdjustColumnsHwnd%
+
+        if (TargetControlHwnd) {
+            ; Publish the resolved target for a short time so the next pause in the same
+            ; Explorer window can bypass DirectUI discovery entirely if nothing structural changed.
+            pendingAdjustColumnsTargetCacheCtrl := TargetControl
+            pendingAdjustColumnsTargetCacheHwnd := pendingAdjustColumnsHwnd
+            pendingAdjustColumnsTargetCacheTick := A_TickCount
+
+            ; Abort immediately if a newer wheel event superseded this request while target
+            ; discovery was happening. This prevents old timers from entering focus work once
+            ; scrolling has already resumed.
+            if (pendingAdjustColumnsRequestId != currentRequestId)
+                return
+
+            ; Use the same explicit ClassNN refocus step as the known-good SendCtrlAdd()
+            ; Explorer path. Modern Explorer can report focus inside the DirectUI subtree while
+            ; still ignoring Ctrl+NumpadAdd unless the exact target control is actively focused.
+            EnsureFocusedCtrlNN(pendingAdjustColumnsHwnd, TargetControl, 60, 15)
+        }
+    }
+
+    ; Abort if a newer wheel event superseded this pending request while focus work
+    ; was happening, or if scrolling resumed during the focus attempt.
+    if (pendingAdjustColumnsRequestId != currentRequestId)
+        return
+
+    if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < pendingAdjustColumnsQuietMs) {
+        SetTimer, AdjustColumns, % -pendingAdjustColumnsRetryMs
+        return
+    }
+
+    ; Reconfirm the same window is still active immediately before injecting keys.
+    if (WinExist("A") != pendingAdjustColumnsHwnd)
+        return
+
+    ; Keep the actual key injection small and late so the timer does all expensive
+    ; decision-making first and only emits Ctrl+NumpadAdd once the request is current.
+    SendCtrlNumpadAdd()
 return
 
 MbuttonTimer:
@@ -8818,6 +9041,17 @@ EndBlockKeys() {
 
     ; End the current key-blocking session.
     blockKeys := False
+}
+
+; Keep the wheel path on its own helper so deferred Explorer column-adjust sends
+; always use the same key blocking and modifier cleanup sequence without changing
+; the click-path sends restored from AutoCorrect_Sept5_works.ahk.
+SendCtrlNumpadAdd(reconcilePassCount := 6) {
+    BeginBlockKeys()
+    Send, ^{NumpadAdd}
+    EndBlockKeys()
+    FixReleasedModifiers("Ctrl")
+    ScheduleModifierReconciliation("Ctrl", reconcilePassCount)
 }
 
 ; Release only the named modifiers that are no longer physically held so call
