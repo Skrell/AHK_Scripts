@@ -2178,37 +2178,37 @@ $~WheelUp::
     stopRecursion := true
     Critical, Off
     Sleep, -1
-    isOverTaskbarBlank := MouseIsOverTaskbarBlank()
-    isOverTitleBar     := MouseIsOverTitleBar()
 
-    if (!isOverTitleBar && !isOverTaskbarBlank)
+    MouseGetPos,,, windowId, wheelControl
+    WinGetClass, hoverClass, ahk_id %windowId%
+    WinGetClass, activeClass, A
+
+    if (hoverClass != "ProgMan"
+     && hoverClass != "WorkerW"
+     && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+     && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
+     && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+     && (wheelControl == "SysListView321"
+      || wheelControl == "DirectUIHWND2"
+      || wheelControl == "DirectUIHWND3"))
     {
-        MouseGetPos,,, windowId, wheelControl
-        WinGetClass, hoverClass, ahk_id %windowId%
-        WinGetClass, activeClass, A
-
-        if (hoverClass != "ProgMan"
-         && hoverClass != "WorkerW"
-         && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-         && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
-         && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-         && (wheelControl == "SysListView321"
-          || wheelControl == "DirectUIHWND2"
-          || wheelControl == "DirectUIHWND3"))
-        {
-            pendingAdjustColumnsClass         := hoverClass
-            pendingAdjustColumnsCtrl          := wheelControl
-            pendingAdjustColumnsHwnd          := windowId
-            pendingAdjustColumnsLastWheelTick := A_TickCount
-            pendingAdjustColumnsRequestId += 1
-            SetTimer, AdjustColumns, Off
-            SetTimer, AdjustColumns, -110
-        }
+        pendingAdjustColumnsClass         := hoverClass
+        pendingAdjustColumnsCtrl          := wheelControl
+        pendingAdjustColumnsHwnd          := windowId
+        pendingAdjustColumnsLastWheelTick := A_TickCount
+        pendingAdjustColumnsRequestId += 1
+        SetTimer, AdjustColumns, Off
+        SetTimer, AdjustColumns, -110
     }
-    else if (isOverTaskbarBlank)
+    else if (MouseIsOverTaskbarBlank())
     {
         Send, #^{Left}
         Sleep, 1000
+    }
+    else {
+        pendingAdjustColumnsRequestId :=
+        pendingAdjustColumnsHwnd      :=
+        pendingAdjustColumnsCtrl      := ""
     }
 
     Thread, NoTimers, False
@@ -2219,34 +2219,27 @@ $~WheelDown::
     stopRecursion := true
     Critical, Off
     Sleep, -1
-    isOverTaskbarBlank := MouseIsOverTaskbarBlank()
-    isOverTitleBar     := MouseIsOverTitleBar()
 
-    if (!isOverTitleBar && !isOverTaskbarBlank)
+    MouseGetPos,,, windowId, wheelControl
+    WinGetClass, hoverClass, ahk_id %windowId%
+    WinGetClass, activeClass, A
+
+    if (hoverClass != "ProgMan"
+     && hoverClass != "WorkerW"
+     && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+     && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
+     && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
+     && (wheelControl == "SysListView321" || InStr(wheelControl, "DirectUIHWND", True)))
     {
-        MouseGetPos,,, windowId, wheelControl
-        WinGetClass, hoverClass, ahk_id %windowId%
-        WinGetClass, activeClass, A
-
-        if (hoverClass != "ProgMan"
-         && hoverClass != "WorkerW"
-         && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-         && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
-         && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-         && (wheelControl == "SysListView321"
-          || wheelControl == "DirectUIHWND2"
-          || wheelControl == "DirectUIHWND3"))
-        {
-            pendingAdjustColumnsClass         := hoverClass
-            pendingAdjustColumnsCtrl          := wheelControl
-            pendingAdjustColumnsHwnd          := windowId
-            pendingAdjustColumnsLastWheelTick := A_TickCount
-            pendingAdjustColumnsRequestId += 1
-            SetTimer, AdjustColumns, Off
-            SetTimer, AdjustColumns, -110
-        }
+        pendingAdjustColumnsClass         := hoverClass
+        pendingAdjustColumnsCtrl          := wheelControl
+        pendingAdjustColumnsHwnd          := windowId
+        pendingAdjustColumnsLastWheelTick := A_TickCount
+        pendingAdjustColumnsRequestId += 1
+        SetTimer, AdjustColumns, Off
+        SetTimer, AdjustColumns, -110
     }
-    else if (isOverTitleBar)
+    else if (MouseIsOverTitleBar())
     {
         blockMouse := true
         MouseGetPos,,, windowHwnd, controlHwnd, 2
@@ -2256,10 +2249,15 @@ $~WheelDown::
         blockMouse := false
         return
     }
-    else if (isOverTaskbarBlank)
+    else if (MouseIsOverTaskbarBlank())
     {
         Send, #^{Right}
         Sleep, 1000
+    }
+    else {
+        pendingAdjustColumnsRequestId :=
+        pendingAdjustColumnsHwnd      :=
+        pendingAdjustColumnsCtrl      := ""
     }
 
     Thread, NoTimers, False
@@ -2305,15 +2303,15 @@ return
 ; bursts animate normally, then fires only after a short quiet gap and cancels itself
 ; if newer wheel input arrives first.
 AdjustColumns:
-    currentRequestId := 0
-    TargetControl := ""
+    currentRequestId  := 0
+    TargetControl     := ""
     TargetControlHwnd := 0
-    OutputVar1 := 0
-    OutputVar2 := 0
-    OutputVar3 := 0
-    OutputVar4 := 0
-    OutputVar6 := 0
-    OutputVar8 := 0
+    OutputVar1        := 0
+    OutputVar2        := 0
+    OutputVar3        := 0
+    OutputVar4        := 0
+    OutputVar6        := 0
+    OutputVar8        := 0
 
     ; If the wheel hook never captured a valid Explorer target, there is nothing to do.
     if (!pendingAdjustColumnsRequestId || !pendingAdjustColumnsHwnd || pendingAdjustColumnsCtrl == "")
@@ -2358,13 +2356,13 @@ AdjustColumns:
     ; decide which DirectUIHWND*/SysListView32 should receive Ctrl+NumpadAdd.
     if (TargetControl == "") {
         DirectUICtrls := GetCtrlNNsByPrefix(pendingAdjustColumnsHwnd, "DirectUIHWND")
-        SysListCtrls := GetCtrlNNsByPrefix(pendingAdjustColumnsHwnd, "SysListView32")
-        OutputVar1 := InStr(SysListCtrls, "SysListView32", false) > 0
-        OutputVar2 := InStr(DirectUICtrls, "DirectUIHWND2", false) > 0
-        OutputVar3 := InStr(DirectUICtrls, "DirectUIHWND3", false) > 0
-        OutputVar4 := InStr(DirectUICtrls, "DirectUIHWND4", false) > 0
-        OutputVar6 := InStr(DirectUICtrls, "DirectUIHWND6", false) > 0
-        OutputVar8 := InStr(DirectUICtrls, "DirectUIHWND8", false) > 0
+        SysListCtrls  := GetCtrlNNsByPrefix(pendingAdjustColumnsHwnd, "SysListView32")
+        OutputVar1    := InStr(SysListCtrls, "SysListView32", false)  > 0
+        OutputVar2    := InStr(DirectUICtrls, "DirectUIHWND2", false) > 0
+        OutputVar3    := InStr(DirectUICtrls, "DirectUIHWND3", false) > 0
+        OutputVar4    := InStr(DirectUICtrls, "DirectUIHWND4", false) > 0
+        OutputVar6    := InStr(DirectUICtrls, "DirectUIHWND6", false) > 0
+        OutputVar8    := InStr(DirectUICtrls, "DirectUIHWND8", false) > 0
 
         ; Prefer the hovered control when it is already a stable known target. For the
         ; more ambiguous DirectUIHWND2/3 case, fall through to the copied SendCtrlAdd()
@@ -7105,6 +7103,16 @@ EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15)
     return EnsureFocusedHwnd(hCtl, totalMs, refocusEveryMs)
 }
 
+; Prefer a resolved HWND for focus checks, with CtrlNN fallback when a stable
+; native handle is not available.
+EnsureFocusedCtrlTarget(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, topClass := "")
+{
+    hCtl := ResolveFocusTargetHwnd(hwndTop, ctrlNN, topClass)
+    if (hCtl)
+        return EnsureFocusedHwnd(hCtl, totalMs, refocusEveryMs)
+    return EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
+}
+
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
 $~LButton::
@@ -7458,26 +7466,93 @@ GetItemsViewHwndFromUIA(shellEl)
     return hCtl
 }
 
+; Resolve Explorer's Items View element with a cheap child-scope lookup before
+; falling back to the existing descendant search.
+FindExplorerItemsViewElement(targetHwndID)
+{
+    exEl := SafeUIA_ElementFromHandle(targetHwndID, "", False)
+    if !IsObject(exEl)
+        return ""
+
+    return SafeUIA_FindFirstByNameFast(exEl, "Items View")
+}
+
+; Resolve the real Explorer Items View HWND when available so Win11 focus
+; checks can target the view subtree instead of brittle DirectUIHWND numbers.
+GetItemsViewHwnd(targetHwndID)
+{
+    static cache := {}
+
+    if (!targetHwndID)
+        return 0
+
+    cacheKey := targetHwndID
+    if (cache.HasKey(cacheKey)) {
+        cacheItem := cache[cacheKey]
+        if ((A_TickCount - cacheItem.tick) < 250 && DllCall("user32\IsWindow", "Ptr", cacheItem.hwnd, "Int"))
+            return cacheItem.hwnd
+    }
+
+    hCtl := 0
+
+    shellEl := FindExplorerItemsViewElement(targetHwndID)
+
+    if IsObject(shellEl)
+        hCtl := GetItemsViewHwndFromUIA(shellEl)
+
+    if (hCtl)
+        cache[cacheKey] := { hwnd: hCtl, tick: A_TickCount }
+
+    return hCtl
+}
+
+; Resolve a focus target to a native HWND whenever possible. Explorer and file
+; dialogs prefer the Items View HWND so child-subtree checks survive Win11
+; DirectUIHWND renumbering.
+ResolveFocusTargetHwnd(hwndTop, ctrlNN, topClass := "")
+{
+    static cache := {}
+
+    if (!hwndTop || ctrlNN = "")
+        return 0
+
+    cacheKey := hwndTop "|" ctrlNN
+    if (cache.HasKey(cacheKey)) {
+        cacheItem := cache[cacheKey]
+        if ((A_TickCount - cacheItem.tick) < 250 && DllCall("user32\IsWindow", "Ptr", cacheItem.hwnd, "Int"))
+            return cacheItem.hwnd
+    }
+
+    if (topClass = "")
+        WinGetClass, topClass, ahk_id %hwndTop%
+
+    hCtl := 0
+    if ((topClass = "CabinetWClass" || topClass = "#32770") && InStr(ctrlNN, "DirectUIHWND", True))
+        hCtl := GetItemsViewHwnd(hwndTop)
+
+    if (!hCtl)
+        ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hwndTop%
+
+    if (hCtl)
+        cache[cacheKey] := { hwnd: hCtl, tick: A_TickCount }
+
+    return hCtl
+}
+
 WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
     global UIA
 
     try {
-        exEl := UIA.ElementFromHandle(targetHwndID)
-        shellEl := ""
-        try
-            shellEl := exEl.FindFirstByName("Items View")
-        catch
-            shellEl := ""
+        shellEl := FindExplorerItemsViewElement(targetHwndID)
 
         if !IsObject(shellEl) {
             ; UIA couldn't find it by name; don't explode, just skip the wait/focus part
             return
         }
 
-        shellEl.WaitElementExist("ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.",,,,5000)
+        SafeUIA_WaitElementExistFast(shellEl, "ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.", "", 200, 5000)
 
         If (!isCabinetWClass10 && !skipFocus) {
-            ; ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %targetHwndID%
             hCtl := GetItemsViewHwndFromUIA(shellEl)
 
             if (!hCtl)
@@ -7855,6 +7930,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     Else
         lClassCheck := initTargetClass
 
+    initTargetTid := DllCall("user32\GetWindowThreadProcessId", "Ptr", initTargetHwnd, "UInt*", 0, "UInt")
+    initFocusedHwnd := initTargetTid ? GetThreadFocusHwnd(initTargetTid) : 0
+
     WinGet, quickCheckID, ID, A
     If (quickCheckID != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd)) {
         SetTimer, SendCtrlAddLabel, Off
@@ -7999,7 +8077,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
 
-                EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
+                EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
             }
         }
         Else If (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
@@ -8008,7 +8086,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             ; tooltip, here7b targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
 
-                EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
+                EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
             }
         }
         Else If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
@@ -8021,14 +8099,14 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
             else if (TargetControl != initFocusedCtrlNN) {
 
-                EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
+                EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
             }
         }
         Else {
             ; tooltip, here7d targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
 
-                EnsureFocusedCtrlNN(initTargetHwnd, TargetControl, 60, 15)
+                EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
             }
         }
         ; tooltip, here8
@@ -8051,7 +8129,10 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                     Return
 
                 ; Use bounded focus+verify instead of 200 iterations
-                EnsureFocusedCtrlNN(initTargetHwnd, initFocusedCtrlNN, 120, 15)
+                if (initFocusedHwnd && DllCall("user32\IsWindow", "Ptr", initFocusedHwnd, "Int"))
+                    EnsureFocusedHwnd(initFocusedHwnd, 120, 15)
+                else
+                    EnsureFocusedCtrlTarget(initTargetHwnd, initFocusedCtrlNN, 120, 15, lClassCheck)
             }
             EndBlockKeys()
             FixReleasedModifiers("Ctrl")
@@ -9103,14 +9184,37 @@ RunDeferredModifierReconciliation() {
         deferredModifierFixModifiers := ""
 }
 
+; Queue one or more delayed modifier reconciliation passes after the immediate
+; cleanup has already run. This gives AutoHotkey time to observe physical
+; key-up events that may land just after the hotkey/send sequence finishes.
+;
+; modifiers:
+;     Space-delimited modifier families to re-check on each deferred pass.
+;     Only those families are examined, so call sites can limit reconciliation
+;     to the modifiers they may have disturbed.
+;
+; passCount:
+;     How many total deferred re-checks should still run for the current
+;     cleanup window. Multiple passes matter because a synthetic send can end
+;     before Windows/AutoHotkey reports the user's real modifier release, so a
+;     single delayed check can still be too early. More passes extend the
+;     reconciliation window without blocking the caller.
 ScheduleModifierReconciliation(modifiers := "Shift Alt Ctrl", passCount := 6) {
     Global deferredModifierFixModifiers
     Global deferredModifierFixRemaining
 
+    ; Always reconcile the latest requested modifier set so the timer re-checks
+    ; the modifiers most relevant to the newest send/hotkey sequence.
     deferredModifierFixModifiers := modifiers
+    ; Only grow the remaining pass budget. This prevents a later caller with a
+    ; smaller passCount from shortening a longer reconciliation window that is
+    ; already in progress and may still be needed to catch a late physical
+    ; modifier release.
     if (deferredModifierFixRemaining < passCount)
         deferredModifierFixRemaining := passCount
 
+    ; Start the first delayed pass soon after the caller returns. The follow-up
+    ; passes are scheduled by RunDeferredModifierReconciliation().
     SetTimer, RunDeferredModifierReconciliation, -40
 }
 
@@ -14535,6 +14639,84 @@ SafeUIA_ElementFromPoint(x, y, default := "") {
         catch
             return default
     }
+}
+
+; ChatGPT
+SafeUIA_ElementFromHandle(hwnd, default := "", activateChromiumAccessibility := False) {
+    global UIA
+
+    if (!hwnd)
+        return default
+
+    if (!IsObject(UIA)) {
+        UIA := UIA_Interface()
+        UIA.TransactionTimeout := 2000
+        UIA.ConnectionTimeout  := 20000
+    }
+
+    try
+        return UIA.ElementFromHandle(hwnd, activateChromiumAccessibility)
+    catch {
+        UIA := ""
+        UIA := UIA_Interface()
+        UIA.TransactionTimeout := 2000
+        UIA.ConnectionTimeout  := 20000
+
+        try
+            return UIA.ElementFromHandle(hwnd, activateChromiumAccessibility)
+        catch
+            return default
+    }
+}
+
+; ChatGPT
+SafeUIA_FindFirstByNameFast(rootEl, name, default := "", childScope := 0x2, fallbackScope := 0x4, matchMode := 3, caseSensitive := True, cacheRequest := "") {
+    if !IsObject(rootEl)
+        return default
+
+    el := ""
+    try
+        el := rootEl.FindFirstByName(name, childScope, matchMode, caseSensitive, cacheRequest)
+    catch e
+        el := ""
+
+    if IsObject(el)
+        return el
+
+    try
+        return rootEl.FindFirstByName(name, fallbackScope, matchMode, caseSensitive, cacheRequest)
+    catch e
+        return default
+}
+
+; ChatGPT
+SafeUIA_WaitElementExistFast(rootEl, expr, default := "", fastTimeout := 200, fallbackTimeout := 5000, fastScope := 0x2, fallbackScope := 0x4, matchMode := 3, caseSensitive := True, cacheRequest := "") {
+    if !IsObject(rootEl)
+        return default
+
+    el := ""
+    startTick := A_TickCount
+    if (fastTimeout > 0) {
+        try
+            el := rootEl.WaitElementExist(expr, fastScope, matchMode, caseSensitive, fastTimeout, cacheRequest)
+        catch e
+            el := ""
+
+        if IsObject(el)
+            return el
+    }
+
+    remainingTimeout := fallbackTimeout
+    if (fallbackTimeout >= 0) {
+        remainingTimeout -= (A_TickCount - startTick)
+        if (remainingTimeout < 0)
+            remainingTimeout := 0
+    }
+
+    try
+        return rootEl.WaitElementExist(expr, fallbackScope, matchMode, caseSensitive, remainingTimeout, cacheRequest)
+    catch e
+        return default
 }
 ; ChatGPT
 SafeUIA_GetControlType(el, default := "") {
