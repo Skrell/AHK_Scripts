@@ -3547,7 +3547,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
