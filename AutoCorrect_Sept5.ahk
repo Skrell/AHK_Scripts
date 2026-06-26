@@ -183,7 +183,7 @@ Global blockMouse                                 := False
 Global gExiting                                   := False
 Global hHookKbd
 Global hHookMouse
-Global deferredModifierFixModifiers               := ""
+Global deferredModifiersToFix               := ""
 Global deferredModifierFixRemaining               := 0
 ; --- Config ---
 Global UseWorkArea                                := true   ; true = monitor work area (ignores taskbar). false = full monitor.
@@ -3235,7 +3235,7 @@ Return
     ; Reconcile any synthetic modifier-up/down imbalance left by the selection
     ; and navigation sends without disturbing modifiers that are still held.
     FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
 
     ; Your environment reset
     Hotstring("Reset")
@@ -3258,7 +3258,7 @@ Return
         Critical, Off
         Send ^d
         FixReleasedModifiers("Shift Alt Ctrl")
-        ScheduleModifierReconciliation("Shift Alt Ctrl")
+        ScheduleFixReleasedModifiers("Shift Alt Ctrl")
         Return
     }
     ; Let the trigger key finish before entering blocked mode so held Ctrl can
@@ -3297,7 +3297,7 @@ Return
         StopAutoFix             := False
         Critical, Off
         FixReleasedModifiers("Shift Alt Ctrl")
-        ScheduleModifierReconciliation("Shift Alt Ctrl")
+        ScheduleFixReleasedModifiers("Shift Alt Ctrl")
         Return
     }
 
@@ -3344,7 +3344,7 @@ Return
     Hotstring("Reset")
     StopAutoFix                 := False
     FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -3595,7 +3595,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -3609,7 +3610,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -3623,7 +3625,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -3637,7 +3640,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -3651,7 +3655,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -3665,7 +3670,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -3679,7 +3685,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -3693,7 +3700,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -3707,7 +3715,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt")
+    FixReleasedModifiers("Shift Alt Ctrl")
+    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -9132,11 +9141,21 @@ SendCtrlNumpadAdd(reconcilePassCount := 6) {
     Send, ^{NumpadAdd}
     EndBlockKeys()
     FixReleasedModifiers("Ctrl")
-    ScheduleModifierReconciliation("Ctrl", reconcilePassCount)
+    ScheduleFixReleasedModifiers("Ctrl", reconcilePassCount)
 }
 
 ; Release only the named modifiers that are no longer physically held so call
 ; sites can reconcile just the modifier family they actually disturbed.
+;
+; Use side-specific scan codes instead of generic {Shift up}/{Alt up} names so
+; each left/right GetKeyState() check can release the exact physical modifier
+; that may still be logically stuck.
+;
+; Scan codes also stay tied to the physical key instead of a layout-dependent
+; key name.
+;
+; Pair them with {Blind} so AHK sends only that explicit key-up without
+; trying to restore or remap other modifiers around the cleanup send.
 FixReleasedModifiers(modifiers := "Shift Alt Ctrl Win") {
     if (InStr(modifiers, "Shift")) {
         if (!GetKeyState("LShift", "P"))
@@ -9169,19 +9188,19 @@ FixReleasedModifiers(modifiers := "Shift Alt Ctrl Win") {
 
 ; Re-check modifier-up state shortly after a hotkey returns so a physical key-up
 ; that happens just after the immediate cleanup still gets reconciled.
-RunDeferredModifierReconciliation() {
-    Global deferredModifierFixModifiers
+RunDeferredModifierFix() {
+    Global deferredModifiersToFix
     Global deferredModifierFixRemaining
 
-    if (deferredModifierFixModifiers = "" || deferredModifierFixRemaining <= 0)
+    if (deferredModifiersToFix = "" || deferredModifierFixRemaining <= 0)
         return
 
-    FixReleasedModifiers(deferredModifierFixModifiers)
+    FixReleasedModifiers(deferredModifiersToFix)
     deferredModifierFixRemaining -= 1
     if (deferredModifierFixRemaining > 0)
-        SetTimer, RunDeferredModifierReconciliation, -75
+        SetTimer, RunDeferredModifierFix, -75
     else
-        deferredModifierFixModifiers := ""
+        deferredModifiersToFix := ""
 }
 
 ; Queue one or more delayed modifier reconciliation passes after the immediate
@@ -9193,29 +9212,29 @@ RunDeferredModifierReconciliation() {
 ;     Only those families are examined, so call sites can limit reconciliation
 ;     to the modifiers they may have disturbed.
 ;
-; passCount:
+; deferredRuns:
 ;     How many total deferred re-checks should still run for the current
 ;     cleanup window. Multiple passes matter because a synthetic send can end
 ;     before Windows/AutoHotkey reports the user's real modifier release, so a
 ;     single delayed check can still be too early. More passes extend the
 ;     reconciliation window without blocking the caller.
-ScheduleModifierReconciliation(modifiers := "Shift Alt Ctrl", passCount := 6) {
-    Global deferredModifierFixModifiers
+ScheduleFixReleasedModifiers(modifiers := "Shift Alt Ctrl", deferredRuns := 6) {
+    Global deferredModifiersToFix
     Global deferredModifierFixRemaining
 
     ; Always reconcile the latest requested modifier set so the timer re-checks
     ; the modifiers most relevant to the newest send/hotkey sequence.
-    deferredModifierFixModifiers := modifiers
+    deferredModifiersToFix := modifiers
     ; Only grow the remaining pass budget. This prevents a later caller with a
-    ; smaller passCount from shortening a longer reconciliation window that is
+    ; smaller deferredRuns from shortening a longer reconciliation window that is
     ; already in progress and may still be needed to catch a late physical
     ; modifier release.
-    if (deferredModifierFixRemaining < passCount)
-        deferredModifierFixRemaining := passCount
+    if (deferredModifierFixRemaining < deferredRuns)
+        deferredModifierFixRemaining := deferredRuns
 
     ; Start the first delayed pass soon after the caller returns. The follow-up
-    ; passes are scheduled by RunDeferredModifierReconciliation().
-    SetTimer, RunDeferredModifierReconciliation, -40
+    ; passes are scheduled by RunDeferredModifierFix().
+    SetTimer, RunDeferredModifierFix, -40
 }
 
 KeyTrack() {
