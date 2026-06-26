@@ -44,158 +44,158 @@ SetBatchLines,   -1 ; Remove AHK's built-in "cooperate with the OS" sleeps
 SetWinDelay,      1 ;
 SetControlDelay,  1 ;
 
-Global CurrentDesktop                             := 1
-Global mouseMoving                                := False
-Global CanceledWinSwap                            := False
-Global ValidWindows                               := []
-Global GroupedWindows                             := []
-Global MinimizedWindows                           := []
-Global PrevActiveWindows                          := []
-Global allWinArray                                := []
-Global cycleCount                                 := 1
+Global CurrentDesktop                              := 1
+Global mouseMoving                                 := False
+Global CanceledWinSwap                             := False
+Global ValidWindows                                := []
+Global GroupedWindows                              := []
+Global MinimizedWindows                            := []
+Global PrevActiveWindows                           := []
+Global allWinArray                                 := []
+Global cycleCount                                  := 1
 ; Alt+Tab/Alt+` can receive the next cycle key while DrawWindowTitlePopup() is still
 ; building the GUI. Buffer that press here so the loop consumes it instead of losing it.
-Global bufferedCycleAdvance                       := False
-Global startHighlight                             := False
-Global border_thickness                           := 4
-Global border_color                               := 0xFF00FF
-Global hitTAB                                     := False
-Global hitTilde                                   := False
-Global SearchingWindows                           := False
-Global UserInputTrimmed                           := ""
-Global memotext                                   := ""
-Global totalMenuItemCount                         := 0
-Global onlyTitleFound                             := ""
-Global CancelClose                                := False
-Global DrawingRect                                := False
-Global LclickSelected                             := False
-Global currMonHeight                              := 0
-Global currMonWidth                               := 0
-Global LbuttonEnabled                             := True
-Global X_PriorPriorHotKey                         :=
-Global StopAutoFix                                := False
+Global bufferedCycleAdvance                        := False
+Global startHighlight                              := False
+Global border_thickness                            := 4
+Global border_color                                := 0xFF00FF
+Global hitTAB                                      := False
+Global hitTilde                                    := False
+Global SearchingWindows                            := False
+Global UserInputTrimmed                            := ""
+Global memotext                                    := ""
+Global totalMenuItemCount                          := 0
+Global onlyTitleFound                              := ""
+Global CancelClose                                 := False
+Global DrawingRect                                 := False
+Global LclickSelected                              := False
+Global currMonHeight                               := 0
+Global currMonWidth                                := 0
+Global LbuttonEnabled                              := True
+Global X_PriorPriorHotKey                          :=
+Global StopAutoFix                                 := False
 ; Cache the typing-auto-fix eligibility decision so most keystrokes avoid the
 ; slower UIA/MSAA focus probes.
 ; Last allow/deny result returned by the typing-auto-fix gate.
-Global typingAutoFixCacheAllowed                  := False
+Global typingAutoFixCacheAllowed                   := False
 ; Focused control name used to decide whether the cached result still applies.
-Global typingAutoFixCacheCtrl                     := ""
+Global typingAutoFixCacheCtrl                      := ""
 ; Active window handle associated with the cached focus/editability decision.
-Global typingAutoFixCacheHwnd                     := 0
+Global typingAutoFixCacheHwnd                      := 0
 ; Short reason string describing why the current cache entry passed or failed.
-Global typingAutoFixCacheReason                   := ""
+Global typingAutoFixCacheReason                    := ""
 ; Tick count when the cache entry was last refreshed.
-Global typingAutoFixCacheTick                     := 0
+Global typingAutoFixCacheTick                      := 0
 ; Maximum age for a same-window/same-control fast cache hit.
-Global typingAutoFixFastTtlMs                     := 125
+Global typingAutoFixFastTtlMs                      := 125
 ; Minimum gap before repeating slower UIA/MSAA probes for unchanged focus.
-Global typingAutoFixSlowPathMs                    := 400
+Global typingAutoFixSlowPathMs                     := 400
 ; Tick count of the last slow UIA/MSAA probe attempt.
-Global typingAutoFixSlowProbeTick                 := 0
+Global typingAutoFixSlowProbeTick                  := 0
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
-Global clipPreferExplicitCtrlV                    := False
-Global disableEnter                               := False
+Global clipPreferExplicitCtrlV                     := False
+Global disableEnter                                := False
 ; Window class for the most recent Explorer/file-dialog wheel target so the
 ; deferred adjust step can confirm the queued request still points at the same shell UI.
-Global pendingAdjustColumnsClass                  := ""
+Global pendingAdjustColumnsClass                   := ""
 ; Control under the mouse when the wheel event was queued; used as a hint before
 ; resolving the final DirectUI/ListView target at send time.
-Global pendingAdjustColumnsCtrl                   := ""
+Global pendingAdjustColumnsCtrl                    := ""
 ; Top-level Explorer or #32770 dialog HWND that should receive the deferred
 ; Ctrl+NumpadAdd once scrolling has gone quiet.
-Global pendingAdjustColumnsHwnd                   := 0
+Global pendingAdjustColumnsHwnd                    := 0
 ; Tick count of the most recent qualifying wheel event so AdjustColumns can defer
 ; work until the user pauses scrolling and cancel if wheel activity resumes.
-Global pendingAdjustColumnsLastWheelTick          := 0
+Global pendingAdjustColumnsLastWheelTick           := 0
 ; Minimum quiet period after the last wheel event before attempting Explorer
 ; column auto-fit; this avoids interrupting fast continuous scrolling.
-Global pendingAdjustColumnsQuietMs                := 110
+Global pendingAdjustColumnsQuietMs                 := 110
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
-Global pendingAdjustColumnsRequestId              := 0
+Global pendingAdjustColumnsRequestId               := 0
 ; Short retry delay used when the timer wakes up before scrolling is truly quiet,
 ; allowing fast re-checks without doing focus/send work on every wheel tick.
-Global pendingAdjustColumnsRetryMs                := 35
+Global pendingAdjustColumnsRetryMs                 := 35
 ; Cached final Explorer target ClassNN for the most recent wheel-adjust window so
 ; repeated pause/resume cycles can skip DirectUI/ListView rediscovery work.
-Global pendingAdjustColumnsTargetCacheCtrl        := ""
+Global pendingAdjustColumnsTargetCacheCtrl         := ""
 ; Top-level window HWND that owns the cached Explorer target ClassNN; the cache is
 ; only valid when a later wheel-adjust request points at this same shell window.
-Global pendingAdjustColumnsTargetCacheHwnd        := 0
+Global pendingAdjustColumnsTargetCacheHwnd         := 0
 ; Tick count when the cached Explorer target was last confirmed, limiting reuse to
 ; a short burst where the folder view structure is unlikely to have changed.
-Global pendingAdjustColumnsTargetCacheTick        := 0
+Global pendingAdjustColumnsTargetCacheTick         := 0
 ; Maximum age for the cached Explorer target before AdjustColumns falls back to
 ; full target resolution to avoid using a stale DirectUI/ListView guess.
-Global pendingAdjustColumnsTargetCacheTtlMs       := 350
+Global pendingAdjustColumnsTargetCacheTtlMs        := 350
 ; Deferred typing correction state so punctuation and capitalization rewrites can
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
-Global pendingFixSlashAction                      := ""
-Global pendingFixSlashHwnd                        := 0
-Global pendingHotyHwnd                            := 0
-Global pendingHotyReplacement                     := ""
-Global TimeOfLastHotkeyTyped                      := A_TickCount
-Global currentMon                                 := 0
-Global previousMon                                := 0
-Global targetDesktop                              := 0
-Global currentPath                                := ""
-Global prevPath                                   := ""
-Global _winCtrlD                                  := ""
-Global MbuttonIsEnter                             := False
-Global suspendRightButtonForMButtonDrag           := False
-Global lastActWinID                               :=
-Global WindowTitleID                              :=
-Global keys                                       := "abcdefghijklmnopqrstuvwxyz"
-Global numbers                                    := "0123456789"
-Global DoubleClickTime                            := DllCall("GetDoubleClickTime")
-Global SingleClickTime                            := floor(DllCall("GetDoubleClickTime") * 0.5)
-Global isWin11                                    := DetectWin11()
-Global isModernExplorerInReg                      := IsExplorerModern()
-Global TaskBarHeight                              := 0
-Global lastHotkeyTyped                            := ""
-Global DraggingWindow                             := False
-Global allowDoubleClicks                          := True
-Global disableSendCtrlHwnd                        := ""
-Global lButtonResizeSyncActive                    := False
-Global lButtonResizeSyncDraggedHwnd               := 0
-Global lButtonResizeSyncDraggedStartedAlwaysOnTop := False
-Global lButtonResizeSyncDraggedTransparent        := False
+Global pendingFixSlashAction                       := ""
+Global pendingFixSlashHwnd                         := 0
+Global pendingHotyHwnd                             := 0
+Global pendingHotyReplacement                      := ""
+Global TimeOfLastHotkeyTyped                       := A_TickCount
+Global currentMon                                  := 0
+Global previousMon                                 := 0
+Global targetDesktop                               := 0
+Global currentPath                                 := ""
+Global prevPath                                    := ""
+Global _winCtrlD                                   := ""
+Global MbuttonIsEnter                              := False
+Global suspendRightButtonForMButtonDrag            := False
+Global lastActWinID                                :=
+Global WindowTitleID                               :=
+Global keys                                        := "abcdefghijklmnopqrstuvwxyz"
+Global numbers                                     := "0123456789"
+Global DoubleClickTime                             := DllCall("GetDoubleClickTime")
+Global SingleClickTime                             := floor(DllCall("GetDoubleClickTime") * 0.5)
+Global isWin11                                     := DetectWin11()
+Global isModernExplorerInReg                       := IsExplorerModern()
+Global TaskBarHeight                               := 0
+Global lastHotkeyTyped                             := ""
+Global DraggingWindow                              := False
+Global allowDoubleClicks                           := True
+Global disableSendCtrlHwnd                         := ""
+Global lButtonResizeSyncActive                     := False
+Global lButtonResizeSyncDraggedHwnd                := 0
+Global lButtonResizeSyncDraggedStartedAlwaysOnTop  := False
+Global lButtonResizeSyncDraggedTransparent         := False
 Global lButtonResizeSyncFullHeightOppositeMoveOnly := False
-Global lButtonResizeSyncHit                       := 0
-Global lButtonResizeSyncLastDraggedH              := ""
-Global lButtonResizeSyncLastDraggedW              := ""
-Global lButtonResizeSyncLastDraggedX              := ""
-Global lButtonResizeSyncLastDraggedY              := ""
-Global lButtonResizeSyncPartners                  := []
-Global lButtonResizeSyncTopmostStates             := {}
-Global trayClickPosX                              := 0
-Global trayClickPosY                              := 0
+Global lButtonResizeSyncHit                        := 0
+Global lButtonResizeSyncLastDraggedH               := ""
+Global lButtonResizeSyncLastDraggedW               := ""
+Global lButtonResizeSyncLastDraggedX               := ""
+Global lButtonResizeSyncLastDraggedY               := ""
+Global lButtonResizeSyncPartners                   := []
+Global lButtonResizeSyncTopmostStates              := {}
+Global trayClickPosX                               := 0
+Global trayClickPosY                               := 0
 
 
-Global hActWin                                    := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
-Global UIA                                        := UIA_Interface() ; Initialize UIA interface
+Global hActWin                                     := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+Global UIA                                         := UIA_Interface() ; Initialize UIA interface
 ; Turn key blocking ON/OFF
-Global StopRecursion                              := False
-Global blockKeys                                  := False
-Global blockMouse                                 := False
-Global gExiting                                   := False
+Global StopRecursion                               := False
+Global blockKeys                                   := False
+Global blockMouse                                  := False
+Global gExiting                                    := False
 Global hHookKbd
 Global hHookMouse
-Global deferredModifiersToFix               := ""
-Global deferredModifierFixRemaining               := 0
+Global deferredModifiersToFix                      := ""
+Global deferredModifierFixRemaining                := 0
 ; --- Config ---
-Global UseWorkArea                                := true   ; true = monitor work area (ignores taskbar). false = full monitor.
-Global SnapRange                                  := 20     ; px: distance from edge to begin snapping
-Global BreakAway                                  := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
-Global ReleaseAway                                := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
+Global UseWorkArea                                 := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+Global SnapRange                                   := 20     ; px: distance from edge to begin snapping
+Global BreakAway                                   := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+Global ReleaseAway                                 := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
-Global skipClasses                                := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
+Global skipClasses                                 := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
 ; === Settings ===
-Global Opacity                                    := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
+Global Opacity                                     := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 
 ; Right-button state machine:
 ; - held/nativeDown track whether we have started a real OS-level right-click yet.
@@ -203,16 +203,16 @@ Global Opacity                                    := 220     ; 255=opaque black;
 ; - suppressMenuOnUp dismisses the shell context menu after a successful RButton+wheel action.
 ; - taskbarPassthrough keeps the entire custom RButton state machine out of taskbar
 ;   and desktop-shell clicks so those surfaces stay fully native.
-Global rightButtonHeld                     := false
-Global rightButtonComboUsed                := false
-Global rightButtonNativeDown               := false
-Global rightButtonSuppressMenuOnUp         := false
-Global rightButtonTaskbarPassthrough       := false
-Global swallowNextRButtonUpFromMButtonDrag := false
+Global rightButtonHeld                             := false
+Global rightButtonComboUsed                        := false
+Global rightButtonNativeDown                       := false
+Global rightButtonSuppressMenuOnUp                 := false
+Global rightButtonTaskbarPassthrough               := false
+Global swallowNextRButtonUpFromMButtonDrag         := false
 
 ; Used by explicit LButton+RButton chords that should consume the normal
 ; right-click flow, such as the title-bar toggle and clear-edit gesture.
-Global suppressRightButtonLogic            := false
+Global suppressRightButtonLogic                    := false
 
 Process, Priority,, High
 
