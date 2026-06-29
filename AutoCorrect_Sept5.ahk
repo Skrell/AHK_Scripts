@@ -1300,6 +1300,50 @@ GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) 
 ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
+IsPlainDialog32770(hWnd) {
+    WinGetClass, cls, ahk_id %hWnd%
+    if (cls != "#32770")
+        return False
+
+    WinGet, style, Style, ahk_id %hWnd%
+
+    ; Optional: reject dialogs with min/max buttons (usually "big" windows)
+    if (style & 0x00010000)  ; WS_MAXIMIZEBOX
+        return False
+    if (style & 0x00020000)  ; WS_MINIMIZEBOX
+        return False
+    if (style & 0x96000001)
+        return False
+
+    ; Do NOT reject WS_THICKFRAME / WS_SIZEBOX here,
+    ; so Notepad++ Find (0x94CC004C) will pass.
+
+    ; Core requirement: must NOT look like a file container
+    return !HasFileViewChild(hWnd)
+}
+
+HasFileViewChild(hParent) {
+    ; Get list of all controls (ClassNNs) in the window.
+    WinGet, ctrlList, ControlList, ahk_id %hParent%
+    if (ErrorLevel)
+        return False
+
+    ; Classes that are strong indicators of a file view or shell namespace view.
+    static suspectPattern := "i)^(SysListView32|SHELLDLL_DefView|DirectUIHWND|NamespaceTreeControl|SysTreeView32|CabinetWClass)"
+
+    Loop, Parse, ctrlList, `n
+    {
+        ctrl := A_LoopField
+        ; Extract the class part from ClassNN (e.g. "SysListView32" from "SysListView321")
+        if RegExMatch(ctrl, "^[^0-9]+", className)
+        {
+            if RegExMatch(className, suspectPattern)
+                return true
+        }
+    }
+    return False
+}
+
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
     global prevActiveWindows
@@ -1330,10 +1374,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         Else {
             WinGet, vWinStyle, Style, % "ahk_id " hWnd
             If (   IsOverException(hWnd)
+                || IsPlainDialog32770(hWnd)
                 || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
                 || !WinExist("ahk_id " hWnd)) {
                 If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                     WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                }
+                If IsPlainDialog32770(hWnd) {
+                    ; WinActivate, ahk_id %hWnd%
+                    WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                    WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
                 }
                 Thread, NoTimers, False
                 Return
@@ -6140,7 +6190,8 @@ ExplorerHitTestType() {
         r := Explorer__GetRoleNum(cur)
         objs.Push(cur)
         roles.Push(r)
-        try cur := cur.accParent
+        try
+            cur := cur.accParent
         catch
         {
             cur := ""
@@ -6251,6 +6302,8 @@ Explorer__GetRoleNum(ByRef accObj := "") {
         return 0x21
     if (r == "list item" || r == "listitem")
         return 0x22
+    if (r == "outline")
+        return 0x3E
     if (r == "outline item" || r == "outlineitem")
         return 0x24
     if (r == "columnheader" || r == "column header")
@@ -6276,6 +6329,91 @@ Explorer__GetRoleNum(ByRef accObj := "") {
         ; Windows 11's XAML Explorer
         ; WebView-backed folder views
         ; File dialogs using UIA → MSAA proxying
+    return 0
+}
+
+; ------------------------------------------------------------------
+
+IsExplorerBlankSpaceClick() {
+    static ROLE_SYSTEM_LIST         := 0x21
+    static ROLE_SYSTEM_LISTITEM     := 0x22
+    static ROLE_SYSTEM_OUTLINEITEM  := 0x24
+    static ROLE_SYSTEM_COLUMNHEADER := 0x19
+    static ROLE_SYSTEM_OUTLINE      := 0x3E
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, xPos, yPos, winHwnd
+    if (!winHwnd)
+        return False
+
+    WinGetClass, cls, ahk_id %winHwnd%
+    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
+        return False
+
+    childId := 0
+    acc := Acc_ObjectFromPoint(childId, xPos, yPos)
+    if !IsObject(acc)
+        return False
+
+    role := Explorer__RoleValueToNum(Explorer__AccRoleSafe(acc, childId))
+    if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
+        return False
+    if (role = ROLE_SYSTEM_COLUMNHEADER)
+        return False
+    if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE)
+        return True
+
+    cur := acc
+    Loop, 15
+    {
+        if !IsObject(cur)
+            break
+
+        role := Explorer__GetRoleNum(cur)
+        if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
+            return False
+        if (role = ROLE_SYSTEM_COLUMNHEADER)
+            return False
+        if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE)
+            return True
+
+        parent := ""
+        try
+            parent := cur.accParent
+        catch
+            parent := ""
+
+        cur := parent
+    }
+
+    return False
+}
+
+Explorer__AccRoleSafe(ByRef accObj, childId := 0) {
+    try
+        return accObj.accRole(childId)
+    catch
+        return ""
+}
+
+Explorer__RoleValueToNum(role) {
+    if role is Integer
+        return role + 0
+
+    r := Trim(role)
+    StringLower, r, r
+
+    if (r == "list")
+        return 0x21
+    if (r == "list item" || r == "listitem")
+        return 0x22
+    if (r == "outline")
+        return 0x3E
+    if (r == "outline item" || r == "outlineitem")
+        return 0x24
+    if (r == "columnheader" || r == "column header")
+        return 0x19
+
     return 0
 }
 
@@ -7226,14 +7364,24 @@ $~LButton::
             isColumnHeader := True
         }
         Else {
-            result := ExplorerClickClassify(lbX1, lbY1, _winCtrlD)
-            if (result == "header")
-                isColumnHeader := True
-            else if (result == "item")
-                isItemClick := True
-            else if (result == "blank")
-                isBlankSpaceExplorer := True
-            ; tooltip, %result%
+            If (InStr(_winCtrlD, "DirectUIHWND", True)) {
+                result := ExplorerClickClassify(lbX1, lbY1, _winCtrlD)
+                if (result == "header") {
+                    isColumnHeader := True
+                    isBlankSpaceExplorer := False
+                }
+                else if (result == "item") {
+                    isItemClick := True
+                    isBlankSpaceExplorer := False
+                }
+                else if (result == "blank") {
+                    isBlankSpaceExplorer := True
+                }
+                ; tooltip, %result%
+            }
+            Else If (InStr(_winCtrlD, "SysListView32", True)) {
+                isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
+            }
 
             If (!isColumnHeader && (isBlankSpaceExplorer || isItemClick)) {
                 Loop,20 {
@@ -7272,17 +7420,22 @@ $~LButton::
     ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick()
     ; tooltip, %timeDiff% ms-allowDoubleclick:%allowDoubleClicks%-isBlankSpaceExplorer:%isBlankSpaceExplorer%-isItemClick:%isItemClick% - isColumnHeader:%isColumnHeader% ; - %_winClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
-    If (timeDiff < SingleClickTime && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
+    If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
 
         If (   (InStr(_winCtrlU, "SysListView32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
             && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
 
 
             If InStr(_winCtrlU, "SysListView32", True) {
-                ControlGet, controlHwnd, Hwnd,, SysListView321, ahk_id %_winIdU%
-                listViewKind := GetListViewFlavor(controlHwnd)
-                If (listViewKind != "classic_report")
+                If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
                     SetTimer, SendCtrlAddLabel, -125
+                }
+                Else {
+                    ControlGet, controlHwnd, Hwnd,, %_winCtrlU%, ahk_id %_winIdU%
+                    listViewKind := GetListViewFlavor(controlHwnd)
+                    If (listViewKind != "classic_report")
+                        SetTimer, SendCtrlAddLabel, -125
+                }
             }
             Else
                 SetTimer, SendCtrlAddLabel, -125
