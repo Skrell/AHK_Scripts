@@ -6259,8 +6259,11 @@ IsMouseOverShellItemForRButton() {
     if (winClass != "CabinetWClass" && winClass != "ExplorerWClass" && winClass != "#32770" && winClass != "Progman" && winClass != "ProgMan" && winClass != "WorkerW")
         return false
     ; tooltip, testing for icon...
-    if (InStr(ctrlNN, "DirectUIHWND", True))
+    if (InStr(ctrlNN, "DirectUIHWND", True)) {
+        if (winClass = "#32770")
+            return (DialogClickClassify(mx, my, ctrlNN) = "item")
         return (ExplorerClickClassify(mx, my, ctrlNN) = "item")
+    }
 
     if (InStr(ctrlNN, "SysListView32", True)) {
         return (ExplorerHitTestType() = "item")
@@ -6811,6 +6814,69 @@ ExplorerClickClassify(xPos, yPos, winCtrlNN) {
     return "other"
 }
 
+/*
+    Walk a standard #32770 file dialog's hit element ancestry and classify
+    whether the click landed on a header, an item, or the blank file area.
+*/
+_DialogClickClassifyWalkParents(hitEl) {
+    static dataGridCtlId   := 50028
+    static dataItemCtlId   := 50029
+    static headerCtlId     := 50034
+    static headerItemCtlId := 50035
+    static listCtlId       := 50008
+    static listItemCtlId   := 50007
+    static tableCtlId      := 50036
+    static treeItemCtlId   := 50024
+
+    walkEl := hitEl
+    depth := 0
+
+    while (IsObject(walkEl) && depth < 20)
+    {
+        autoId := SafeUIA_GetAutoId(walkEl)
+        className := SafeUIA_GetClassName(walkEl, "")
+        controlType := SafeUIA_GetControlType(walkEl, 0)
+        elementName := SafeUIA_GetName(walkEl, "")
+
+        if (className = "UIColumnHeader" || controlType = headerCtlId || controlType = headerItemCtlId)
+            return "header"
+
+        if (className = "UIItem"
+         || controlType = dataItemCtlId
+         || controlType = listItemCtlId
+         || controlType = treeItemCtlId
+         || autoId = "System.ItemNameDisplay")
+            return "item"
+
+        if (className = "UIItemsView"
+         || controlType = dataGridCtlId
+         || controlType = listCtlId
+         || controlType = tableCtlId
+         || elementName = "Items View")
+            return "blank"
+
+        walkEl := ExplorerClickClassify_GetParentTW(walkEl)
+        depth++
+    }
+
+    return "other"
+}
+
+/*
+    Classify clicks in standard #32770 file dialogs without assuming the
+    Explorer-specific UIItemsView ancestry always exists.
+*/
+DialogClickClassify(xPos, yPos, winCtrlNN) {
+    if !InStr(winCtrlNN, "DirectUIHWND", True)
+        return "other"
+
+    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "")
+    if !IsObject(hitEl)
+        return "other"
+
+    return _DialogClickClassifyWalkParents(hitEl)
+}
+
 ExplorerClickClassify_GetParentTW(el) {
     global UIA
     if !IsObject(el)
@@ -7310,21 +7376,29 @@ $~LButton::
         KeyWait, Lbutton, U T3
 
         If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
-            ; tooltip, getting path
-            currentPath    := ""
-            Loop,20 {
-                If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
-                    GoSub, EnableTimers
-                    Return
-                }
-                currentPath := GetExplorerPath(_winIdD)
-                If (currentPath != "" && prevPath != currentPath )
-                    break
-                sleep, 15
+            if (_winClassD == "#32770" && _winCtrlD == "DirectUIHWND2" && isItemClick && prevPath != "") {
+                ; Win11 file dialogs can navigate before the breadcrumb/path text
+                ; updates, so skip the extra path polling and let the existing
+                ; shell-view load wait inside SendCtrlAdd() be the reliability gate.
+                SendCtrlAdd(_winIdD, prevPath, "", _winClassD, _winCtrlD, True)
             }
-            ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
-            If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
-                SendCtrlAdd(_winIdD, prevPath, currentPath, _winClassD)
+            else {
+                ; tooltip, getting path
+                currentPath    := ""
+                Loop,20 {
+                    If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
+                        GoSub, EnableTimers
+                        Return
+                    }
+                    currentPath := GetExplorerPath(_winIdD)
+                    If (currentPath != "" && prevPath != currentPath )
+                        break
+                    sleep, 15
+                }
+                ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
+                If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
+                    SendCtrlAdd(_winIdD, prevPath, currentPath, _winClassD)
+                }
             }
         }
         Else {
@@ -7365,7 +7439,11 @@ $~LButton::
         }
         Else {
             If (InStr(_winCtrlD, "DirectUIHWND", True)) {
-                result := ExplorerClickClassify(lbX1, lbY1, _winCtrlD)
+                if (_winClassD == "#32770")
+                    result := DialogClickClassify(lbX1, lbY1, _winCtrlD)
+                else
+                    result := ExplorerClickClassify(lbX1, lbY1, _winCtrlD)
+
                 if (result == "header") {
                     isColumnHeader := True
                     isBlankSpaceExplorer := False
@@ -7377,10 +7455,15 @@ $~LButton::
                 else if (result == "blank") {
                     isBlankSpaceExplorer := True
                 }
+                else if (_winClassD == "#32770") {
+                    isBlankSpaceExplorer := AreaLooksUniformFast(lbX1, lbY1)
+                }
                 ; tooltip, %result%
             }
             Else If (InStr(_winCtrlD, "SysListView32", True)) {
                 isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
+                if (!isBlankSpaceExplorer && _winClassD == "#32770")
+                    isBlankSpaceExplorer := AreaLooksUniformFast(lbX1, lbY1)
             }
 
             If (!isColumnHeader && (isBlankSpaceExplorer || isItemClick)) {
@@ -13692,10 +13775,10 @@ MouseIsOverTaskbarBlank() {
     local controlClass
 
     if !(GetKeyState("WheelDown", "P")
-      || GetKeyState("WheelUp", "P")
-      || GetKeyState("LButton", "P")
-      || GetKeyState("RButton", "P")
-      || GetKeyState("MButton", "P"))
+      || GetKeyState("WheelUp",   "P")
+      || GetKeyState("LButton",   "P")
+      || GetKeyState("RButton",   "P")
+      || GetKeyState("MButton",   "P"))
         return False
 
     MouseGetPos, mousePosX, mousePosY, windowUnderMouseId, controlUnderMouseHwnd, 2
@@ -15836,6 +15919,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::aggreed::agreed
 ::aggreement::agreement
 ::aggregious::egregious
+::aggrevate::aggravate
 ::agreeement::agreement
 ::agreemeent::agreement
 ::agreemeents::agreements
