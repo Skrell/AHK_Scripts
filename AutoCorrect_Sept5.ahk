@@ -6802,27 +6802,36 @@ ExplorerClickClassify(xPos, yPos, winCtrlNN) {
     if !IsObject(hitEl)
         return "other"
 
-    ; 1) HEADER WINS: if the hit element OR ANY ANCESTOR is a column header, it's "header"
-    if ExplorerClickClassify_HasAncestorClass(hitEl, "UIColumnHeader", 12)
-        return "header"
+    ; Use one snapshot-driven parent walk so header/item/blank classification
+    ; stays ordered while avoiding multiple UIA ancestry/property passes.
+    blankFound := False
+    itemFound := False
+    walkEl := hitEl
+    depth := 0
 
-    ; Optional: even more reliable (uses UIA control types, not class strings)
-    ; Some builds report HeaderItem/Header instead of UIColumnHeader at the leaf.
-    if ExplorerClickClassify_HasAncestorControlType(hitEl, headerItemCtlId, 16)
-        return "header"
-    if ExplorerClickClassify_HasAncestorControlType(hitEl, headerCtlId, 16)
-        return "header"
+    while (IsObject(walkEl) && depth < 18)
+    {
+        info := SafeUIA_GetElementSnapshot(walkEl, "autoId|className|controlType")
 
-    ; 2) ITEM: require UIItem ancestry (don't rely on AutoId alone)
-    if ExplorerClickClassify_HasAncestorClass(hitEl, "UIItem", 18)
+        if ((depth < 12 && info.className = "UIColumnHeader")
+         || (depth < 16 && (info.controlType = headerItemCtlId || info.controlType = headerCtlId)))
+            return "header"
+
+        if (!itemFound
+         && (info.className = "UIItem" || (depth = 0 && info.autoId = "System.ItemNameDisplay")))
+            itemFound := True
+
+        if (!blankFound && info.className = "UIItemsView")
+            blankFound := True
+
+        walkEl := ExplorerClickClassify_GetParentTW(walkEl)
+        depth++
+    }
+
+    if (itemFound)
         return "item"
 
-    ; Your original leaf checks can stay as a fast path, but after header checks
-    if (SafeUIA_GetAutoId(hitEl) == "System.ItemNameDisplay" || SafeUIA_GetClassName(hitEl) == "UIItem")
-        return "item"
-
-    ; 3) BLANK: click landed in ItemsView (or within it) but not on an item/header
-    if ExplorerClickClassify_HasAncestorClass(hitEl, "UIItemsView", 18)
+    if (blankFound)
         return "blank"
 
     return "other"
@@ -6847,10 +6856,13 @@ _DialogClickClassifyWalkParents(hitEl) {
 
     while (IsObject(walkEl) && depth < 20)
     {
-        autoId := SafeUIA_GetAutoId(walkEl)
-        className := SafeUIA_GetClassName(walkEl, "")
-        controlType := SafeUIA_GetControlType(walkEl, 0)
-        elementName := SafeUIA_GetName(walkEl, "")
+        ; Read the properties this classifier needs once per ancestor to keep
+        ; dialog click classification cheaper on repeated click activity.
+        info := SafeUIA_GetElementSnapshot(walkEl, "autoId|className|controlType|name")
+        autoId := info.autoId
+        className := info.className
+        controlType := info.controlType
+        elementName := info.name
 
         if (className = "UIColumnHeader" || controlType = headerCtlId || controlType = headerItemCtlId)
             return "header"
@@ -7744,13 +7756,24 @@ GetItemsViewHwndFromUIA(shellEl)
     return hCtl
 }
 
-; Resolve Explorer's Items View element with a cheap child-scope lookup before
-; falling back to the existing descendant search.
+; Resolve Explorer's main item container by trying the common view control types
+; first, then fall back to the legacy "Items View" name lookup.
 FindExplorerItemsViewElement(targetHwndID)
 {
     exEl := SafeUIA_ElementFromHandle(targetHwndID, "", False)
     if !IsObject(exEl)
         return ""
+
+    for controlTypeIndex, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
+        itemsEl := ""
+        try
+            itemsEl := exEl.FindFirstBy("ControlType=" . ctlType)
+        catch e
+            itemsEl := ""
+
+        if IsObject(itemsEl)
+            return itemsEl
+    }
 
     return SafeUIA_FindFirstByNameFast(exEl, "Items View")
 }
@@ -9823,8 +9846,11 @@ MouseIsOverTitleBarDeferred(xPos, yPos, excludeCaptions := True, windowUnderMous
         return lastValue
 
     pt := SafeUIA_ElementFromPoint(xPos, yPos, "", transactionTimeout)
-    ctype := SafeUIA_GetControlType(pt)
-    ccname := SafeUIA_GetClassName(pt)
+    ; This deferred title-bar path can still run frequently, so snapshot the
+    ; few properties we need instead of issuing separate UIA COM reads.
+    ptInfo := SafeUIA_GetElementSnapshot(pt, "className|controlType")
+    ctype := ptInfo.controlType
+    ccname := ptInfo.className
     result := False
 
     if (mClass == "Chrome_WidgetWin_1" && ctype == 50033)
@@ -15189,6 +15215,61 @@ SafeUIA_WaitElementExistFast(rootEl, expr, default := "", fastTimeout := 200, fa
         return rootEl.WaitElementExist(expr, fallbackScope, matchMode, caseSensitive, remainingTimeout, cacheRequest)
     catch e
         return default
+}
+/*
+    Read the small set of UIA properties a caller needs in one local snapshot
+    so clustered hot paths avoid repeated COM property calls on the same element.
+*/
+SafeUIA_GetElementSnapshot(el, fields := "") {
+    fieldList := (fields = "") ? "|autoId|className|controlType|localizedType|name|nativeHwnd|" : "|" . fields . "|"
+    info := { autoId: ""
+        , className: ""
+        , controlType: ""
+        , localizedType: ""
+        , name: ""
+        , nativeHwnd: 0 }
+
+    if !IsObject(el)
+        return info
+
+    if InStr(fieldList, "|autoId|") {
+        try
+            info.autoId := el.AutomationId
+        catch e
+            info.autoId := ""
+    }
+    if InStr(fieldList, "|className|") {
+        try
+            info.className := el.CurrentClassName
+        catch e
+            info.className := ""
+    }
+    if InStr(fieldList, "|controlType|") {
+        try
+            info.controlType := el.CurrentControlType
+        catch e
+            info.controlType := ""
+    }
+    if InStr(fieldList, "|localizedType|") {
+        try
+            info.localizedType := el.CurrentLocalizedControlType
+        catch e
+            info.localizedType := ""
+    }
+    if InStr(fieldList, "|name|") {
+        try
+            info.name := el.CurrentName
+        catch e
+            info.name := ""
+    }
+    if InStr(fieldList, "|nativeHwnd|") {
+        try
+            info.nativeHwnd := el.CurrentNativeWindowHandle
+        catch e
+            info.nativeHwnd := 0
+    }
+
+    return info
 }
 ; ChatGPT
 SafeUIA_GetControlType(el, default := "") {
