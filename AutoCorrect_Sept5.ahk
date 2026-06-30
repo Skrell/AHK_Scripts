@@ -111,12 +111,18 @@ Global pendingAdjustColumnsLastWheelTick           := 0
 ; Minimum quiet period after the last wheel event before attempting Explorer
 ; column auto-fit; this avoids interrupting fast continuous scrolling.
 Global pendingAdjustColumnsQuietMs                 := 110
+; Stronger quiet period for #32770 file dialogs, where DirectUI scroll activity and
+; deferred Ctrl+NumpadAdd sends are more likely to overlap visibly.
+Global pendingAdjustColumnsDialogQuietMs           := 180
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
 Global pendingAdjustColumnsRequestId               := 0
 ; Short retry delay used when the timer wakes up before scrolling is truly quiet,
 ; allowing fast re-checks without doing focus/send work on every wheel tick.
 Global pendingAdjustColumnsRetryMs                 := 35
+; Brief final hold just before injecting Ctrl+NumpadAdd so a last-moment wheel event
+; can update the pending request state and cause the send to abort cleanly.
+Global pendingAdjustColumnsSendGuardMs             := 20
 ; Cached final Explorer target ClassNN for the most recent wheel-adjust window so
 ; repeated pause/resume cycles can skip DirectUI/ListView rediscovery work.
 Global pendingAdjustColumnsTargetCacheCtrl         := ""
@@ -2232,11 +2238,13 @@ $~WheelUp::
     MouseGetPos,,, windowId, wheelControl
     WinGetClass, hoverClass, ahk_id %windowId%
     WinGetClass, activeClass, A
+    isWheelOverTitleBar := MouseIsOverTitleBar()
 
     if (hoverClass != "ProgMan"
      && hoverClass != "WorkerW"
      && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
      && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
+     && !(hoverClass == "CabinetWClass" && isWheelOverTitleBar)
      && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
      && (wheelControl == "SysListView321"
       || wheelControl == "DirectUIHWND2"
@@ -2273,11 +2281,13 @@ $~WheelDown::
     MouseGetPos,,, windowId, wheelControl
     WinGetClass, hoverClass, ahk_id %windowId%
     WinGetClass, activeClass, A
+    isWheelOverTitleBar := MouseIsOverTitleBar()
 
     if (hoverClass != "ProgMan"
      && hoverClass != "WorkerW"
      && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
      && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
+     && !(hoverClass == "CabinetWClass" && isWheelOverTitleBar)
      && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
      && (wheelControl == "SysListView321" || InStr(wheelControl, "DirectUIHWND", True)))
     {
@@ -2289,7 +2299,7 @@ $~WheelDown::
         SetTimer, AdjustColumns, Off
         SetTimer, AdjustColumns, -110
     }
-    else if (MouseIsOverTitleBar())
+    else if (isWheelOverTitleBar)
     {
         blockMouse := true
         MouseGetPos,,, windowHwnd, controlHwnd, 2
@@ -2354,6 +2364,7 @@ return
 ; if newer wheel input arrives first.
 AdjustColumns:
     currentRequestId  := 0
+    requiredQuietMs   := 0
     TargetControl     := ""
     TargetControlHwnd := 0
     OutputVar1        := 0
@@ -2371,10 +2382,13 @@ AdjustColumns:
     ; newer wheel event replaced this work item while the timer was resolving targets
     ; or attempting focus. This is the main stale-work guard for pause/resume scrolls.
     currentRequestId := pendingAdjustColumnsRequestId
+    requiredQuietMs  := (pendingAdjustColumnsClass == "#32770")
+                     ? pendingAdjustColumnsDialogQuietMs
+                     : pendingAdjustColumnsQuietMs
 
     ; Defer any focus/send work until wheel activity has actually paused. If more
     ; scrolling is still happening, re-arm a short retry instead of interfering with it.
-    if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < pendingAdjustColumnsQuietMs) {
+    if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < requiredQuietMs) {
         SetTimer, AdjustColumns, % -pendingAdjustColumnsRetryMs
         return
     }
@@ -2517,7 +2531,7 @@ AdjustColumns:
     if (pendingAdjustColumnsRequestId != currentRequestId)
         return
 
-    if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < pendingAdjustColumnsQuietMs) {
+    if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < requiredQuietMs) {
         SetTimer, AdjustColumns, % -pendingAdjustColumnsRetryMs
         return
     }
@@ -2528,7 +2542,7 @@ AdjustColumns:
 
     ; Keep the actual key injection small and late so the timer does all expensive
     ; decision-making first and only emits Ctrl+NumpadAdd once the request is current.
-    SendCtrlNumpadAdd()
+    SendCtrlNumpadAdd(6, currentRequestId, requiredQuietMs, pendingAdjustColumnsHwnd)
 return
 
 MbuttonTimer:
@@ -4614,7 +4628,7 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
 
     if !isScrollbar
     {
-        pt := SafeUIA_ElementFromPoint(mousePosX, mousePosY)
+        pt := SafeUIA_ElementFromPoint(mousePosX, mousePosY, "", 2000)
         autoId := SafeUIA_GetAutoId(pt)
         if (InStr(autoId, "DownPage", false) || InStr(autoId, "UpPage", false))
             return true
@@ -6425,7 +6439,7 @@ Explorer__RoleValueToNum(role) {
 UIA_SafeElementFromPoint_(x, y) {
     ; Requires: #Include UIA_Interface.ahk
     ; Returns a UIA element or "" if it fails.
-    return SafeUIA_ElementFromPoint(x, y, "")
+    return SafeUIA_ElementFromPoint(x, y, "", 2000)
 }
 
 Dialog_IsDetails_UIA_ByPoint(dlgHwnd := "") {
@@ -6784,7 +6798,7 @@ ExplorerClickClassify(xPos, yPos, winCtrlNN) {
     if !InStr(winCtrlNN, "DirectUIHWND", True)
         return "other"
 
-    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "")
+    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "", 2000)
     if !IsObject(hitEl)
         return "other"
 
@@ -6870,7 +6884,7 @@ DialogClickClassify(xPos, yPos, winCtrlNN) {
     if !InStr(winCtrlNN, "DirectUIHWND", True)
         return "other"
 
-    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "")
+    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "", 2000)
     if !IsObject(hitEl)
         return "other"
 
@@ -7328,16 +7342,26 @@ EnsureFocusedCtrlTarget(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, to
 }
 
 #MaxThreadsPerHotkey 2
-#If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBar(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
+#If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBarFast(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
 $~LButton::
+    CoordMode, Mouse, Screen
+    MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
+    WinGetClass, _winClassD, ahk_id %_winIdD%
+    titleBarState := _GetTitleBarProbeState(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)
+
+    if (titleBarState == "caption")
+        Return
+
+    if (titleBarState == "other"
+     && WindowNeedsTitleBarUIA(_winIdD, _winClassD)
+     && MouseIsOverTitleBarDeferred(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)) {
+        Return
+    }
+
     tooltip,
     GoSub, DisableTimers
 
     HotString("Reset")
-
-    CoordMode, Mouse, Screen
-    MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
-    WinGetClass, _winClassD, ahk_id %_winIdD%
 
     ; When the press starts on a plain resizable edge that is already flush to a
     ; visible adjacent window, let the native resize happen and mirror the
@@ -7351,6 +7375,14 @@ $~LButton::
     }
     Else If (!WinExist("ahk_id " . disableSendCtrlHwnd))
         disableSendCtrlHwnd := ""
+
+    ; Chromium webpage clicks do not benefit from the generic non-Explorer
+    ; blank-space classification or SendCtrlAdd() flow. The hotkey predicate
+    ; already kept title-bar and caption-button clicks out of this branch.
+    if (IsChromiumContentClick(_winIdD, _winClassD, _winCtrlD)) {
+        GoSub, EnableTimers
+        Return
+    }
 
     initTime := A_TickCount
 
@@ -7532,7 +7564,7 @@ $~LButton::
             }
             Else {
                 ; Get UIA element
-                pt    := SafeUIA_ElementFromPoint(lbX2, lbY2)
+                pt    := SafeUIA_ElementFromPoint(lbX2, lbY2, "", 2000)
                 ctype := SafeUIA_GetControlType(pt)
                 ; Optional if used later
                 ; cname := SafeUIA_GetName(pt, "")
@@ -7578,7 +7610,7 @@ $~LButton::
                 || InStr(_winCtrlU, "Windows.UI.Composition.DesktopWindowContentBridge", True) )) {
 
             ; tooltip, here2
-            pt     := SafeUIA_ElementFromPoint(lbX2,lbY2)
+            pt     := SafeUIA_ElementFromPoint(lbX2,lbY2, "", 2000)
             ctype  := SafeUIA_GetControlType(pt)
             cname  := SafeUIA_GetName(pt)
             cltype := SafeUIA_GetLocalizedControlType(pt)
@@ -8489,6 +8521,33 @@ IsOverException(hWnd := "") {
         Return False
 }
 
+IsChromiumBrowserWindow(windowHwnd, windowClass := "") {
+    if (!windowHwnd)
+        return False
+
+    if (windowClass == "")
+        WinGetClass, windowClass, ahk_id %windowHwnd%
+
+    if (windowClass != "Chrome_WidgetWin_1")
+        return False
+
+    WinGet, processName, ProcessName, ahk_id %windowHwnd%
+    return (processName == "chrome.exe" || processName == "msedge.exe")
+}
+
+IsChromiumContentClick(windowHwnd, windowClass := "", ctrlNN := "") {
+    if (!IsChromiumBrowserWindow(windowHwnd, windowClass))
+        return False
+
+    ; Chromium web content usually reports the renderer host control directly,
+    ; but some builds return no child ClassNN for the same content surface.
+    if (ctrlNN == "")
+        return True
+
+    return (   InStr(ctrlNN, "Chrome_RenderWidgetHostHWND", True)
+            || InStr(ctrlNN, "Intermediate D3D Window", True))
+}
+
 GetListViewFlavor(controlHwnd)
 {
     WinGet, controlStyle, Style, ahk_id %controlHwnd%
@@ -9373,12 +9432,33 @@ EndBlockKeys() {
 ; Keep the wheel path on its own helper so deferred Explorer column-adjust sends
 ; always use the same key blocking and modifier cleanup sequence without changing
 ; the click-path sends restored from AutoCorrect_Sept5_works.ahk.
-SendCtrlNumpadAdd(reconcilePassCount := 6) {
+;
+; When a guarded wheel-adjust send is requested, wait one last very short moment and
+; re-check the current request token, quiet window, and active window immediately
+; before injecting Ctrl+NumpadAdd. This lets a just-arrived WheelUp/WheelDown event
+; abort the send instead of being interpreted alongside a synthetic Ctrl chord.
+SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0) {
+    global pendingAdjustColumnsLastWheelTick, pendingAdjustColumnsRequestId, pendingAdjustColumnsSendGuardMs
+
+    if (guardRequestId || guardQuietMs || guardHwnd) {
+        Sleep, %pendingAdjustColumnsSendGuardMs%
+
+        if (guardRequestId && pendingAdjustColumnsRequestId != guardRequestId)
+            return false
+
+        if (guardQuietMs && (A_TickCount - pendingAdjustColumnsLastWheelTick) < guardQuietMs)
+            return false
+
+        if (guardHwnd && WinExist("A") != guardHwnd)
+            return false
+    }
+
     BeginBlockKeys()
     Send, ^{NumpadAdd}
     EndBlockKeys()
     FixReleasedModifiers("Ctrl")
     ScheduleFixReleasedModifiers("Ctrl", reconcilePassCount)
+    return true
 }
 
 ; Release only the named modifiers that are no longer physically held so call
@@ -9549,82 +9629,213 @@ MouseTrack() {
     ListLines On
 }
 
-MouseIsOverTitleBar(xPos := "", yPos := "", excludeCaptions := True) {
-    global UIA
-
+MouseIsOverTitleBarFast(xPos := "", yPos := "", excludeCaptions := True) {
     if !( GetKeyState("Wheeldown","P") || GetKeyState("Wheelup","P") || GetKeyState("LButton","P") || GetKeyState("RButton","P") || GetKeyState("MButton","P") )
         return False
 
+    return (_GetTitleBarProbeState(xPos, yPos, excludeCaptions) == "caption")
+}
+
+MouseIsOverTitleBar(xPos := "", yPos := "", excludeCaptions := True) {
     CoordMode, Mouse, Screen
     If (xPos != "" && yPos != "")
         MouseGetPos, , , WindowUnderMouseID, ctrlnnUnderMouse
     Else
         MouseGetPos, xPos, yPos, WindowUnderMouseID, ctrlnnUnderMouse
 
-    If (!IsAltTabWindow(WindowUnderMouseID))
-        Return False
+    if (!WindowUnderMouseID || !IsAltTabWindow(WindowUnderMouseID))
+        return False
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    If (   !MouseIsOverTaskbar()
-        && (mClass != "WorkerW")
-        && (mClass != "ProgMan")
-        && (mClass != "TaskListThumbnailWnd")
-        && (mClass != "#32768")
-        && (mClass != "Net UI Tool Window")) {
+    if (   MouseIsOverTaskbar()
+        || (mClass == "WorkerW")
+        || (mClass == "ProgMan")
+        || (mClass == "TaskListThumbnailWnd")
+        || (mClass == "#32768")
+        || (mClass == "Net UI Tool Window"))
+        return False
 
-        SysGet, SM_CXBORDER, 5
-        SysGet, SM_CYBORDER, 6
-        SysGet, SM_CXFIXEDFRAME, 7
-        SysGet, SM_CYFIXEDFRAME, 8
-        SysGet, SM_CXMIN, 28
-        SysGet, SM_CYMIN, 29
-        SysGet, SM_CXSIZE, 30
-        SysGet, SM_CYSIZE , 31
-        SysGet, SM_CXSIZEFRAME, 32
-        SysGet, SM_CYSIZEFRAME , 33
+    static HTCAPTION     := 2   ; Non-client title bar.
+    static HTCLOSE       := 20  ; Non-client close button.
+    static HTHELP        := 21  ; Non-client help button.
+    static HTMAXBUTTON   := 9   ; Non-client maximize button.
+    static HTMINBUTTON   := 8   ; Non-client minimize button.
+    static HTBOTTOM      := 15  ; Non-client bottom resize border.
+    static HTBOTTOMLEFT  := 16 ; Non-client bottom-left resize corner.
+    static HTBOTTOMRIGHT := 17 ; Non-client bottom-right resize corner.
+    static HTLEFT        := 10  ; Non-client left resize border.
+    static HTRIGHT       := 11  ; Non-client right resize border.
+    static HTTOP         := 12  ; Non-client top resize border.
+    static HTTOPLEFT     := 13  ; Non-client top-left resize corner.
+    static HTTOPRIGHT    := 14  ; Non-client top-right resize corner.
 
-        If excludeCaptions
-            widthOfCaptions := SM_CXBORDER+(45*3)
-        Else
-            widthOfCaptions := 0
+    hitVal := IsPointOnCaption(xPos, yPos, WindowUnderMouseID)
+    if (hitVal = HTCAPTION)
+        return True
 
-        WinGet, isMax, MinMax, ahk_id %WindowUnderMouseID%
-        titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
-        If (isMax == 1)
-            titlebarHeight := SM_CYSIZE
-        ; tooltip, %SM_CXBORDER% - %SM_CYBORDER% : %SM_CXFIXEDFRAME% - %SM_CYFIXEDFRAME% : %SM_CXSIZE% - %SM_CYSIZE%
-        WinGetPosEx(WindowUnderMouseID,x,y,w,h)
+    if (   hitVal = HTMINBUTTON
+        || hitVal = HTMAXBUTTON
+        || hitVal = HTCLOSE
+        || hitVal = HTHELP
+        || hitVal = HTLEFT
+        || hitVal = HTRIGHT
+        || hitVal = HTTOP
+        || hitVal = HTBOTTOM
+        || hitVal = HTTOPLEFT
+        || hitVal = HTTOPRIGHT
+        || hitVal = HTBOTTOMLEFT
+        || hitVal = HTBOTTOMRIGHT)
+        return False
 
-        If ((yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > x) && (xPos < (x+w-widthOfCaptions))) {
-            If (ctrlnnUnderMouse == "DRAG_BAR_WINDOW_CLASS1")
-                Return True
+    titleBarState := _GetTitleBarProbeState(xPos, yPos, excludeCaptions, WindowUnderMouseID, ctrlnnUnderMouse, mClass)
+    if (titleBarState == "caption")
+        return True
 
-            nonClientZone := _GetMouseWindowNonClientZone(xPos, yPos, WindowUnderMouseID)
-            if (nonClientZone = "resize_edge")
-                Return False
-            if (nonClientZone = "caption_button")
-                Return False
-            If (nonClientZone = "caption")
-                Return True
-            Else  {
-                    pt     := SafeUIA_ElementFromPoint(xPos, yPos)
-                    ctype  := SafeUIA_GetControlType(pt)
-                    ccname := SafeUIA_GetClassName(pt)
+    if (mClass == "CabinetWClass"
+     && _IsPointInWindowTopStrip(xPos, yPos, WindowUnderMouseID, excludeCaptions)
+     && _IsModernExplorerTopStripControl(ctrlnnUnderMouse))
+        return True
 
-                    If (mClass == "Chrome_WidgetWin_1" && ctype == 50033 && ccname == "FrameGrabHandle")
-                        Return True
-                    Else If (mClass == "Chrome_WidgetWin_1" && ctype == 50033 && ccname != "FrameGrabHandle")
-                        Return False
-                    Else If ((ctype == 50037) || (ctype == 50026) || (ctype == 50033))
-                        Return True
-                    Else
-                        Return False
-            }
-            Return True
-        }
+    if (titleBarState != "other")
+        return False
+
+    return MouseIsOverTitleBarDeferred(xPos, yPos, excludeCaptions, WindowUnderMouseID, ctrlnnUnderMouse, mClass, True, 750)
+}
+
+_IsModernExplorerTopStripControl(ctrlNN := "") {
+    if (ctrlNN == "")
+        return False
+
+    return (   InStr(ctrlNN, "Microsoft.UI.Content.DesktopChildSiteBridge", True)
+            || InStr(ctrlNN, "Windows.UI.Composition.DesktopWindowContentBridge", True)
+            || InStr(ctrlNN, "XamlExplorerHostIslandWindow", True))
+}
+
+_IsPointInWindowTopStrip(xPos, yPos, windowHwnd, excludeCaptions := True) {
+    if (!windowHwnd)
+        return False
+
+    SysGet, SM_CXBORDER, 5
+    SysGet, SM_CXMIN, 28
+    SysGet, SM_CYMIN, 29
+    SysGet, SM_CYSIZE, 31
+    SysGet, SM_CYSIZEFRAME, 33
+
+    if excludeCaptions
+        widthOfCaptions := SM_CXBORDER + (45 * 3)
+    else
+        widthOfCaptions := 0
+
+    WinGet, isMax, MinMax, ahk_id %windowHwnd%
+    titlebarHeight := SM_CYMIN - SM_CYSIZEFRAME
+    if (isMax == 1)
+        titlebarHeight := SM_CYSIZE
+
+    if !WinGetPosEx(windowHwnd, x, y, w, h)
+        return False
+
+    return ((yPos > y) && (yPos < (y + titlebarHeight)) && (xPos > x) && (xPos < (x + w - widthOfCaptions)))
+}
+
+_GetTitleBarProbeState(xPos := "", yPos := "", excludeCaptions := True, windowUnderMouseID := "", ctrlnnUnderMouse := "", mClass := "") {
+    CoordMode, Mouse, Screen
+    if (xPos != "" && yPos != "") {
+        if (windowUnderMouseID == "" || ctrlnnUnderMouse == "")
+            MouseGetPos, , , windowUnderMouseID, ctrlnnUnderMouse
     }
+    else
+        MouseGetPos, xPos, yPos, windowUnderMouseID, ctrlnnUnderMouse
 
-    Return False
+    if (!windowUnderMouseID || !IsAltTabWindow(windowUnderMouseID))
+        return ""
+
+    if (mClass == "")
+        WinGetClass, mClass, ahk_id %windowUnderMouseID%
+
+    if (   MouseIsOverTaskbar()
+        || (mClass == "WorkerW")
+        || (mClass == "ProgMan")
+        || (mClass == "TaskListThumbnailWnd")
+        || (mClass == "#32768")
+        || (mClass == "Net UI Tool Window"))
+        return ""
+
+    SysGet, SM_CXBORDER, 5
+    SysGet, SM_CYBORDER, 6
+    SysGet, SM_CXMIN, 28
+    SysGet, SM_CYMIN, 29
+    SysGet, SM_CYSIZE, 31
+    SysGet, SM_CYSIZEFRAME, 33
+
+    if excludeCaptions
+        widthOfCaptions := SM_CXBORDER + (45 * 3)
+    else
+        widthOfCaptions := 0
+
+    WinGet, isMax, MinMax, ahk_id %windowUnderMouseID%
+    titlebarHeight := SM_CYMIN - SM_CYSIZEFRAME
+    if (isMax == 1)
+        titlebarHeight := SM_CYSIZE
+
+    WinGetPosEx(windowUnderMouseID, x, y, w, h)
+    if !((yPos > y) && (yPos < (y + titlebarHeight)) && (xPos > x) && (xPos < (x + w - widthOfCaptions)))
+        return ""
+
+    if (ctrlnnUnderMouse == "DRAG_BAR_WINDOW_CLASS1")
+        return "caption"
+
+    nonClientZone := _GetMouseWindowNonClientZone(xPos, yPos, windowUnderMouseID)
+    if (nonClientZone != "")
+        return nonClientZone
+
+    return "other"
+}
+
+WindowNeedsTitleBarUIA(windowHwnd, windowClass := "") {
+    if (!windowHwnd)
+        return False
+
+    if (windowClass == "")
+        WinGetClass, windowClass, ahk_id %windowHwnd%
+
+    return (   IsChromiumBrowserWindow(windowHwnd, windowClass)
+            || windowClass == "ApplicationFrameWindow"
+            || windowClass == "CASCADIA_HOSTING_WINDOW_CLASS")
+}
+
+MouseIsOverTitleBarDeferred(xPos, yPos, excludeCaptions := True, windowUnderMouseID := "", ctrlnnUnderMouse := "", mClass := "", allowAnyClass := False, transactionTimeout := 250) {
+    static cacheMs := 75
+    static lastCacheKey := ""
+    static lastTick := 0
+    static lastValue := False
+
+    if (!windowUnderMouseID)
+        return False
+
+    if (mClass == "")
+        WinGetClass, mClass, ahk_id %windowUnderMouseID%
+
+    if (!allowAnyClass && !WindowNeedsTitleBarUIA(windowUnderMouseID, mClass))
+        return False
+
+    cacheKey := windowUnderMouseID "|" xPos "|" yPos "|" excludeCaptions "|" allowAnyClass "|" transactionTimeout
+    if (cacheKey == lastCacheKey && (A_TickCount - lastTick) <= cacheMs)
+        return lastValue
+
+    pt := SafeUIA_ElementFromPoint(xPos, yPos, "", transactionTimeout)
+    ctype := SafeUIA_GetControlType(pt)
+    ccname := SafeUIA_GetClassName(pt)
+    result := False
+
+    if (mClass == "Chrome_WidgetWin_1" && ctype == 50033)
+        result := (ccname == "FrameGrabHandle")
+    else if ((ctype == 50037) || (ctype == 50026) || (ctype == 50033))
+        result := True
+
+    lastCacheKey := cacheKey
+    lastTick := A_TickCount
+    lastValue := result
+    return result
 }
 
 IsPointOnCaption(x := "", y := "", hwnd := "") {
@@ -13748,7 +13959,7 @@ MouseIsOverTaskbarButtonGroup() {
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
     If (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId != "TrayNotifyWnd1") {
-        pt := SafeUIA_ElementFromPoint(x,y)
+        pt := SafeUIA_ElementFromPoint(x,y, "", 2000)
         ctype := SafeUIA_GetControlType(pt)
         ; tooltip, % "val is " pt.CurrentControlType
         Return (ctype == 50000)
@@ -14873,22 +15084,27 @@ Acc_ParentSafe(accObj) {
     return parentObj
 }
 ; ChatGPT
-SafeUIA_ElementFromPoint(x, y, default := "") {
+SafeUIA_ElementFromPoint(x, y, default := "", transactionTimeout := 250, connectionTimeout := 20000) {
     global UIA
 
-    if (!IsObject(UIA)) {
+    if (transactionTimeout <= 0)
+        transactionTimeout := 250
+    if (connectionTimeout <= 0)
+        connectionTimeout := 20000
+
+    if (!IsObject(UIA))
         UIA := UIA_Interface()
-        UIA.TransactionTimeout := 2000
-        UIA.ConnectionTimeout  := 20000
-    }
+
+    UIA.TransactionTimeout := transactionTimeout
+    UIA.ConnectionTimeout  := connectionTimeout
 
     try
         return UIA.ElementFromPoint(x, y, False)
     catch {
         UIA := ""
         UIA := UIA_Interface()
-        UIA.TransactionTimeout := 2000
-        UIA.ConnectionTimeout  := 20000
+        UIA.TransactionTimeout := transactionTimeout
+        UIA.ConnectionTimeout  := connectionTimeout
 
         try
             return UIA.ElementFromPoint(x, y, False)
