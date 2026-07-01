@@ -1503,6 +1503,9 @@ WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll 
 
     ; -------- 1) Find the shell view's item list (works across Explorer + dialogs)
     ; Try List first (Explorer "Items View"), then DataGrid/Table (some dialogs), then Tree (rare)
+    ; UIA_Interface's FindFirstBy("ControlType=...") parser accepts symbolic
+    ; names like UIA_ListControlTypeId here and resolves them the same as the
+    ; raw numeric UIA control type IDs (for example List -> 50008).
     for controlTypeIndex, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
         items := root.FindFirstBy("ControlType=" . ctlType)
         if (items)
@@ -5420,10 +5423,15 @@ Overlay_SetAlpha(overlayHwnd, alphaVal) {
 
     alphaVal := ClampAlpha(alphaVal)
 
-    ; Ensures WS_EX_LAYERED is present (required for alpha)
+    ; Keep the overlay as a layered window so the compositor can blend opacity
+    ; changes against the already-existing surface. That lets fades happen as
+    ; cheap alpha updates instead of forcing hide/show or full window rebuilds,
+    ; which is what keeps the dimming transition visually smooth.
     WinSet, ExStyle, +0x80000, ahk_id %overlayHwnd%  ; WS_EX_LAYERED
 
-    ; LWA_ALPHA = 0x2
+    ; Apply only a new per-window alpha value. Because the same HWND stays alive,
+    ; each fade step modifies the current frame in place and avoids the flash that
+    ; would come from recreating the overlay window between animation frames.
     DllCall("user32\SetLayeredWindowAttributes"
         , "ptr", overlayHwnd
         , "uint", 0
@@ -5435,6 +5443,9 @@ Overlay_SetAlpha(overlayHwnd, alphaVal) {
 
 Overlay_CancelFade() {
     global overlayFadeToken
+    ; Every new show/hide request bumps the token so older fade loops stop
+    ; writing alpha immediately. This prevents two overlapping animations from
+    ; fighting each other and producing flicker or abrupt opacity jumps.
     overlayFadeToken++
     return overlayFadeToken
 }
@@ -5447,13 +5458,17 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "", allowM
     if (alphaStart = "")
         alphaStart := overlayAlphaCurrent
 
-    alphaStart := ClampAlpha(alphaStart)
+    alphaStart  := ClampAlpha(alphaStart)
     alphaTarget := ClampAlpha(alphaTarget)
 
     ; Guard: avoid divide-by-zero and negative durations
     if (fadeMs < 1)
         fadeMs := 1
 
+    ; Break the fade into small ~5 ms steps so opacity ramps gradually instead
+    ; of jumping straight to the end state. Starting from the current alpha also
+    ; means a new fade can continue seamlessly from whatever frame was already on
+    ; screen, which avoids a visible snap when the user cycles quickly.
     iterations := ceil(fadeMs/5)
     if (iterations > 0) {
         transIncr  := (alphaTarget - alphaStart)/iterations
@@ -5461,12 +5476,16 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "", allowM
 
         Loop, %iterations%
         {
-            ; If a newer fade started, stop ASAP
+            ; If a newer fade started, stop ASAP so only one animation source is
+            ; updating opacity. That keeps the transition coherent during rapid
+            ; Alt+Tab / Alt+` input.
             If (localFadeToken != overlayFadeToken)
                 return
 
             ; Show/preview fades should stop immediately once the cycle keys are up,
             ; but hide fades are allowed to finish unless a newer fade supersedes them.
+            ; The effect is that the overlay appears responsive on release while the
+            ; fade-out can still visually taper off instead of disappearing hard.
             If (allowModifierAbort && !GetKeyState("LAlt","P") && !GetKeyState("Esc","P")) {
                 Overlay_SetAlpha(overlayHwnd, alphaTarget)
                 break
@@ -5474,6 +5493,8 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "", allowM
 
             Overlay_SetAlpha(overlayHwnd, alphaNow)
             if(A_Index < iterations) {
+                ; Yield briefly between frames so Windows can present the updated
+                ; alpha and make the fade read as motion rather than one delayed jump.
                 sleep, 5
                 alphaNow += transIncr
             }
@@ -5506,7 +5527,9 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
     if (!overlayIsReady || !overlayHwnd)
         return 0
 
-    ; Cancel any in-progress fade immediately.
+    ; Stop any older show/hide fade before positioning the next preview. This
+    ; keeps the new overlay from inheriting stale alpha writes from the previous
+    ; cycle and removes the "rubber-band" feeling during rapid window switching.
     Overlay_CancelFade()
 
     If !GetKeyState("LAlt","P") && !GetKeyState("Esc","P")
@@ -5577,9 +5600,14 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
         return 0
 
     ; Show overlay exactly over the selected monitor's work area.
+    ; Keeping the overlay sized to the active monitor minimizes the surface area
+    ; Windows has to composite on each alpha step, which helps the fade feel more
+    ; immediate and reduces the chance of cross-monitor redraw artifacts.
     Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
 
     ; If currently transparent, reset alpha baseline.
+    ; This guarantees the fade always starts from a known invisible state after a
+    ; hide, rather than briefly reusing an older partially visible alpha level.
     if (overlayAlphaCurrent < 1)
         Overlay_SetAlpha(overlayHwnd, 0)
 
@@ -5588,16 +5616,22 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
     holeRelX := clipLeft - areaLeft
     holeRelY := clipTop  - areaTop
 
+    ; Update the cut-out before the fade ramps in so the first visible frame is
+    ; already aligned to the target window. That avoids a one-frame flash where a
+    ; full-screen dimmer appears before the hole is carved out.
     Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeRelX, holeRelY, clippedHoleW, clippedHoleH)
 
     ; Force repaint only if part of the requested hole was outside the monitor edges.
+    ; Redrawing only on geometry edge cases avoids unnecessary extra paint work on
+    ; every cycle step, which helps the repeated overlay moves stay fluid.
     if (shouldRedraw)
         WinSet, Redraw,, ahk_id %overlayHwnd%
 
     If !GetKeyState("LAlt","P") && !GetKeyState("Esc","P")
         return 0
 
-    ; Fade from current alpha to target alpha.
+    ; Fade from the current alpha instead of toggling visibility in one shot so
+    ; the overlay eases in smoothly even when the previous cycle left it mid-fade.
     Overlay_FadeTo(overlayHwnd, overlayAlpha, fadeMs, overlayAlphaCurrent)
 
     return overlayHwnd
@@ -5651,6 +5685,9 @@ Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeX, holeY,
         , "ptr")
 
     ; Subtract the hole from the full region.
+    ; This updates the visible "donut" shape on the same overlay HWND, which is
+    ; smoother than destroying and rebuilding a GUI around the highlighted window
+    ; every time the selection changes.
     DllCall("gdi32\CombineRgn"
         , "ptr", regFull
         , "ptr", regFull
@@ -5659,6 +5696,9 @@ Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeX, holeY,
 
     ; Apply the region to the overlay.
     ; Windows takes ownership of regFull after SetWindowRgn succeeds.
+    ; Because the region swap happens in-place on the existing overlay window, the
+    ; hole can track the selection with much less visual popping than a hide/show
+    ; approach.
     DllCall("user32\SetWindowRgn"
         , "ptr", overlayHwnd
         , "ptr", regFull
@@ -5769,6 +5809,9 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
         return 0
     }
 
+    ; Reuse the same overlay window and just move its region to the next target.
+    ; Avoiding window recreation here is the main reason repeated cycle presses
+    ; feel like a continuous animation instead of a series of flashes.
     ; Make sure the overlay is positioned on the selected monitor's work area.
     Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
 
@@ -5776,9 +5819,13 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     holeRelX := clipLeft - areaLeft
     holeRelY := clipTop - areaTop
 
-    ; Apply the updated donut region using overlay-relative coordinates.
+    ; Apply the updated donut region using overlay-relative coordinates so the
+    ; highlight moves by reshaping the same surface already on screen. That keeps
+    ; movement smooth because only the hole geometry changes between frames.
     Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeRelX, holeRelY, clippedHoleW, clippedHoleH)
 
+    ; Skip forced redraws when not needed so high-frequency cycle input does not
+    ; pay an extra repaint cost on every step.
     if (doRedraw)
         WinSet, Redraw,, ahk_id %overlayHwnd%
 
@@ -5792,8 +5839,10 @@ Overlay_Prewarm() {
         return 0
 
     ; Pre-show the overlay once at startup as a tiny fully transparent window.
-    ; This keeps the first real Alt+Tab / Alt+` preview from paying the first
-    ; visible Show/composition cost during the live switch animation.
+    ; This "warms" the HWND, its layered-window state, and the compositor path
+    ; before the user ever sees it. Doing that startup work early removes the
+    ; first-use hitch that would otherwise make the first overlay animation feel
+    ; noticeably rougher than later ones.
     regFull := DllCall("gdi32\CreateRectRgn"
         , "int", 0, "int", 0
         , "int", 1, "int", 1
@@ -5813,12 +5862,17 @@ Overlay_Hide(fadeMs := 100) {
     if (!overlayIsReady || !overlayHwnd)
         return
 
-    ; Let the hide fade continue after Alt/Esc release. A new preview can still
-    ; interrupt it immediately because Overlay_FadeTo() uses the fade token.
+    ; Let the hide fade continue after Alt/Esc release. That gives the overlay a
+    ; short tail-off instead of an abrupt vanish, while the fade token still lets
+    ; a new preview interrupt immediately if the user starts cycling again.
     Overlay_CancelFade()
+    ; Fade all the way back to alpha 0 here so the next Cycle() preview can start
+    ; from a fully transparent baseline and draw in with a clean fade-in instead
+    ; of inheriting leftover opacity from the previous overlay instance.
     Overlay_FadeTo(overlayHwnd, 0, fadeMs, overlayAlphaCurrent, False)
 
-    ; Reset to full region (no hole)
+    ; Reset to a full region only after the fade logic runs so the next show starts
+    ; from a clean surface without having to rebuild the overlay from scratch.
     regFull := DllCall("gdi32\CreateRectRgn"
         , "int", 0, "int", 0
         , "int", A_ScreenWidth, "int", A_ScreenHeight
@@ -6805,9 +6859,9 @@ ExplorerClickClassify(xPos, yPos, winCtrlNN) {
     ; Use one snapshot-driven parent walk so header/item/blank classification
     ; stays ordered while avoiding multiple UIA ancestry/property passes.
     blankFound := False
-    itemFound := False
-    walkEl := hitEl
-    depth := 0
+    itemFound  := False
+    walkEl     := hitEl
+    depth      := 0
 
     while (IsObject(walkEl) && depth < 18)
     {
@@ -6858,9 +6912,9 @@ _DialogClickClassifyWalkParents(hitEl) {
     {
         ; Read the properties this classifier needs once per ancestor to keep
         ; dialog click classification cheaper on repeated click activity.
-        info := SafeUIA_GetElementSnapshot(walkEl, "autoId|className|controlType|name")
-        autoId := info.autoId
-        className := info.className
+        info        := SafeUIA_GetElementSnapshot(walkEl, "autoId|className|controlType|name")
+        autoId      := info.autoId
+        className   := info.className
         controlType := info.controlType
         elementName := info.name
 
@@ -7764,6 +7818,9 @@ FindExplorerItemsViewElement(targetHwndID)
     if !IsObject(exEl)
         return ""
 
+    ; These symbolic UIA_*ControlTypeId names are intentional: UIA_Interface
+    ; resolves them inside FindFirstBy("ControlType=...") just like the
+    ; equivalent numeric IDs, which keeps this search readable.
     for controlTypeIndex, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
         itemsEl := ""
         try
@@ -9849,7 +9906,7 @@ MouseIsOverTitleBarDeferred(xPos, yPos, excludeCaptions := True, windowUnderMous
     ; This deferred title-bar path can still run frequently, so snapshot the
     ; few properties we need instead of issuing separate UIA COM reads.
     ptInfo := SafeUIA_GetElementSnapshot(pt, "className|controlType")
-    ctype := ptInfo.controlType
+    ctype  := ptInfo.controlType
     ccname := ptInfo.className
     result := False
 
@@ -15109,9 +15166,49 @@ Acc_ParentSafe(accObj) {
 
     return parentObj
 }
-; ChatGPT
+/*
+    SafeUIA_* wrappers provide a small defensive layer over UIA_Interface so
+    callers do not have to handle COM exceptions, missing elements, or shared
+    timeout state directly.
+
+    Shared parameter conventions in this wrapper block:
+    x, y:
+    Screen coordinates in pixels.
+
+    timeout values:
+    Milliseconds.
+
+    TreeScope values passed to UIA_Interface searches:
+    0x2 = UIA_TreeScope_Children (direct children only)
+    0x4 = UIA_TreeScope_Descendants (search the full descendant subtree)
+
+    matchMode values:
+    1 = starts with
+    2 = contains
+    3 = exact match
+    RegEx = regular-expression match supported by UIA_Interface
+
+    cacheRequest:
+    Optional UIA cache-request object. Blank means "do not use build-cache for
+    this lookup; read properties normally."
+
+    SafeUIA_ElementFromPoint():
+    Return the UIA element under a screen point.
+    This is the UIA equivalent of "what control is under the mouse right now?"
+    The wrapper applies per-call UIA timeouts and restores the shared UIA
+    object's prior timeout state before returning.
+
+    Parameters:
+    x, y = screen point to query.
+    default = value returned if UIA lookup fails.
+    transactionTimeout := 250 = per-call UIA transaction timeout in ms.
+    connectionTimeout := 20000 = per-call UIA connection timeout in ms.
+*/
 SafeUIA_ElementFromPoint(x, y, default := "", transactionTimeout := 250, connectionTimeout := 20000) {
     global UIA
+    priorConnectionTimeout := ""
+    priorTransactionTimeout := ""
+    result := default
 
     if (transactionTimeout <= 0)
         transactionTimeout := 250
@@ -15121,53 +15218,148 @@ SafeUIA_ElementFromPoint(x, y, default := "", transactionTimeout := 250, connect
     if (!IsObject(UIA))
         UIA := UIA_Interface()
 
-    UIA.TransactionTimeout := transactionTimeout
-    UIA.ConnectionTimeout  := connectionTimeout
-
+    ; Keep fast point probes self-contained so their short timeout does not
+    ; leak into later Explorer/SendCtrlAdd UIA work on the shared UIA object.
     try
-        return UIA.ElementFromPoint(x, y, False)
-    catch {
-        UIA := ""
-        UIA := UIA_Interface()
+        priorTransactionTimeout := UIA.TransactionTimeout
+    catch e
+        priorTransactionTimeout := ""
+    try
+        priorConnectionTimeout := UIA.ConnectionTimeout
+    catch e
+        priorConnectionTimeout := ""
+
+    try {
         UIA.TransactionTimeout := transactionTimeout
         UIA.ConnectionTimeout  := connectionTimeout
+        result := UIA.ElementFromPoint(x, y, False)
+    } catch {
+        UIA := ""
+        UIA := UIA_Interface()
+        try
+            UIA.TransactionTimeout := transactionTimeout
+        catch e {
+        }
+        try
+            UIA.ConnectionTimeout  := connectionTimeout
+        catch e {
+        }
 
         try
-            return UIA.ElementFromPoint(x, y, False)
+            result := UIA.ElementFromPoint(x, y, False)
         catch
-            return default
+            result := default
     }
+
+    try {
+        if (priorTransactionTimeout != "")
+            UIA.TransactionTimeout := priorTransactionTimeout
+    } catch e {
+    }
+    try {
+        if (priorConnectionTimeout != "")
+            UIA.ConnectionTimeout := priorConnectionTimeout
+    } catch e {
+    }
+
+    return result
 }
 
-; ChatGPT
-SafeUIA_ElementFromHandle(hwnd, default := "", activateChromiumAccessibility := False) {
+/*
+    Return the root UIA element for a window/control HWND.
+    This is the UIA equivalent of starting from a known window handle and then
+    searching inside that window's automation tree.
+
+    Parameters:
+    hwnd = target window/control handle to convert into a UIA root element.
+    default = value returned if hwnd is blank or UIA lookup fails.
+    activateChromiumAccessibility := False = pass-through flag for
+    UIA_Interface's ElementFromHandle(); when True, let the library try to
+    activate Chromium accessibility for that handle if needed.
+    transactionTimeout            := 2000 = per-call UIA transaction timeout in ms.
+    connectionTimeout             := 20000 = per-call UIA connection timeout in ms.
+*/
+SafeUIA_ElementFromHandle(hwnd, default := "", activateChromiumAccessibility := False, transactionTimeout := 2000, connectionTimeout := 20000) {
     global UIA
+    priorConnectionTimeout := ""
+    priorTransactionTimeout := ""
+    result := default
 
     if (!hwnd)
         return default
 
-    if (!IsObject(UIA)) {
-        UIA := UIA_Interface()
-        UIA.TransactionTimeout := 2000
-        UIA.ConnectionTimeout  := 20000
-    }
+    if (transactionTimeout <= 0)
+        transactionTimeout := 2000
+    if (connectionTimeout <= 0)
+        connectionTimeout := 20000
 
+    if (!IsObject(UIA))
+        UIA := UIA_Interface()
+
+    ; Force an explicit timeout on every handle lookup so earlier fast probes
+    ; cannot leave this shared UIA path in a too-short timeout mode.
     try
-        return UIA.ElementFromHandle(hwnd, activateChromiumAccessibility)
-    catch {
+        priorTransactionTimeout := UIA.TransactionTimeout
+    catch e
+        priorTransactionTimeout := ""
+    try
+        priorConnectionTimeout := UIA.ConnectionTimeout
+    catch e
+        priorConnectionTimeout := ""
+
+    try {
+        UIA.TransactionTimeout := transactionTimeout
+        UIA.ConnectionTimeout  := connectionTimeout
+        result := UIA.ElementFromHandle(hwnd, activateChromiumAccessibility)
+    } catch {
         UIA := ""
         UIA := UIA_Interface()
-        UIA.TransactionTimeout := 2000
-        UIA.ConnectionTimeout  := 20000
+        try
+            UIA.TransactionTimeout := transactionTimeout
+        catch e {
+        }
+        try
+            UIA.ConnectionTimeout  := connectionTimeout
+        catch e {
+        }
 
         try
-            return UIA.ElementFromHandle(hwnd, activateChromiumAccessibility)
+            result := UIA.ElementFromHandle(hwnd, activateChromiumAccessibility)
         catch
-            return default
+            result := default
     }
+
+    try {
+        if (priorTransactionTimeout != "")
+            UIA.TransactionTimeout := priorTransactionTimeout
+    } catch e {
+    }
+    try {
+        if (priorConnectionTimeout != "")
+            UIA.ConnectionTimeout := priorConnectionTimeout
+    } catch e {
+    }
+
+    return result
 }
 
-; ChatGPT
+/*
+    Search for the first descendant element with the requested UIA Name.
+    It tries a cheaper near-root search first, then falls back to a broader
+    subtree search if needed.
+
+    Parameters:
+    rootEl = starting UIA element whose subtree will be searched.
+    name = UIA Name property to match.
+    default = value returned if the search fails.
+    childScope    := 0x2  = first-pass scope, UIA_TreeScope_Children, meaning
+    search only direct children of rootEl.
+    fallbackScope := 0x4  = second-pass scope, UIA_TreeScope_Descendants,
+    meaning search all descendants under rootEl.
+    matchMode     := 3    = exact-name match by default.
+    caseSensitive := True = keep case-sensitive string matching by default.
+    cacheRequest  := ""   = no UIA cache request unless the caller supplies one.
+*/
 SafeUIA_FindFirstByNameFast(rootEl, name, default := "", childScope := 0x2, fallbackScope := 0x4, matchMode := 3, caseSensitive := True, cacheRequest := "") {
     if !IsObject(rootEl)
         return default
@@ -15187,7 +15379,25 @@ SafeUIA_FindFirstByNameFast(rootEl, name, default := "", childScope := 0x2, fall
         return default
 }
 
-; ChatGPT
+/*
+    Wait for a UIA element matching expr to appear.
+    It spends a short time on a fast narrow search first, then uses the
+    remaining budget on a broader search so common cases resolve sooner.
+
+    Parameters:
+    rootEl = starting UIA element whose subtree will be polled.
+    expr = UIA_Interface FindFirstBy()/WaitElementExist() expression, such as
+    "Name=Open" or "ControlType=Button".
+    default = value returned if nothing is found before timeout.
+    fastTimeout     := 200  = initial narrow-search budget in ms.
+    fallbackTimeout := 5000 = total fallback budget in ms; the time already
+    spent in the fast pass is subtracted before the broader retry.
+    fastScope       := 0x2  = UIA_TreeScope_Children for the quick first pass.
+    fallbackScope   := 0x4  = UIA_TreeScope_Descendants for the broader retry.
+    matchMode       := 3    = exact-match mode by default.
+    caseSensitive   := True = keep case-sensitive string matching by default.
+    cacheRequest    := ""   = no UIA cache request unless the caller supplies one.
+*/
 SafeUIA_WaitElementExistFast(rootEl, expr, default := "", fastTimeout := 200, fallbackTimeout := 5000, fastScope := 0x2, fallbackScope := 0x4, matchMode := 3, caseSensitive := True, cacheRequest := "") {
     if !IsObject(rootEl)
         return default
@@ -15219,6 +15429,20 @@ SafeUIA_WaitElementExistFast(rootEl, expr, default := "", fastTimeout := 200, fa
 /*
     Read the small set of UIA properties a caller needs in one local snapshot
     so clustered hot paths avoid repeated COM property calls on the same element.
+
+    Parameters:
+    el = UIA element to read from.
+    fields := "" = pipe-delimited property list to fetch. Blank means fetch the
+    wrapper's standard set:
+    autoId|className|controlType|localizedType|name|nativeHwnd
+
+    Returned object keys:
+    autoId        = UIA AutomationId
+    className     = UIA ClassName
+    controlType   = numeric UIA control-type ID
+    localizedType = human-readable localized control-type label
+    name          = UIA Name
+    nativeHwnd    = provider-reported native window handle, if any
 */
 SafeUIA_GetElementSnapshot(el, fields := "") {
     fieldList := (fields = "") ? "|autoId|className|controlType|localizedType|name|nativeHwnd|" : "|" . fields . "|"
@@ -15271,7 +15495,14 @@ SafeUIA_GetElementSnapshot(el, fields := "") {
 
     return info
 }
-; ChatGPT
+/*
+    Read an element's numeric UIA control type, such as List, Pane, or Header.
+    Returns default if the element is missing or the UIA property read fails.
+
+    Parameters:
+    el = UIA element to read from.
+    default := "" = fallback value if the property cannot be read.
+*/
 SafeUIA_GetControlType(el, default := "") {
     if !IsObject(el)
         return default
@@ -15281,7 +15512,14 @@ SafeUIA_GetControlType(el, default := "") {
         return default
 
 }
-; ChatGPT
+/*
+    Read an element's human-readable control type label, such as "list" or
+    "pane", instead of the numeric UIA control type ID.
+
+    Parameters:
+    el = UIA element to read from.
+    default := "" = fallback value if the property cannot be read.
+*/
 SafeUIA_GetLocalizedControlType(el, default := "") {
     if !IsObject(el)
         return default
@@ -15290,7 +15528,14 @@ SafeUIA_GetLocalizedControlType(el, default := "") {
     catch e
         return default
 }
-; ChatGPT
+/*
+    Read the UIA Name property, which is the accessibility/display label that
+    automation clients use to identify the element.
+
+    Parameters:
+    el = UIA element to read from.
+    default := "" = fallback value if the property cannot be read.
+*/
 SafeUIA_GetName(el, default := "") {
     if !IsObject(el)
         return default
@@ -15299,7 +15544,14 @@ SafeUIA_GetName(el, default := "") {
     catch e
         return default
 }
-; ChatGPT
+/*
+    Read the UIA ClassName property, which is the provider-reported class label
+    such as UIItem, UIItemsView, DirectUI, or other framework-specific names.
+
+    Parameters:
+    el = UIA element to read from.
+    default := "" = fallback value if the property cannot be read.
+*/
 SafeUIA_GetClassName(el, default := "") {
     if !IsObject(el)
         return default
@@ -15308,7 +15560,15 @@ SafeUIA_GetClassName(el, default := "") {
     catch e
         return default
 }
-; ChatGPT
+/*
+    Read the UIA Orientation property when a control reports horizontal or
+    vertical layout information.
+
+    Parameters:
+    el = UIA element to read from.
+    default := 0 = fallback orientation value if the property cannot be read.
+    Common values are 0 = none/unspecified, 1 = horizontal, 2 = vertical.
+*/
 SafeUIA_GetOrientation(el, default := 0) {
     if !IsObject(el)
         return default
@@ -15317,7 +15577,13 @@ SafeUIA_GetOrientation(el, default := 0) {
     catch e
         return default
 }
-; ChatGPT
+/*
+    Return the direct UIA parent element.
+    Use this when walking upward through the automation tree.
+
+    Parameters:
+    el = UIA element whose direct parent should be returned.
+*/
 SafeUIA_GetParent(el) {
     if !IsObject(el)
         return ""
@@ -15326,7 +15592,13 @@ SafeUIA_GetParent(el) {
     catch e
         return ""
 }
-; ChatGPT
+/*
+    Read the UIA AutomationId property, which is the provider's stable
+    identifier when one is exposed for the element.
+
+    Parameters:
+    el = UIA element to read from.
+*/
 SafeUIA_GetAutoId(el) {
     if !IsObject(el)
         return ""
@@ -15335,6 +15607,16 @@ SafeUIA_GetAutoId(el) {
     catch e
         return ""
 }
+/*
+    Read the UIA IsContentElement flag.
+    This reports whether the provider considers the element meaningful content
+    for content-view traversal, not just structural UI chrome.
+
+    Parameters:
+    el = UIA element to read from.
+    default := 0 = fallback value if the property cannot be read.
+    Common values are 0 = False and 1 = True.
+*/
 SafeUIA_GetIsContentElement(el, default := 0) {
     if !IsObject(el)
         return default
@@ -15344,6 +15626,16 @@ SafeUIA_GetIsContentElement(el, default := 0) {
         return default
 }
 
+/*
+    Read the UIA IsControlElement flag.
+    This reports whether the provider considers the element a real control in
+    the control view of the automation tree.
+
+    Parameters:
+    el = UIA element to read from.
+    default := 0 = fallback value if the property cannot be read.
+    Common values are 0 = False and 1 = True.
+*/
 SafeUIA_GetIsControlElement(el, default := 0) {
     if !IsObject(el)
         return default
@@ -17845,7 +18137,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its there::it's there
 ::its time::it's time
 ::its true::it's true
+::its under::it's under
 ::its up::it's up
+::its used::it's used
 ::its using::it's using
 ::its very::it's very
 ::its working::it's working
