@@ -69,6 +69,18 @@ Global onlyTitleFound                              := ""
 Global CancelClose                                 := False
 Global DrawingRect                                 := False
 Global LclickSelected                              := False
+; True while the pixel-measure drag tool owns the current LButton hold.
+Global measureActive                               := False
+; Tracks whether the three lightweight measurement GUIs have already been created.
+Global measureGuiReady                             := False
+; GUI control variable backing the live X/Y pixel readout.
+Global MeasureText                                := ""
+; Screen-space mouse-down origin for the current measurement drag.
+Global measureStartX                               := 0
+; Screen-space mouse-down origin for the current measurement drag.
+Global measureStartY                               := 0
+; Thickness in pixels for the horizontal and vertical measurement guides.
+Global measureThickness                            := 3
 Global currMonHeight                               := 0
 Global currMonWidth                                := 0
 Global LbuttonEnabled                              := True
@@ -1756,33 +1768,33 @@ HIGH-LEVEL HOTKEY RELATIONSHIPS
 A) Special LButton+RButton         B) MButton move/resize               C) RButton system
 ---------------------------        ----------------------               ------------------
 
-same chord, context decides        $*MButton:: begins                  first ownership check
+only title-bar chord exists        $*MButton:: begins                  every press first hits
+in current code                           |                            passive ~*RButton tracker
          |                                  |                                  |
-         +--> over title bar?               +--> becomes temporary             +--> MButton-mode dedicated
-         |        |                               owner of RButton                  RButton capture active?
+         +--> over title bar?               +--> sets temporary                +--> MButton-mode dedicated
+         |        |                               RButton ownership                 RButton capture active?
          |        +--> YES                         during drag/resize               |
          |        |      set                                                    +--> YES
          |        |      suppressRightButtonLogic                                 |    #If suspendRightButton...
          |        |      rightButtonComboUsed                                     |    dedicated $*RButton:: / Up::
-         |        |      title-bar action                                         |    own this RButton completely
+         |        |      title-bar action                                         |    consume this hold/release
          |        |
          |        +--> if standalone $*RButton:: also runs                     +--> NO
          |               it sees suppressRightButtonLogic                            |
          |               and exits early as consumed                                 v
          |
-         +--> over editable control?                                         taskbar or desktop shell?
-         |        |                                                                  |
-         |        +--> YES                                                           +--> YES
-         |        |      clear-edit action                                           |    ~*RButton
-         |        |      on hovered/focused field                                    |    native Windows right-click
-         |        |                                                                   |    RButton+Wheel stays native
-         |        +--> NO                                                             |
-         |               no special chord action                                      +--> NO
-         |                                                                                 |
-         +--> cleanup of consumed RButton path                                                v
-              later handled by $*RButton Up::                                            ~*RButton passthrough tracker
-                                                                                           marks shell/taskbar-native holds
-                                                                                           then normal $*RButton:: decides
+         +--> not over title bar?                                            taskbar or desktop shell?
+                  |                                                                  |
+                  +--> no special LButton+RButton action                             +--> YES
+                                                                                     |    ~*RButton tracker still runs
+                                                                                     |    no normal custom $*RButton::
+                                                                                     |    native Windows RButton path
+                                                                                     |    RButton+Wheel stays native
+                                                                                     |
+                                                                                     +--> NO
+                                                                                          |
+                                                                                          v
+                                                                                     normal scoped $*RButton:: decides
 
 
 MButton move/resize details
@@ -1801,17 +1813,30 @@ $*MButton::
         +--> if RButton participates in resize gesture
         |     mark next RButton Up to swallow
         |
-        +--> if moved window is nearly full monitor height
-        |     keep drag-time Y pinned to monitor top
-        |     so move-time geometry matches release-time
-        |     full-height normalization
+        +--> drag loop chooses move vs resize
+        |     and keeps monitor-boundary normalization in sync
         |
-        +--> on release after a real move:
-              FitMovedWindowAgainstOthers(...)
+        +--> on release:
+              |
+              +--> quick title-bar tap?
+              |        |
+              |        +--> YES -> SwitchDesktop
+              |
+              +--> else quick non-drag tap?
+              |        |
+              |        +--> YES -> Send {MButton}
+              |
+              +--> else nearly full monitor height?
+              |        |
+              |        +--> YES -> normalize height to monitor bounds
+              |
+              +--> if a real move/resize happened
+                       FitMovedWindowAgainstOthers(...)
+
 
 Normal RButton system
 =====================
-$*RButton::
+scoped $*RButton::  (#If !MouseIsOverAnyTaskbarSurface() && !MouseIsOverDesktopShellSurface())
         |
         +--> special LButton+RButton chord already claimed this press?
         |        |
@@ -1827,6 +1852,7 @@ $*RButton::
                  |        +--> YES
                  |        |      send native {RButton Down} immediately
                  |        |      so Explorer/Desktop right-drag works
+                 |        |      mark hold as already consumed by special path
                  |        |
                  |        +--> NO
                  |               keep hold script-owned
@@ -1900,9 +1926,9 @@ WatchMButtonOverrideState
 ONE-SENTENCE MENTAL MODEL
 =========================
 
-- `LButton + RButton` is a context-sensitive special chord.
+- `LButton + RButton` currently has one special path: the title-bar chord.
 - `MButton` temporarily installs a top-priority RButton owner during move/resize mode.
-- otherwise the normal RButton system owns the hold unless taskbar/desktop passthrough keeps it native.
+- every `RButton` press is passively tracked, but the custom `$*RButton::` state machine only exists off taskbar/desktop shell surfaces.
 */
 
 #If suspendRightButtonForMButtonDrag
@@ -5359,6 +5385,133 @@ DrawRect:
     Critical, Off
 Return
 ; ------------------  ChatGPT ------------------------------------------------------------------
+; ========================================================================================================
+; ------------------------------------  Pixel Measure Tool -----------------------------------------------
+; ========================================================================================================
+Measure_UpdateTick:
+    ; Keep the timer label tiny and delegate the real work to the function so the
+    ; measurement logic stays in one place.
+    Measure_Update()
+Return
+
+; Start the isolated pixel-measure drag tool at the current mouse position and arm
+; a fast timer so the two orthogonal guide legs track smoothly while LButton stays down.
+Measure_Begin() {
+    global measureActive, measureStartX, measureStartY
+
+    if (measureActive)
+        return
+
+    ; Read the drag origin in screen coordinates so the guides line up with the
+    ; always-on-top GUIs regardless of which window is under the cursor.
+    oldCoordModeMouse := A_CoordModeMouse
+    CoordMode, Mouse, Screen
+    MouseGetPos, measureStartX, measureStartY
+    CoordMode, Mouse, %oldCoordModeMouse%
+
+    ; Build the GUIs on first use, draw one frame immediately, then let the timer
+    ; keep the overlay in sync until LButton is released.
+    measureActive := True
+    Measure_EnsureGui()
+    Measure_Update()
+    SetTimer, Measure_UpdateTick, 10
+}
+
+; Hide the measurement guides and stop the drag timer so the tool leaves no overlay
+; behind after the mouse button is released.
+Measure_End() {
+    global measureActive, measureGuiReady
+
+    measureActive := False
+    SetTimer, Measure_UpdateTick, Off
+
+    if (!measureGuiReady)
+        return
+
+    ; Hide all three windows together so a partial overlay never gets left behind.
+    Gui, GUIMeasureH: Hide
+    Gui, GUIMeasureText: Hide
+    Gui, GUIMeasureV: Hide
+}
+
+; Lazily create the small click-through GUIs used by the measurement tool so the
+; feature stays self-contained and does not interfere with Overlay_* or GUI4Boarder.
+Measure_EnsureGui() {
+    global MeasureText, measureGuiReady
+
+    if (measureGuiReady)
+        return
+
+    ; Horizontal guide: spans from the drag origin to the current X position.
+    Gui, GUIMeasureH: New
+    Gui, GUIMeasureH: +AlwaysOnTop +ToolWindow -Caption -DPIScale +E0x20 +LastFound
+    Gui, GUIMeasureH: Color, FFAA00
+    WinSet, Transparent, 210
+
+    ; Vertical guide: drops from the horizontal endpoint to the current Y position.
+    Gui, GUIMeasureV: New
+    Gui, GUIMeasureV: +AlwaysOnTop +ToolWindow -Caption -DPIScale +E0x20 +LastFound
+    Gui, GUIMeasureV: Color, FFAA00
+    WinSet, Transparent, 210
+
+    ; Readout window: shows the live horizontal and vertical pixel distances.
+    Gui, GUIMeasureText: New
+    Gui, GUIMeasureText: +AlwaysOnTop +ToolWindow -Caption -DPIScale +Border +E0x20 +LastFound
+    Gui, GUIMeasureText: Color, 111111
+    Gui, GUIMeasureText: Font, s10 cFFFFFF, Segoe UI
+    Gui, GUIMeasureText: Margin, 8, 4
+    Gui, GUIMeasureText: Add, Text, vMeasureText, X: 0 px | Y: 0 px
+
+    measureGuiReady := True
+}
+
+; Recompute the current mouse delta, resize the horizontal and vertical guide legs,
+; and refresh the live pixel readout until the physical LButton is released.
+Measure_Update() {
+    global MeasureText, measureActive, measureStartX, measureStartY, measureThickness
+
+    if (!measureActive)
+        return
+
+    if (!GetKeyState("LButton", "P")) {
+        Measure_End()
+        return
+    }
+
+    ; Re-read the cursor in screen space so the overlay math matches the GUI
+    ; positions exactly.
+    oldCoordModeMouse := A_CoordModeMouse
+    CoordMode, Mouse, Screen
+    MouseGetPos, curX, curY
+    CoordMode, Mouse, %oldCoordModeMouse%
+
+    ; Signed deltas are kept for geometry, while the on-screen label shows the
+    ; absolute distance in each axis.
+    dx := curX - measureStartX
+    dy := curY - measureStartY
+
+    ; The horizontal leg always starts at the lesser X so it renders correctly
+    ; whether the drag moves left or right.
+    hX := (dx >= 0) ? measureStartX : curX
+    hY := measureStartY - Floor(measureThickness / 2)
+    hW := Abs(dx) + 1
+
+    ; The vertical leg is anchored at the current X so the two guides form a clean
+    ; L-shape that ends exactly at the cursor.
+    vX := curX - Floor(measureThickness / 2)
+    vY := (dy >= 0) ? measureStartY : curY
+    vH := Abs(dy) + 1
+
+    ; Resize and reposition the two guide windows in place instead of recreating
+    ; them on every tick.
+    Gui, GUIMeasureH: Show, % "x" hX " y" hY " w" hW " h" measureThickness " NA"
+    Gui, GUIMeasureV: Show, % "x" vX " y" vY " w" measureThickness " h" vH " NA"
+
+    ; Keep the readout near the cursor so the measurement stays readable while dragging.
+    GuiControl, GUIMeasureText:, MeasureText, % "X: " Abs(dx) " px | Y: " Abs(dy) " px"
+    Gui, GUIMeasureText: Show, % "x" (curX + 18) " y" (curY + 18) " NA AutoSize"
+}
+
 ClampAlpha(alphaValue) {
     if (alphaValue < 0)
         return 0
@@ -6132,6 +6285,12 @@ $^LButton::
     Thread, NoTimers, False
 return
 #If
+
+; Hold Ctrl+Shift, then drag with LButton to measure horizontal and vertical distance
+; from the mouse-down origin.
+$^+LButton::
+    Measure_Begin()
+return
 
 BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) {
     DetectHiddenWindows, Off
