@@ -104,6 +104,12 @@ Global typingAutoFixFastTtlMs                      := 125
 Global typingAutoFixSlowPathMs                     := 400
 ; Tick count of the last slow UIA/MSAA probe attempt.
 Global typingAutoFixSlowProbeTick                  := 0
+; Shared sequence token for deferred typing rewrites so older timer callbacks can
+; detect that a newer key event already replaced their context and should win.
+Global typingFixSeq                                := 0
+; Maximum lifetime for a deferred typing rewrite before it is treated as stale
+; and discarded instead of mutating text after the user has moved on.
+Global pendingTypingFixMaxAgeMs                    := 250
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
 Global clipPreferExplicitCtrlV                     := False
@@ -151,8 +157,32 @@ Global pendingAdjustColumnsTargetCacheTtlMs        := 350
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
 Global pendingFixSlashAction                       := ""
+; Focused control name captured when the "/ " or "/{Enter}" fix is queued so the
+; timer can cancel instead of rewriting text after focus moves to another control.
+Global pendingFixSlashCtrl                         := ""
+; Active top-level window captured when the deferred slash rewrite is armed; the
+; flush step requires this same window to still be active before sending anything.
 Global pendingFixSlashHwnd                         := 0
+; Sequence token assigned when the slash rewrite is queued so older timer callbacks
+; can detect that a newer typing event already superseded their pending work.
+Global pendingFixSlashId                           := 0
+; Tick count recorded when the slash rewrite is queued, used to drop the request if
+; it sits too long and would otherwise mutate text after the user moved on.
+Global pendingFixSlashQueuedTick                   := 0
+; Focused control name captured when the deferred Hoty capitalization fix is queued
+; so the timer only rewrites if the same edit target still owns focus.
+Global pendingHotyCtrl                             := ""
+; Active top-level window captured for the deferred Hoty fix, preventing the timer
+; from replaying a capitalization rewrite into whichever window became active later.
 Global pendingHotyHwnd                             := 0
+; Sequence token assigned to the deferred Hoty fix so only the newest queued typing
+; rewrite can fire and any stale timer callbacks self-cancel.
+Global pendingHotyId                               := 0
+; Tick count captured when the Hoty fix is queued, allowing old capitalization fixes
+; to expire quickly instead of landing after the surrounding typing context changed.
+Global pendingHotyQueuedTick                       := 0
+; Replacement character captured from the prior capital hotkey so the deferred Hoty
+; flush can send the intended rewrite only after the live key cycle has settled.
 Global pendingHotyReplacement                      := ""
 Global TimeOfLastHotkeyTyped                       := A_TickCount
 Global currentMon                                  := 0
@@ -500,13 +530,13 @@ TooltipExpr =
 Hotkey, If, ShouldRunTypingAutoFix()
 
 HotKey, ~/,  Marktime_FixSlash
-HotKey, ~',  Hoty ;'
-HotKey, ~?,  Hoty
-HotKey, ~!,  Hoty
-HotKey, ~`,, Hoty
+HotKey, ~',  Marktime_Hoty ;'
+HotKey, ~?,  Marktime_Hoty
+HotKey, ~!,  Marktime_Hoty
+HotKey, ~`,, Marktime_Hoty
 HotKey, ~.,  Marktime_Hoty
-HotKey, ~_,  Hoty
-HotKey, ~-,  Hoty
+HotKey, ~_,  Marktime_Hoty
+HotKey, ~-,  Marktime_Hoty
 Hotkey, ~:,  MarkKeypressTime
 
 Loop Parse, keys
@@ -873,8 +903,10 @@ LL_MouseHook(nCode, wParam, lParam)
 }
 
 MarkKeypressTime:
+    if (!StopAutoFix && (pendingFixSlashAction || pendingHotyReplacement))
+        CancelPendingTypingFixes(True, False)
     TimeOfLastHotkeyTyped := A_TickCount
-    lastHotkeyTyped := A_ThisHotkey
+    lastHotkeyTyped       := A_ThisHotkey
 Return
 
 Marktime_Hoty:
@@ -963,7 +995,12 @@ Return
 Hoty:
     CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey < 999) ? CapCount + 1 : 1 ; note that CapCount is ALWAYS at least 1
     If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
+        CancelPendingTypingFixes(False, False)
+        typingFixSeq += 1
         pendingHotyHwnd        := WinExist("A")
+        ControlGetFocus, pendingHotyCtrl, ahk_id %pendingHotyHwnd%
+        pendingHotyId          := typingFixSeq
+        pendingHotyQueuedTick  := A_TickCount
         pendingHotyReplacement := SubStr(A_PriorHotKey,3,1)
         SetTimer, FlushPendingHotyReplacement, -40
         CapCount := 1
@@ -993,6 +1030,14 @@ FlushPendingHotyReplacement:
     if (!pendingHotyReplacement)
         Return
 
+    ; Drop the queued rewrite if it sat too long. An aged-out timer is more
+    ; likely to target text the user has already continued editing.
+    if (pendingHotyQueuedTick && (A_TickCount - pendingHotyQueuedTick) > pendingTypingFixMaxAgeMs)
+    {
+        _ClearPendingHotyState()
+        Return
+    }
+
     ; Let the physical key cycle settle before rewriting the prior capital letter.
     if (A_TimeIdlePhysical < 40 || StopAutoFix)
     {
@@ -1000,18 +1045,20 @@ FlushPendingHotyReplacement:
         Return
     }
 
-    if (!WinActive("ahk_id " . pendingHotyHwnd))
+    ; Only allow Send when the queued rewrite still belongs to the latest
+    ; typing-fix sequence, the same window is still active, the same control
+    ; still has focus when we were able to capture one, and the queued work is
+    ; still within the short freshness budget.
+    if (!IsPendingTypingFixStillValid(pendingHotyId, pendingHotyHwnd, pendingHotyCtrl, pendingHotyQueuedTick))
     {
-        pendingHotyHwnd        := 0
-        pendingHotyReplacement := ""
+        _ClearPendingHotyState()
         Return
     }
 
     StopAutoFix            := True
     Send % "{Left}{BS}" . pendingHotyReplacement . "{Right}"
     StopAutoFix            := False
-    pendingHotyHwnd        := 0
-    pendingHotyReplacement := ""
+    _ClearPendingHotyState()
 Return
 
 FixSlash:
@@ -1021,14 +1068,24 @@ FixSlash:
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
     If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
-        pendingFixSlashAction := "space"
-        pendingFixSlashHwnd := WinExist("A")
+        CancelPendingTypingFixes(False, False)
+        typingFixSeq += 1
+        pendingFixSlashAction     := "space"
+        pendingFixSlashHwnd       := WinExist("A")
+        ControlGetFocus, pendingFixSlashCtrl, ahk_id %pendingFixSlashHwnd%
+        pendingFixSlashId         := typingFixSeq
+        pendingFixSlashQueuedTick := A_TickCount
         SetTimer, FlushPendingFixSlash, -40
         disableEnter := False
     }
     Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$Enter" && A_TimeSincePriorHotkey<999)) {
-        pendingFixSlashAction := "enter"
-        pendingFixSlashHwnd := WinExist("A")
+        CancelPendingTypingFixes(False, False)
+        typingFixSeq += 1
+        pendingFixSlashAction     := "enter"
+        pendingFixSlashHwnd       := WinExist("A")
+        ControlGetFocus, pendingFixSlashCtrl, ahk_id %pendingFixSlashHwnd%
+        pendingFixSlashId         := typingFixSeq
+        pendingFixSlashQueuedTick := A_TickCount
         SetTimer, FlushPendingFixSlash, -40
         disableEnter := False
     }
@@ -1060,6 +1117,14 @@ FlushPendingFixSlash:
     if (!pendingFixSlashAction)
         Return
 
+    ; Drop the queued slash rewrite if it has become stale. Once the user has
+    ; moved on, an old timer is more dangerous than skipping the correction.
+    if (pendingFixSlashQueuedTick && (A_TickCount - pendingFixSlashQueuedTick) > pendingTypingFixMaxAgeMs)
+    {
+        _ClearPendingFixSlashState()
+        Return
+    }
+
     ; Let the physical key cycle settle before rewriting slash punctuation.
     if (A_TimeIdlePhysical < 40 || StopAutoFix)
     {
@@ -1067,10 +1132,12 @@ FlushPendingFixSlash:
         Return
     }
 
-    if (!WinActive("ahk_id " . pendingFixSlashHwnd))
+    ; Only allow Send when this is still the newest queued slash fix, the
+    ; original window is still active, the same control still has focus when
+    ; available, and the queued action remains fresh enough to trust.
+    if (!IsPendingTypingFixStillValid(pendingFixSlashId, pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashQueuedTick))
     {
-        pendingFixSlashAction := ""
-        pendingFixSlashHwnd   := 0
+        _ClearPendingFixSlashState()
         Return
     }
 
@@ -1080,9 +1147,81 @@ FlushPendingFixSlash:
     else if (pendingFixSlashAction = "enter")
         Send, % "{BS}{?}{ENTER}"
     StopAutoFix           := False
-    pendingFixSlashAction := ""
-    pendingFixSlashHwnd   := 0
+    _ClearPendingFixSlashState()
 Return
+
+; Clears the deferred slash rewrite slot without invalidating the shared sequence
+; token, allowing the caller to decide whether newer timers should also be dropped.
+_ClearPendingFixSlashState() {
+    global pendingFixSlashAction
+    global pendingFixSlashCtrl
+    global pendingFixSlashHwnd
+    global pendingFixSlashId
+    global pendingFixSlashQueuedTick
+
+    pendingFixSlashAction     := ""
+    pendingFixSlashCtrl       := ""
+    pendingFixSlashHwnd       := 0
+    pendingFixSlashId         := 0
+    pendingFixSlashQueuedTick := 0
+}
+
+; Clears the deferred capitalization rewrite slot without invalidating the shared
+; sequence token, allowing the caller to cancel one slot or both explicitly.
+_ClearPendingHotyState() {
+    global pendingHotyCtrl
+    global pendingHotyHwnd
+    global pendingHotyId
+    global pendingHotyQueuedTick
+    global pendingHotyReplacement
+
+    pendingHotyCtrl        := ""
+    pendingHotyHwnd        := 0
+    pendingHotyId          := 0
+    pendingHotyQueuedTick  := 0
+    pendingHotyReplacement := ""
+}
+
+; Cancels deferred typing rewrites and can optionally bump the shared sequence so
+; already-scheduled timers know a newer physical action superseded their work.
+CancelPendingTypingFixes(invalidateSeq := False, resetDisableEnter := False) {
+    global disableEnter
+    global typingFixSeq
+
+    if (invalidateSeq)
+        typingFixSeq += 1
+
+    _ClearPendingFixSlashState()
+    _ClearPendingHotyState()
+
+    if (resetDisableEnter)
+        disableEnter := False
+}
+
+; Returns true only when a deferred typing rewrite is still fresh, still points
+; at the active window, and still targets the same focused control when exposed.
+IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedTick) {
+    global pendingTypingFixMaxAgeMs
+    global typingFixSeq
+
+    if (!pendingHwnd || pendingId != typingFixSeq)
+        return False
+
+    if (pendingQueuedTick && (A_TickCount - pendingQueuedTick) > pendingTypingFixMaxAgeMs)
+        return False
+
+    if (!WinActive("ahk_id " . pendingHwnd))
+        return False
+
+    if (pendingCtrl != "")
+    {
+        ControlGetFocus, currentCtrl, ahk_id %pendingHwnd%
+        if (currentCtrl != pendingCtrl)
+            return False
+    }
+
+    return True
+}
 
 IsPriorHotKeyLetterKey() {
     Return (IsPriorHotKeyCapital() || IsPriorHotKeyLowerCase())
@@ -3575,7 +3714,7 @@ TryFastInsertWrappedText(text) {
 
 ; Wraps clipboard text and preserves a single trailing space outside the wrapper.
 WrapClipboardText(leftText, rightText) {
-    Send, ^!+m
+    ; Send, ^!+m
 
     clipboardText    := Clip()
 
@@ -3589,7 +3728,7 @@ WrapClipboardText(leftText, rightText) {
     if !TryFastInsertWrappedText(wrappedText)
         Clip(wrappedText)
 
-    Send, ^!+m
+    ; Send, ^!+m
 }
 
 ; Swap a selected true/false literal to the opposite value while preserving only
@@ -3601,7 +3740,7 @@ _SwapSelectedBooleanLiteral() {
     if (selectedText = "")
         return false
 
-    if (selectedText == "true")
+    if (selectedText      == "true")
         replacementText := "false"
     else if (selectedText == "True")
         replacementText := "False"
@@ -3862,7 +4001,10 @@ Return
 
 #If disableEnter
 $Enter::
+    typingFixSeqBefore := typingFixSeq
     GoSub, FixSlash
+    if !(pendingFixSlashAction = "enter" && pendingFixSlashId = typingFixSeq && typingFixSeq != typingFixSeqBefore)
+        Send, {Enter}
     disableEnter := False
 Return
 #If
@@ -3923,19 +4065,27 @@ $~+Space::
 Return
 
 $~^Backspace::
+    CancelPendingTypingFixes(True, True)
     Hotstring("Reset")
 Return
 
+; Editing or moving the caret invalidates the remembered prior-letter context used
+; by FixSlash, so clear it here rather than letting a later "/" rewrite qualify
+; against text the user has already changed or navigated away from.
 $~Backspace::
+    CancelPendingTypingFixes(True, True)
     TimeOfLastHotkeyTyped := A_TickCount
     lastHotkeyTyped := "~Backspace"
+    X_PriorPriorHotKey :=
 Return
 
 $~Left::
+    CancelPendingTypingFixes(True, True)
     X_PriorPriorHotKey :=
 Return
 
 $~Right::
+    CancelPendingTypingFixes(True, True)
     X_PriorPriorHotKey :=
 Return
 
