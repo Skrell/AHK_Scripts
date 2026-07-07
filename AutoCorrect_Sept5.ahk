@@ -18,21 +18,25 @@
 #KeyHistory 25
 
 ; #include %A_ScriptDir%\_VD.ahk
-; DLL
-Global VDA_DllName := "VirtualDesktopAccessor_Win11.dll"
-Global dllPath := A_ScriptDir . "\" . VDA_DllName  ; destination: next to EXE/script
-Global hVirtualDesktopAccessor             := 0
-Global GetDesktopCountProc                 := 0
-Global GoToDesktopNumberProc               := 0
-Global GetCurrentDesktopNumberProc         := 0
-Global IsWindowOnCurrentVirtualDesktopProc := 0
-Global IsWindowOnDesktopNumberProc         := 0
-Global MoveWindowToDesktopNumberProc       := 0
-Global IsPinnedWindowProc                  := 0
-Global GetDesktopNameProc                  := 0
-Global SetDesktopNameProc                  := 0
-Global CreateDesktopProc                   := 0
-Global RemoveDesktopProc                   := 0
+; +----------------------------------------------------------------------------+
+; | Virtual Desktop DLL Bindings                                               |
+; | Holds the DLL name/path, module handle, and exported function pointers     |
+; | used by the virtual-desktop helpers.                                       |
+; +----------------------------------------------------------------------------+
+Global k_VDA_DllName := "VirtualDesktopAccessor_Win11.dll"
+Global k_dllPath := A_ScriptDir . "\" . k_VDA_DllName  ; destination: next to EXE/script
+Global hVirtualDesktopAccessor                     := 0
+Global GetDesktopCountProc                         := 0
+Global GoToDesktopNumberProc                       := 0
+Global GetCurrentDesktopNumberProc                 := 0
+Global IsWindowOnCurrentVirtualDesktopProc         := 0
+Global IsWindowOnDesktopNumberProc                 := 0
+Global MoveWindowToDesktopNumberProc               := 0
+Global IsPinnedWindowProc                          := 0
+Global GetDesktopNameProc                          := 0
+Global SetDesktopNameProc                          := 0
+Global CreateDesktopProc                           := 0
+Global RemoveDesktopProc                           := 0
 
 SendMode, Input ; It injects the whole keystroke atomically, reducing the window where logical/physical can disagree
 
@@ -44,6 +48,11 @@ SetBatchLines,   -1 ; Remove AHK's built-in "cooperate with the OS" sleeps
 SetWinDelay,      1 ;
 SetControlDelay,  1 ;
 
+; +----------------------------------------------------------------------------+
+; | Window, Search, And Selection State                                        |
+; | Tracks the live window lists, Alt+Tab-style cycling, popup-selection UI,   |
+; | and other top-level state shared by the window-management hotkeys.          |
+; +----------------------------------------------------------------------------+
 Global CurrentDesktop                              := 1
 Global mouseMoving                                 := False
 Global CanceledWinSwap                             := False
@@ -57,8 +66,8 @@ Global cycleCount                                  := 1
 ; building the GUI. Buffer that press here so the loop consumes it instead of losing it.
 Global bufferedCycleAdvance                        := False
 Global startHighlight                              := False
-Global border_thickness                            := 4
-Global border_color                                := 0xFF00FF
+Global k_border_thickness                          := 4
+Global k_border_color                              := 0xFF00FF
 Global hitTAB                                      := False
 Global hitTilde                                    := False
 Global SearchingWindows                            := False
@@ -69,51 +78,99 @@ Global onlyTitleFound                              := ""
 Global CancelClose                                 := False
 Global DrawingRect                                 := False
 Global LclickSelected                              := False
+; +----------------------------------------------------------------------------+
+; | Measurement Overlay State                                                  |
+; | Backs the temporary pixel-measure tool so one drag can reuse lightweight    |
+; | GUI overlays instead of rebuilding them on every mouse move.               |
+; +----------------------------------------------------------------------------+
 ; True while the pixel-measure drag tool owns the current LButton hold.
 Global measureActive                               := False
 ; Tracks whether the three lightweight measurement GUIs have already been created.
 Global measureGuiReady                             := False
 ; GUI control variable backing the live X/Y pixel readout.
-Global MeasureText                                := ""
+Global MeasureText                                 := ""
 ; Screen-space mouse-down origin for the current measurement drag.
 Global measureStartX                               := 0
 ; Screen-space mouse-down origin for the current measurement drag.
 Global measureStartY                               := 0
 ; Thickness in pixels for the horizontal and vertical measurement guides.
-Global measureThickness                            := 3
+Global k_measureThickness                          := 3
 Global currMonHeight                               := 0
 Global currMonWidth                                := 0
 Global LbuttonEnabled                              := True
+; +----------------------------------------------------------------------------+
+; | Typing Auto-Fix, Deferred Rewrite, And Activation State                    |
+; | Caches whether typing fixes are allowed, queues short-lived deferred text   |
+; | rewrites, and keeps focus/activation bookkeeping cheap while typing or      |
+; | clicking into another window.                                               |
+; +----------------------------------------------------------------------------+
 Global X_PriorPriorHotKey                          :=
 Global StopAutoFix                                 := False
 ; Cache the typing-auto-fix eligibility decision so most keystrokes avoid the
 ; slower UIA/MSAA focus probes.
 ; Last allow/deny result returned by the typing-auto-fix gate.
-Global typingAutoFixCacheAllowed                   := False
+Global c_typingAutoFixAllowed                      := False
 ; Focused control name used to decide whether the cached result still applies.
-Global typingAutoFixCacheCtrl                      := ""
+Global c_typingAutoFixCtrlNN                       := ""
 ; Active window handle associated with the cached focus/editability decision.
-Global typingAutoFixCacheHwnd                      := 0
+Global c_typingAutoFixHwnd                         := 0
 ; Short reason string describing why the current cache entry passed or failed.
-Global typingAutoFixCacheReason                    := ""
+Global c_typingAutoFixReason                       := ""
 ; Tick count when the cache entry was last refreshed.
-Global typingAutoFixCacheTick                      := 0
+Global c_typingAutoFixTick                         := 0
 ; Maximum age for a same-window/same-control fast cache hit.
-Global typingAutoFixFastTtlMs                      := 125
+Global k_typingAutoFixFastTtlMs                    := 125
 ; Minimum gap before repeating slower UIA/MSAA probes for unchanged focus.
-Global typingAutoFixSlowPathMs                     := 400
+Global k_typingAutoFixSlowPathMs                   := 400
 ; Tick count of the last slow UIA/MSAA probe attempt.
 Global typingAutoFixSlowProbeTick                  := 0
+; Focused control name captured when an async editability refresh is queued so
+; the timer can confirm the same target still owns focus before probing.
+Global typingAutoFixRefreshCtrlNN                  := ""
+; Short one-shot delay before the async editability refresh runs. This keeps the
+; first keypath cheap and spaces the slow probe slightly away from the triggering
+; keystroke, while the later A_TimeIdlePhysical retry is what usually keeps the
+; refresh from competing with nearby deferred text-rewrite timers.
+Global k_typingAutoFixRefreshDelayMs               := 25
+; Active window captured when the async editability refresh is queued.
+Global typingAutoFixRefreshHwnd                    := 0
+; Monotonic token incremented whenever a newer async editability refresh
+; replaces an older queued request.
+Global typingAutoFixRefreshId                      := 0
+; Tick count recorded when the async editability refresh is queued so the flow
+; can be reasoned about against nearby deferred typing timers.
+Global typingAutoFixRefreshQueuedTick              := 0
+; Short delay before deferred foreground-window maintenance runs. The WinEvent
+; callback stores only the latest target HWND, then this timer waits long enough
+; for the physical activation click to finish so the first click into another
+; window does not have to pay the full activation-classification cost inline.
+Global k_pendingActiveWinChangeDelayMs             := 25
+; Latest foreground-window HWND captured by OnWinActiveChange(). The deferred
+; timer re-checks that this exact top-level window is still active before
+; running any of the heavier activation bookkeeping or SendCtrlAdd logic.
+Global pendingActiveWinChangeHwnd                  := 0
+; Monotonic token for deferred activation work. Each newer foreground change
+; supersedes the prior one so an older timer cannot mutate a newer context.
+Global pendingActiveWinChangeId                    := 0
 ; Shared sequence token for deferred typing rewrites so older timer callbacks can
 ; detect that a newer key event already replaced their context and should win.
 Global typingFixSeq                                := 0
-; Maximum lifetime for a deferred typing rewrite before it is treated as stale
-; and discarded instead of mutating text after the user has moved on.
-Global pendingTypingFixMaxAgeMs                    := 250
+; Maximum lifetime for a deferred typing rewrite before it is discarded. Once a
+; queued fix has been pending longer than this limit, it is assumed the user may
+; already be typing in a newer text context, so the delayed Send is skipped.
+Global k_pendingTypingFixMaxAgeMs                  := 250
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
 Global clipPreferExplicitCtrlV                     := False
+; Temporary slash-fix Enter interception flag. When "/{Enter}" is being evaluated,
+; this enables the custom $Enter handler to either queue the deferred slash rewrite
+; or pass through a normal Enter instead of letting both paths fire.
 Global disableEnter                                := False
+; +----------------------------------------------------------------------------+
+; | Explorer Column Auto-Fit Deferred Wheel State                              |
+; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
+; | caches for the deferred Explorer/file-dialog Ctrl+NumpadAdd send path.     |
+; +----------------------------------------------------------------------------+
 ; Window class for the most recent Explorer/file-dialog wheel target so the
 ; deferred adjust step can confirm the queued request still points at the same shell UI.
 Global pendingAdjustColumnsClass                   := ""
@@ -128,31 +185,31 @@ Global pendingAdjustColumnsHwnd                    := 0
 Global pendingAdjustColumnsLastWheelTick           := 0
 ; Minimum quiet period after the last wheel event before attempting Explorer
 ; column auto-fit; this avoids interrupting fast continuous scrolling.
-Global pendingAdjustColumnsQuietMs                 := 110
+Global k_pendingAdjustColumnsQuietMs               := 110
 ; Stronger quiet period for #32770 file dialogs, where DirectUI scroll activity and
 ; deferred Ctrl+NumpadAdd sends are more likely to overlap visibly.
-Global pendingAdjustColumnsDialogQuietMs           := 180
+Global k_pendingAdjustColumnsDialogQuietMs         := 180
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
 Global pendingAdjustColumnsRequestId               := 0
 ; Short retry delay used when the timer wakes up before scrolling is truly quiet,
 ; allowing fast re-checks without doing focus/send work on every wheel tick.
-Global pendingAdjustColumnsRetryMs                 := 35
+Global k_pendingAdjustColumnsRetryMs               := 35
 ; Brief final hold just before injecting Ctrl+NumpadAdd so a last-moment wheel event
 ; can update the pending request state and cause the send to abort cleanly.
-Global pendingAdjustColumnsSendGuardMs             := 20
+Global k_pendingAdjustColumnsSendGuardMs           := 20
 ; Cached final Explorer target ClassNN for the most recent wheel-adjust window so
 ; repeated pause/resume cycles can skip DirectUI/ListView rediscovery work.
-Global pendingAdjustColumnsTargetCacheCtrl         := ""
+Global c_pendingAdjustColumnsTargetCtrl            := ""
 ; Top-level window HWND that owns the cached Explorer target ClassNN; the cache is
 ; only valid when a later wheel-adjust request points at this same shell window.
-Global pendingAdjustColumnsTargetCacheHwnd         := 0
+Global c_pendingAdjustColumnsTargetHwnd            := 0
 ; Tick count when the cached Explorer target was last confirmed, limiting reuse to
 ; a short burst where the folder view structure is unlikely to have changed.
-Global pendingAdjustColumnsTargetCacheTick         := 0
+Global c_pendingAdjustColumnsTargetTick            := 0
 ; Maximum age for the cached Explorer target before AdjustColumns falls back to
 ; full target resolution to avoid using a stale DirectUI/ListView guess.
-Global pendingAdjustColumnsTargetCacheTtlMs        := 350
+Global k_pendingAdjustColumnsTargetTtlMs           := 350
 ; Deferred typing correction state so punctuation and capitalization rewrites can
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
@@ -166,8 +223,8 @@ Global pendingFixSlashHwnd                         := 0
 ; Sequence token assigned when the slash rewrite is queued so older timer callbacks
 ; can detect that a newer typing event already superseded their pending work.
 Global pendingFixSlashId                           := 0
-; Tick count recorded when the slash rewrite is queued, used to drop the request if
-; it sits too long and would otherwise mutate text after the user moved on.
+; Tick count recorded when the slash rewrite is queued, used to drop the request
+; once it has been pending longer than k_pendingTypingFixMaxAgeMs.
 Global pendingFixSlashQueuedTick                   := 0
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
@@ -175,8 +232,8 @@ Global pendingHotyCtrl                             := ""
 ; Active top-level window captured for the deferred Hoty fix, preventing the timer
 ; from replaying a capitalization rewrite into whichever window became active later.
 Global pendingHotyHwnd                             := 0
-; Sequence token assigned to the deferred Hoty fix so only the newest queued typing
-; rewrite can fire and any stale timer callbacks self-cancel.
+; Sequence token assigned to the deferred Hoty fix so only the newest queued
+; typing rewrite can fire and any older timer callbacks self-cancel.
 Global pendingHotyId                               := 0
 ; Tick count captured when the Hoty fix is queued, allowing old capitalization fixes
 ; to expire quickly instead of landing after the surrounding typing context changed.
@@ -184,6 +241,11 @@ Global pendingHotyQueuedTick                       := 0
 ; Replacement character captured from the prior capital hotkey so the deferred Hoty
 ; flush can send the intended rewrite only after the live key cycle has settled.
 Global pendingHotyReplacement                      := ""
+; +----------------------------------------------------------------------------+
+; | Runtime Context And Click/Drag Scratch State                               |
+; | Stores the current desktop, monitor, Explorer path, click target, and      |
+; | in-progress drag metadata shared across mouse and window-management flows.  |
+; +----------------------------------------------------------------------------+
 Global TimeOfLastHotkeyTyped                       := A_TickCount
 Global currentMon                                  := 0
 Global previousMon                                 := 0
@@ -195,12 +257,12 @@ Global MbuttonIsEnter                              := False
 Global suspendRightButtonForMButtonDrag            := False
 Global lastActWinID                                :=
 Global WindowTitleID                               :=
-Global keys                                        := "abcdefghijklmnopqrstuvwxyz"
-Global numbers                                     := "0123456789"
-Global DoubleClickTime                             := DllCall("GetDoubleClickTime")
-Global SingleClickTime                             := floor(DllCall("GetDoubleClickTime") * 0.5)
-Global isWin11                                     := DetectWin11()
-Global isModernExplorerInReg                       := IsExplorerModern()
+Global k_keys                                      := "abcdefghijklmnopqrstuvwxyz"
+Global k_numbers                                   := "0123456789"
+Global k_DoubleClickTime                           := DllCall("GetDoubleClickTime")
+Global k_SingleClickTime                           := floor(DllCall("GetDoubleClickTime") * 0.5)
+Global k_isWin11                                   := DetectWin11()
+Global k_isModernExplorerInReg                     := IsExplorerModern()
 Global TaskBarHeight                               := 0
 Global lastHotkeyTyped                             := ""
 Global DraggingWindow                              := False
@@ -221,7 +283,11 @@ Global lButtonResizeSyncTopmostStates              := {}
 Global trayClickPosX                               := 0
 Global trayClickPosY                               := 0
 
-
+; +----------------------------------------------------------------------------+
+; | Hook, UIA, And Input-Guard State                                           |
+; | Owns the foreground-window hook, UIA interface, low-level hook handles,    |
+; | and key/mouse blocking state used to keep synthetic input predictable.      |
+; +----------------------------------------------------------------------------+
 Global hActWin                                     := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
 Global UIA                                         := UIA_Interface() ; Initialize UIA interface
 ; Turn key blocking ON/OFF
@@ -233,18 +299,26 @@ Global hHookKbd
 Global hHookMouse
 Global deferredModifiersToFix                      := ""
 Global deferredModifierFixRemaining                := 0
-; --- Config ---
-Global UseWorkArea                                 := true   ; true = monitor work area (ignores taskbar). false = full monitor.
-Global SnapRange                                   := 20     ; px: distance from edge to begin snapping
-Global BreakAway                                   := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
-Global ReleaseAway                                 := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
+; +----------------------------------------------------------------------------+
+; | Window Snap And Drag Configuration                                         |
+; | These are the coarse behavior knobs for snapping, monitor work-area rules, |
+; | classes that should never be drag-managed, and overlay dimming strength.   |
+; +----------------------------------------------------------------------------+
+Global k_UseWorkArea                               := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+Global k_SnapRange                                 := 20     ; px: distance from edge to begin snapping
+Global k_BreakAway                                 := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+Global k_ReleaseAway                               := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
-Global skipClasses                                 := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
+Global k_skipClasses                               := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
-; === Settings ===
-Global Opacity                                     := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
+Global k_Opacity                                   := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 
+; +----------------------------------------------------------------------------+
+; | Right-Button State Machine                                                 |
+; | Remembers whether the script has started, consumed, or should suppress the |
+; | native right-click flow so custom RButton chords do not leak shell input.  |
+; +----------------------------------------------------------------------------+
 ; Right-button state machine:
 ; - held/nativeDown track whether we have started a real OS-level right-click yet.
 ; - comboUsed suppresses the fallback Click, Right path when the hold was consumed by a combo.
@@ -361,8 +435,8 @@ line1  := "Total Number of Monitors is " MonCount " with Primary being " MonNum
 line1a := "Desktop edges: " leftArrow . "(" . G_DisplayLeftEdge . "," . G_DisplayRightEdge . ")" . rightArrow
 line1b := "Desktop edges: " upArrow . "(" . G_DisplayTopEdge . "," . G_DisplayBottomEdge . ")" . downArrow
 line2  := "Current Mon is     " GetCurrentMonitorIndex()
-line3  := "Win11 is           " isWin11
-line4  := "Modern Explorer is " isModernExplorerInReg
+line3  := "Win11 is           " k_isWin11
+line4  := "Modern Explorer is " k_isModernExplorerInReg
 line5  := "Total # of Desktops " totalVirtualDesktops
 Tooltip, % line1 "`n" line1a "`n" line1b "`n" line2 "`n" line3 "`n" line4 "`n" line5
 Sleep 5000
@@ -384,7 +458,7 @@ FrameShadow(IGUIF2)
 Gui, GUI4Boarder: New
 Gui, GUI4Boarder: +HwndHighlighter
 Gui, GUI4Boarder: +AlwaysOnTop +Toolwindow -Caption +Owner +Lastfound
-Gui, GUI4Boarder: Color, %border_color%
+Gui, GUI4Boarder: Color, %k_border_color%
 
 ; --- Overlay GUI init (create once at startup) ---
 ;
@@ -539,14 +613,14 @@ HotKey, ~_,  Marktime_Hoty
 HotKey, ~-,  Marktime_Hoty
 Hotkey, ~:,  MarkKeypressTime
 
-Loop Parse, keys
+Loop Parse, k_keys
 {
     Hotkey, %  "~" . A_LoopField, Marktime_Hoty_FixSlash, On
     Hotkey, % "~+" . A_LoopField, Marktime_Hoty_FixSlash, On
 }
 
 ; Numbers
-Loop Parse, numbers
+Loop Parse, k_numbers
 {
     Hotkey, % "~" . A_LoopField, Marktime_Hoty_FixSlash, On
 }
@@ -700,7 +774,7 @@ _gp(name)
 
 InitVDA()
 {
-    global hVirtualDesktopAccessor, dllPath
+    global hVirtualDesktopAccessor, k_dllPath
     global GetDesktopCountProc, GoToDesktopNumberProc, GetCurrentDesktopNumberProc
     global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
     global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
@@ -716,20 +790,20 @@ InitVDA()
 
     initializing := true
 
-    if !FileExist(dllPath)
+    if !FileExist(k_dllPath)
     {
         initializing := false
-        MsgBox % "VDA DLL missing:`n" dllPath
+        MsgBox % "VDA DLL missing:`n" k_dllPath
         return false
     }
 
     if (!hVirtualDesktopAccessor)
     {
-        hVirtualDesktopAccessor := DllCall("LoadLibrary", "Str", dllPath, "Ptr")
+        hVirtualDesktopAccessor := DllCall("LoadLibrary", "Str", k_dllPath, "Ptr")
         if (!hVirtualDesktopAccessor)
         {
             initializing := false
-            MsgBox % "LoadLibrary failed:`n" dllPath "`nA_LastError=" A_LastError
+            MsgBox % "LoadLibrary failed:`n" k_dllPath "`nA_LastError=" A_LastError
             return false
         }
     }
@@ -1030,9 +1104,10 @@ FlushPendingHotyReplacement:
     if (!pendingHotyReplacement)
         Return
 
-    ; Drop the queued rewrite if it sat too long. An aged-out timer is more
-    ; likely to target text the user has already continued editing.
-    if (pendingHotyQueuedTick && (A_TickCount - pendingHotyQueuedTick) > pendingTypingFixMaxAgeMs)
+    ; Drop the queued rewrite if it has been pending longer than
+    ; k_pendingTypingFixMaxAgeMs. Once that short age budget is exceeded, the user
+    ; may already be editing later text and this delayed Send is no longer safe.
+    if (pendingHotyQueuedTick && (A_TickCount - pendingHotyQueuedTick) > k_pendingTypingFixMaxAgeMs)
     {
         _ClearPendingHotyState()
         Return
@@ -1067,7 +1142,7 @@ FixSlash:
     Else If !IsGoogleDocWindow() && (!StopAutoFix && IsThisHotKeyLetterKey())
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
-    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
+    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
         CancelPendingTypingFixes(False, False)
         typingFixSeq += 1
         pendingFixSlashAction     := "space"
@@ -1076,9 +1151,9 @@ FixSlash:
         pendingFixSlashId         := typingFixSeq
         pendingFixSlashQueuedTick := A_TickCount
         SetTimer, FlushPendingFixSlash, -40
-        disableEnter := False
+        disableEnter              := False
     }
-    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$Enter" && A_TimeSincePriorHotkey<999)) {
+    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$Enter" && A_TimeSincePriorHotkey<999)) {
         CancelPendingTypingFixes(False, False)
         typingFixSeq += 1
         pendingFixSlashAction     := "enter"
@@ -1087,7 +1162,7 @@ FixSlash:
         pendingFixSlashId         := typingFixSeq
         pendingFixSlashQueuedTick := A_TickCount
         SetTimer, FlushPendingFixSlash, -40
-        disableEnter := False
+        disableEnter              := False
     }
     If IsPriorHotKeyLowerCase()   ; as long as a letter key is pressed we record the priorprior hotkey
         X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1) ; record the letter key pressed
@@ -1117,9 +1192,10 @@ FlushPendingFixSlash:
     if (!pendingFixSlashAction)
         Return
 
-    ; Drop the queued slash rewrite if it has become stale. Once the user has
-    ; moved on, an old timer is more dangerous than skipping the correction.
-    if (pendingFixSlashQueuedTick && (A_TickCount - pendingFixSlashQueuedTick) > pendingTypingFixMaxAgeMs)
+    ; Drop the queued slash rewrite if it has been pending longer than
+    ; k_pendingTypingFixMaxAgeMs. After that short age budget, skipping the
+    ; correction is safer than rewriting text in a newer typing context.
+    if (pendingFixSlashQueuedTick && (A_TickCount - pendingFixSlashQueuedTick) > k_pendingTypingFixMaxAgeMs)
     {
         _ClearPendingFixSlashState()
         Return
@@ -1198,16 +1274,52 @@ CancelPendingTypingFixes(invalidateSeq := False, resetDisableEnter := False) {
         disableEnter := False
 }
 
+; A mouse click means the user is taking manual caret or focus control, so any
+; queued rewrite/probe tied to the old caret position should be dropped first.
+CancelPendingTypingWorkForPointerAction() {
+    CancelPendingTypingFixes(True, True)
+    ClearPendingTypingAutoFixRefresh()
+}
+
+; A focus change is also a pointer-like context break for deferred typing work,
+; so reuse the same cancellation path the click handler uses.
+CancelPendingTypingWorkForFocusChange() {
+    CancelPendingTypingWorkForPointerAction()
+}
+
+; Clears the queued foreground-window maintenance target once a newer activation
+; supersedes it or the deferred handler finishes its work.
+ClearPendingActiveWinChange() {
+    global pendingActiveWinChangeHwnd
+
+    pendingActiveWinChangeHwnd := 0
+}
+
+; Returns true only when the deferred activation handler still points at the
+; latest queued foreground window and that same window remains active.
+IsPendingActiveWinChangeStillValid(pendingId, pendingHwnd) {
+    global pendingActiveWinChangeHwnd
+    global pendingActiveWinChangeId
+
+    if (!pendingHwnd || pendingId != pendingActiveWinChangeId)
+        return False
+
+    if (pendingHwnd != pendingActiveWinChangeHwnd)
+        return False
+
+    return WinActive("ahk_id " . pendingHwnd)
+}
+
 ; Returns true only when a deferred typing rewrite is still fresh, still points
 ; at the active window, and still targets the same focused control when exposed.
 IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedTick) {
-    global pendingTypingFixMaxAgeMs
+    global k_pendingTypingFixMaxAgeMs
     global typingFixSeq
 
     if (!pendingHwnd || pendingId != typingFixSeq)
         return False
 
-    if (pendingQueuedTick && (A_TickCount - pendingQueuedTick) > pendingTypingFixMaxAgeMs)
+    if (pendingQueuedTick && (A_TickCount - pendingQueuedTick) > k_pendingTypingFixMaxAgeMs)
         return False
 
     if (!WinActive("ahk_id " . pendingHwnd))
@@ -1230,20 +1342,20 @@ IsThisHotKeyLetterKey() {
     Return (IsThisHotKeyCapital() || IsThisHotKeyLowerCase())
 }
 IsPriorHotKeyCapital() {
-    global keys
-    Return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,1,1)!="!" && SubStr(A_PriorHotKey,2,1)="+" && InStr(keys, Substr(A_PriorHotkey,3,1), False))
+    global k_keys
+    Return (StrLen(A_PriorHotkey) == 3 && SubStr(A_PriorHotKey,1,1)!="!" && SubStr(A_PriorHotKey,2,1)="+" && InStr(k_keys, Substr(A_PriorHotkey,3,1), False))
 }
 IsPriorHotKeyLowerCase() {
-    global keys
-    Return (StrLen(A_PriorHotkey) == 2 && InStr(keys, Substr(A_PriorHotkey,2,1), False))
+    global k_keys
+    Return (StrLen(A_PriorHotkey) == 2 && InStr(k_keys, Substr(A_PriorHotkey,2,1), False))
 }
 IsThisHotKeyCapital() {
-    global keys
-    Return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,1,1)!="!" && SubStr(A_ThisHotKey,2,1)="+" && InStr(keys, Substr(A_ThisHotKey,3,1), False))
+    global k_keys
+    Return (StrLen(A_ThisHotKey) == 3 && SubStr(A_ThisHotKey,1,1)!="!" && SubStr(A_ThisHotKey,2,1)="+" && InStr(k_keys, Substr(A_ThisHotKey,3,1), False))
 }
 IsThisHotKeyLowerCase() {
-    global keys
-    Return (StrLen(A_ThisHotKey) == 2 && InStr(keys, Substr(A_ThisHotKey,2,1), False))
+    global k_keys
+    Return (StrLen(A_ThisHotKey) == 2 && InStr(k_keys, Substr(A_ThisHotKey,2,1), False))
 }
 
 DoNothing:
@@ -1490,9 +1602,9 @@ HasFileViewChild(hParent) {
 
     Loop, Parse, ctrlList, `n
     {
-        ctrl := A_LoopField
+        ctrlNN := A_LoopField
         ; Extract the class part from ClassNN (e.g. "SysListView32" from "SysListView321")
-        if RegExMatch(ctrl, "^[^0-9]+", className)
+        if RegExMatch(ctrlNN, "^[^0-9]+", className)
         {
             if RegExMatch(className, suspectPattern)
                 return true
@@ -1503,128 +1615,205 @@ HasFileViewChild(hParent) {
 
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
-    global prevActiveWindows
     global StopRecursion
-    global blockKeys
+    global k_pendingActiveWinChangeDelayMs
+    global pendingActiveWinChangeHwnd
+    global pendingActiveWinChangeId
 
-    If !StopRecursion && !hitTab {
+    if (StopRecursion || hitTab || !hWnd)
+        return
 
-        DetectHiddenWindows, Off
-        Thread, NoTimers, True
+    ; A focus change means any deferred typing rewrite or async editability probe
+    ; belongs to the previous target, so cancel that work immediately.
+    CancelPendingTypingWorkForFocusChange()
 
-        Loop, 500 {
-            WinGetClass, vWinClass, % "ahk_id " hWnd
-            WinGetTitle, vWinTitle, % "ahk_id " hWnd
-            WinGet, vWinProc, ProcessName, ahk_id %hWnd%
-            If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768"))
+    ; Keep the WinEvent callback cheap. Store only the newest foreground target
+    ; and let a short timer perform the heavier activation bookkeeping later.
+    pendingActiveWinChangeId   += 1
+    pendingActiveWinChangeHwnd := hWnd
+    SetTimer, FlushPendingActiveWinChange, % -k_pendingActiveWinChangeDelayMs
+}
+
+FlushPendingActiveWinChange:
+    pendingActiveHwnd := pendingActiveWinChangeHwnd
+    pendingActiveId   := pendingActiveWinChangeId
+
+    if (!pendingActiveHwnd)
+        Return
+
+    ; Timing model:
+    ; t=0   activation click lands, WinEvent callback stores hwnd/id only
+    ; t=0   deferred timer is armed for k_pendingActiveWinChangeDelayMs
+    ; t=0+  click hotkey can return quickly instead of running the full
+    ;       activation-classification path inline on the first click
+    ; t=25  timer tries the heavier work after the click has had a chance to
+    ;       finish, or re-queues if LButton is still physically down
+    ;
+    ; This keeps activation clicks cheap and prevents focus changes from being
+    ; delayed behind window-activation bookkeeping while the user is mid-click.
+    ; While the physical focus click is still held down, keep deferring the
+    ; heavier activation logic so the user can finish the click first.
+    if (GetKeyState("LButton", "P"))
+    {
+        SetTimer, FlushPendingActiveWinChange, % -k_pendingActiveWinChangeDelayMs
+        Return
+    }
+
+    if (!IsPendingActiveWinChangeStillValid(pendingActiveId, pendingActiveHwnd))
+    {
+        if (pendingActiveId = pendingActiveWinChangeId)
+            ClearPendingActiveWinChange()
+        Return
+    }
+
+    DetectHiddenWindows, Off
+    Thread, NoTimers, True
+
+    Loop, 500 {
+        WinGetClass, vWinClass, % "ahk_id " pendingActiveHwnd
+        WinGetTitle, vWinTitle, % "ahk_id " pendingActiveHwnd
+        WinGet, vWinProc, ProcessName, ahk_id %pendingActiveHwnd%
+        If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768"))
+            break
+        sleep, 1
+    }
+
+    if (!IsPendingActiveWinChangeStillValid(pendingActiveId, pendingActiveHwnd))
+    {
+        Thread, NoTimers, False
+        if (pendingActiveId = pendingActiveWinChangeId)
+            ClearPendingActiveWinChange()
+        Return
+    }
+
+    If (vWinClass == "#32770" && vWinTitle == "Run") {
+        WinGetPos, rx, ry, rw, rh, ahk_id %pendingActiveHwnd%
+        If UIA_GetStartButtonCenter(sx, sy, bw) {
+            x := sx - (rw/2) ; 44 is the width of a single taskbar button
+            WinMove, ahk_id %pendingActiveHwnd%,, x,
+        }
+    }
+    Else {
+        WinGet, vWinStyle, Style, % "ahk_id " pendingActiveHwnd
+        If (   IsOverException(pendingActiveHwnd)
+            || IsPlainDialog32770(pendingActiveHwnd)
+            || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
+            || !WinExist("ahk_id " pendingActiveHwnd)) {
+            If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
+                WinSet, AlwaysOnTop, On, ahk_id %pendingActiveHwnd%
+            }
+            If IsPlainDialog32770(pendingActiveHwnd) {
+                ; WinActivate, ahk_id %pendingActiveHwnd%
+                WinSet, AlwaysOnTop, On, ahk_id %pendingActiveHwnd%
+                WinSet, AlwaysOnTop, Off, ahk_id %pendingActiveHwnd%
+            }
+            Thread, NoTimers, False
+            if (pendingActiveId = pendingActiveWinChangeId)
+                ClearPendingActiveWinChange()
+            Return
+        }
+    }
+
+    WaitForFadeInStop(pendingActiveHwnd)
+    LbuttonEnabled := False
+
+    if (!IsPendingActiveWinChangeStillValid(pendingActiveId, pendingActiveHwnd))
+    {
+        LbuttonEnabled := True
+        Thread, NoTimers, False
+        if (pendingActiveId = pendingActiveWinChangeId)
+            ClearPendingActiveWinChange()
+        Return
+    }
+
+    If (vWinClass == "wxWindowNR" && vWinProc == "clipdiary-portable.exe") {
+        EnsureFocusedCtrlNN(pendingActiveHwnd, "Edit1", 60, 10)
+        BeginBlockKeys()
+        Send, {LCtrl UP}
+        Send, {LShift UP}
+        Send, {. UP}
+        Send, {Backspace}
+        ControlFocus, Edit1, ahk_id %pendingActiveHwnd%
+        EndBlockKeys()
+    }
+
+    if ( !HasVal(prevActiveWindows, pendingActiveHwnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
+        Critical, On
+        prevActiveWindows.push(pendingActiveHwnd)
+        Critical, Off
+
+        WinGet, state, MinMax, ahk_id %pendingActiveHwnd%
+        If (state > -1 && vWinTitle != "" && MonCount > 1) {
+            currentMon := MWAGetMonitorMouseIsIn()
+            currentMonHasActWin := IsWindowOnMonNum(pendingActiveHwnd, currentMon)
+            If !currentMonHasActWin {
+                WinActivate, ahk_id %pendingActiveHwnd%
+                Send, #+{Left}
+            }
+        }
+
+        If (vWinClass == "#32770") {
+            WinSet, AlwaysOnTop, On, ahk_id %pendingActiveHwnd%
+        }
+        Else If (vWinClass != "#32770" && WinExist("ahk_class #32770")) {
+            WinSet, AlwaysOnTop, On,  ahk_id %pendingActiveHwnd%
+            WinSet, AlwaysOnTop, Off, ahk_class #32770
+            WinSet, AlwaysOnTop, Off, ahk_id %pendingActiveHwnd%
+        }
+
+        If (InStr(vWinTitle, "Save", False) && vWinClass != "#32770") {
+            LbuttonEnabled := True
+            Thread, NoTimers, False
+            if (pendingActiveId = pendingActiveWinChangeId)
+                ClearPendingActiveWinChange()
+            WinSet, AlwaysOnTop, On,  ahk_id %pendingActiveHwnd%
+            WinSet, AlwaysOnTop, Off, ahk_id %pendingActiveHwnd%
+            Return
+        }
+
+        initFocusedCtrl := ""
+        Loop, 100 {
+            ControlGetFocus, initFocusedCtrl, ahk_id %pendingActiveHwnd%
+            If (initFocusedCtrl != "")
                 break
             sleep, 1
         }
 
-        If (vWinClass == "#32770" && vWinTitle == "Run") {
-            WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
-            If UIA_GetStartButtonCenter(sx, sy, bw) {
-                x := sx - (rw/2) ; 44 is the width of a single taskbar button
-                WinMove, ahk_id %hWnd%,, x,
-            }
-        }
-        Else {
-            WinGet, vWinStyle, Style, % "ahk_id " hWnd
-            If (   IsOverException(hWnd)
-                || IsPlainDialog32770(hWnd)
-                || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
-                || !WinExist("ahk_id " hWnd)) {
-                If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
-                    WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-                }
-                If IsPlainDialog32770(hWnd) {
-                    ; WinActivate, ahk_id %hWnd%
-                    WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-                    WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
-                }
-                Thread, NoTimers, False
-                Return
-            }
+        LbuttonEnabled := True
+        Thread, NoTimers, False
+
+        if (!IsPendingActiveWinChangeStillValid(pendingActiveId, pendingActiveHwnd))
+        {
+            if (pendingActiveId = pendingActiveWinChangeId)
+                ClearPendingActiveWinChange()
+            Return
         }
 
-        WaitForFadeInStop(hWnd)
-        LbuttonEnabled := False
+        ; tooltip, sent to %initFocusedCtrl%
+        SendCtrlAdd(pendingActiveHwnd,,,vWinClass, initFocusedCtrl, (vWinClass == "CabinetWClass" || vWinClass == "#32770"))
 
-        If (vWinClass == "wxWindowNR" && vWinProc == "clipdiary-portable.exe") {
-            EnsureFocusedCtrlNN(hWnd, "Edit1", 60, 10)
-            BeginBlockKeys()
-            Send, {LCtrl UP}
-            Send, {LShift UP}
-            Send, {. UP}
-            Send, {Backspace}
-            ControlFocus, Edit1, ahk_id %hWnd%
-            EndBlockKeys()
+        DetectHiddenWindows, On
+        i := 1
+        while (i <= prevActiveWindows.MaxIndex()) {
+            checkID := prevActiveWindows[i]
+            If !WinExist("ahk_id " checkID)
+                prevActiveWindows.RemoveAt(i)
+            Else
+                ++i
+            If (GetKeyState("Lbutton", "P")) {
+                break
+            }
         }
-
-        If ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
-            Critical, On
-            prevActiveWindows.push(hWnd)
-            Critical, Off
-
-            WinGet, state, MinMax, ahk_id %hWnd%
-            If (state > -1 && vWinTitle != "" && MonCount > 1) {
-                currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnMonNum(hWnd, currentMon)
-                If !currentMonHasActWin {
-                    WinActivate, ahk_id %hWnd%
-                    Send, #+{Left}
-                }
-            }
-
-            If (vWinClass == "#32770") {
-                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
-            }
-            Else If (vWinClass != "#32770" && WinExist("ahk_class #32770")) {
-                WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
-                WinSet, AlwaysOnTop, Off, ahk_class #32770
-                WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
-            }
-
-            If (InStr(vWinTitle, "Save", False) && vWinClass != "#32770") {
-                WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
-                WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
-                LbuttonEnabled := True
-                Thread, NoTimers, False
-                Return
-            }
-
-            initFocusedCtrl := ""
-            Loop, 100 {
-                ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
-                If (initFocusedCtrl != "")
-                    break
-                sleep, 1
-            }
-
-            LbuttonEnabled := True
-            Thread, NoTimers, False
-            ; tooltip, sent to %initFocusedCtrl%
-            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl, (vWinClass == "CabinetWClass" || vWinClass == "#32770"))
-
-            DetectHiddenWindows, On
-            i := 1
-            while (i <= prevActiveWindows.MaxIndex()) {
-                checkID := prevActiveWindows[i]
-                If !WinExist("ahk_id " checkID)
-                    prevActiveWindows.RemoveAt(i)
-                Else
-                    ++i
-                If (GetKeyState("Lbutton", "P")) {
-                    break
-                }
-            }
-            DetectHiddenWindows, Off
-        }
+        DetectHiddenWindows, Off
+    }
+    Else {
         Thread, NoTimers, False
     }
+
     LbuttonEnabled := True
-    Return
-}
+    if (pendingActiveId = pendingActiveWinChangeId)
+        ClearPendingActiveWinChange()
+Return
 
 ; Waits until the shell view's item list has finished populating.
 ; Works for both:
@@ -1822,7 +2011,7 @@ UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
 }
 
 ; Hotkeys for demo
-F9::Overlay_ShowHole(500, 300, 400, 300, Opacity)  ; show again
+F9::Overlay_ShowHole(500, 300, 400, 300, k_Opacity)  ; show again
 F10::Overlay_Hide()                             ; hide
 
 $~^Enter::
@@ -2217,7 +2406,7 @@ return
     else {
         Gui, GUI4Boarder: Color, 0xFF0000
         transDelta := 5
-        iterations := (255 - Opacity) / transDelta
+        iterations := (255 - k_Opacity) / transDelta
         transVal := 255
         transVal -= transDelta
 
@@ -2236,7 +2425,7 @@ return
     Sleep, 200
     ClearRect()
     BlockInput, MouseMoveOff
-    Gui, GUI4Boarder: Color, %border_color%
+    Gui, GUI4Boarder: Color, %k_border_color%
     WinSet, AlwaysOnTop, Toggle, ahk_id %hwndId%
 return
 
@@ -2551,13 +2740,13 @@ AdjustColumns:
     ; or attempting focus. This is the main stale-work guard for pause/resume scrolls.
     currentRequestId := pendingAdjustColumnsRequestId
     requiredQuietMs  := (pendingAdjustColumnsClass == "#32770")
-                     ? pendingAdjustColumnsDialogQuietMs
-                     : pendingAdjustColumnsQuietMs
+                       ? k_pendingAdjustColumnsDialogQuietMs
+                       : k_pendingAdjustColumnsQuietMs
 
     ; Defer any focus/send work until wheel activity has actually paused. If more
     ; scrolling is still happening, re-arm a short retry instead of interfering with it.
     if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < requiredQuietMs) {
-        SetTimer, AdjustColumns, % -pendingAdjustColumnsRetryMs
+        SetTimer, AdjustColumns, % -k_pendingAdjustColumnsRetryMs
         return
     }
 
@@ -2574,12 +2763,12 @@ AdjustColumns:
     ; before falling back to the heavier SendCtrlAdd()-derived discovery below. This
     ; is safe because the cache is validated against both HWND ownership and control
     ; existence, and it avoids repeated ControlList scans during stop-and-go scrolling.
-    if (pendingAdjustColumnsTargetCacheHwnd = pendingAdjustColumnsHwnd
-     && pendingAdjustColumnsTargetCacheCtrl != ""
-     && (A_TickCount - pendingAdjustColumnsTargetCacheTick) < pendingAdjustColumnsTargetCacheTtlMs) {
-        ControlGet, TargetControlHwnd, Hwnd,, % pendingAdjustColumnsTargetCacheCtrl, ahk_id %pendingAdjustColumnsHwnd%
+    if (c_pendingAdjustColumnsTargetHwnd = pendingAdjustColumnsHwnd
+     && c_pendingAdjustColumnsTargetCtrl != ""
+     && (A_TickCount - c_pendingAdjustColumnsTargetTick) < k_pendingAdjustColumnsTargetTtlMs) {
+        ControlGet, TargetControlHwnd, Hwnd,, % c_pendingAdjustColumnsTargetCtrl, ahk_id %pendingAdjustColumnsHwnd%
         if (TargetControlHwnd)
-            TargetControl := pendingAdjustColumnsTargetCacheCtrl
+            TargetControl := c_pendingAdjustColumnsTargetCtrl
     }
 
     ; Mirror the DirectUI/ListView discovery from SendCtrlAdd() on purpose instead of
@@ -2627,7 +2816,7 @@ AdjustColumns:
                 ; This Win11 DirectUIHWND2-vs-3 probe is copied from SendCtrlAdd(). Explorer
                 ; frequently exposes multiple large DirectUI panes, so preserving the same
                 ; sizing heuristic avoids regressing whichever pane currently handles the key.
-                if isWin11 {
+                if k_isWin11 {
                     ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %pendingAdjustColumnsHwnd%
                     if (GetWindowRectEx(hCtl, L, T, R, B)) {
                         OutHeight2 := B - T
@@ -2637,10 +2826,10 @@ AdjustColumns:
                     ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %pendingAdjustColumnsHwnd%, , , ,
                 }
 
-                if (adjustClassNow == "CabinetWClass" && !isModernExplorerInReg)
+                if (adjustClassNow == "CabinetWClass" && !k_isModernExplorerInReg)
                     ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %pendingAdjustColumnsHwnd%, , , ,
 
-                if (adjustClassNow == "CabinetWClass" && (!isWin11 || !isModernExplorerInReg))
+                if (adjustClassNow == "CabinetWClass" && (!k_isWin11 || !k_isModernExplorerInReg))
                     TargetControl := "DirectUIHWND3"
                 else
                     TargetControl := "DirectUIHWND2"
@@ -2677,9 +2866,9 @@ AdjustColumns:
         if (TargetControlHwnd) {
             ; Publish the resolved target for a short time so the next pause in the same
             ; Explorer window can bypass DirectUI discovery entirely if nothing structural changed.
-            pendingAdjustColumnsTargetCacheCtrl := TargetControl
-            pendingAdjustColumnsTargetCacheHwnd := pendingAdjustColumnsHwnd
-            pendingAdjustColumnsTargetCacheTick := A_TickCount
+            c_pendingAdjustColumnsTargetCtrl := TargetControl
+            c_pendingAdjustColumnsTargetHwnd := pendingAdjustColumnsHwnd
+            c_pendingAdjustColumnsTargetTick := A_TickCount
 
             ; Abort immediately if a newer wheel event superseded this request while target
             ; discovery was happening. This prevents old timers from entering focus work once
@@ -2700,7 +2889,7 @@ AdjustColumns:
         return
 
     if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < requiredQuietMs) {
-        SetTimer, AdjustColumns, % -pendingAdjustColumnsRetryMs
+        SetTimer, AdjustColumns, % -k_pendingAdjustColumnsRetryMs
         return
     }
 
@@ -2749,32 +2938,6 @@ IsWindowScrollable() {
     }
 }
 
-IsMouseOnLeftSide() {
-    divisor := 5
-    MouseGetPos, mx, my, hwnd, ctrlN
-    If (!ctrlN) {
-        WinGetPos, x, y, w, h, ahk_id %hwnd%
-        ; tooltip, % x "-" y "-" x+w "-" y+h "-" mx "-" my
-        ; If (mx > x && mx < (x+w/divisor) && my > y && my < (y+h)) {
-        If (mx > x && mx < (x+300) && my > y && my < (y+h)) {
-            Return True
-        }
-        Else
-            Return False
-    }
-    Else {
-        ControlGetPos , cx, cy, cw, ch, %ctrlN%, ahk_id %hwnd%
-        If (cx && cy && cw && ch) {
-            ; If (mx > cx && mx < (cx+cw/divisor) && my > cy && my < (cy+ch)) {
-            If (mx > cx && mx < (cx+300) && my > cy && my < (cy+ch)) {
-                Return True
-            }
-        }
-        Else
-            Return False
-    }
-}
-
 ForceRedrawWindow(hwnd) {
     static RDW_INVALIDATE := 0x0001
     static RDW_UPDATENOW  := 0x0100
@@ -2799,7 +2962,7 @@ $*MButton::
     ; Thread, NoTimers, True
     SetTimer, WatchMButtonOverrideState, 25
 
-    MouseGetPos, mx0, my0, hWnd, ctrl, 2
+    MouseGetPos, mx0, my0, hWnd, ctrlNN, 2
     isOverTitleBar        := MouseIsOverTitleBar(mx0, my0)
     checkClickMx          := mx0
     checkClickMy          := my0
@@ -2837,7 +3000,7 @@ $*MButton::
 
     WinGet, isMax, MinMax, ahk_id %hWnd%
     WinGetClass, cls, ahk_id %hWnd%
-    If (skipClasses.HasKey(cls)) {
+    If (k_skipClasses.HasKey(cls)) {
         ; For excluded classes, fall back to a normal MButton click and tear down the
         ; temporary RButton suppression state on the way out.
         KeyWait, Mbutton, U T3
@@ -2878,10 +3041,10 @@ $*MButton::
     ; compare the window's current left/right edges against monL/monR to see
     ; whether the drag started already docked near the monitor edge.
     ; msgbox, % leftWinEdge "," rightWinEdge "-" topWinEdge "," bottomWinEdge ":" offsetX " & " offsetY
-    GetMonitorRectForMouse(mx0, my0, UseWorkArea, monL, monT, monR, monB)
-    If ((leftWinEdge - monL) <= SnapRange && (leftWinEdge - monL) >= 0) {
+    GetMonitorRectForMouse(mx0, my0, k_UseWorkArea, monL, monT, monR, monB)
+    If ((leftWinEdge - monL) <= k_SnapRange && (leftWinEdge - monL) >= 0) {
         snapState := "left"
-    } Else If ((rightWinEdge - monR) <= SnapRange && (rightWinEdge - monR) >= 0) {
+    } Else If ((rightWinEdge - monR) <= k_SnapRange && (rightWinEdge - monR) >= 0) {
         snapState := "right"
     }
 
@@ -2903,7 +3066,7 @@ $*MButton::
     Critical, On
     while GetKeyState("MButton", "P") {
 
-        If (A_TickCount - initTime < SingleClickTime && !GetKeyState("LShift","P"))
+        If (A_TickCount - initTime < k_SingleClickTime && !GetKeyState("LShift","P"))
             continue
 
         DraggingWindow := True
@@ -3020,7 +3183,7 @@ $*MButton::
         ; from one loop iteration to the next, so all snap thresholds, max
         ; travel distances, and confinement math below stay tied to the monitor
         ; the cursor is currently in rather than the one where the drag started.
-        GetMonitorRectForMouse(mx, my, UseWorkArea, monL, monT, monR, monB)
+        GetMonitorRectForMouse(mx, my, k_UseWorkArea, monL, monT, monR, monB)
         ; monW/monH are the active monitor dimensions used by the near-full-
         ; height heuristic and the later mouse-confinement calls.
         monW  := monR-monL
@@ -3065,7 +3228,7 @@ $*MButton::
 
         ; virtwx0 is continuously changing with your mouse and represents the current theoretical value of the window's x coordinate.
         ; it's "theoretical" because the window may be "snapped" but this value will still change as the mouse moves which
-        ; is why you can compare virtwx0 against the difference between monL and BreakAway/ReleaseAway distances
+                ; is why you can compare virtwx0 against the difference between monL and k_BreakAway/k_ReleaseAway distances
         ; monL is fixed to the active monitor's left edge.
         virtwx0 := wx0 + dx ; (original window X) + (how far the mouse has moved in X since drag start)
         virtwy0 := wy0 + dy
@@ -3092,10 +3255,10 @@ $*MButton::
             WinGetPosEx(hWnd, null, null, ww, wh, null, null)
             If (snapState = "left") {
                 ; While snapped left:
-                ; - Push-through: keep dragging left until virtwx0 <= monL - BreakAway to break snap
-                ; - Release: drag right until virtwx0 >= monL + ReleaseAway to release snap
-                ; ie Have you moved (virtwx0) far enough past the monitor edge (monL) → BreakAway/ReleaseAway
-                If (virtwx0 <= monL - BreakAway || virtwx0 >= monL + ReleaseAway) {
+                ; - Push-through: keep dragging left until virtwx0 <= monL - k_BreakAway to break snap
+                ; - Release: drag right until virtwx0 >= monL + k_ReleaseAway to release snap
+                ; ie Have you moved (virtwx0) far enough past the monitor edge (monL) → k_BreakAway/k_ReleaseAway
+                If (virtwx0 <= monL - k_BreakAway || virtwx0 >= monL + k_ReleaseAway) {
                     snapState := ""
                     newX := virtwx0
                 } Else {
@@ -3103,9 +3266,9 @@ $*MButton::
                 }
             } Else If (snapState = "right") {
                 ; While snapped right (window's right edge at monR):
-                ; - Push-through: keep dragging right until virtwx0 >= rightSnapX + BreakAway to break snap
-                ; - Release: drag left until virtwx0 <= rightSnapX - ReleaseAway to release snap
-                If (virtwx0 >= rightSnapX + BreakAway || virtwx0 <= rightSnapX - ReleaseAway) {
+                ; - Push-through: keep dragging right until virtwx0 >= rightSnapX + k_BreakAway to break snap
+                ; - Release: drag left until virtwx0 <= rightSnapX - k_ReleaseAway to release snap
+                If (virtwx0 >= rightSnapX + k_BreakAway || virtwx0 <= rightSnapX - k_ReleaseAway) {
                     snapState := ""
                     newX := virtwx0
                 } Else {
@@ -3113,12 +3276,12 @@ $*MButton::
                 }
             } Else {
                 ; Not currently snapped: check proximity to edges to start snapping
-                If (Abs(leftWinEdge - monL) <= SnapRange && dragHorz == "left") {
+                If (Abs(leftWinEdge - monL) <= k_SnapRange && dragHorz == "left") {
                     snapState := "left"
                     windowSnapped := True
                     newX := monL
                     ; tooltip, snapState %snapState%
-                } Else If (Abs(rightWinEdge - monR) <= SnapRange && dragHorz == "right") {
+                } Else If (Abs(rightWinEdge - monR) <= k_SnapRange && dragHorz == "right") {
                     snapState := "right"
                     windowSnapped := True
                     newX := rightSnapX
@@ -3135,7 +3298,7 @@ $*MButton::
             WinMove, ahk_id %hWnd%, , %newX%, %newY%
         }
         Else {
-            gridSize := SnapRange
+            gridSize := k_SnapRange
 
             gridDx := ceil(dx/gridSize) * gridSize
             gridDy := ceil(dy/gridSize) * gridSize
@@ -3154,7 +3317,7 @@ $*MButton::
                     If (dragVert == "up") {
                         virtwy0 := wy0 - abs(gridDy)
                         virtwh0 := wh  + abs(gridDy)
-                        If ((virtwh0 > maxHU - SnapRange) || (virtwy0 < minY + SnapRange)) {
+                        If ((virtwh0 > maxHU - k_SnapRange) || (virtwy0 < minY + k_SnapRange)) {
                             virtwy0 := minY
                             virtwh0 := maxHU
                         }
@@ -3184,7 +3347,7 @@ $*MButton::
                     If (dragVert == "down") {
                         ; virtwy0 doesnt matter since it remains fixed when adjusting width
                         virtwh0 := wh + abs(gridDy)
-                        If (virtwh0 > maxHD - SnapRange)
+                        If (virtwh0 > maxHD - k_SnapRange)
                             virtwh0 := maxHD
                     }
                     Else If (dragVert == "up") {
@@ -3212,7 +3375,7 @@ $*MButton::
                     If (dragHorz == "left") {
                         virtwx0 := wx0 - abs(gridDx)
                         virtww0 := ww  + abs(gridDx)
-                        If ((virtww0 > (maxWL - SnapRange)) || (virtwx0 < (minX + SnapRange))) {
+                        If ((virtww0 > (maxWL - k_SnapRange)) || (virtwx0 < (minX + k_SnapRange))) {
                             virtwx0 := minX
                             virtww0 := maxWL
                         }
@@ -3242,7 +3405,7 @@ $*MButton::
                     If (dragHorz == "right") {
                         ; virtwx0 doesnt matter since it remains fixed when adjusting width
                         virtww0 := ww + abs(gridDx)
-                        If (virtww0 > (maxWR - SnapRange))
+                        If (virtww0 > (maxWR - k_SnapRange))
                             virtww0 := maxWR
                     }
                     Else If (dragHorz == "left") {
@@ -3276,7 +3439,7 @@ $*MButton::
     If (!startedAlwaysOnTop)
         ForceRedrawWindow(hWnd)
 
-    If (rlsTime - initTime < SingleClickTime
+    If (rlsTime - initTime < k_SingleClickTime
         && isOverTitleBar
         && (abs(checkClickMx - mx0) <= deltaPxTrig)
         && (abs(checkClickMy - my0) <= deltaPxTrig)) {
@@ -3284,7 +3447,7 @@ $*MButton::
         WinSet, Transparent, Off, ahk_id %hWnd%
         GoSub, SwitchDesktop
     }
-    Else If (rlsTime - initTime < SingleClickTime
+    Else If (rlsTime - initTime < k_SingleClickTime
             && (abs(checkClickMx - mx0) <= deltaPxTrig)
             && (abs(checkClickMy - my0) <= deltaPxTrig)) {
         Send, {Mbutton}
@@ -3582,8 +3745,8 @@ Return
 
 #If
 
-ControlExist(ctrl, winTitle := "", winText := "") {
-    ControlGet, hCtl, Hwnd,, %ctrl%, %winTitle%, %winText%
+ControlExist(ctrlNN, winTitle := "", winText := "") {
+    ControlGet, hCtl, Hwnd,, %ctrlNN%, %winTitle%, %winText%
     Return !!hCtl
 }
 
@@ -3793,7 +3956,7 @@ Return
 
 !+;::
     StopAutoFix := True
-    If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < DoubleClickTime) {
+    If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < k_DoubleClickTime) {
         Send, {Home}
         Send, +{End}
     }
@@ -4168,7 +4331,7 @@ $Esc::
     escHwndID := FindTopMostWindow()
     WinGetTitle, escTitle, ahk_id %escHwndID%
 
-    If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey  < DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
+    If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey  < k_DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
 
         DetectHiddenWindows, Off
         executedOnce   := False
@@ -4178,7 +4341,7 @@ $Esc::
             WinGet, pp, ProcessPath , ahk_id %escHwndID%
             Hotkey, x, DoNothing, On
             WinGetPosEx(escHwndID, wx, wy, ww, wh, null, null)
-            Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
+            Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 40)
             DrawWindowTitlePopup(escHwndID, "Close?", pp, True)
 
             Loop
@@ -4263,7 +4426,7 @@ $Esc::
         Return
     }
 
-    delayValue := -1*(DoubleClickTime/2)
+    delayValue := -1*(k_DoubleClickTime/2)
     SetTimer, EscTimer, %delayValue%
     escTitle_old  := escTitle
     escHwndID_old := escHwndID
@@ -4817,7 +4980,7 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
 }
 
 Cycle() {
-    global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, Opacity, bufferedCycleAdvance
+    global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, k_Opacity, bufferedCycleAdvance
 
     prev_exe             :=
     prev_cl              :=
@@ -4866,7 +5029,7 @@ Cycle() {
                         Else {
                             Critical, Off
 
-                            Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
+                            Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 40)
 
                             If !GetKeyState("LAlt","P")
                                 Return 0
@@ -4877,7 +5040,7 @@ Cycle() {
                         cycleCount := 3
                         Critical, Off
 
-                        Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 40)
+                        Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 40)
 
                         If !GetKeyState("LAlt","P")
                             Return 0
@@ -4965,7 +5128,7 @@ Cycle() {
 ; Switch "App" open windows based on the same process and class
 CycleAppWindows(activeProcessName, activeClass) {
 
-    global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, Opacity, bufferedCycleAdvance
+    global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, k_Opacity, bufferedCycleAdvance
 
     activeCurrentMonitorWindowIndex := 0
     CurrentMonitorMinimizedWindows  := []
@@ -5081,7 +5244,7 @@ CycleAppWindows(activeProcessName, activeClass) {
     WinActivate, ahk_id %gwHwndId%
 
     WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
-    Overlay_ShowHole(wx, wy, ww, wh, Opacity,,40)
+    Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,,40)
 
     lastActWinID := gwHwndId
 
@@ -5188,7 +5351,7 @@ RegExEscape(s) {
 }
 
 LaunchWinFind:
-    If (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (0.75*(DoubleClickTime/2))) {
+    If (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (0.75*(k_DoubleClickTime/2))) {
         StopRecursion   := True
         SetTimer, KeyTrack,   Off
         ; SetTimer, MouseTrack, Off
@@ -5388,7 +5551,7 @@ ActivateWindow:
 
     ; DrawBlackMonitor_aot(hwndOfTitle)
     WinGetPosEx(hwndOfTitle, wx, wy, ww, wh, null, null)
-    Overlay_ShowHole(wx, wy, ww, wh, Opacity,, 60)
+    Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 60)
 
     WinGet, actWinState, MinMax, %fulltitle%
     If (actWinState == -1)
@@ -5471,18 +5634,18 @@ DrawRect:
     If (borderType = "outside") {
         outerX      := 0
         outerY      := 0
-        outerX2     := w+2*border_thickness
-        outerY2     := h+2*border_thickness
+        outerX2     := w+2*k_border_thickness
+        outerY2     := h+2*k_border_thickness
 
-        innerX      := border_thickness
-        innerY      := border_thickness
-        innerX2     := border_thickness+w
-        innerY2     := border_thickness+h
+        innerX      := k_border_thickness
+        innerY      := k_border_thickness
+        innerX2     := k_border_thickness+w
+        innerY2     := k_border_thickness+h
 
-        newX        := x-border_thickness
-        newY        := y-border_thickness
-        newW        := w+2*border_thickness
-        newH        := h+2*border_thickness
+        newX        := x-k_border_thickness
+        newY        := y-k_border_thickness
+        newW        := w+2*k_border_thickness
+        newH        := h+2*k_border_thickness
 
     } Else If (borderType="inside") {
         ; WinGet, myState, MinMax, A
@@ -5496,10 +5659,10 @@ DrawRect:
         outerX2     := w-offset
         outerY2     := h-offset
 
-        innerX      := border_thickness+offset
-        innerY      := border_thickness+offset
-        innerX2     := w-border_thickness-offset
-        innerY2     := h-border_thickness-offset
+        innerX      := k_border_thickness+offset
+        innerY      := k_border_thickness+offset
+        innerX2     := w-k_border_thickness-offset
+        innerY2     := h-k_border_thickness-offset
 
         newX        := x
         newY        := y
@@ -5509,18 +5672,18 @@ DrawRect:
     } Else If (borderType="both") {
         outerX      := 0
         outerY      := 0
-        outerX2     := w+2*border_thickness
-        outerY2     := h+2*border_thickness
+        outerX2     := w+2*k_border_thickness
+        outerY2     := h+2*k_border_thickness
 
-        innerX      := border_thickness*2
-        innerY      := border_thickness*2
+        innerX      := k_border_thickness*2
+        innerY      := k_border_thickness*2
         innerX2     := w
         innerY2     := h
 
-        newX        := x-border_thickness
-        newY        := y-border_thickness
-        newW        := w+4*border_thickness
-        newH        := h+4*border_thickness
+        newX        := x-k_border_thickness
+        newY        := y-k_border_thickness
+        newW        := w+4*k_border_thickness
+        newH        := h+4*k_border_thickness
     }
 
     Critical, On
@@ -5618,7 +5781,7 @@ Measure_EnsureGui() {
 ; Recompute the current mouse delta, resize the horizontal and vertical guide legs,
 ; and refresh the live pixel readout until the physical LButton is released.
 Measure_Update() {
-    global MeasureText, measureActive, measureStartX, measureStartY, measureThickness
+    global MeasureText, measureActive, measureStartX, measureStartY, k_measureThickness
 
     if (!measureActive)
         return
@@ -5643,19 +5806,19 @@ Measure_Update() {
     ; The horizontal leg always starts at the lesser X so it renders correctly
     ; whether the drag moves left or right.
     hX := (dx >= 0) ? measureStartX : curX
-    hY := measureStartY - Floor(measureThickness / 2)
+    hY := measureStartY - Floor(k_measureThickness / 2)
     hW := Abs(dx) + 1
 
     ; The vertical leg is anchored at the current X so the two guides form a clean
     ; L-shape that ends exactly at the cursor.
-    vX := curX - Floor(measureThickness / 2)
+    vX := curX - Floor(k_measureThickness / 2)
     vY := (dy >= 0) ? measureStartY : curY
     vH := Abs(dy) + 1
 
     ; Resize and reposition the two guide windows in place instead of recreating
     ; them on every tick.
-    Gui, GUIMeasureH: Show, % "x" hX " y" hY " w" hW " h" measureThickness " NA"
-    Gui, GUIMeasureV: Show, % "x" vX " y" vY " w" measureThickness " h" vH " NA"
+    Gui, GUIMeasureH: Show, % "x" hX " y" hY " w" hW " h" k_measureThickness " NA"
+    Gui, GUIMeasureV: Show, % "x" vX " y" vY " w" k_measureThickness " h" vH " NA"
 
     ; Keep the readout near the cursor so the measurement stays readable while dragging.
     GuiControl, GUIMeasureText:, MeasureText, % "X: " Abs(dx) " px | Y: " Abs(dy) " px"
@@ -6497,7 +6660,7 @@ BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) 
 $~Lbutton::
     MouseGetPos, expX1, expY1,
     If (A_PriorHotkey == A_ThisHotkey
-        && (A_TimeSincePriorHotkey < DoubleClickTime)
+        && (A_TimeSincePriorHotkey < k_DoubleClickTime)
         && (abs(expX1-expX2) < 20 && abs(expY1-expY2) < 20)) {
         run, explorer.exe
         expX2 := 0
@@ -7318,9 +7481,9 @@ IsCaretInEdit(useUIA := true, useMSAA := true) {
     ; ================================
     ; 1) Classic Win32 detection
     ; ================================
-    ControlGetFocus, ctrl, ahk_id %hWnd%
-    if (ctrl != "") {
-        ControlGet, hCtrl, Hwnd,, %ctrl%, ahk_id %hWnd%
+    ControlGetFocus, ctrlNN, ahk_id %hWnd%
+    if (ctrlNN != "") {
+        ControlGet, hCtrl, Hwnd,, %ctrlNN%, ahk_id %hWnd%
         if (hCtrl) {
             WinGetClass, cls, ahk_id %hCtrl%
 
@@ -7721,6 +7884,16 @@ EnsureFocusedCtrlTarget(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, to
 $~LButton::
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
+    activeBeforeLButton := WinExist("A")
+    CancelPendingTypingWorkForPointerAction()
+
+    ; If this press is aimed at a different top-level window, keep the click
+    ; path as cheap as possible so Windows can complete the focus change before
+    ; this hotkey runs the heavier blank-space and SendCtrlAdd classification.
+    if (_winIdD && activeBeforeLButton && _winIdD != activeBeforeLButton) {
+        Return
+    }
+
     WinGetClass, _winClassD, ahk_id %_winIdD%
     titleBarState := _GetTitleBarProbeState(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)
 
@@ -7763,7 +7936,7 @@ $~LButton::
 
     If (   allowDoubleClicks
         && (A_PriorHotkey == A_ThisHotkey)
-        && (A_TimeSincePriorHotkey <= DoubleClickTime)
+        && (A_TimeSincePriorHotkey <= k_DoubleClickTime)
         && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
         && (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))) {
 
@@ -7836,7 +8009,7 @@ $~LButton::
     isColumnHeader          := False
     isItemClick             := False
 
-    If (!allowDoubleClicks && A_TimeSincePriorHotkey > DoubleClickTime) ; basically a single click
+    If (!allowDoubleClicks && A_TimeSincePriorHotkey > k_DoubleClickTime) ; basically a single click
         allowDoubleClicks := True
 
     prevPath := ""
@@ -7907,10 +8080,10 @@ $~LButton::
     ; traceText .= "TOTAL dt=" (tickTotalEnd - tickTotalStart) "ms`n"
     ; ToolTip, %traceText%
     ; tooltip, %isColumnHeader%
-    ; tooltip, % isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick()
+    ; tooltip, % k_isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick()
     ; tooltip, %timeDiff% ms-allowDoubleclick:%allowDoubleClicks%-isBlankSpaceExplorer:%isBlankSpaceExplorer%-isItemClick:%isItemClick% - isColumnHeader:%isColumnHeader% ; - %_winClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
-    If (timeDiff < floor(DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
+    If (timeDiff < floor(k_DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
 
         If (   (InStr(_winCtrlU, "SysListView32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
             && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
@@ -7932,7 +8105,7 @@ $~LButton::
         }
         Else If ( isColumnHeader && !isItemClick) {
 
-            If (_winClassD == "CabinetWClass" && isWin11 && isModernExplorerInReg) {
+            If (_winClassD == "CabinetWClass" && k_isWin11 && k_isModernExplorerInReg) {
 
                 EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
                 Send, ^{NumpadAdd}
@@ -7946,8 +8119,8 @@ $~LButton::
                 ; Cache risky UIA properties ONCE
                 ; tooltip, % "line4 - " pt.CurrentControlType
                 if (_winClassD == "CabinetWClass"
-                 && isWin11
-                 && isModernExplorerInReg
+                 && k_isWin11
+                 && k_isModernExplorerInReg
                  && InStr(_winCtrlU, "DirectUIHWND", True)
                  && ctype == 50026) {
                     EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
@@ -7966,7 +8139,7 @@ $~LButton::
                         Send, ^{NumpadAdd}
                     }
                     Else If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
-                        If !isWin11
+                        If !k_isWin11
                             Send, {F5}
 
                         Send, ^{NumpadAdd}
@@ -8581,7 +8754,7 @@ GetCtrlNNsByPrefixMinSize(hwndTop, classPrefix, minWidth := 400, minHeight := 18
 }
 
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False) {
-    global UIA, isWin11, blockKeys
+    global UIA, k_isWin11, blockKeys
 
     TargetControl := ""
     OutputVar1    := 0
@@ -8694,7 +8867,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 OutHeight2 := 0
                 OutHeight3 := 0
 
-                If isWin11 {
+                If k_isWin11 {
                     ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %initTargetHwnd%
                    ; In the Win32 API, everything that has an HWND - from the desktop to a text box — is a “window.”
                     ; That’s why these functions don’t care whether it’s a dialog, listview, or StaticNN.
@@ -8707,10 +8880,10 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                     ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
                 }
                 ; tooltip, 2: %OutHeight2% vs 3: %OutHeight3%
-                If (lClassCheck == "CabinetWClass" && !isModernExplorerInReg)
+                If (lClassCheck == "CabinetWClass" && !k_isModernExplorerInReg)
                     ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
 
-                If (lClassCheck == "CabinetWClass" && (!isWin11 || !isModernExplorerInReg))
+                If (lClassCheck == "CabinetWClass" && (!k_isWin11 || !k_isModernExplorerInReg))
                     TargetControl := "DirectUIHWND3"
                 Else If (OutHeight2 > OutHeight3)
                     TargetControl := "DirectUIHWND2"
@@ -9827,10 +10000,10 @@ EndBlockKeys() {
 ; before injecting Ctrl+NumpadAdd. This lets a just-arrived WheelUp/WheelDown event
 ; abort the send instead of being interpreted alongside a synthetic Ctrl chord.
 SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0) {
-    global pendingAdjustColumnsLastWheelTick, pendingAdjustColumnsRequestId, pendingAdjustColumnsSendGuardMs
+    global pendingAdjustColumnsLastWheelTick, pendingAdjustColumnsRequestId, k_pendingAdjustColumnsSendGuardMs
 
     if (guardRequestId || guardQuietMs || guardHwnd) {
-        Sleep, %pendingAdjustColumnsSendGuardMs%
+        Sleep, %k_pendingAdjustColumnsSendGuardMs%
 
         if (guardRequestId && pendingAdjustColumnsRequestId != guardRequestId)
             return false
@@ -9944,7 +10117,7 @@ ScheduleFixReleasedModifiers(modifiers := "Shift Alt Ctrl", deferredRuns := 6) {
 }
 
 KeyTrack() {
-    global keys, numbers, StopAutoFix, TimeOfLastHotkeyTyped, blockKeys
+    global k_keys, k_numbers, StopAutoFix, TimeOfLastHotkeyTyped, blockKeys
 
     ListLines, Off
 
@@ -9963,8 +10136,8 @@ KeyTrack() {
                 ; && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
                 && (A_TimeIdlePhysical >= 150)
                 && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
-                && (   InStr(keys,    Substr(A_ThisHotkey,2), false)
-                    || InStr(numbers, Substr(A_ThisHotkey,2), false)
+                && (   InStr(k_keys,    Substr(A_ThisHotkey,2), false)
+                    || InStr(k_numbers, Substr(A_ThisHotkey,2), false)
                     || A_ThisHotkey == "~:"
                     || A_ThisHotkey == "~/"
                     || A_ThisHotkey == "$~Space"
@@ -10193,9 +10366,9 @@ WindowNeedsTitleBarUIA(windowHwnd, windowClass := "") {
 }
 
 MouseIsOverTitleBarDeferred(xPos, yPos, excludeCaptions := True, windowUnderMouseID := "", ctrlnnUnderMouse := "", mClass := "", allowAnyClass := False, transactionTimeout := 250) {
-    static cacheMs := 75
-    static lastCacheKey := ""
-    static lastTick := 0
+    static cacheMs   := 75
+    static c_lastKey := ""
+    static lastTick  := 0
     static lastValue := False
 
     if (!windowUnderMouseID)
@@ -10208,7 +10381,7 @@ MouseIsOverTitleBarDeferred(xPos, yPos, excludeCaptions := True, windowUnderMous
         return False
 
     cacheKey := windowUnderMouseID "|" xPos "|" yPos "|" excludeCaptions "|" allowAnyClass "|" transactionTimeout
-    if (cacheKey == lastCacheKey && (A_TickCount - lastTick) <= cacheMs)
+    if (cacheKey == c_lastKey && (A_TickCount - lastTick) <= cacheMs)
         return lastValue
 
     pt := SafeUIA_ElementFromPoint(xPos, yPos, "", transactionTimeout)
@@ -10224,8 +10397,8 @@ MouseIsOverTitleBarDeferred(xPos, yPos, excludeCaptions := True, windowUnderMous
     else if ((ctype == 50037) || (ctype == 50026) || (ctype == 50033))
         result := True
 
-    lastCacheKey := cacheKey
-    lastTick := A_TickCount
+    c_lastKey := cacheKey
+    lastTick  := A_TickCount
     lastValue := result
     return result
 }
@@ -13886,7 +14059,7 @@ ResolveDialogBreadcrumbToolbar(hwndDlg, excludeHwnd := 0) {
 }
 
 GetExplorerPath(hwnd := "") {
-    global isWin11
+    global k_isWin11
 
     static shellApp := ""
     static cacheMap := {} ; hwnd -> { activeTabHwnd, shellWin, lastPath, lastTick }
@@ -13912,7 +14085,7 @@ GetExplorerPath(hwnd := "") {
         return ""
 
     ; Keep your Win10 behavior intact
-    if (!isWin11) {
+    if (!k_isWin11) {
         WinGetTitle, expTitle, ahk_id %hwnd%
 
         if (   InStr(expTitle, "This PC"    , True)
@@ -14073,17 +14246,91 @@ IsGoogleDocWindow() {
         Return False
 }
 
-; Recompute whether typing auto-fix hooks should be active for the current
-; focus target.
-; This is the only path that is allowed to pay for slower UIA/MSAA
+; Async editability-refresh timing:
+; synchronous path (old)
+; t=0   FixSlash / Hoty queues a deferred rewrite
+;       pending...QueuedTick := A_TickCount
+;       SetTimer, FlushPending..., -40
+; t=20  first key in a newly active window runs RefreshTypingAutoFixContext()
+;       and can spend noticeable time in UIA/MSAA editability checks
+; t=40  deferred rewrite timer is due, but the script thread is still busy
+; t=230 slow probe finishes, so FlushPending... finally runs with age = 230 ms
+;
+; async path (current)
+; t=0   FixSlash / Hoty queues a deferred rewrite
+;       pending...QueuedTick := A_TickCount
+;       SetTimer, FlushPending..., -40
+; t=20  first key does only cheap cache / exclusion checks
+;       QueueTypingAutoFixRefresh() arms SetTimer, FlushTypingAutoFixRefresh, -25
+; t=40  deferred rewrite timer runs close to schedule
+; t=45+ FlushTypingAutoFixRefresh pays the UIA/MSAA cost off the live key path
+FlushTypingAutoFixRefresh:
+    pendingRefreshId         := typingAutoFixRefreshId
+    pendingRefreshHwnd       := typingAutoFixRefreshHwnd
+    pendingRefreshCtrlNN     := typingAutoFixRefreshCtrlNN
+    pendingRefreshQueuedTick := typingAutoFixRefreshQueuedTick
+
+    if (!pendingRefreshHwnd)
+        Return
+
+    ; Retry while physical typing is still in flight so the slow accessibility
+    ; probe does not jump back onto the same burst of live key handling.
+    if (A_TimeIdlePhysical < k_typingAutoFixRefreshDelayMs)
+    {
+        SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
+        Return
+    }
+
+    ; Only refresh when the queued target still matches the active window and,
+    ; when available, the same focused control.
+    if (!WinActive("ahk_id " . pendingRefreshHwnd))
+    {
+        if (pendingRefreshId = typingAutoFixRefreshId)
+            ClearPendingTypingAutoFixRefresh()
+        Return
+    }
+
+    if (pendingRefreshCtrlNN != "")
+    {
+        ControlGetFocus, currentCtrl, ahk_id %pendingRefreshHwnd%
+        if (currentCtrl != pendingRefreshCtrlNN)
+        {
+            if (pendingRefreshId = typingAutoFixRefreshId)
+                ClearPendingTypingAutoFixRefresh()
+            Return
+        }
+    }
+
+    ; If a newer async refresh request replaced this one, exit without touching
+    ; the cache so only the newest focus context can update it.
+    if (pendingRefreshId         != typingAutoFixRefreshId
+     || pendingRefreshHwnd       != typingAutoFixRefreshHwnd
+     || pendingRefreshCtrlNN     != typingAutoFixRefreshCtrlNN
+     || pendingRefreshQueuedTick != typingAutoFixRefreshQueuedTick)
+        Return
+
+    RefreshTypingAutoFixContext(pendingRefreshHwnd, pendingRefreshCtrlNN)
+
+    if (pendingRefreshId = typingAutoFixRefreshId)
+        ClearPendingTypingAutoFixRefresh()
+Return
+
+; Recompute the cached typing-auto-fix eligibility decision for the current
+; focused window/control.
+;
+; What this function does:
+; 1) refreshes the cached context fields (allowed, hwnd, ctrlNN, reason, tick)
+; 2) returns the final allowed boolean for this focused target
+;
+; This is the only path that is allowed to pay for the slower UIA/MSAA
 ; editability checks.
-RefreshTypingAutoFixContext(activeHwnd := 0, ctrl := "", nowTick := "") {
-    global typingAutoFixCacheAllowed
-    global typingAutoFixCacheCtrl
-    global typingAutoFixCacheHwnd
-    global typingAutoFixCacheReason
-    global typingAutoFixCacheTick
-    global typingAutoFixSlowPathMs
+RefreshTypingAutoFixContext(activeHwnd := 0, ctrlNN := "", nowTick := "") {
+    global c_typingAutoFixAllowed
+    global c_typingAutoFixCtrlNN
+    global c_typingAutoFixHwnd
+    global c_typingAutoFixReason
+    global c_typingAutoFixTick
+    global k_typingAutoFixSlowPathMs
     global typingAutoFixSlowProbeTick
 
     ; Resolve the current foreground window if the caller did not provide one.
@@ -14094,8 +14341,8 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrl := "", nowTick := "") {
     }
 
     ; Capture the focused control name once so every downstream check can reuse it.
-    if (ctrl = "")
-        ControlGetFocus, ctrl, ahk_id %activeHwnd%
+    if (ctrlNN = "")
+        ControlGetFocus, ctrlNN, ahk_id %activeHwnd%
 
     ; Normalize the timestamp so all cache writes for this pass share one tick value.
     if (nowTick = "")
@@ -14104,39 +14351,41 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrl := "", nowTick := "") {
     ; Cheap process-level exclusions should exit before any focus/editability probing.
     WinGet, processName, ProcessName, ahk_id %activeHwnd%
     if (_TypingAutoFixIsExcludedProcess(processName))
-        return _TypingAutoFixSetCache(activeHwnd, ctrl, false, "excluded_process", nowTick)
+        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "excluded_process", nowTick)
 
     ; Google Docs/Sheets keep their own editing model and are intentionally excluded.
     WinGetTitle, title, ahk_id %activeHwnd%
     if (InStr(title, "Google Sheets", False) || InStr(title, "Google Docs", False))
-        return _TypingAutoFixSetCache(activeHwnd, ctrl, false, "google_docs", nowTick)
+        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "google_docs", nowTick)
 
     ; Classic Win32 edit controls are the cheapest positive match, so allow them immediately.
     ctrlClass := ""
-    if (_TypingAutoFixTryGetFocusedControlClass(activeHwnd, ctrl, ctrlClass)) {
+    if (_TypingAutoFixTryGetFocusedControlClass(activeHwnd, ctrlNN, ctrlClass)) {
         if (_TypingAutoFixIsClassicEditClass(ctrlClass))
-            return _TypingAutoFixSetCache(activeHwnd, ctrl, true, "classic_edit", nowTick)
+            return _TypingAutoFixSetCache(activeHwnd, ctrlNN, true, "classic_edit", nowTick)
     }
 
     ; Once the window/control pair is unchanged, reuse the prior decision until the
-    ; slower UIA/MSAA re-probe interval expires.
-    contextChanged := (activeHwnd != typingAutoFixCacheHwnd || ctrl != typingAutoFixCacheCtrl)
-    if (!contextChanged && (nowTick - typingAutoFixSlowProbeTick) < typingAutoFixSlowPathMs)
-        return _TypingAutoFixSetCache(activeHwnd, ctrl, typingAutoFixCacheAllowed, typingAutoFixCacheReason, nowTick)
+    ; slower UIA/MSAA re-probe interval expires. A queued "pending_refresh"
+    ; context is the exception because the async timer still needs one real probe.
+    contextChanged        := (activeHwnd != c_typingAutoFixHwnd || ctrlNN != c_typingAutoFixCtrlNN)
+    pendingRefreshContext := (c_typingAutoFixReason = "pending_refresh")
+    if (!contextChanged && !pendingRefreshContext && (nowTick - typingAutoFixSlowProbeTick) < k_typingAutoFixSlowPathMs)
+        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, c_typingAutoFixAllowed, c_typingAutoFixReason, nowTick)
 
     ; A new context or expired slow-path TTL means it is time to refresh accessibility state.
     typingAutoFixSlowProbeTick := nowTick
 
     ; UIA is the preferred slow-path signal for custom editors that expose editability.
     if (UIA_IsFocusedEditable())
-        return _TypingAutoFixSetCache(activeHwnd, ctrl, true, "uia_editable", nowTick)
+        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, true, "uia_editable", nowTick)
 
     ; MSAA stays as a weaker fallback when UIA is missing or incomplete.
     if (MSAA_IsFocusedEditable())
-        return _TypingAutoFixSetCache(activeHwnd, ctrl, true, "msaa_editable", nowTick)
+        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, true, "msaa_editable", nowTick)
 
     ; No cheap or accessibility-based edit signal was found, so disable the hooks.
-    return _TypingAutoFixSetCache(activeHwnd, ctrl, false, "not_editable", nowTick)
+    return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "not_editable", nowTick)
 }
 
 ; ----------------------------------------------------------------------------
@@ -14157,15 +14406,118 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrl := "", nowTick := "") {
 ;    after the thread catches up, and fewer rewrite routines run against text
 ;    that has already advanced beyond the original keystroke context.
 ; ------------------------------------------------------------------------------
+; ASCII flow for the typing-auto-fix gate and hotstring gate:
+;
+; PATH A: typing auto-fix hotkey gating
+;                          ------------------------------------
+;
+; key press
+;    |
+;    v
+; #If ShouldRunTypingAutoFix()
+;    |
+;    v
+; ShouldRunTypingAutoFix()
+;    |
+;    |-- StopAutoFix? ------------------------------ yes --> return false
+;    |
+;    |-- active window missing? -------------------- yes --> return false
+;    |
+;    v
+; GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, nowTick)
+;    |
+;    |-- no active hwnd?
+;    |      |
+;    |      +--> ClearPendingTypingAutoFixRefresh()
+;    |      +--> _TypingAutoFixSetCache(false, "no_active_window")
+;    |      +--> return false
+;    |
+;    |-- same hwnd + same ctrlNN + cache still fresh?
+;    |      |
+;    |      +--> return c_typingAutoFixAllowed
+;    |
+;    |-- excluded process?
+;    |      |
+;    |      +--> ClearPendingTypingAutoFixRefresh()
+;    |      +--> _TypingAutoFixSetCache(false, "excluded_process")
+;    |      +--> return false
+;    |
+;    |-- Google Docs / Sheets?
+;    |      |
+;    |      +--> ClearPendingTypingAutoFixRefresh()
+;    |      +--> _TypingAutoFixSetCache(false, "google_docs")
+;    |      +--> return false
+;    |
+;    |-- classic Edit / RichEdit control?
+;    |      |
+;    |      +--> ClearPendingTypingAutoFixRefresh()
+;    |      +--> _TypingAutoFixSetCache(true, "classic_edit")
+;    |      +--> return true
+;    |
+;    |-- context changed?
+;    |      |
+;    |      +--> QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick)
+;    |      +--> _TypingAutoFixSetCache(false, "pending_refresh")
+;    |      +--> return false for THIS keypress
+;    |      |
+;    |      +--> later...
+;    |             FlushTypingAutoFixRefresh
+;    |                |
+;    |                |-- still same hwnd/ctrlNN and physically idle?
+;    |                |       |
+;    |                |       +--> RefreshTypingAutoFixContext(...)
+;    |                |               |
+;    |                |               +--> _TypingAutoFixSetCache(final true/false, reason)
+;    |                |
+;    |                +--> else cancel / requeue
+;    |
+;    |-- same context but cache older?
+;    |      |
+;    |      |-- slow-probe interval expired?
+;    |      |       |
+;    |      |       +--> QueueTypingAutoFixRefresh(...)
+;    |      |
+;    |      +--> return current c_typingAutoFixAllowed
+;    |              |
+;    |              +--> later flush may call RefreshTypingAutoFixContext(...)
+;
+;
+;                          PATH B: hotstring gating
+;                          ------------------------
+;
+; trigger point for hotstring table
+;    |
+;    v
+; #If ShouldRunHotstringAutoCorrect()
+;    |
+;    v
+; ShouldRunHotstringAutoCorrect()
+;    |
+;    |-- search / alt-tab / StopAutoFix / modifiers held? --- yes --> return false
+;    |
+;    |-- Google Docs? --------------------------------------- yes --> return false
+;    |
+;    |-- no active window? ---------------------------------- yes --> return false
+;    |
+;    |-- excluded process? ---------------------------------- yes --> return false
+;    |
+;    |-- plain Edit control? -------------------------------- yes --> return false
+;    |
+;    v
+; RefreshTypingAutoFixContext(activeHwnd, ctrlNN, nowTick)
+;    |
+;    |-- excluded process ---------------------------> return false
+;    |-- Google Docs / Sheets -----------------------> return false
+;    |-- classic edit class -------------------------> return true
+;    |-- unchanged ctx + slow TTL not expired -------> return cached true/false
+;    |-- UIA editable -------------------------------> return true
+;    |-- MSAA editable ------------------------------> return true
+;    |-- otherwise ---------------------------------> return false
+;
 ; Returns true only when typing auto-fix hooks should be active for the current
 ; focused target.
 ShouldRunTypingAutoFix() {
     global StopAutoFix
-    global typingAutoFixCacheAllowed
-    global typingAutoFixCacheCtrl
-    global typingAutoFixCacheHwnd
-    global typingAutoFixCacheTick
-    global typingAutoFixFastTtlMs
 
     ; Script-driven sends temporarily disable typing hooks through StopAutoFix.
     if (StopAutoFix)
@@ -14178,17 +14530,8 @@ ShouldRunTypingAutoFix() {
 
     ; The focused control name is part of the cache key because one window can host
     ; both editable and non-editable child controls.
-    ControlGetFocus, ctrl, ahk_id %activeHwnd%
-    nowTick := A_TickCount
-
-    ; Fast path: identical window/control within the short TTL reuses the cached result.
-    if (activeHwnd = typingAutoFixCacheHwnd
-     && ctrl = typingAutoFixCacheCtrl
-     && (nowTick - typingAutoFixCacheTick) <= typingAutoFixFastTtlMs)
-        return typingAutoFixCacheAllowed
-
-    ; Slow path: refresh the context and rewrite the cache before returning.
-    return RefreshTypingAutoFixContext(activeHwnd, ctrl, nowTick)
+    ControlGetFocus, ctrlNN, ahk_id %activeHwnd%
+    return GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, A_TickCount)
 }
 
 ; Returns true only when the large hotstring autocorrect table should be active
@@ -14230,10 +14573,11 @@ ShouldRunHotstringAutoCorrect() {
     if (IsEditCtrl())
         return false
 
-    ; Reuse the cached editability decision so custom editors only carry the hotstring
-    ; table when the focused target actually looks editable.
-    ControlGetFocus, ctrl, ahk_id %activeHwnd%
-    return RefreshTypingAutoFixContext(activeHwnd, ctrl, A_TickCount)
+    ; Hotstrings must not wake up mid-word after an async cache miss because
+    ; suffix/in-word replacements can then rewrite only the tail end of text
+    ; that started while the table was disabled.
+    ControlGetFocus, ctrlNN, ahk_id %activeHwnd%
+    return RefreshTypingAutoFixContext(activeHwnd, ctrlNN, A_TickCount)
 }
 
 IsEditCtrl() {
@@ -14267,33 +14611,137 @@ _TypingAutoFixIsExcludedProcess(processName) {
          || processName = "WINWORD.EXE")
 }
 
-; Persist the current decision so the hotkey predicate can usually return with a
-; cheap same-window/same-control cache hit.
-_TypingAutoFixSetCache(activeHwnd, ctrl, allowed, reason, nowTick := "") {
-    global typingAutoFixCacheAllowed
-    global typingAutoFixCacheCtrl
-    global typingAutoFixCacheHwnd
-    global typingAutoFixCacheReason
-    global typingAutoFixCacheTick
+; Clears the queued async editability refresh so an older focus context cannot
+; continue to hold onto a probe request after the caller already resolved cheaply.
+ClearPendingTypingAutoFixRefresh() {
+    global typingAutoFixRefreshCtrlNN
+    global typingAutoFixRefreshHwnd
+    global typingAutoFixRefreshQueuedTick
+
+    typingAutoFixRefreshCtrlNN     := ""
+    typingAutoFixRefreshHwnd       := 0
+    typingAutoFixRefreshQueuedTick := 0
+}
+
+; Returns quickly on the live key path by using cheap exclusions and the cached
+; result first, then queueing any slower UIA/MSAA refresh onto a short timer.
+GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, nowTick := "") {
+    global c_typingAutoFixAllowed
+    global c_typingAutoFixCtrlNN
+    global c_typingAutoFixHwnd
+    global c_typingAutoFixTick
+    global k_typingAutoFixFastTtlMs
+    global k_typingAutoFixSlowPathMs
+    global typingAutoFixSlowProbeTick
 
     if (nowTick = "")
         nowTick := A_TickCount
 
-    typingAutoFixCacheAllowed := allowed
-    typingAutoFixCacheCtrl    := ctrl
-    typingAutoFixCacheHwnd    := activeHwnd
-    typingAutoFixCacheReason  := reason
-    typingAutoFixCacheTick    := nowTick
+    if !activeHwnd {
+        ClearPendingTypingAutoFixRefresh()
+        return _TypingAutoFixSetCache(0, "", false, "no_active_window", nowTick)
+    }
+
+    if (ctrlNN = "")
+        ControlGetFocus, ctrlNN, ahk_id %activeHwnd%
+
+    ; Fast same-target reuse keeps most keystrokes off the slower probe path.
+    if (activeHwnd = c_typingAutoFixHwnd
+     && ctrlNN     = c_typingAutoFixCtrlNN
+     && (nowTick - c_typingAutoFixTick) <= k_typingAutoFixFastTtlMs)
+        return c_typingAutoFixAllowed
+
+    ; Cheap process exclusions resolve synchronously and do not need an async probe.
+    WinGet, processName, ProcessName, ahk_id %activeHwnd%
+    if (_TypingAutoFixIsExcludedProcess(processName)) {
+        ClearPendingTypingAutoFixRefresh()
+        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "excluded_process", nowTick)
+    }
+
+    ; Google Docs/Sheets keep their own editing model and are intentionally excluded.
+    WinGetTitle, title, ahk_id %activeHwnd%
+    if (InStr(title, "Google Sheets", False) || InStr(title, "Google Docs", False)) {
+        ClearPendingTypingAutoFixRefresh()
+        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "google_docs", nowTick)
+    }
+
+    ; Classic Win32 edit controls are still the cheapest positive match.
+    ctrlClass := ""
+    if (_TypingAutoFixTryGetFocusedControlClass(activeHwnd, ctrlNN, ctrlClass)) {
+        if (_TypingAutoFixIsClassicEditClass(ctrlClass)) {
+            ClearPendingTypingAutoFixRefresh()
+            return _TypingAutoFixSetCache(activeHwnd, ctrlNN, true, "classic_edit", nowTick)
+        }
+    }
+
+    contextChanged := (activeHwnd != c_typingAutoFixHwnd || ctrlNN != c_typingAutoFixCtrlNN)
+    if (contextChanged) {
+        QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick)
+        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "pending_refresh", nowTick)
+    }
+
+    ; Same context but older cache: keep the current answer for this keypress and
+    ; refresh in the background once the slower probe interval has expired.
+    if ((nowTick - typingAutoFixSlowProbeTick) >= k_typingAutoFixSlowPathMs)
+        QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick)
+
+    return c_typingAutoFixAllowed
+}
+
+; Persist the current typing-auto-fix decision so the hotkey predicate can usually
+; return with a cheap same-window/same-control cache hit.
+;
+; `allowed` is decided by the caller before this helper runs. In the current flow,
+; it becomes true only when:
+; 1) the focused control is a classic Edit/RichEdit-style class
+; 2) UIA reports the focused element is editable
+; 3) MSAA reports the focused element is editable
+; 4) the same window/control context is being reused and the cached allowed value
+;    was already true
+_TypingAutoFixSetCache(activeHwnd, ctrlNN, allowed, reason, nowTick := "") {
+    global c_typingAutoFixAllowed
+    global c_typingAutoFixCtrlNN
+    global c_typingAutoFixHwnd
+    global c_typingAutoFixReason
+    global c_typingAutoFixTick
+
+    if (nowTick = "")
+        nowTick := A_TickCount
+
+    c_typingAutoFixAllowed := allowed
+    c_typingAutoFixCtrlNN  := ctrlNN
+    c_typingAutoFixHwnd    := activeHwnd
+    c_typingAutoFixReason  := reason
+    c_typingAutoFixTick    := nowTick
 
     return allowed
 }
 
-_TypingAutoFixTryGetFocusedControlClass(activeHwnd, ctrl, ByRef ctrlClass) {
+; Stores the latest async editability-refresh request and resets the one-shot
+; timer so newer focus contexts supersede older queued probes.
+QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick := "") {
+    global typingAutoFixRefreshCtrlNN
+    global k_typingAutoFixRefreshDelayMs
+    global typingAutoFixRefreshHwnd
+    global typingAutoFixRefreshId
+    global typingAutoFixRefreshQueuedTick
+
+    if (nowTick = "")
+        nowTick := A_TickCount
+
+    typingAutoFixRefreshId         += 1
+    typingAutoFixRefreshCtrlNN     := ctrlNN
+    typingAutoFixRefreshHwnd       := activeHwnd
+    typingAutoFixRefreshQueuedTick := nowTick
+    SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
+}
+
+_TypingAutoFixTryGetFocusedControlClass(activeHwnd, ctrlNN, ByRef ctrlClass) {
     ctrlClass := ""
-    if (ctrl = "")
+    if (ctrlNN = "")
         return false
 
-    ControlGet, hCtrl, Hwnd,, %ctrl%, ahk_id %activeHwnd%
+    ControlGet, hCtrl, Hwnd,, %ctrlNN%, ahk_id %activeHwnd%
     if !hCtrl
         return false
 
@@ -14668,7 +15116,7 @@ ClearWindowTitlePopup() {
 }
 
 DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
-    global bufferedCycleAdvance, hitTAB, hitTilde, Opacity, WindowTitleID, WindowTitle
+    global bufferedCycleAdvance, hitTAB, hitTilde, k_Opacity, WindowTitleID, WindowTitle
     static IsWindowTitleGuiInitialized := False
 
     strArray := []
@@ -14737,7 +15185,7 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
 
     ; WinMove, ahk_id %WindowTitleID%,, drawX-floor(w/2), drawY-floor(h/2)
     WinSet, AlwaysOnTop, On, ahk_id %WindowTitleID%
-    WinSet, Transparent, %Opacity%, ahk_id %WindowTitleID%
+    WinSet, Transparent, %k_Opacity%, ahk_id %WindowTitleID%
 
     Return WindowTitleID
 }
@@ -14854,17 +15302,17 @@ Acc_IsChildRef(accObj) {
 }
 ; ChatGPT
 Acc_GetRoleText(nRole) {
-    static roleCache := {}
+    static c_role := {}
     local textSize, roleText
 
-    if (roleCache.HasKey(nRole))
-        return roleCache[nRole]
+    if (c_role.HasKey(nRole))
+        return c_role[nRole]
 
     textSize := DllCall("oleacc\GetRoleText", "UInt", nRole, "Ptr", 0, "UInt", 0)
     VarSetCapacity(roleText, (A_IsUnicode ? 2 : 1) * (textSize + 1), 0)
     DllCall("oleacc\GetRoleText", "UInt", nRole, "Str", roleText, "UInt", textSize + 1)
 
-    roleCache[nRole] := roleText
+    c_role[nRole] := roleText
     return roleText
 }
 ; ChatGPT
@@ -16695,6 +17143,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+::fullfill::fulfill
 ::requiremts::requirement
 ::requireement::requirement
 ::termainl::terminal
