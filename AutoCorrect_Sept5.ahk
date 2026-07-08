@@ -253,11 +253,11 @@ Global targetDesktop                               := 0
 Global currentPath                                 := ""
 Global prevPath                                    := ""
 Global _winCtrlD                                   := ""
-Global postActivationLButtonHwnd                 := 0
-Global postActivationLButtonCtrl                 := ""
-Global postActivationLButtonX                    := 0
-Global postActivationLButtonY                    := 0
-Global postActivationLButtonId                   := 0
+Global postActivationLButtonHwnd                   := 0
+Global postActivationLButtonCtrl                   := ""
+Global postActivationLButtonX                      := 0
+Global postActivationLButtonY                      := 0
+Global postActivationLButtonId                     := 0
 Global MbuttonIsEnter                              := False
 Global suspendRightButtonForMButtonDrag            := False
 Global lastActWinID                                :=
@@ -14700,11 +14700,14 @@ FlushTypingAutoFixRefresh:
     if (!pendingRefreshHwnd)
         Return
 
-    ; Retry while physical typing is still in flight so the slow accessibility
-    ; probe does not jump back onto the same burst of live key handling.
+    ; refreshAge
+      ; -> may force FlushTypingAutoFixRefresh to run
+      ; -> updates typing auto-fix eligibility cache
+      ; -> future keys can use the updated eligibility
+      ; -> future auto-fix rewrites may be allowed
     refreshAge := pendingRefreshQueuedTick ? (A_TickCount - pendingRefreshQueuedTick) : 0
     if (A_TimeIdlePhysical < k_typingAutoFixRefreshDelayMs
-     && refreshAge < k_typingAutoFixRefreshForceMs)
+             && refreshAge < k_typingAutoFixRefreshForceMs)
     {
         SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
         Return
