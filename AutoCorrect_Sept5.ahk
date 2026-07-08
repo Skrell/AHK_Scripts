@@ -140,18 +140,6 @@ Global typingAutoFixRefreshId                      := 0
 ; Tick count recorded when the async editability refresh is queued so the flow
 ; can be reasoned about against nearby deferred typing timers.
 Global typingAutoFixRefreshQueuedTick              := 0
-; Short delay before deferred foreground-window maintenance runs. The WinEvent
-; callback stores only the latest target HWND, then this timer waits long enough
-; for the physical activation click to finish so the first click into another
-; window does not have to pay the full activation-classification cost inline.
-Global k_pendingActiveWinChangeDelayMs             := 25
-; Latest foreground-window HWND captured by OnWinActiveChange(). The deferred
-; timer re-checks that this exact top-level window is still active before
-; running any of the heavier activation bookkeeping or SendCtrlAdd logic.
-Global pendingActiveWinChangeHwnd                  := 0
-; Monotonic token for deferred activation work. Each newer foreground change
-; supersedes the prior one so an older timer cannot mutate a newer context.
-Global pendingActiveWinChangeId                    := 0
 ; Shared sequence token for deferred typing rewrites so older timer callbacks can
 ; detect that a newer key event already replaced their context and should win.
 Global typingFixSeq                                := 0
@@ -162,9 +150,10 @@ Global k_pendingTypingFixMaxAgeMs                  := 250
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
 Global clipPreferExplicitCtrlV                     := False
-; Temporary slash-fix Enter interception flag. When "/{Enter}" is being evaluated,
-; this enables the custom $Enter handler to either queue the deferred slash rewrite
-; or pass through a normal Enter instead of letting both paths fire.
+; Temporary slash-fix Enter interception flag. After a qualifying letter + "/",
+; this diverts the next Enter into the custom $Enter handler so slash+Enter can
+; either commit "{BS}{?}{ENTER}" inline or fall back to one normal Enter, but
+; never let both the raw key and the rewrite path fire.
 Global disableEnter                                := False
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
@@ -213,18 +202,20 @@ Global k_pendingAdjustColumnsTargetTtlMs           := 350
 ; Deferred typing correction state so punctuation and capitalization rewrites can
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
+; Slash uses this slot only for the deferred "/ " rewrite. The slash+Enter path
+; is handled inline in the custom $Enter hotkey instead of through this timer.
 Global pendingFixSlashAction                       := ""
-; Focused control name captured when the "/ " or "/{Enter}" fix is queued so the
-; timer can cancel instead of rewriting text after focus moves to another control.
+; Focused control name captured when the "/ " fix is queued so the timer can
+; cancel instead of rewriting text after focus moves to another control.
 Global pendingFixSlashCtrl                         := ""
-; Active top-level window captured when the deferred slash rewrite is armed; the
-; flush step requires this same window to still be active before sending anything.
+; Active top-level window captured when the deferred slash-space rewrite is armed;
+; the flush step requires this same window to still be active before sending.
 Global pendingFixSlashHwnd                         := 0
-; Sequence token assigned when the slash rewrite is queued so older timer callbacks
-; can detect that a newer typing event already superseded their pending work.
+; Sequence token assigned when the slash-space rewrite is queued so older timer
+; callbacks can detect that a newer typing event already superseded the work.
 Global pendingFixSlashId                           := 0
-; Tick count recorded when the slash rewrite is queued, used to drop the request
-; once it has been pending longer than k_pendingTypingFixMaxAgeMs.
+; Tick count recorded when the slash-space rewrite is queued, used to drop the
+; request once it has been pending longer than k_pendingTypingFixMaxAgeMs.
 Global pendingFixSlashQueuedTick                   := 0
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
@@ -1136,6 +1127,65 @@ FlushPendingHotyReplacement:
     _ClearPendingHotyState()
 Return
 
+; Inline slash+Enter commit path:
+; once the custom $Enter hotkey has intercepted a qualifying "/{Enter}", wait
+; only a short bounded time for the physical key cycle and any active script send
+; to settle, then either commit "{BS}{?}{ENTER}" against the same window/control
+; or report failure so the caller can fall back to one raw Enter.
+_CommitFixSlashEnterInline() {
+    global StopAutoFix
+
+    settleIdleMs := 30
+    settleMaxMs  := 90
+    settlePollMs := 5
+
+    targetHwnd := WinExist("A")
+    if (!targetHwnd)
+        return False
+
+    ControlGetFocus, targetCtrlNN, ahk_id %targetHwnd%
+    startTick := A_TickCount
+
+    while (((GetKeyState("Enter", "P") || A_TimeIdlePhysical < settleIdleMs) || StopAutoFix)
+        && (A_TickCount - startTick) < settleMaxMs)
+        Sleep, %settlePollMs%
+
+    if (StopAutoFix)
+        return False
+
+    if (WinExist("A") != targetHwnd)
+        return False
+
+    if (targetCtrlNN != "") {
+        ControlGetFocus, currentCtrlNN, ahk_id %targetHwnd%
+        if (currentCtrlNN != targetCtrlNN)
+            return False
+    }
+
+    StopAutoFix := True
+    Send, % "{BS}{?}{ENTER}"
+    StopAutoFix := False
+    return True
+}
+
+; Returns true only for the exact slash+Enter pattern that should commit "?"
+; inline. This intentionally mirrors the older FixSlash qualification test, but
+; now lets the Enter hotkey decide immediately instead of queueing a timer first.
+_ShouldCommitFixSlashEnter() {
+    global disableEnter
+    global k_keys
+    global StopAutoFix
+    global X_PriorPriorHotKey
+
+    return (disableEnter
+         && !IsGoogleDocWindow()
+         && !StopAutoFix
+         && InStr(k_keys, X_PriorPriorHotKey, False)
+         && A_PriorHotKey == "~/"
+         && A_ThisHotkey == "$Enter"
+         && A_TimeSincePriorHotkey < 999)
+}
+
 FixSlash:
     If !IsGoogleDocWindow() && (!StopAutoFix && IsPriorHotKeyLetterKey()) && A_ThisHotkey == "~/"
         disableEnter := True
@@ -1153,17 +1203,6 @@ FixSlash:
         SetTimer, FlushPendingFixSlash, -40
         disableEnter              := False
     }
-    Else If (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$Enter" && A_TimeSincePriorHotkey<999)) {
-        CancelPendingTypingFixes(False, False)
-        typingFixSeq += 1
-        pendingFixSlashAction     := "enter"
-        pendingFixSlashHwnd       := WinExist("A")
-        ControlGetFocus, pendingFixSlashCtrl, ahk_id %pendingFixSlashHwnd%
-        pendingFixSlashId         := typingFixSeq
-        pendingFixSlashQueuedTick := A_TickCount
-        SetTimer, FlushPendingFixSlash, -40
-        disableEnter              := False
-    }
     If IsPriorHotKeyLowerCase()   ; as long as a letter key is pressed we record the priorprior hotkey
         X_PriorPriorHotKey := Substr(A_PriorHotkey,2,1) ; record the letter key pressed
     If IsPriorHotKeyCapital()
@@ -1171,18 +1210,18 @@ FixSlash:
 Return
 
 ; Deferred FixSlash rewrite:
-; letter -> "/" -> Space or Enter
+; letter -> "/" -> Space
 ;              +--> queue slash rewrite intent instead of backspacing on the
-;                   same live Space / Enter event
+;                   same live Space event
 ;
 ; Why this exists:
-; immediate fix on live Space / Enter can race with:
+; immediate fix on live Space can race with:
 ; - the real punctuation key cycle finishing
-; - caret movement caused by Space / Enter
+; - caret movement caused by Space
 ; - other typing auto-fix logic already running on the main thread
 ;
 ; Timer flow:
-; detect "/ " or "/{Enter}"
+; detect "/ "
 ;         +--> store action + active hwnd
 ;             +--> timer waits for physical idle and StopAutoFix = false
 ;                 +--> same window still active?
@@ -1192,7 +1231,7 @@ FlushPendingFixSlash:
     if (!pendingFixSlashAction)
         Return
 
-    ; Drop the queued slash rewrite if it has been pending longer than
+    ; Drop the queued slash-space rewrite if it has been pending longer than
     ; k_pendingTypingFixMaxAgeMs. After that short age budget, skipping the
     ; correction is safer than rewriting text in a newer typing context.
     if (pendingFixSlashQueuedTick && (A_TickCount - pendingFixSlashQueuedTick) > k_pendingTypingFixMaxAgeMs)
@@ -1201,14 +1240,14 @@ FlushPendingFixSlash:
         Return
     }
 
-    ; Let the physical key cycle settle before rewriting slash punctuation.
+    ; Let the physical Space key cycle settle before rewriting slash punctuation.
     if (A_TimeIdlePhysical < 40 || StopAutoFix)
     {
         SetTimer, FlushPendingFixSlash, -40
         Return
     }
 
-    ; Only allow Send when this is still the newest queued slash fix, the
+    ; Only allow Send when this is still the newest queued slash-space fix, the
     ; original window is still active, the same control still has focus when
     ; available, and the queued action remains fresh enough to trust.
     if (!IsPendingTypingFixStillValid(pendingFixSlashId, pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashQueuedTick))
@@ -1217,17 +1256,21 @@ FlushPendingFixSlash:
         Return
     }
 
-    StopAutoFix           := True
-    if (pendingFixSlashAction = "space")
-        Send, % "{BS}{BS}{?}{SPACE}"
-    else if (pendingFixSlashAction = "enter")
-        Send, % "{BS}{?}{ENTER}"
-    StopAutoFix           := False
+    if (pendingFixSlashAction != "space")
+    {
+        _ClearPendingFixSlashState()
+        Return
+    }
+
+    StopAutoFix := True
+    Send, % "{BS}{BS}{?}{SPACE}"
+    StopAutoFix := False
     _ClearPendingFixSlashState()
 Return
 
-; Clears the deferred slash rewrite slot without invalidating the shared sequence
-; token, allowing the caller to decide whether newer timers should also be dropped.
+; Clears the deferred slash-space rewrite slot without invalidating the shared
+; sequence token, allowing the caller to decide whether newer timers should also
+; be dropped.
 _ClearPendingFixSlashState() {
     global pendingFixSlashAction
     global pendingFixSlashCtrl
@@ -1285,29 +1328,6 @@ CancelPendingTypingWorkForPointerAction() {
 ; so reuse the same cancellation path the click handler uses.
 CancelPendingTypingWorkForFocusChange() {
     CancelPendingTypingWorkForPointerAction()
-}
-
-; Clears the queued foreground-window maintenance target once a newer activation
-; supersedes it or the deferred handler finishes its work.
-ClearPendingActiveWinChange() {
-    global pendingActiveWinChangeHwnd
-
-    pendingActiveWinChangeHwnd := 0
-}
-
-; Returns true only when the deferred activation handler still points at the
-; latest queued foreground window and that same window remains active.
-IsPendingActiveWinChangeStillValid(pendingId, pendingHwnd) {
-    global pendingActiveWinChangeHwnd
-    global pendingActiveWinChangeId
-
-    if (!pendingHwnd || pendingId != pendingActiveWinChangeId)
-        return False
-
-    if (pendingHwnd != pendingActiveWinChangeHwnd)
-        return False
-
-    return WinActive("ahk_id " . pendingHwnd)
 }
 
 ; Returns true only when a deferred typing rewrite is still fresh, still points
@@ -1613,12 +1633,32 @@ HasFileViewChild(hParent) {
     return False
 }
 
+NeedsSendCtrlAddFadeWait(hParent, focusedCtrlNN := "") {
+    if (!hParent || !WinExist("ahk_id " . hParent))
+        return False
+
+    if (focusedCtrlNN = "")
+        ControlGetFocus, focusedCtrlNN, ahk_id %hParent%
+
+    if (InStr(focusedCtrlNN, "SysListView32", True) || InStr(focusedCtrlNN, "DirectUIHWND", True))
+        return True
+
+    WinGet, ctrlList, ControlList, ahk_id %hParent%
+    if (ErrorLevel)
+        return False
+
+    Loop, Parse, ctrlList, `n
+    {
+        ctrlNN := A_LoopField
+        if (InStr(ctrlNN, "SysListView32", True) || InStr(ctrlNN, "DirectUIHWND", True))
+            return True
+    }
+    return False
+}
+
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
     global StopRecursion
-    global k_pendingActiveWinChangeDelayMs
-    global pendingActiveWinChangeHwnd
-    global pendingActiveWinChangeId
 
     if (StopRecursion || hitTab || !hWnd)
         return
@@ -1627,170 +1667,119 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     ; belongs to the previous target, so cancel that work immediately.
     CancelPendingTypingWorkForFocusChange()
 
-    ; Keep the WinEvent callback cheap. Store only the newest foreground target
-    ; and let a short timer perform the heavier activation bookkeeping later.
-    pendingActiveWinChangeId   += 1
-    pendingActiveWinChangeHwnd := hWnd
-    SetTimer, FlushPendingActiveWinChange, % -k_pendingActiveWinChangeDelayMs
-}
-
-FlushPendingActiveWinChange:
-    pendingActiveHwnd := pendingActiveWinChangeHwnd
-    pendingActiveId   := pendingActiveWinChangeId
-
-    if (!pendingActiveHwnd)
-        Return
-
-    ; Timing model:
-    ; t=0   activation click lands, WinEvent callback stores hwnd/id only
-    ; t=0   deferred timer is armed for k_pendingActiveWinChangeDelayMs
-    ; t=0+  click hotkey can return quickly instead of running the full
-    ;       activation-classification path inline on the first click
-    ; t=25  timer tries the heavier work after the click has had a chance to
-    ;       finish, or re-queues if LButton is still physically down
-    ;
-    ; This keeps activation clicks cheap and prevents focus changes from being
-    ; delayed behind window-activation bookkeeping while the user is mid-click.
-    ; While the physical focus click is still held down, keep deferring the
-    ; heavier activation logic so the user can finish the click first.
-    if (GetKeyState("LButton", "P"))
-    {
-        SetTimer, FlushPendingActiveWinChange, % -k_pendingActiveWinChangeDelayMs
-        Return
-    }
-
-    if (!IsPendingActiveWinChangeStillValid(pendingActiveId, pendingActiveHwnd))
-    {
-        if (pendingActiveId = pendingActiveWinChangeId)
-            ClearPendingActiveWinChange()
-        Return
-    }
-
     DetectHiddenWindows, Off
+    ; Only hold timers off while capturing the initial activation snapshot and
+    ; rejecting unsupported windows. Slower fade waits and send-path setup
+    ; should not block unrelated deferred typing timers.
     Thread, NoTimers, True
 
     Loop, 500 {
-        WinGetClass, vWinClass, % "ahk_id " pendingActiveHwnd
-        WinGetTitle, vWinTitle, % "ahk_id " pendingActiveHwnd
-        WinGet, vWinProc, ProcessName, ahk_id %pendingActiveHwnd%
+        WinGetClass, vWinClass, % "ahk_id " hWnd
+        WinGetTitle, vWinTitle, % "ahk_id " hWnd
+        WinGet, vWinProc, ProcessName, ahk_id %hWnd%
         If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768"))
             break
         sleep, 1
     }
 
-    if (!IsPendingActiveWinChangeStillValid(pendingActiveId, pendingActiveHwnd))
-    {
-        Thread, NoTimers, False
-        if (pendingActiveId = pendingActiveWinChangeId)
-            ClearPendingActiveWinChange()
-        Return
-    }
-
-    If (vWinClass == "#32770" && vWinTitle == "Run") {
-        WinGetPos, rx, ry, rw, rh, ahk_id %pendingActiveHwnd%
-        If UIA_GetStartButtonCenter(sx, sy, bw) {
-            x := sx - (rw/2) ; 44 is the width of a single taskbar button
-            WinMove, ahk_id %pendingActiveHwnd%,, x,
-        }
-    }
-    Else {
-        WinGet, vWinStyle, Style, % "ahk_id " pendingActiveHwnd
-        If (   IsOverException(pendingActiveHwnd)
-            || IsPlainDialog32770(pendingActiveHwnd)
+    If !(vWinClass == "#32770" && vWinTitle == "Run") {
+        WinGet, vWinStyle, Style, % "ahk_id " hWnd
+        If (   IsOverException(hWnd)
+            || IsPlainDialog32770(hWnd)
             || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
-            || !WinExist("ahk_id " pendingActiveHwnd)) {
+            || !WinExist("ahk_id " hWnd)) {
             If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
-                WinSet, AlwaysOnTop, On, ahk_id %pendingActiveHwnd%
+                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
             }
-            If IsPlainDialog32770(pendingActiveHwnd) {
-                ; WinActivate, ahk_id %pendingActiveHwnd%
-                WinSet, AlwaysOnTop, On, ahk_id %pendingActiveHwnd%
-                WinSet, AlwaysOnTop, Off, ahk_id %pendingActiveHwnd%
+            If IsPlainDialog32770(hWnd) {
+                ; WinActivate, ahk_id %hWnd%
+                WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
             }
             Thread, NoTimers, False
-            if (pendingActiveId = pendingActiveWinChangeId)
-                ClearPendingActiveWinChange()
             Return
         }
     }
 
-    WaitForFadeInStop(pendingActiveHwnd)
-    LbuttonEnabled := False
+    Thread, NoTimers, False
 
-    if (!IsPendingActiveWinChangeStillValid(pendingActiveId, pendingActiveHwnd))
-    {
-        LbuttonEnabled := True
-        Thread, NoTimers, False
-        if (pendingActiveId = pendingActiveWinChangeId)
-            ClearPendingActiveWinChange()
-        Return
+    If (vWinClass == "#32770" && vWinTitle == "Run") {
+        WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
+        If UIA_GetStartButtonCenter(sx, sy, bw) {
+            x := sx - (rw/2) ; 44 is the width of a single taskbar button
+            WinMove, ahk_id %hWnd%,, x,
+        }
     }
 
+    initFocusedCtrlForWait := ""
+    ControlGetFocus, initFocusedCtrlForWait, ahk_id %hWnd%
+    ; Base the fade-settle wait on the actual control shape that SendCtrlAdd()
+    ; targets, so SysListView32-hosting apps such as 7-Zip still wait even
+    ; when their top-level class is not Explorer or #32770.
+    if (NeedsSendCtrlAddFadeWait(hWnd, initFocusedCtrlForWait)) {
+        WaitForFadeInStop(hWnd)
+    }
+
+    LbuttonEnabled := False
+
     If (vWinClass == "wxWindowNR" && vWinProc == "clipdiary-portable.exe") {
-        EnsureFocusedCtrlNN(pendingActiveHwnd, "Edit1", 60, 10)
+        EnsureFocusedCtrlNN(hWnd, "Edit1", 60, 10)
         BeginBlockKeys()
         Send, {LCtrl UP}
         Send, {LShift UP}
         Send, {. UP}
         Send, {Backspace}
-        ControlFocus, Edit1, ahk_id %pendingActiveHwnd%
+        ControlFocus, Edit1, ahk_id %hWnd%
         EndBlockKeys()
     }
 
-    if ( !HasVal(prevActiveWindows, pendingActiveHwnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
+    if ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
         Critical, On
-        prevActiveWindows.push(pendingActiveHwnd)
+        prevActiveWindows.push(hWnd)
         Critical, Off
 
-        WinGet, state, MinMax, ahk_id %pendingActiveHwnd%
+        WinGet, state, MinMax, ahk_id %hWnd%
         If (state > -1 && vWinTitle != "" && MonCount > 1) {
             currentMon := MWAGetMonitorMouseIsIn()
-            currentMonHasActWin := IsWindowOnMonNum(pendingActiveHwnd, currentMon)
+            currentMonHasActWin := IsWindowOnMonNum(hWnd, currentMon)
             If !currentMonHasActWin {
-                WinActivate, ahk_id %pendingActiveHwnd%
+                WinActivate, ahk_id %hWnd%
                 Send, #+{Left}
             }
         }
 
         If (vWinClass == "#32770") {
-            WinSet, AlwaysOnTop, On, ahk_id %pendingActiveHwnd%
+            WinSet, AlwaysOnTop, On, ahk_id %hWnd%
         }
         Else If (vWinClass != "#32770" && WinExist("ahk_class #32770")) {
-            WinSet, AlwaysOnTop, On,  ahk_id %pendingActiveHwnd%
+            WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
             WinSet, AlwaysOnTop, Off, ahk_class #32770
-            WinSet, AlwaysOnTop, Off, ahk_id %pendingActiveHwnd%
+            WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
         }
 
         If (InStr(vWinTitle, "Save", False) && vWinClass != "#32770") {
             LbuttonEnabled := True
             Thread, NoTimers, False
-            if (pendingActiveId = pendingActiveWinChangeId)
-                ClearPendingActiveWinChange()
-            WinSet, AlwaysOnTop, On,  ahk_id %pendingActiveHwnd%
-            WinSet, AlwaysOnTop, Off, ahk_id %pendingActiveHwnd%
+            WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
+            WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
             Return
         }
 
-        initFocusedCtrl := ""
-        Loop, 100 {
-            ControlGetFocus, initFocusedCtrl, ahk_id %pendingActiveHwnd%
-            If (initFocusedCtrl != "")
-                break
-            sleep, 1
+        initFocusedCtrl := initFocusedCtrlForWait
+        if (initFocusedCtrl == "") {
+            Loop, 99 {
+                sleep, 1
+                ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
+                If (initFocusedCtrl != "")
+                    break
+            }
         }
 
         LbuttonEnabled := True
         Thread, NoTimers, False
 
-        if (!IsPendingActiveWinChangeStillValid(pendingActiveId, pendingActiveHwnd))
-        {
-            if (pendingActiveId = pendingActiveWinChangeId)
-                ClearPendingActiveWinChange()
-            Return
-        }
-
         ; tooltip, sent to %initFocusedCtrl%
-        SendCtrlAdd(pendingActiveHwnd,,,vWinClass, initFocusedCtrl, (vWinClass == "CabinetWClass" || vWinClass == "#32770"))
+        SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl, (vWinClass == "CabinetWClass" || vWinClass == "#32770"))
 
         DetectHiddenWindows, On
         i := 1
@@ -1811,9 +1800,7 @@ FlushPendingActiveWinChange:
     }
 
     LbuttonEnabled := True
-    if (pendingActiveId = pendingActiveWinChangeId)
-        ClearPendingActiveWinChange()
-Return
+}
 
 ; Waits until the shell view's item list has finished populating.
 ; Works for both:
@@ -2724,12 +2711,6 @@ AdjustColumns:
     requiredQuietMs   := 0
     TargetControl     := ""
     TargetControlHwnd := 0
-    OutputVar1        := 0
-    OutputVar2        := 0
-    OutputVar3        := 0
-    OutputVar4        := 0
-    OutputVar6        := 0
-    OutputVar8        := 0
 
     ; If the wheel hook never captured a valid Explorer target, there is nothing to do.
     if (!pendingAdjustColumnsRequestId || !pendingAdjustColumnsHwnd || pendingAdjustColumnsCtrl == "")
@@ -2771,85 +2752,14 @@ AdjustColumns:
             TargetControl := c_pendingAdjustColumnsTargetCtrl
     }
 
-    ; Mirror the DirectUI/ListView discovery from SendCtrlAdd() on purpose instead of
-    ; calling SendCtrlAdd() directly. Reusing the full helper made wheel scrolling feel
-    ; janky, but modern Explorer still needs the same target-resolution heuristics to
-    ; decide which DirectUIHWND*/SysListView32 should receive Ctrl+NumpadAdd.
+    ; Reuse the same shared target scan + chooser as SendCtrlAdd(), while still
+    ; keeping the wheel path lightweight by stopping after target resolution.
     if (TargetControl == "") {
-        DirectUICtrls := GetCtrlNNsByPrefix(pendingAdjustColumnsHwnd, "DirectUIHWND")
-        SysListCtrls  := GetCtrlNNsByPrefix(pendingAdjustColumnsHwnd, "SysListView32")
-        OutputVar1    := InStr(SysListCtrls, "SysListView32", false)  > 0
-        OutputVar2    := InStr(DirectUICtrls, "DirectUIHWND2", false) > 0
-        OutputVar3    := InStr(DirectUICtrls, "DirectUIHWND3", false) > 0
-        OutputVar4    := InStr(DirectUICtrls, "DirectUIHWND4", false) > 0
-        OutputVar6    := InStr(DirectUICtrls, "DirectUIHWND6", false) > 0
-        OutputVar8    := InStr(DirectUICtrls, "DirectUIHWND8", false) > 0
-
-        ; Prefer the hovered control when it is already a stable known target. For the
-        ; more ambiguous DirectUIHWND2/3 case, fall through to the copied SendCtrlAdd()
-        ; heuristics below because modern Explorer often reports a hover control that is
-        ; not the one that ultimately handles the adjust-columns shortcut.
-        if (InStr(pendingAdjustColumnsCtrl, "SysListView32", True)) {
-            TargetControl := pendingAdjustColumnsCtrl
-        }
-        else if (pendingAdjustColumnsCtrl == "DirectUIHWND4" && OutputVar4) {
-            TargetControl := pendingAdjustColumnsCtrl
-        }
-        else if (pendingAdjustColumnsCtrl == "DirectUIHWND6" && OutputVar6) {
-            TargetControl := pendingAdjustColumnsCtrl
-        }
-        else if (pendingAdjustColumnsCtrl == "DirectUIHWND8" && OutputVar8) {
-            TargetControl := pendingAdjustColumnsCtrl
-        }
-
-        ; This selection block is intentionally derived from SendCtrlAdd(). It preserves the
-        ; existing Explorer-specific choice order while keeping the wheel path lightweight.
-        if (TargetControl == "" && (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)) {
-            if (OutputVar1 == 1) {
-                TargetControl := "SysListView321"
-            }
-            else if ((OutputVar2 == 1 && OutputVar3 == 1 && !OutputVar4 && !OutputVar6 && !OutputVar8)
-                    && (adjustClassNow == "CabinetWClass" || adjustClassNow == "#32770")) {
-                OutHeight2 := 0
-                OutHeight3 := 0
-
-                ; This Win11 DirectUIHWND2-vs-3 probe is copied from SendCtrlAdd(). Explorer
-                ; frequently exposes multiple large DirectUI panes, so preserving the same
-                ; sizing heuristic avoids regressing whichever pane currently handles the key.
-                if k_isWin11 {
-                    ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %pendingAdjustColumnsHwnd%
-                    if (GetWindowRectEx(hCtl, L, T, R, B)) {
-                        OutHeight2 := B - T
-                    }
-                }
-                else {
-                    ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %pendingAdjustColumnsHwnd%, , , ,
-                }
-
-                if (adjustClassNow == "CabinetWClass" && !k_isModernExplorerInReg)
-                    ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %pendingAdjustColumnsHwnd%, , , ,
-
-                if (adjustClassNow == "CabinetWClass" && (!k_isWin11 || !k_isModernExplorerInReg))
-                    TargetControl := "DirectUIHWND3"
-                else
-                    TargetControl := "DirectUIHWND2"
-            }
-            else if (OutputVar2 == 1) {
-                TargetControl := "DirectUIHWND2"
-            }
-            else if (OutputVar3 == 1) {
-                TargetControl := "DirectUIHWND3"
-            }
-            else if (OutputVar4) {
-                TargetControl := "DirectUIHWND4"
-            }
-            else if (OutputVar6) {
-                TargetControl := "DirectUIHWND6"
-            }
-            else if (OutputVar8) {
-                TargetControl := "DirectUIHWND8"
-            }
-        }
+        targetScan := GetSendCtrlAddTargetScan(pendingAdjustColumnsHwnd, adjustClassNow)
+        ; Wheel hover can transiently report DirectUIHWND2/3 even when a different
+        ; pane will ultimately handle Ctrl+NumpadAdd, so do not let those two names
+        ; win outright here. Fall back to the shared chooser instead.
+        TargetControl := ChooseSendCtrlAddTarget(pendingAdjustColumnsHwnd, adjustClassNow, pendingAdjustColumnsCtrl, targetScan, False)
     }
 
     ; If target resolution succeeds, use the richer Explorer-specific focus path. If it
@@ -4164,9 +4074,15 @@ Return
 
 #If disableEnter
 $Enter::
-    typingFixSeqBefore := typingFixSeq
-    GoSub, FixSlash
-    if !(pendingFixSlashAction = "enter" && pendingFixSlashId = typingFixSeq && typingFixSeq != typingFixSeqBefore)
+    if (_ShouldCommitFixSlashEnter()) {
+        ; Once slash+Enter qualifies, cancel any older deferred rewrites and
+        ; resolve this boundary keypress immediately in the Enter thread. That
+        ; avoids losing the correction to timer age/context invalidation later.
+        CancelPendingTypingFixes(True, False)
+        if (!_CommitFixSlashEnterInline())
+            Send, {Enter}
+    }
+    else
         Send, {Enter}
     disableEnter := False
 Return
@@ -8292,8 +8208,9 @@ GetItemsViewHwndFromUIA(shellEl)
     return hCtl
 }
 
-; Resolve Explorer's main item container by trying the common view control types
-; first, then fall back to the legacy "Items View" name lookup.
+; Resolve Explorer's main item container with a two-stage lookup:
+; 1) cheap/more direct UIA control-type checks for the common shell view hosts
+; 2) broader legacy "Items View" name lookup as the slower fallback
 FindExplorerItemsViewElement(targetHwndID)
 {
     exEl := SafeUIA_ElementFromHandle(targetHwndID, "", False)
@@ -8317,8 +8234,11 @@ FindExplorerItemsViewElement(targetHwndID)
     return SafeUIA_FindFirstByNameFast(exEl, "Items View")
 }
 
-; Resolve the real Explorer Items View HWND when available so Win11 focus
-; checks can target the view subtree instead of brittle DirectUIHWND numbers.
+; Resolve the real Explorer Items View HWND with a cheap-first split:
+; 1) reuse a short-lived cached HWND when the same window was just resolved
+; 2) otherwise pay for fresh UIA discovery and extract the native handle
+; This keeps repeat focus checks cheap while still falling back to the more
+; accurate UIA path when the cache is missing or stale.
 GetItemsViewHwnd(targetHwndID)
 {
     static cache := {}
@@ -8346,9 +8266,13 @@ GetItemsViewHwnd(targetHwndID)
     return hCtl
 }
 
-; Resolve a focus target to a native HWND whenever possible. Explorer and file
-; dialogs prefer the Items View HWND so child-subtree checks survive Win11
-; DirectUIHWND renumbering.
+; Resolve a focus target to a native HWND with a cheap-first/fallback split:
+; 1) for shell DirectUI targets, prefer the resolved Items View HWND so focus
+;    checks survive Win11 DirectUIHWND renumbering
+; 2) if that richer shell-specific path does not produce a handle, fall back to
+;    a direct ControlGet on the caller's CtrlNN
+; Explorer and file dialogs therefore get the more accurate subtree-aware path,
+; while other windows still keep the simpler CtrlNN-based fallback.
 ResolveFocusTargetHwnd(hwndTop, ctrlNN, topClass := "")
 {
     static cache := {}
@@ -8379,10 +8303,103 @@ ResolveFocusTargetHwnd(hwndTop, ctrlNN, topClass := "")
     return hCtl
 }
 
-WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
+; Cheap preflight before the slower UIA-based Explorer readiness wait. This only
+; returns true when the caller's chosen shell-view control is already present,
+; stays stable across repeated polls, and is either already focused or is a plain
+; SysListView host that can be trusted once its HWND has settled.
+IsExplorerLoadReadyFast(targetHwndID, preferredCtrlNN := "", skipFocus := False, stablePollCount := 2, timeoutMs := 25)
+{
+    ; Without both the top-level window and the caller's chosen shell-view CtrlNN,
+    ; there is nothing concrete to validate, so force the caller onto the slower
+    ; UIA readiness path.
+    if (!targetHwndID || preferredCtrlNN = "")
+        return false
+
+    ; This fast probe is intentionally narrow. It only knows how to reason about
+    ; the Explorer/file-dialog control families that SendCtrlAdd() targets.
+    ; Everything else should keep using the older UIA-based wait.
+    if !(InStr(preferredCtrlNN, "DirectUIHWND", True) || InStr(preferredCtrlNN, "SysListView32", True))
+        return false
+
+    lastHwnd    := 0
+    stableCount := 0
+    startTick   := A_TickCount
+
+    Loop
+    {
+        ; Resolve the specific CtrlNN to a live child HWND each poll. During shell
+        ; navigation the same CtrlNN can temporarily disappear or point at a view
+        ; host that is still being rebuilt, so this must be rechecked rather than
+        ; trusted from one earlier lookup.
+        ControlGet, hCtl, Hwnd,, %preferredCtrlNN%, ahk_id %targetHwndID%
+        if (hCtl
+         && DllCall("user32\IsWindow", "Ptr", hCtl, "Int")
+         && DllCall("user32\IsWindowVisible", "Ptr", hCtl, "Int")
+         && DllCall("user32\IsWindowEnabled", "Ptr", hCtl, "Int")) {
+            ; Require the resolved HWND to stay the same across repeated polls.
+            ; This avoids treating a transient shell-control rebuild as "ready"
+            ; just because one intermediate HWND briefly existed.
+            if (hCtl = lastHwnd)
+                stableCount += 1
+            else {
+                lastHwnd := hCtl
+                stableCount := 1
+            }
+
+            if (stableCount >= stablePollCount) {
+                ; For DirectUI-based views, the safest cheap success signal is:
+                ; the chosen view subtree already owns focus. That means the user-
+                ; visible target is present and Windows has mostly finished the
+                ; navigation/focus handoff we were about to wait for.
+                tidTarget := DllCall("GetWindowThreadProcessId", "Ptr", hCtl, "UInt*", 0, "UInt")
+                if (tidTarget && ControlGetFocusEx(tidTarget, hCtl, 0))
+                    return true
+
+                ; The skipFocus path is used when the caller intentionally does
+                ; not need this helper to prove focus moved into the view. Only
+                ; allow that shortcut for plain SysListView hosts, which are less
+                ; ambiguous than DirectUI containers once their HWND has settled.
+                if (skipFocus && InStr(preferredCtrlNN, "SysListView32", True))
+                    return true
+            }
+        }
+        else {
+            ; Any missing/hidden/disabled poll breaks the stability run. That
+            ; forces the control to prove it is consistently present before we
+            ; skip the heavier UIA wait.
+            lastHwnd    := 0
+            stableCount := 0
+        }
+
+        ; Keep the fast path tightly bounded. If the control does not become
+        ; obviously ready within this short window, fall back to the slower but
+        ; more reliable UIA wait instead of spinning here too long.
+        if ((A_TickCount - startTick) >= timeoutMs)
+            break
+
+        ; Yield the script thread between polls so this quick probe does not turn
+        ; into its own visible stall during activation/navigation.
+        Sleep, 0
+    }
+
+    ; "Not obviously ready yet" is a normal outcome here. Returning false simply
+    ; tells WaitForExplorerLoad() to continue with its slower confirmation path.
+    return false
+}
+
+; Two-stage Explorer readiness wait:
+; 1) try the short cheap control-readiness probe in IsExplorerLoadReadyFast()
+; 2) if that probe cannot confidently prove the target view is ready, fall back
+;    to the slower but more accurate UIA-based wait/focus path below
+WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False, preferredCtrlNN := "") {
     global UIA
 
     try {
+        ; If the intended view control is already real, stable, and effectively
+        ; focused for this path, skip the slower UIA readiness probe entirely.
+        if (IsExplorerLoadReadyFast(targetHwndID, preferredCtrlNN, skipFocus))
+            return
+
         shellEl := FindExplorerItemsViewElement(targetHwndID)
 
         if !IsObject(shellEl) {
@@ -8421,6 +8438,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
                 Sleep, 1
             }
         }
+
     } catch e {
         tooltip, 4: UIA TIMED OUT!!!!
         WinGetClass, wndClass, ahk_id %targetHwndID%
@@ -8683,7 +8701,12 @@ GetCtrlNNsByPrefix(hwndTop, classPrefix)
     return out
 }
 
-; Returns matching ClassNNs whose visible area is large enough to behave like a real file/details view.
+; This helper exists because some non-shell windows expose multiple child controls
+; with the same class prefix, but only the large pane-sized ones are real
+; file/details views that should receive Ctrl+NumpadAdd or related focus logic.
+; Without this size filter, callers could accidentally target tiny helper hosts,
+; side panes, or decorative DirectUI/ListView children that match by class name
+; but are not the main content surface.
 GetCtrlNNsByPrefixMinSize(hwndTop, classPrefix, minWidth := 400, minHeight := 180)
 {
     static cache := {}
@@ -8753,16 +8776,170 @@ GetCtrlNNsByPrefixMinSize(hwndTop, classPrefix, minWidth := 400, minHeight := 18
     return out
 }
 
+; Capture the DirectUI/ListView child-control snapshot once so multiple callers
+; can reuse the same discovery result while choosing a Ctrl+NumpadAdd target.
+; Explorer/file-dialog windows keep the full shell control set; other windows
+; filter to large panes only so tiny helper hosts do not qualify as targets.
+GetSendCtrlAddTargetScan(hwndTop, topClass := "", minWidth := 400, minHeight := 180)
+{
+    if (!hwndTop)
+        return { directCtrls: "", hasDirect2: 0, hasDirect3: 0, hasDirect4: 0, hasDirect6: 0, hasDirect8: 0
+               , hasSysList: 0, isShellLike: False, sysListCtrls: "", topClass: "" }
+
+    if (topClass = "")
+        WinGetClass, topClass, ahk_id %hwndTop%
+
+    isShellLike := (topClass == "CabinetWClass" || topClass == "#32770")
+    if (isShellLike) {
+        directCtrls  := GetCtrlNNsByPrefix(hwndTop, "DirectUIHWND")
+        sysListCtrls := GetCtrlNNsByPrefix(hwndTop, "SysListView32")
+    }
+    else {
+        directCtrls  := GetCtrlNNsByPrefixMinSize(hwndTop, "DirectUIHWND", minWidth, minHeight)
+        sysListCtrls := GetCtrlNNsByPrefixMinSize(hwndTop, "SysListView32", minWidth, minHeight)
+    }
+
+    return { directCtrls: directCtrls
+           , hasDirect2: InStr(directCtrls,  "DirectUIHWND2", False) > 0
+           , hasDirect3: InStr(directCtrls,  "DirectUIHWND3", False) > 0
+           , hasDirect4: InStr(directCtrls,  "DirectUIHWND4", False) > 0
+           , hasDirect6: InStr(directCtrls,  "DirectUIHWND6", False) > 0
+           , hasDirect8: InStr(directCtrls,  "DirectUIHWND8", False) > 0
+           , hasSysList: InStr(sysListCtrls, "SysListView32", False) > 0
+           , isShellLike: isShellLike
+           , sysListCtrls: sysListCtrls
+           , topClass: topClass }
+}
+
+; Pick the CtrlNN that should receive Ctrl+NumpadAdd from either the current
+; focused control or a previously captured child-control scan. Callers can
+; disable direct trust of DirectUIHWND2/3 when those names are too ambiguous.
+ChooseSendCtrlAddTarget(hwndTop, topClass := "", focusedCtrlNN := "", targetScan := "", allowFocusedDirect23 := True)
+{
+    global k_isModernExplorerInReg, k_isWin11
+
+    if (!hwndTop)
+        return ""
+
+    if (topClass = "") {
+        if (IsObject(targetScan) && targetScan.topClass != "")
+            topClass := targetScan.topClass
+        else
+            WinGetClass, topClass, ahk_id %hwndTop%
+    }
+
+    isShellLike := (topClass == "CabinetWClass" || topClass == "#32770")
+    if (!IsObject(targetScan)) {
+        if (focusedCtrlNN = "")
+            return ""
+
+        if (InStr(focusedCtrlNN, "SysListView32", True)
+         || focusedCtrlNN == "DirectUIHWND4"
+         || focusedCtrlNN == "DirectUIHWND6"
+         || focusedCtrlNN == "DirectUIHWND8"
+         || (allowFocusedDirect23 && (focusedCtrlNN == "DirectUIHWND2" || focusedCtrlNN == "DirectUIHWND3"))) {
+            if (!isShellLike) {
+                ControlGetPos, , , ctrlWidth, ctrlHeight, %focusedCtrlNN%, ahk_id %hwndTop%
+                if (ctrlWidth < 400 || ctrlHeight < 180)
+                    return ""
+            }
+            return focusedCtrlNN
+        }
+        return ""
+    }
+
+    if (InStr(focusedCtrlNN, "SysListView32", True) && targetScan.hasSysList)
+        return focusedCtrlNN
+    if (focusedCtrlNN == "DirectUIHWND4" && targetScan.hasDirect4)
+        return focusedCtrlNN
+    if (focusedCtrlNN == "DirectUIHWND6" && targetScan.hasDirect6)
+        return focusedCtrlNN
+    if (focusedCtrlNN == "DirectUIHWND8" && targetScan.hasDirect8)
+        return focusedCtrlNN
+    if (allowFocusedDirect23 && focusedCtrlNN == "DirectUIHWND2" && targetScan.hasDirect2)
+        return focusedCtrlNN
+    if (allowFocusedDirect23 && focusedCtrlNN == "DirectUIHWND3" && targetScan.hasDirect3)
+        return focusedCtrlNN
+
+    if (!(targetScan.hasSysList || targetScan.hasDirect2 || targetScan.hasDirect3 || targetScan.hasDirect4 || targetScan.hasDirect6 || targetScan.hasDirect8))
+        return ""
+
+    if (targetScan.hasSysList)
+        return "SysListView321"
+
+    if (isShellLike
+     && targetScan.hasDirect2
+     && targetScan.hasDirect3
+     && !targetScan.hasDirect4
+     && !targetScan.hasDirect6
+     && !targetScan.hasDirect8) {
+        OutHeight2 := 0
+        OutHeight3 := 0
+
+        if k_isWin11 {
+            ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %hwndTop%
+            if (GetWindowRectEx(hCtl, L, T, R, B))
+                OutHeight2 := B - T
+        }
+        else {
+            ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %hwndTop%, , , ,
+        }
+
+        if (topClass == "CabinetWClass" && !k_isModernExplorerInReg)
+            ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %hwndTop%, , , ,
+
+        if (topClass == "CabinetWClass" && (!k_isWin11 || !k_isModernExplorerInReg))
+            return "DirectUIHWND3"
+
+        return "DirectUIHWND2"
+    }
+
+    if (targetScan.hasDirect2)
+        return "DirectUIHWND2"
+    if (targetScan.hasDirect3)
+        return "DirectUIHWND3"
+    if (isShellLike && targetScan.hasDirect4)
+        return "DirectUIHWND4"
+    if (isShellLike && targetScan.hasDirect6)
+        return "DirectUIHWND6"
+    if (isShellLike && targetScan.hasDirect8)
+        return "DirectUIHWND8"
+
+    return ""
+}
+
+; Resolve the best CtrlNN target for Ctrl+NumpadAdd while keeping the common
+; "focused control is already correct" case cheap. If that quick check fails,
+; this helper falls back to the shared child-control scan + chooser path.
+GetSendCtrlAddTargetCtrl(hwndTop, initFocusedCtrlNN := "", topClass := "", targetScan := "", allowFocusedDirect23 := True)
+{
+    if (!hwndTop)
+        return ""
+
+    if (topClass = "") {
+        if (IsObject(targetScan) && targetScan.topClass != "")
+            topClass := targetScan.topClass
+        else
+            WinGetClass, topClass, ahk_id %hwndTop%
+    }
+
+    if (initFocusedCtrlNN = "")
+        ControlGetFocus, initFocusedCtrlNN, ahk_id %hwndTop%
+
+    TargetControl := ChooseSendCtrlAddTarget(hwndTop, topClass, initFocusedCtrlNN, "", allowFocusedDirect23)
+    if (TargetControl != "")
+        return TargetControl
+
+    if (!IsObject(targetScan))
+        targetScan := GetSendCtrlAddTargetScan(hwndTop, topClass)
+
+    return ChooseSendCtrlAddTarget(hwndTop, topClass, initFocusedCtrlNN, targetScan, allowFocusedDirect23)
+}
+
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False) {
     global UIA, k_isWin11, blockKeys
 
     TargetControl := ""
-    OutputVar1    := 0
-    OutputVar2    := 0
-    OutputVar3    := 0
-    OutputVar4    := 0
-    OutputVar6    := 0
-    OutputVar8    := 0
     didNavigate   := forceExplorerWait || (prevPath != "" && currentPath != "" && prevPath != currentPath)
 
     If (initTargetClass == "")
@@ -8785,135 +8962,41 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     ; tooltip, here1
     If (!GetKeyState("LShift","P" )) {
         If (initFocusedCtrlNN == "") {
-            MouseGetPos, , , , initFocusedCtrlNN
-            while (initFocusedCtrlNN == "ShellTabWindowClass1") {
+            ; Prefer the focused child reported by the target window itself.
+            ; Fall back to the older mouse-based shell-tab workaround only when
+            ; focus is blank or still too generic to identify the real target.
+            ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
+            if (initFocusedCtrlNN == "" || initFocusedCtrlNN == "ShellTabWindowClass1") {
                 MouseGetPos, , , , initFocusedCtrlNN
-                sleep, 1
+                while (initFocusedCtrlNN == "ShellTabWindowClass1") {
+                    MouseGetPos, , , , initFocusedCtrlNN
+                    sleep, 1
+                }
             }
         }
         ; tooltip, here2
         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+        {
             Return
-
-        If (InStr(initFocusedCtrlNN,  "SysListView32", True)) {
-            OutputVar1    := 1
-            TargetControl := initFocusedCtrlNN
-        }
-        Else If (initFocusedCtrlNN == "DirectUIHWND4") {
-            OutputVar4    := 1
-            TargetControl := initFocusedCtrlNN
-        }
-        Else If (initFocusedCtrlNN == "DirectUIHWND6") {
-            OutputVar6    := 1
-            TargetControl := initFocusedCtrlNN
-        }
-        Else If (initFocusedCtrlNN == "DirectUIHWND8") {
-            OutputVar8    := 1
-            TargetControl := initFocusedCtrlNN
-        }
-        Else If (initFocusedCtrlNN == "DirectUIHWND2") {
-            OutputVar2    := 1
-            TargetControl := initFocusedCtrlNN
-        }
-        Else If (initFocusedCtrlNN == "DirectUIHWND3") {
-            OutputVar3    := 1
-            TargetControl := initFocusedCtrlNN
-        }
-        If ((lClassCheck != "CabinetWClass" && lClassCheck != "#32770") && TargetControl != "") {
-            ControlGetPos, , , ctrlWidth, ctrlHeight, %TargetControl%, ahk_id %initTargetHwnd%
-            if (ctrlWidth < 400 || ctrlHeight < 180) {
-                TargetControl := ""
-                OutputVar1    := 0
-                OutputVar2    := 0
-                OutputVar3    := 0
-                OutputVar4    := 0
-                OutputVar6    := 0
-                OutputVar8    := 0
-            }
         }
 
-        If (TargetControl == "") {
-            if (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
-                DirectUICtrls := GetCtrlNNsByPrefix(initTargetHwnd, "DirectUIHWND")
-                SysListCtrls  := GetCtrlNNsByPrefix(initTargetHwnd, "SysListView32")
-            }
-            else {
-                DirectUICtrls := GetCtrlNNsByPrefixMinSize(initTargetHwnd, "DirectUIHWND", 400, 180)
-                SysListCtrls  := GetCtrlNNsByPrefixMinSize(initTargetHwnd, "SysListView32", 400, 180)
-            }
-
-            OutputVar1    := InStr(SysListCtrls,  "SysListView32", false) > 0
-            OutputVar2    := InStr(DirectUICtrls, "DirectUIHWND2", false) > 0
-            OutputVar3    := InStr(DirectUICtrls, "DirectUIHWND3", false) > 0
-            OutputVar4    := InStr(DirectUICtrls, "DirectUIHWND4", false) > 0
-            OutputVar6    := InStr(DirectUICtrls, "DirectUIHWND6", false) > 0
-            OutputVar8    := InStr(DirectUICtrls, "DirectUIHWND8", false) > 0
-        }
-
-        ; tooltip, target:%lClassCheck% OutputVar1:%OutputVar1% OutputVar2:%OutputVar2% OutputVar3:%OutputVar3% OutputVar4:%OutputVar4% OutputVar6:%OutputVar6% OutputVar8:%OutputVar8%
+        TargetControl := GetSendCtrlAddTargetCtrl(initTargetHwnd, initFocusedCtrlNN, lClassCheck)
 
         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+        {
             Return
-
-        If (TargetControl == "" && (OutputVar1 == 1 || OutputVar2 == 1 || OutputVar3 == 1 || OutputVar4 == 1 || OutputVar6 == 1 || OutputVar8 == 1)) {
-
-            ; tooltip, here6
-            If (OutputVar1 == 1) {
-                TargetControl := "SysListView321"
-            }
-            Else If ((OutputVar2 == 1 && OutputVar3 == 1 && !OutputVar4 && !OutputVar6 && !OutputVar8)
-                    && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
-
-                OutHeight2 := 0
-                OutHeight3 := 0
-
-                If k_isWin11 {
-                    ControlGet, hCtl, Hwnd,, DirectUIHWND2, ahk_id %initTargetHwnd%
-                   ; In the Win32 API, everything that has an HWND - from the desktop to a text box — is a “window.”
-                    ; That’s why these functions don’t care whether it’s a dialog, listview, or StaticNN.
-                    If (GetWindowRectEx(hCtl, L, T, R, B)) {
-                        OutHeight2 := B - T
-                        OutWidth2  := R - L
-                    }
-                }
-                Else {
-                    ControlGetPos, , , , OutHeight2, DirectUIHWND2, ahk_id %initTargetHwnd%, , , ,
-                }
-                ; tooltip, 2: %OutHeight2% vs 3: %OutHeight3%
-                If (lClassCheck == "CabinetWClass" && !k_isModernExplorerInReg)
-                    ControlGetPos, , , , OutHeight3, DirectUIHWND3, ahk_id %initTargetHwnd%, , , ,
-
-                If (lClassCheck == "CabinetWClass" && (!k_isWin11 || !k_isModernExplorerInReg))
-                    TargetControl := "DirectUIHWND3"
-                Else If (OutHeight2 > OutHeight3)
-                    TargetControl := "DirectUIHWND2"
-                Else
-                    TargetControl := "DirectUIHWND2"
-            }
-            Else If (OutputVar2 == 1) {
-                TargetControl := "DirectUIHWND2"
-            }
-            Else If (OutputVar3 == 1) {
-                TargetControl := "DirectUIHWND3"
-            }
-            Else If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
-                If OutputVar4
-                    TargetControl := "DirectUIHWND4"
-                Else If OutputVar6
-                    TargetControl := "DirectUIHWND6"
-                Else If OutputVar8
-                    TargetControl := "DirectUIHWND8"
-            }
         }
-        ; tooltip, here7
 
         If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+        {
             Return
+        }
 
         ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
-            if (didNavigate)
-                WaitForExplorerLoad(initTargetHwnd, , True)
+            if (didNavigate) {
+                WaitForExplorerLoad(initTargetHwnd, False, True, TargetControl)
+            }
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
 
@@ -8921,8 +9004,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         Else If (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
-            if (didNavigate)
-                WaitForExplorerLoad(initTargetHwnd, True)
+            if (didNavigate) {
+                WaitForExplorerLoad(initTargetHwnd, True, False, TargetControl)
+            }
             ; tooltip, here7b targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
 
@@ -8934,8 +9018,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
             ; tooltip, here7c
             if (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
-                if (didNavigate)
-                    WaitForExplorerLoad(initTargetHwnd)
+                if (didNavigate) {
+                    WaitForExplorerLoad(initTargetHwnd, False, False, TargetControl)
+                }
             }
             else if (TargetControl != initFocusedCtrlNN) {
 
@@ -8952,7 +9037,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         ; tooltip, here8
 
         If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+        {
             Return
+        }
 
         ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
 
@@ -8962,17 +9049,33 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             Send, ^{NumpadAdd}
 
             If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
-                sleep, 125
-                EndBlockKeys()
+                ; Skip the heavier restore path when Ctrl+NumpadAdd already left
+                ; focus on the original control/window.
+                restoreNeeded := True
+                if (initTargetTid) {
+                    currentFocusedHwnd := GetThreadFocusHwnd(initTargetTid)
+                    if (initFocusedHwnd && currentFocusedHwnd = initFocusedHwnd)
+                        restoreNeeded := False
+                }
+                if (restoreNeeded) {
+                    ControlGetFocus, currentFocusedCtrlNN, ahk_id %initTargetHwnd%
+                    if (currentFocusedCtrlNN = initFocusedCtrlNN)
+                        restoreNeeded := False
+                }
 
-                If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd)
-                    Return
+                if (restoreNeeded) {
+                    sleep, 125
+                    EndBlockKeys()
 
-                ; Use bounded focus+verify instead of 200 iterations
-                if (initFocusedHwnd && DllCall("user32\IsWindow", "Ptr", initFocusedHwnd, "Int"))
-                    EnsureFocusedHwnd(initFocusedHwnd, 120, 15)
-                else
-                    EnsureFocusedCtrlTarget(initTargetHwnd, initFocusedCtrlNN, 120, 15, lClassCheck)
+                    If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd)
+                        Return
+
+                    ; Use bounded focus+verify instead of 200 iterations
+                    if (initFocusedHwnd && DllCall("user32\IsWindow", "Ptr", initFocusedHwnd, "Int"))
+                        EnsureFocusedHwnd(initFocusedHwnd, 120, 15)
+                    else
+                        EnsureFocusedCtrlTarget(initTargetHwnd, initFocusedCtrlNN, 120, 15, lClassCheck)
+                }
             }
             EndBlockKeys()
             FixReleasedModifiers("Ctrl")
@@ -14248,7 +14351,7 @@ IsGoogleDocWindow() {
 
 ; Async editability-refresh timing:
 ; synchronous path (old)
-; t=0   FixSlash / Hoty queues a deferred rewrite
+; t=0   Hoty or slash+Space queues a deferred rewrite
 ;       pending...QueuedTick := A_TickCount
 ;       SetTimer, FlushPending..., -40
 ; t=20  first key in a newly active window runs RefreshTypingAutoFixContext()
@@ -14257,7 +14360,7 @@ IsGoogleDocWindow() {
 ; t=230 slow probe finishes, so FlushPending... finally runs with age = 230 ms
 ;
 ; async path (current)
-; t=0   FixSlash / Hoty queues a deferred rewrite
+; t=0   Hoty or slash+Space queues a deferred rewrite
 ;       pending...QueuedTick := A_TickCount
 ;       SetTimer, FlushPending..., -40
 ; t=20  first key does only cheap cache / exclusion checks
@@ -14316,11 +14419,16 @@ FlushTypingAutoFixRefresh:
 Return
 
 ; Recompute the cached typing-auto-fix eligibility decision for the current
-; focused window/control.
+; focused window/control using a cheap-first/slow-fallback split.
 ;
 ; What this function does:
 ; 1) refreshes the cached context fields (allowed, hwnd, ctrlNN, reason, tick)
 ; 2) returns the final allowed boolean for this focused target
+;
+; Flow shape inside this function:
+; 1) cheap exclusions and classic Edit/RichEdit checks run first
+; 2) unchanged context can reuse the cached decision for a short interval
+; 3) only then does the function pay for the slower UIA/MSAA editability checks
 ;
 ; This is the only path that is allowed to pay for the slower UIA/MSAA
 ; editability checks.
@@ -14516,6 +14624,12 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrlNN := "", nowTick := "") {
 ;
 ; Returns true only when typing auto-fix hooks should be active for the current
 ; focused target.
+; This is the cheap live-key entry point:
+; 1) capture the current window + focused control
+; 2) let GetTypingAutoFixEligibilityFastOrQ() answer from cheap exclusions and
+;    short-lived cached state when possible
+; 3) if the context needs a slower UIA/MSAA confirmation, that helper queues it
+;    separately so this keypress can return without paying the full slow-path cost
 ShouldRunTypingAutoFix() {
     global StopAutoFix
 
