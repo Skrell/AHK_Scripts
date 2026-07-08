@@ -253,11 +253,22 @@ Global targetDesktop                               := 0
 Global currentPath                                 := ""
 Global prevPath                                    := ""
 Global _winCtrlD                                   := ""
+; +----------------------------------------------------------------------------+
+; | Post-Activation LButton Recovery State                                     |
+; | Captures one inactive-window click snapshot so Explorer/dialog auto-fit can |
+; | be recovered after Windows finishes activating the clicked window.           |
+; +----------------------------------------------------------------------------+
+; Top-level window that received the inactive-window LButton press.
 Global postActivationLButtonHwnd                   := 0
+; ClassNN captured under the press; later used to limit recovery to shell view/header controls.
 Global postActivationLButtonCtrl                   := ""
+; Screen X coordinate of the original press for delayed title-bar and blank-space checks.
 Global postActivationLButtonX                      := 0
+; Screen Y coordinate of the original press for delayed title-bar and blank-space checks.
 Global postActivationLButtonY                      := 0
+; Monotonic snapshot token so a newer inactive-window click supersedes older timers.
 Global postActivationLButtonId                     := 0
+; Remaining globals in this section are general click/drag runtime state.
 Global MbuttonIsEnter                              := False
 Global suspendRightButtonForMButtonDrag            := False
 Global lastActWinID                                :=
