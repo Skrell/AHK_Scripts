@@ -1156,7 +1156,7 @@ Return
 ; once the custom $Enter hotkey has intercepted a qualifying "/{Enter}", wait
 ; only a short bounded time for the physical key cycle and any active script send
 ; to settle, then either commit "{BS}{?}{ENTER}" against the same window/control
-; or report failure so the caller can queue one short fallback retry.
+; or decline the inline send so the caller can queue one short fallback retry.
 _CommitFixSlashEnterInline() {
     global StopAutoFix
 
@@ -8634,107 +8634,14 @@ ResolveFocusTargetHwnd(hwndTop, ctrlNN, topClass := "")
     return hCtl
 }
 
-; Cheap preflight before the slower UIA-based Explorer readiness wait. This only
-; returns true when the caller's chosen shell-view control is already present,
-; stays stable across repeated polls, and is either already focused or is a plain
-; SysListView host that can be trusted once its HWND has settled.
-IsExplorerLoadReadyFast(targetHwndID, preferredCtrlNN := "", skipFocus := False, stablePollCount := 2, timeoutMs := 25)
-{
-    ; Without both the top-level window and the caller's chosen shell-view CtrlNN,
-    ; there is nothing concrete to validate, so force the caller onto the slower
-    ; UIA readiness path.
-    if (!targetHwndID || preferredCtrlNN = "")
-        return false
-
-    ; This fast probe is intentionally narrow. It only knows how to reason about
-    ; the Explorer/file-dialog control families that SendCtrlAdd() targets.
-    ; Everything else should keep using the older UIA-based wait.
-    if !(InStr(preferredCtrlNN, "DirectUIHWND", True) || InStr(preferredCtrlNN, "SysListView32", True))
-        return false
-
-    lastHwnd    := 0
-    stableCount := 0
-    startTick   := A_TickCount
-
-    Loop
-    {
-        ; Resolve the specific CtrlNN to a live child HWND each poll. During shell
-        ; navigation the same CtrlNN can temporarily disappear or point at a view
-        ; host that is still being rebuilt, so this must be rechecked rather than
-        ; trusted from one earlier lookup.
-        ControlGet, hCtl, Hwnd,, %preferredCtrlNN%, ahk_id %targetHwndID%
-        if (hCtl
-         && DllCall("user32\IsWindow", "Ptr", hCtl, "Int")
-         && DllCall("user32\IsWindowVisible", "Ptr", hCtl, "Int")
-         && DllCall("user32\IsWindowEnabled", "Ptr", hCtl, "Int")) {
-            ; Require the resolved HWND to stay the same across repeated polls.
-            ; This avoids treating a transient shell-control rebuild as "ready"
-            ; just because one intermediate HWND briefly existed.
-            if (hCtl = lastHwnd)
-                stableCount += 1
-            else {
-                lastHwnd := hCtl
-                stableCount := 1
-            }
-
-            if (stableCount >= stablePollCount) {
-                ; For DirectUI-based views, the safest cheap success signal is:
-                ; the chosen view subtree already owns focus. That means the user-
-                ; visible target is present and Windows has mostly finished the
-                ; navigation/focus handoff we were about to wait for.
-                tidTarget := DllCall("GetWindowThreadProcessId", "Ptr", hCtl, "UInt*", 0, "UInt")
-                if (tidTarget && ControlGetFocusEx(tidTarget, hCtl, 0))
-                    return true
-
-                ; The skipFocus path is used when the caller intentionally does
-                ; not need this helper to prove focus moved into the view. Only
-                ; allow that shortcut for plain SysListView hosts, which are less
-                ; ambiguous than DirectUI containers once their HWND has settled.
-                if (skipFocus && InStr(preferredCtrlNN, "SysListView32", True))
-                    return true
-            }
-        }
-        else {
-            ; Any missing/hidden/disabled poll breaks the stability run. That
-            ; forces the control to prove it is consistently present before we
-            ; skip the heavier UIA wait.
-            lastHwnd    := 0
-            stableCount := 0
-        }
-
-        ; Keep the fast path tightly bounded. If the control does not become
-        ; obviously ready within this short window, fall back to the slower but
-        ; more reliable UIA wait instead of spinning here too long.
-        if ((A_TickCount - startTick) >= timeoutMs)
-            break
-
-        ; Yield the script thread between polls so this quick probe does not turn
-        ; into its own visible stall during activation/navigation.
-        Sleep, 0
-    }
-
-    ; "Not obviously ready yet" is a normal outcome here. Returning false simply
-    ; tells WaitForExplorerLoad() to continue with its slower confirmation path.
-    return false
-}
-
-; Two-stage Explorer readiness wait:
-; 1) when navigation did not just happen, try the short cheap control-readiness
-;    probe in IsExplorerLoadReadyFast()
-; 2) when navigation did happen, require the item/empty-state UIA check so
-;    Ctrl+NumpadAdd does not fire before slow folders finish populating
-; 3) if the cheap probe is not allowed or cannot prove readiness, fall back to
-;    the slower but more accurate UIA-based wait/focus path below
-WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False, preferredCtrlNN := "", requireItemsReady := False) {
+; Explorer readiness wait used before Ctrl+NumpadAdd after navigation. This
+; intentionally waits for a real item or empty/search state instead of trusting
+; only shell-view HWND/focus stability, because column sizing can be missed if it
+; fires before slow folders, network locations, or file dialogs finish populating.
+WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
     global UIA
 
     try {
-        ; If the intended view control is already real, stable, and effectively
-        ; focused for this path, skip the slower UIA readiness probe only when
-        ; the caller does not need proof that folder items finished loading.
-        if (!requireItemsReady && IsExplorerLoadReadyFast(targetHwndID, preferredCtrlNN, skipFocus))
-            return
-
         shellEl := FindExplorerItemsViewElement(targetHwndID)
 
         if !IsObject(shellEl) {
@@ -9330,7 +9237,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (didNavigate) {
-                WaitForExplorerLoad(initTargetHwnd, False, True, TargetControl, True)
+                WaitForExplorerLoad(initTargetHwnd, False, True)
             }
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
@@ -9340,7 +9247,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
         Else If (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (didNavigate) {
-                WaitForExplorerLoad(initTargetHwnd, True, False, TargetControl, True)
+                WaitForExplorerLoad(initTargetHwnd, True)
             }
             ; tooltip, here7b targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
@@ -9354,7 +9261,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             ; tooltip, here7c
             if (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
                 if (didNavigate) {
-                    WaitForExplorerLoad(initTargetHwnd, False, False, TargetControl, True)
+                    WaitForExplorerLoad(initTargetHwnd)
                 }
             }
             else if (TargetControl != initFocusedCtrlNN) {
@@ -14711,11 +14618,11 @@ FlushTypingAutoFixRefresh:
     if (!pendingRefreshHwnd)
         Return
 
-    ; refreshAge
-      ; -> may force FlushTypingAutoFixRefresh to run
-      ; -> updates typing auto-fix eligibility cache
-      ; -> future keys can use the updated eligibility
-      ; -> future auto-fix rewrites may be allowed
+    ; Defer while physical typing is still in flight so the slow UIA/MSAA
+    ; probe stays off the immediate key burst. refreshAge is the starvation
+    ; cap: continuous typing can keep A_TimeIdlePhysical low indefinitely,
+    ; so force the eligibility refresh after k_typingAutoFixRefreshForceMs
+    ; instead of leaving custom-editor auto-fix eligibility stuck unknown.
     refreshAge := pendingRefreshQueuedTick ? (A_TickCount - pendingRefreshQueuedTick) : 0
     if (A_TimeIdlePhysical < k_typingAutoFixRefreshDelayMs
              && refreshAge < k_typingAutoFixRefreshForceMs)
