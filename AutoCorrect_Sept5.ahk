@@ -14606,7 +14606,7 @@ IsGoogleDocWindow() {
 ;       pending...QueuedTick := A_TickCount
 ;       SetTimer, FlushPending..., -40
 ; t=20  first key does only cheap cache / exclusion checks
-;       QueueTypingAutoFixRefresh() arms SetTimer, FlushTypingAutoFixRefresh, -25
+;       QueueTypingAutoFixRefresh() starts or reuses the pending async refresh
 ; t=40  deferred rewrite timer runs close to schedule
 ; t=45+ FlushTypingAutoFixRefresh pays the UIA/MSAA cost off the live key path
 FlushTypingAutoFixRefresh:
@@ -14818,13 +14818,13 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrlNN := "", nowTick := "") {
 ;    |      +--> later...
 ;    |             FlushTypingAutoFixRefresh
 ;    |                |
-;    |                |-- still same hwnd/ctrlNN and physically idle?
+;    |                |-- still same hwnd/ctrlNN and idle, or refreshAge forced?
 ;    |                |       |
 ;    |                |       +--> RefreshTypingAutoFixContext(...)
 ;    |                |               |
 ;    |                |               +--> _TypingAutoFixSetCache(final true/false, reason)
 ;    |                |
-;    |                +--> else cancel / requeue
+;    |                +--> else cancel / requeue only while still inside the starvation cap
 ;    |
 ;    |-- same context but cache older?
 ;    |      |
@@ -15198,8 +15198,11 @@ _TypingAutoFixSetCache(activeHwnd, ctrlNN, allowed, reason, nowTick := "") {
     return allowed
 }
 
-; Stores the latest async editability-refresh request and resets the one-shot
-; timer so newer focus contexts supersede older queued probes.
+; Stores the latest async editability-refresh request. Requeues for the same
+; hwnd/control preserve the original request id, queued tick, and one-shot timer
+; so refreshAge can still force the probe after k_typingAutoFixRefreshForceMs
+; during continuous typing. A different target gets a new id/tick and supersedes
+; the older probe.
 QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick := "") {
     global typingAutoFixRefreshCtrlNN
     global k_typingAutoFixRefreshDelayMs
@@ -15209,6 +15212,11 @@ QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick := "") {
 
     if (nowTick = "")
         nowTick := A_TickCount
+
+    if (typingAutoFixRefreshQueuedTick
+     && typingAutoFixRefreshHwnd = activeHwnd
+     && typingAutoFixRefreshCtrlNN = ctrlNN)
+        return
 
     typingAutoFixRefreshId         += 1
     typingAutoFixRefreshCtrlNN     := ctrlNN
