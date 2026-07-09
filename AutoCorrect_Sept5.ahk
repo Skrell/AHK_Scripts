@@ -132,15 +132,6 @@ Global typingAutoFixRefreshCtrlNN                  := ""
 ; keystroke, while the later A_TimeIdlePhysical retry is what usually keeps the
 ; refresh from competing with nearby deferred text-rewrite timers.
 Global k_typingAutoFixRefreshDelayMs               := 25
-; Maximum age before the async editability refresh runs even if physical
-; typing never fully goes idle. This prevents custom editors from staying
-; in pending_refresh during a long continuous typing burst.
-Global k_typingAutoFixRefreshForceMs               := 200
-; Recently proven custom-editor targets can be allowed immediately on the
-; next focus return while a background refresh reconfirms editability.
-Global typingAutoFixPositiveTargets                := {}
-; Lifetime for a positive custom-editor target memory.
-Global k_typingAutoFixPositiveTargetTtlMs          := 30000
 ; Active window captured when the async editability refresh is queued.
 Global typingAutoFixRefreshHwnd                    := 0
 ; Monotonic token incremented whenever a newer async editability refresh
@@ -242,6 +233,30 @@ Global pendingHotyQueuedTick                       := 0
 ; flush can send the intended rewrite only after the live key cycle has settled.
 Global pendingHotyReplacement                      := ""
 ; +----------------------------------------------------------------------------+
+; | Post-Activation Explorer Click Recovery                                    |
+; | Captures the first click into an inactive Explorer/file-dialog window so a |
+; | short timer can re-check that now-active shell target and recover the      |
+; | expected Ctrl+NumpadAdd behavior without slowing the activation click path. |
+; +----------------------------------------------------------------------------+
+; Top-level window HWND that received the activation click. The timer requires
+; this same window to become active before attempting any delayed shell action.
+Global postActivationLButtonHwnd                   := 0
+; ClassNN under the pointer when the activation click happened, used to limit
+; the recovery path to shell headers and shell-view controls only.
+Global postActivationLButtonCtrl                   := ""
+; Screen X coordinate of the activation click so the timer can re-run title-bar
+; and blank-space checks against the original click location.
+Global postActivationLButtonX                      := 0
+; Screen Y coordinate of the activation click so the deferred recovery inspects
+; the same area the user originally clicked.
+Global postActivationLButtonY                      := 0
+; Monotonic token incremented for each queued activation click so an older timer
+; can detect it was superseded by a newer click and exit safely.
+Global postActivationLButtonId                     := 0
+; Short one-shot delay that gives Windows time to finish activation/focus
+; transfer before the deferred shell-view re-check runs.
+Global k_postActivationLButtonDelayMs              := 35
+; +----------------------------------------------------------------------------+
 ; | Runtime Context And Click/Drag Scratch State                               |
 ; | Stores the current desktop, monitor, Explorer path, click target, and      |
 ; | in-progress drag metadata shared across mouse and window-management flows.  |
@@ -253,22 +268,6 @@ Global targetDesktop                               := 0
 Global currentPath                                 := ""
 Global prevPath                                    := ""
 Global _winCtrlD                                   := ""
-; +----------------------------------------------------------------------------+
-; | Post-Activation LButton Recovery State                                     |
-; | Captures one inactive-window click snapshot so Explorer/dialog auto-fit can |
-; | be recovered after Windows finishes activating the clicked window.           |
-; +----------------------------------------------------------------------------+
-; Top-level window that received the inactive-window LButton press.
-Global postActivationLButtonHwnd                   := 0
-; ClassNN captured under the press; later used to limit recovery to shell view/header controls.
-Global postActivationLButtonCtrl                   := ""
-; Screen X coordinate of the original press for delayed title-bar and blank-space checks.
-Global postActivationLButtonX                      := 0
-; Screen Y coordinate of the original press for delayed title-bar and blank-space checks.
-Global postActivationLButtonY                      := 0
-; Monotonic snapshot token so a newer inactive-window click supersedes older timers.
-Global postActivationLButtonId                     := 0
-; Remaining globals in this section are general click/drag runtime state.
 Global MbuttonIsEnter                              := False
 Global suspendRightButtonForMButtonDrag            := False
 Global lastActWinID                                :=
@@ -1156,7 +1155,7 @@ Return
 ; once the custom $Enter hotkey has intercepted a qualifying "/{Enter}", wait
 ; only a short bounded time for the physical key cycle and any active script send
 ; to settle, then either commit "{BS}{?}{ENTER}" against the same window/control
-; or decline the inline send so the caller can queue one short fallback retry.
+; or report failure so the caller can fall back to one raw Enter.
 _CommitFixSlashEnterInline() {
     global StopAutoFix
 
@@ -1199,62 +1198,16 @@ _CommitFixSlashEnterInline() {
 _ShouldCommitFixSlashEnter() {
     global disableEnter
     global k_keys
+    global StopAutoFix
     global X_PriorPriorHotKey
 
     return (disableEnter
          && !IsGoogleDocWindow()
+         && !StopAutoFix
          && InStr(k_keys, X_PriorPriorHotKey, False)
          && A_PriorHotKey == "~/"
          && A_ThisHotkey == "$Enter"
          && A_TimeSincePriorHotkey < 999)
-}
-
-; Captures the original slash+Enter target before the inline attempt. If the
-; inline send loses a short race with StopAutoFix or key settling, the timer can
-; retry once against the same window/control instead of immediately dropping to
-; a raw Enter.
-_ArmPendingFixSlashEnterRetry() {
-    global pendingFixSlashAction
-    global pendingFixSlashCtrl
-    global pendingFixSlashHwnd
-    global pendingFixSlashId
-    global pendingFixSlashQueuedTick
-    global typingFixSeq
-
-    CancelPendingTypingFixes(True, False)
-
-    pendingFixSlashAction     := "enter"
-    pendingFixSlashHwnd       := WinExist("A")
-    if (!pendingFixSlashHwnd)
-        return False
-
-    ControlGetFocus, pendingFixSlashCtrl, ahk_id %pendingFixSlashHwnd%
-    pendingFixSlashId         := typingFixSeq
-    pendingFixSlashQueuedTick := A_TickCount
-    return True
-}
-
-; Sends the suppressed physical Enter only if focus is still on the same target
-; that received the original slash+Enter. This avoids leaking the fallback into a
-; different window after an activation or focus change.
-_SendPendingFixSlashEnterFallback() {
-    global pendingFixSlashCtrl
-    global pendingFixSlashHwnd
-    global StopAutoFix
-
-    if (!pendingFixSlashHwnd || !WinActive("ahk_id " . pendingFixSlashHwnd))
-        return False
-
-    if (pendingFixSlashCtrl != "") {
-        ControlGetFocus, currentCtrl, ahk_id %pendingFixSlashHwnd%
-        if (currentCtrl != pendingFixSlashCtrl)
-            return False
-    }
-
-    StopAutoFix := True
-    Send, {Enter}
-    StopAutoFix := False
-    return True
 }
 
 FixSlash:
@@ -1302,40 +1255,39 @@ FlushPendingFixSlash:
     if (!pendingFixSlashAction)
         Return
 
-    ; Drop the queued slash rewrite if it has been pending longer than
-    ; k_pendingTypingFixMaxAgeMs. Slash+Enter gets one same-target raw Enter
-    ; fallback because the physical Enter was suppressed by the custom hotkey.
+    ; Drop the queued slash-space rewrite if it has been pending longer than
+    ; k_pendingTypingFixMaxAgeMs. After that short age budget, skipping the
+    ; correction is safer than rewriting text in a newer typing context.
     if (pendingFixSlashQueuedTick && (A_TickCount - pendingFixSlashQueuedTick) > k_pendingTypingFixMaxAgeMs)
     {
-        if (pendingFixSlashAction = "enter")
-            _SendPendingFixSlashEnterFallback()
         _ClearPendingFixSlashState()
         Return
     }
 
-    ; Let the physical Space/Enter key cycle settle before rewriting slash punctuation.
+    ; Let the physical Space key cycle settle before rewriting slash punctuation.
     if (A_TimeIdlePhysical < 40 || StopAutoFix)
     {
         SetTimer, FlushPendingFixSlash, -40
         Return
     }
 
-    ; Only allow Send when this is still the newest queued slash fix, the
+    ; Only allow Send when this is still the newest queued slash-space fix, the
     ; original window is still active, the same control still has focus when
     ; available, and the queued action remains fresh enough to trust.
     if (!IsPendingTypingFixStillValid(pendingFixSlashId, pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashQueuedTick))
     {
-        if (pendingFixSlashAction = "enter")
-            _SendPendingFixSlashEnterFallback()
+        _ClearPendingFixSlashState()
+        Return
+    }
+
+    if (pendingFixSlashAction != "space")
+    {
         _ClearPendingFixSlashState()
         Return
     }
 
     StopAutoFix := True
-    if (pendingFixSlashAction = "space")
-        Send, % "{BS}{BS}{?}{SPACE}"
-    else if (pendingFixSlashAction = "enter")
-        Send, % "{BS}{?}{ENTER}"
+    Send, % "{BS}{BS}{?}{SPACE}"
     StopAutoFix := False
     _ClearPendingFixSlashState()
 Return
@@ -1400,122 +1352,6 @@ CancelPendingTypingWorkForPointerAction() {
 ; so reuse the same cancellation path the click handler uses.
 CancelPendingTypingWorkForFocusChange() {
     CancelPendingTypingWorkForPointerAction()
-}
-
-; Foreground events can be transient menu/tooltip/status windows. Preserve
-; pending typing work for those short-lived activations and for owned popups
-; attached to the same text target; cancel only when focus really moved away.
-CancelPendingTypingWorkForActivationChange(hWnd, vWinClass := "") {
-    if (_ShouldPreservePendingTypingWorkForActivation(hWnd, vWinClass))
-        return
-
-    CancelPendingTypingWorkForFocusChange()
-}
-
-; Decide whether a foreground-window event is a real typing-context break.
-;
-; Why this helper exists:
-; OnWinActiveChange() is driven by EVENT_SYSTEM_FOREGROUND, not by a clean
-; "the user moved to a different edit control" signal. Windows can briefly
-; promote menus, shadows, tooltips, task thumbnails, progress/status popups,
-; and owned dialog fragments to the foreground while the user is still working
-; in the same text target. If we treat every one of those events as a focus
-; change, CancelPendingTypingWorkForFocusChange() clears pending slash/Hoty
-; rewrites and async editability probes that still belong to the original
-; editor. That creates visible missed corrections: a queued "word/" ->
-; "word?" rewrite or capitalization fix can disappear just because a transient
-; shell/menu window flashed in front.
-;
-; Return True here when the activation should be ignored for typing-work
-; cancellation. Return False only when the foreground hwnd looks like a real
-; move away from the pending rewrite/probe target.
-_ShouldPreservePendingTypingWorkForActivation(hWnd, vWinClass := "") {
-    global pendingFixSlashHwnd
-    global pendingHotyHwnd
-    global typingAutoFixRefreshHwnd
-
-    ; A missing hwnd is not actionable evidence that typing moved elsewhere.
-    ; Preserve pending work rather than clearing it on an incomplete event.
-    if (!hWnd)
-        return True
-
-    ; Callers normally pass the class captured in OnWinActiveChange(), but this
-    ; helper can also be used directly. Resolve lazily so the decision is still
-    ; based on the actual foreground target.
-    if (vWinClass = "")
-        WinGetClass, vWinClass, ahk_id %hWnd%
-
-    ; These classes are foreground noise for this purpose. They can appear while
-    ; a menu is open, a tooltip/shadow is being drawn, Alt-Tab/task previews are
-    ; visible, or an operation-status popup is surfaced. None of those should
-    ; invalidate a pending text rewrite tied to the original editor.
-    if (vWinClass == "#32768"
-     || vWinClass == "OperationStatusWindow"
-     || vWinClass == "tooltips_class32"
-     || vWinClass == "SysShadow"
-     || vWinClass == "DropDown"
-     || vWinClass == "TaskListThumbnailWnd")
-        return True
-
-    ; Sometimes the foreground callback arrives before the transient menu class
-    ; has been resolved on hWnd, but the menu window already exists globally.
-    ; Treat that as the same menu-interruption case and keep the pending work.
-    if (vWinClass = "" && WinExist("ahk_class #32768"))
-        return True
-
-    ; The pending hwnds below are the concrete pieces of typing work that can
-    ; survive a harmless foreground blip:
-    ; - pendingFixSlashHwnd: deferred slash-space or slash-Enter rewrite
-    ; - pendingHotyHwnd: deferred capitalization rewrite
-    ; - typingAutoFixRefreshHwnd: queued async editability probe
-    ; Preserve when the foreground window is the same hwnd that owns any of
-    ; that pending work, or an owned popup of that hwnd. Owned popups often
-    ; appear as part of the same text interaction, so clearing here would be
-    ; broader than the actual user intent.
-    if (_ActivationMatchesPendingTypingTarget(hWnd, pendingFixSlashHwnd)
-     || _ActivationMatchesPendingTypingTarget(hWnd, pendingHotyHwnd)
-     || _ActivationMatchesPendingTypingTarget(hWnd, typingAutoFixRefreshHwnd))
-        return True
-
-    ; Anything else is a real foreground move as far as pending typing work is
-    ; concerned, so the caller should cancel stale rewrite/probe state.
-    return False
-}
-
-; Return true when a foreground hwnd still belongs to the pending typing
-; target. This is the narrow ownership test used by
-; _ShouldPreservePendingTypingWorkForActivation() after it has already ruled
-; out known transient foreground classes.
-;
-; Why this helper exists:
-; Pending slash/Hoty rewrites and async editability refreshes are stored
-; against the top-level window that owned the text target when the work was
-; queued. A later foreground event can name either that same top-level hwnd
-; or a short-lived owned popup/dialog belonging to it. The same hwnd is an
-; obvious match. The owned-popup case is less obvious but important: Windows
-; commonly models dropdowns, context UI, and small modal fragments as owned
-; windows. Treating those as unrelated activations would clear the pending
-; text work even though the user has not really moved to a new editor.
-;
-; This helper intentionally does not inspect descendants or arbitrary process
-; siblings. It only accepts exact ownership evidence so preservation stays
-; conservative and cannot keep stale typing work alive after a real app/window
-; switch.
-_ActivationMatchesPendingTypingTarget(hWnd, pendingHwnd) {
-    ; If either side is missing, there is no reliable relationship to prove.
-    if (!hWnd || !pendingHwnd)
-        return False
-
-    ; The foreground event is for the same top-level window that queued the
-    ; pending rewrite/probe, so preserving it is safe.
-    if (hWnd = pendingHwnd)
-        return True
-
-    ; GW_OWNER checks whether this foreground hwnd is an owned popup of the
-    ; pending target. Owned popups are treated as part of the same typing
-    ; context for cancellation purposes.
-    ownerHwnd := DllCall("user32\GetWindow", "Ptr", hWnd, "UInt", 4, "Ptr")
-    return (ownerHwnd && ownerHwnd = pendingHwnd)
 }
 
 ; Returns true only when a deferred typing rewrite is still fresh, still points
@@ -1844,6 +1680,31 @@ NeedsSendCtrlAddFadeWait(hParent, focusedCtrlNN := "") {
     return False
 }
 
+ShouldForceExplorerLoadOnActivate(topClass, targetScan := "", topProc := "", topTitle := "") {
+    if (topClass != "CabinetWClass" && topClass != "#32770")
+        return False
+
+    ; Only force the activation-time Explorer load wait for windows that still
+    ; look like real shell hosts and that actually contain a likely shell-view
+    ; content target. This avoids basing the decision on transient initial
+    ; focus such as the breadcrumb bar or address field.
+    if (!(topClass == "CabinetWClass"
+       || InStr(topProc, "explorer.exe", False)
+       || InStr(topTitle, "Save", True)
+       || InStr(topTitle, "Open", True)))
+        return False
+
+    if (!IsObject(targetScan))
+        return False
+
+    return targetScan.hasSysList
+        || targetScan.hasDirect2
+        || targetScan.hasDirect3
+        || targetScan.hasDirect4
+        || targetScan.hasDirect6
+        || targetScan.hasDirect8
+}
+
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
     global StopRecursion
@@ -1851,6 +1712,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     if (StopRecursion || hitTab || !hWnd)
         return
 
+    ; A focus change means any deferred typing rewrite or async editability probe
+    ; belongs to the previous target, so cancel that work immediately.
+    CancelPendingTypingWorkForFocusChange()
 
     DetectHiddenWindows, Off
     ; Only hold timers off while capturing the initial activation snapshot and
@@ -1866,10 +1730,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             break
         sleep, 1
     }
-
-    ; Cancel stale typing work only after resolving the foreground target, so
-    ; transient menus/status windows do not wipe pending same-target rewrites.
-    CancelPendingTypingWorkForActivationChange(hWnd, vWinClass)
 
     If !(vWinClass == "#32770" && vWinTitle == "Run") {
         WinGet, vWinStyle, Style, % "ahk_id " hWnd
@@ -1954,6 +1814,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Return
         }
 
+        sendCtrlAddTargetScan := ""
+        if (vWinClass == "#32770" || vWinClass == "CabinetWClass")
+            sendCtrlAddTargetScan := GetSendCtrlAddTargetScan(hWnd, vWinClass)
+
         initFocusedCtrl := initFocusedCtrlForWait
         if (initFocusedCtrl == "") {
             Loop, 99 {
@@ -1968,7 +1832,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         Thread, NoTimers, False
 
         ; tooltip, sent to %initFocusedCtrl%
-        SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl, (vWinClass == "CabinetWClass" || vWinClass == "#32770"))
+        SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl
+            , ShouldForceExplorerLoadOnActivate(vWinClass, sendCtrlAddTargetScan, vWinProc, vWinTitle)
+            , sendCtrlAddTargetScan)
 
         DetectHiddenWindows, On
         i := 1
@@ -4264,15 +4130,11 @@ Return
 #If disableEnter
 $Enter::
     if (_ShouldCommitFixSlashEnter()) {
-        ; Try the immediate path first. If the key cycle or StopAutoFix is still
-        ; settling, queue one short retry instead of dropping straight to raw Enter.
-        if (_ArmPendingFixSlashEnterRetry()) {
-            if (_CommitFixSlashEnterInline())
-                _ClearPendingFixSlashState()
-            else
-                SetTimer, FlushPendingFixSlash, -40
-        }
-        else
+        ; Once slash+Enter qualifies, cancel any older deferred rewrites and
+        ; resolve this boundary keypress immediately in the Enter thread. That
+        ; avoids losing the correction to timer age/context invalidation later.
+        CancelPendingTypingFixes(True, False)
+        if (!_CommitFixSlashEnterInline())
             Send, {Enter}
     }
     else
@@ -7988,88 +7850,78 @@ EnsureFocusedCtrlTarget(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, to
     return EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
 }
 
-; Queue the narrow post-activation Explorer/dialog click recovery pass.
-;
-; Why this helper exists:
-; The $~LButton hotkey deliberately returns early when the initial press lands
-; on a different top-level window. Running the full blank-space/header
-; classification before Windows finishes activating that window can make first
-; clicks feel sticky or janky, especially around Explorer and file dialogs.
-; The downside is that the old immediate path could also perform useful work
-; on that first click, such as auto-fitting columns after a header/blank-space
-; click. This queue captures the click target and mouse position, then lets a
-; short one-shot timer re-check only the safe Explorer/dialog subset once the
-; clicked window has actually become active.
-;
-; The monotonically increasing id lets a newer activation click supersede an
-; older queued timer without needing to cancel and reason about all pending
-; timer instances manually.
+#MaxThreadsPerHotkey 2
+#If
+; Queue a conservative post-activation recovery for the first click into an
+; inactive Explorer/file-dialog window. The live $~LButton path now returns
+; immediately in that case to keep activation cheap and avoid blocking focus
+; transfer with heavier blank-space or SendCtrlAdd classification. This helper
+; captures the click snapshot so a short timer can re-check only the safe shell
+; subset once the clicked window is actually active.
 _QueuePostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY) {
+    global k_postActivationLButtonDelayMs
     global postActivationLButtonCtrl
     global postActivationLButtonHwnd
     global postActivationLButtonId
     global postActivationLButtonX
     global postActivationLButtonY
 
-    ; Publish one complete snapshot of the press. The timer copies this into
-    ; locals immediately so later clicks cannot partially mutate its decision.
+    ; Publish one complete snapshot of the activation click. The timer copies
+    ; this into locals immediately so later clicks cannot partially mutate its
+    ; decision state.
     postActivationLButtonId   += 1
     postActivationLButtonHwnd := hwnd
     postActivationLButtonCtrl := ctrlNN
     postActivationLButtonX    := clickX
     postActivationLButtonY    := clickY
-    ; A short delay is enough for normal activation/focus transfer to settle
-    ; while still feeling tied to the original click.
-    SetTimer, PostActivationLButtonCheck, -35
+    SetTimer, PostActivationLButtonCheck, % -k_postActivationLButtonDelayMs
 }
 
 
 ; Deferred recovery for a first click into an inactive Explorer/file-dialog
-; window. This is intentionally not a replay of the full $~LButton handler:
-; it avoids double-click state, generic non-Explorer blank-space detection,
-; resize/drag logic, and item-click navigation handling. By the time this
-; timer runs, the original physical click has already gone to Windows, so the
-; safest recovery is limited to cases where sending Ctrl+NumpadAdd was already
-; expected behavior: shell headers and blank shell view space.
+; window. This intentionally does not replay the full $~LButton handler: by the
+; time this timer runs, the original physical click already went to Windows, so
+; the only safe follow-up is the narrow shell case where Ctrl+NumpadAdd was the
+; already-expected result.
 PostActivationLButtonCheck:
-    ; Copy the queued snapshot first; every later guard validates that this
-    ; still describes the current foreground target.
+    ; Copy the queued snapshot first; every later guard validates that it still
+    ; describes the current foreground target.
     queuedId   := postActivationLButtonId
     targetHwnd := postActivationLButtonHwnd
     targetCtrl := postActivationLButtonCtrl
     clickX     := postActivationLButtonX
     clickY     := postActivationLButtonY
 
-    ; If activation did not land on the original clicked window, do nothing.
-    ; That prevents sending keys into a stale or unrelated foreground window.
+    ; If activation did not land on the originally clicked window, do nothing.
+    ; This prevents any delayed send from targeting a stale or unrelated window.
     if (!targetHwnd || !WinExist("ahk_id " . targetHwnd) || WinExist("A") != targetHwnd)
         Return
 
-    ; While the button is still down, this might be a drag or selection. The
-    ; deferred recovery only handles completed simple clicks.
+    ; While the button is still down this may be a drag or selection gesture.
+    ; Only recover completed simple clicks.
     if (GetKeyState("LButton", "P"))
         Return
 
-    ; A newer inactive-window click replaced this snapshot; let the newer timer
-    ; make the decision instead.
+    ; A newer inactive-window click replaced this snapshot, so let the newer
+    ; timer instance make the decision.
     if (queuedId != postActivationLButtonId)
         Return
 
-    ; Keep the recovery scoped to Explorer and common file dialogs, the only
-    ; places where this delayed Ctrl+NumpadAdd behavior was intended.
+    ; Keep the delayed recovery scoped to Explorer and common file dialogs, the
+    ; only windows where this first-click Ctrl+NumpadAdd behavior is intended.
     WinGetClass, targetClass, ahk_id %targetHwnd%
     if !(targetClass == "CabinetWClass" || targetClass == "#32770")
         Return
 
-    ; Ignore unrelated controls in those windows. The original full click path
-    ; has broader handling, but the delayed path must stay conservative.
+    ; Ignore unrelated controls in those windows. The deferred path must stay
+    ; narrower than the normal click handler because it runs after activation.
     if !(InStr(targetCtrl, "DirectUIHWND", True)
        || InStr(targetCtrl, "SysListView32", True)
        || InStr(targetCtrl, "SysHeader32", True))
         Return
 
-    ; Re-run title-bar filtering after activation so caption/title clicks do
-    ; not get mistaken for shell-view clicks.
+    ; Re-run title-bar filtering after activation so caption/title clicks do not
+    ; get mistaken for shell-view clicks.
     titleBarState := _GetTitleBarProbeState(clickX, clickY, False, targetHwnd, targetCtrl, targetClass)
     if (titleBarState == "caption")
         Return
@@ -8079,18 +7931,17 @@ PostActivationLButtonCheck:
      && MouseIsOverTitleBarDeferred(clickX, clickY, False, targetHwnd, targetCtrl, targetClass))
         Return
 
-    ; Header clicks are the clearest safe case: after the target is active,
-    ; focus the captured header control and send the same auto-fit command.
+    ; Header clicks are the clearest safe case: once the target is active, focus
+    ; the captured header control and send the normal auto-fit command.
     if (InStr(targetCtrl, "SysHeader32", True)) {
         EnsureFocusedCtrlNN(targetHwnd, targetCtrl, 60, 15)
         Send, ^{NumpadAdd}
         Return
     }
 
-    ; For Explorer/file-dialog item-list controls (the main file/folder display
-    ; area: DirectUIHWND/SysListView32), only recover blank-space clicks. Item
-    ; clicks may select or navigate, and replaying follow-up send logic here
-    ; would be more invasive than the first-click activation fix is meant to be.
+    ; For Explorer/file-dialog item-list controls, only recover blank-space
+    ; clicks. Item clicks may select or navigate, and replaying that broader
+    ; logic here would be more invasive than this activation-click fix should be.
     postActivationBlankClick := False
     if (InStr(targetCtrl, "DirectUIHWND", True)) {
         if (targetClass == "#32770")
@@ -8111,7 +7962,7 @@ PostActivationLButtonCheck:
     else if (InStr(targetCtrl, "SysListView32", True)) {
         CoordMode, Mouse, Screen
         MouseGetPos, currentX, currentY
-        ; SysListView blank-space detection is mouse-position based, so only
+        ; SysListView blank-space detection is pointer-position based, so only
         ; trust it if the pointer is still essentially where the click landed.
         if (Abs(currentX - clickX) <= 3 && Abs(currentY - clickY) <= 3)
             postActivationBlankClick := IsExplorerBlankSpaceClick()
@@ -8119,8 +7970,8 @@ PostActivationLButtonCheck:
             postActivationBlankClick := AreaLooksUniformFast(clickX, clickY)
     }
 
-    ; Force the Explorer wait path because this recovery runs after activation
-    ; and may need the shell view to settle before Ctrl+NumpadAdd is useful.
+    ; Force the shell-view wait path because this recovery runs immediately after
+    ; activation and may need the target to settle before Ctrl+NumpadAdd is useful.
     if (postActivationBlankClick)
         SendCtrlAdd(targetHwnd, , , targetClass, targetCtrl, True)
 Return
@@ -8455,7 +8306,9 @@ $~LButton::
                 sleep, 15
             }
             ; tooltip, sending
-            SendCtrlAdd(_winIdU, prevPath, currentPath, _winClassD, _winCtrlU, True)
+            ; If the path probe already proved navigation happened, avoid forcing
+            ; the load wait and let SendCtrlAdd() infer didNavigate from the path delta.
+            SendCtrlAdd(_winIdU, prevPath, currentPath, _winClassD, _winCtrlU, (currentPath == "" || currentPath == prevPath))
         }
     }
     Else If (InStr(_winCtrlU, "SysHeader", True) && (abs(lbX1-lbX2) >= 15 || abs(lbY1-lbY2) >= 15)) { ; dragged to size one of the header columns
@@ -8634,10 +8487,11 @@ ResolveFocusTargetHwnd(hwndTop, ctrlNN, topClass := "")
     return hCtl
 }
 
-; Explorer readiness wait used before Ctrl+NumpadAdd after navigation. This
-; intentionally waits for a real item or empty/search state instead of trusting
-; only shell-view HWND/focus stability, because column sizing can be missed if it
-; fires before slow folders, network locations, or file dialogs finish populating.
+; UIA-based Explorer readiness wait:
+; 1) locate the shell Items View element
+; 2) wait for either a real item or a known empty/search-result message
+; 3) when this caller needs focus inside the view, perform the slower UIA-backed
+;    focus confirmation/retry path instead of trusting only control-level signals
 WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
     global UIA
 
@@ -9178,7 +9032,7 @@ GetSendCtrlAddTargetCtrl(hwndTop, initFocusedCtrlNN := "", topClass := "", targe
     return ChooseSendCtrlAddTarget(hwndTop, topClass, initFocusedCtrlNN, targetScan, allowFocusedDirect23)
 }
 
-SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False) {
+SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False, targetScan := "") {
     global UIA, k_isWin11, blockKeys
 
     TargetControl := ""
@@ -9222,7 +9076,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             Return
         }
 
-        TargetControl := GetSendCtrlAddTargetCtrl(initTargetHwnd, initFocusedCtrlNN, lClassCheck)
+        TargetControl := GetSendCtrlAddTargetCtrl(initTargetHwnd, initFocusedCtrlNN, lClassCheck, targetScan)
 
         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
         {
@@ -9247,7 +9101,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
         Else If (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (didNavigate) {
-                WaitForExplorerLoad(initTargetHwnd, True)
+                WaitForExplorerLoad(initTargetHwnd, True, False)
             }
             ; tooltip, here7b targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
@@ -9256,15 +9110,13 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         Else If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
-            WinGet, proc, ProcessName, ahk_id %initTargetHwnd%
-            WinGetTitle, vWinTitle, ahk_id %initTargetHwnd%
-            ; tooltip, here7c
-            if (InStr(proc,"explorer.exe",False) || InStr(vWinTitle,"Save",True) || InStr(vWinTitle,"Open",True)) {
-                if (didNavigate) {
-                    WaitForExplorerLoad(initTargetHwnd)
-                }
+            if (didNavigate) {
+                ; This fallback shell branch already resolved a real content target.
+                ; Skip the slower UIA focus-confirmation part when focus is already
+                ; on that target and only the content-readiness wait still matters.
+                WaitForExplorerLoad(initTargetHwnd, (TargetControl == initFocusedCtrlNN), False)
             }
-            else if (TargetControl != initFocusedCtrlNN) {
+            if (TargetControl != initFocusedCtrlNN) {
 
                 EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
             }
@@ -12147,6 +11999,23 @@ _SendClipboardPaste()
     SendInput, {Ctrl Down}v{Ctrl Up}
 }
 
+; Retry plain-text clipboard writes a few times so transient clipboard locks do
+; not terminate the script with a SetClipboardData exception.
+_TrySetClipboardText(text, retries := 6, sleepMs := 15)
+{
+    Loop, %retries% {
+        try {
+            Clipboard := text
+            ClipWait, 0.1
+            if (Clipboard == text)
+                return True
+        } catch e {
+        }
+        Sleep, %sleepMs%
+    }
+    return False
+}
+
 Clip(Text := "", Reselect := "", Restore := "")
 {
     global clipPreferExplicitCtrlV
@@ -12185,7 +12054,11 @@ Clip(Text := "", Reselect := "", Restore := "")
                 ClipWait, 0.2, 1
             }
         } else {
-            Clipboard := LastClip := Text
+            LastClip := Text
+            if !_TrySetClipboardText(Text) {
+                Clip("", "", "RESTORE")
+                return ""
+            }
             ClipWait, 10
             if (clipPreferExplicitCtrlV)
                 _SendClipboardPaste()
@@ -14606,7 +14479,7 @@ IsGoogleDocWindow() {
 ;       pending...QueuedTick := A_TickCount
 ;       SetTimer, FlushPending..., -40
 ; t=20  first key does only cheap cache / exclusion checks
-;       QueueTypingAutoFixRefresh() starts or reuses the pending async refresh
+;       QueueTypingAutoFixRefresh() arms SetTimer, FlushTypingAutoFixRefresh, -25
 ; t=40  deferred rewrite timer runs close to schedule
 ; t=45+ FlushTypingAutoFixRefresh pays the UIA/MSAA cost off the live key path
 FlushTypingAutoFixRefresh:
@@ -14618,14 +14491,9 @@ FlushTypingAutoFixRefresh:
     if (!pendingRefreshHwnd)
         Return
 
-    ; Defer while physical typing is still in flight so the slow UIA/MSAA
-    ; probe stays off the immediate key burst. refreshAge is the starvation
-    ; cap: continuous typing can keep A_TimeIdlePhysical low indefinitely,
-    ; so force the eligibility refresh after k_typingAutoFixRefreshForceMs
-    ; instead of leaving custom-editor auto-fix eligibility stuck unknown.
-    refreshAge := pendingRefreshQueuedTick ? (A_TickCount - pendingRefreshQueuedTick) : 0
-    if (A_TimeIdlePhysical < k_typingAutoFixRefreshDelayMs
-             && refreshAge < k_typingAutoFixRefreshForceMs)
+    ; Retry while physical typing is still in flight so the slow accessibility
+    ; probe does not jump back onto the same burst of live key handling.
+    if (A_TimeIdlePhysical < k_typingAutoFixRefreshDelayMs)
     {
         SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
         Return
@@ -14818,13 +14686,13 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrlNN := "", nowTick := "") {
 ;    |      +--> later...
 ;    |             FlushTypingAutoFixRefresh
 ;    |                |
-;    |                |-- still same hwnd/ctrlNN and idle, or refreshAge forced?
+;    |                |-- still same hwnd/ctrlNN and physically idle?
 ;    |                |       |
 ;    |                |       +--> RefreshTypingAutoFixContext(...)
 ;    |                |               |
 ;    |                |               +--> _TypingAutoFixSetCache(final true/false, reason)
 ;    |                |
-;    |                +--> else cancel / requeue only while still inside the starvation cap
+;    |                +--> else cancel / requeue
 ;    |
 ;    |-- same context but cache older?
 ;    |      |
@@ -15035,11 +14903,6 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, nowTick := "") {
         }
     }
 
-    if (_TypingAutoFixWasRecentlyPositive(activeHwnd, ctrlNN, nowTick)) {
-        QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick)
-        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, true, "positive_target_cache", nowTick)
-    }
-
     contextChanged := (activeHwnd != c_typingAutoFixHwnd || ctrlNN != c_typingAutoFixCtrlNN)
     if (contextChanged) {
         QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick)
@@ -15054,128 +14917,16 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, nowTick := "") {
     return c_typingAutoFixAllowed
 }
 
-; Build the identity used by the recent-positive custom-editor cache.
+; Persist the current typing-auto-fix decision so the hotkey predicate can usually
+; return with a cheap same-window/same-control cache hit.
 ;
-; Why this helper exists:
-; GetTypingAutoFixEligibilityFastOrQ() intentionally avoids slow UIA/MSAA
-; editability probes on the live key path. That keeps typing responsive, but
-; it means a custom editor can return false for the first key after focus
-; changes while the async refresh is still pending. To avoid repeatedly
-; missing that first key in editors we have just proven editable, the script
-; remembers a short-lived positive result and allows the next matching target
-; immediately while a background refresh reconfirms it.
-;
-; The key has to be broader than a raw HWND because many apps recreate window
-; handles while keeping the same editing surface, but it cannot be so broad
-; that one editable control enables auto-fix in unrelated controls. This
-; process + top-level class + focused CtrlNN + focused control class shape is
-; the compromise:
-; - processName separates apps with similar window/control class names.
-; - topClass separates different window types inside the same process.
-; - ctrlNN keeps one window from sharing editability across sibling controls.
-; - ctrlClass distinguishes custom/editable hosts from other controls that
-;   happen to reuse the same CtrlNN pattern.
-;
-; Empty hwnd/control input returns an empty key so callers can safely skip
-; storing or reusing a positive decision when the target is not identifiable.
-_TypingAutoFixPositiveCacheKey(activeHwnd, ctrlNN, processName := "", ctrlClass := "") {
-    ; Without both pieces, a positive result would be too ambiguous to reuse.
-    if (!activeHwnd || ctrlNN = "")
-        return ""
-
-    ; Resolve optional fields lazily so callers with known values can avoid
-    ; repeated WinGet work, while simple callers still get a complete key.
-    if (processName = "")
-        WinGet, processName, ProcessName, ahk_id %activeHwnd%
-
-    ; Top-level class and focused-control class narrow the memory to the same
-    ; kind of editing surface rather than every window in the same process.
-    WinGetClass, topClass, ahk_id %activeHwnd%
-
-    if (ctrlClass = "")
-        _TypingAutoFixTryGetFocusedControlClass(activeHwnd, ctrlNN, ctrlClass)
-
-    ; Use a simple string key because the cache is short-lived and only needs
-    ; exact-match lookups for recently proven editable targets.
-    return processName "|" topClass "|" ctrlNN "|" ctrlClass
-}
-
-
-; Store a short-lived "this custom target was editable" memory.
-;
-; Why this helper exists:
-; UIA/MSAA editability checks are too expensive to run on every live keypress,
-; so the fast path can temporarily return false while an async probe catches
-; up. Once the slower path has positively identified a custom editor, storing
-; that target lets a later focus return avoid missing the first key again.
-;
-; This helper only records the target identity and timestamp. The caller
-; decides whether the positive result is trustworthy enough to remember;
-; currently _TypingAutoFixSetCache() calls this only for uia_editable and
-; msaa_editable results, not for plain classic Edit controls or reused cache
-; answers. Classic controls already resolve cheaply and do not need this
-; extra target memory.
-_TypingAutoFixRememberPositiveTarget(activeHwnd, ctrlNN, reason := "", nowTick := "") {
-    global typingAutoFixPositiveTargets
-
-    ; Normalize the timestamp so the writer and later TTL check compare the
-    ; same kind of tick value even when the caller did not pass one.
-    if (nowTick = "")
-        nowTick := A_TickCount
-
-    ; Reuse the same key builder as the read path. If the target cannot be
-    ; identified narrowly enough, do not store a broad or misleading entry.
-    cacheKey := _TypingAutoFixPositiveCacheKey(activeHwnd, ctrlNN)
-    if (cacheKey = "")
-        return
-
-    ; Overwrite any older memory for this target. A newer successful probe is
-    ; the freshest evidence and resets the TTL window.
-    typingAutoFixPositiveTargets[cacheKey] := { tick: nowTick, reason: reason }
-}
-
-
-; Return true when this target was recently proven editable by the slow path.
-;
-; Why this helper exists:
-; On a context change, GetTypingAutoFixEligibilityFastOrQ() normally queues an
-; async UIA/MSAA refresh and returns false for that immediate keypress. That
-; is good for latency on unknown controls, but bad for custom editors that the
-; script has just verified. This read-side helper lets those known-good targets
-; be allowed immediately while the caller still queues a background refresh to
-; reconfirm the decision.
-;
-; The check is intentionally TTL-bound. Custom editor accessibility state can
-; change as tabs, panes, documents, or embedded controls change; stale positive
-; entries are deleted instead of keeping auto-fix enabled indefinitely.
-_TypingAutoFixWasRecentlyPositive(activeHwnd, ctrlNN, nowTick := "") {
-    global k_typingAutoFixPositiveTargetTtlMs
-    global typingAutoFixPositiveTargets
-
-    ; Use one tick value for this lookup so cache age is measured consistently.
-    if (nowTick = "")
-        nowTick := A_TickCount
-
-    ; No key or no stored entry means this is still an unknown target; the
-    ; caller should fall back to the normal pending_refresh path.
-    cacheKey := _TypingAutoFixPositiveCacheKey(activeHwnd, ctrlNN)
-    if (cacheKey = "" || !typingAutoFixPositiveTargets.HasKey(cacheKey))
-        return False
-
-    ; The entry exists; now enforce freshness before trusting it.
-    cacheItem := typingAutoFixPositiveTargets[cacheKey]
-    if ((nowTick - cacheItem.tick) > k_typingAutoFixPositiveTargetTtlMs) {
-        ; Prune stale positives on read so the cache self-cleans without a
-        ; separate maintenance timer.
-        typingAutoFixPositiveTargets.Delete(cacheKey)
-        return False
-    }
-
-    ; Fresh positive evidence is enough to allow this keypress. The caller is
-    ; responsible for queueing a background refresh so this is not blind trust.
-    return True
-}
-
+; `allowed` is decided by the caller before this helper runs. In the current flow,
+; it becomes true only when:
+; 1) the focused control is a classic Edit/RichEdit-style class
+; 2) UIA reports the focused element is editable
+; 3) MSAA reports the focused element is editable
+; 4) the same window/control context is being reused and the cached allowed value
+;    was already true
 _TypingAutoFixSetCache(activeHwnd, ctrlNN, allowed, reason, nowTick := "") {
     global c_typingAutoFixAllowed
     global c_typingAutoFixCtrlNN
@@ -15192,17 +14943,11 @@ _TypingAutoFixSetCache(activeHwnd, ctrlNN, allowed, reason, nowTick := "") {
     c_typingAutoFixReason  := reason
     c_typingAutoFixTick    := nowTick
 
-    if (allowed && (reason = "uia_editable" || reason = "msaa_editable"))
-        _TypingAutoFixRememberPositiveTarget(activeHwnd, ctrlNN, reason, nowTick)
-
     return allowed
 }
 
-; Stores the latest async editability-refresh request. Requeues for the same
-; hwnd/control preserve the original request id, queued tick, and one-shot timer
-; so refreshAge can still force the probe after k_typingAutoFixRefreshForceMs
-; during continuous typing. A different target gets a new id/tick and supersedes
-; the older probe.
+; Stores the latest async editability-refresh request and resets the one-shot
+; timer so newer focus contexts supersede older queued probes.
 QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick := "") {
     global typingAutoFixRefreshCtrlNN
     global k_typingAutoFixRefreshDelayMs
@@ -15212,11 +14957,6 @@ QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick := "") {
 
     if (nowTick = "")
         nowTick := A_TickCount
-
-    if (typingAutoFixRefreshQueuedTick
-     && typingAutoFixRefreshHwnd = activeHwnd
-     && typingAutoFixRefreshCtrlNN = ctrlNN)
-        return
 
     typingAutoFixRefreshId         += 1
     typingAutoFixRefreshCtrlNN     := ctrlNN
@@ -19321,6 +19061,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::upon it's::upon its
 ::of it's::of its
 ::its a::it's a
+::its always::it's always
 ::its an::it's an
 ::its as::it's as
 ::its apparently::it's apparently
