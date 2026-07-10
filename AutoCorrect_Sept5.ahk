@@ -1186,10 +1186,13 @@ FlushPendingHotyReplacement:
 Return
 
 ; Inline slash+Enter commit path:
-; once the custom $Enter hotkey has intercepted a qualifying "/{Enter}", wait
-; only a short bounded time for the physical key cycle and any active script send
-; to settle, then either commit "{BS}{?}{ENTER}" against the same window/control
-; or report failure so the caller can fall back to one raw Enter.
+; slash followed by Enter is handled differently from the deferred slash+Space
+; fix because Enter should not be allowed to outrun the "/ -> ?" correction.
+; This helper briefly waits for the physical Enter key cycle and any in-progress
+; script send to settle, then commits the replacement and Enter together against
+; the same window/control snapshot. If that bounded settle window fails or the
+; context changed, it reports failure so the caller can fall back to one raw Enter
+; instead of risking a late or misplaced slash rewrite.
 _CommitFixSlashEnterInline() {
     global StopAutoFix
 
@@ -1397,8 +1400,8 @@ CancelPendingTypingWorkForFocusChange() {
 ; Captures the currently focused control identity so deferred typing rewrites can
 ; require the exact same edit target before they mutate caret-relative text.
 _TryGetFocusedControlSnapshot(activeHwnd, ByRef ctrlNN, ByRef ctrlHwnd, ByRef ctrlClass) {
-    ctrlNN := ""
-    ctrlHwnd := 0
+    ctrlNN    := ""
+    ctrlHwnd  := 0
     ctrlClass := ""
 
     if !activeHwnd
@@ -1435,8 +1438,13 @@ _GetClassicControlSelectionRange(controlHwnd, ByRef selStart, ByRef selEnd) {
     return (selStart >= 0 && selEnd >= 0)
 }
 
-; Returns true only when a deferred typing rewrite is still fresh, still points
-; at the active window, and still targets the same focused control when exposed.
+; Shared pending typing-fix validator:
+; this is the baseline safety check for deferred slash/typing rewrites. It makes
+; sure the queued work still belongs to the latest typing-fix sequence, is still
+; within the short freshness window, still targets the same active top-level
+; window, and still points at the same focused control name when one was captured.
+; It is intentionally conservative: if that coarse context no longer matches, the
+; delayed rewrite is canceled rather than sent into a newer typing state.
 IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedTick) {
     global k_pendingTypingFixMaxAgeMs
     global typingFixSeq
@@ -1460,9 +1468,12 @@ IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedT
     return True
 }
 
-; Extends the shared pending typing validation with exact control-instance checks
-; so the deferred Hoty rewrite cannot mutate a different control that reused the
-; same window/control names after focus churn.
+; Hoty pending-work validator:
+; this is the guard that decides whether a queued Hoty rewrite is still safe to
+; attempt. It rejects stale or superseded work and requires the same active
+; window plus the same focused control identity before a delayed rewrite can run.
+; The goal is to cancel late fixes rather than let a timer mutate a different
+; field/control after the user has already moved on.
 _IsPendingHotyStillValid() {
     global pendingHotyCtrl
     global pendingHotyCtrlClass
@@ -1492,9 +1503,12 @@ _IsPendingHotyStillValid() {
     return true
 }
 
-; For classic Edit/RichEdit targets, validate the exact two-character context at
-; the live caret and replace only the prior capital. This avoids blind caret
-; movement when the timer fires after the keypress itself has already settled.
+; Classic-control Hoty rewrite:
+; for Edit/RichEdit targets, do not trust a blind {Left}{BS}...{Right} send.
+; Instead, inspect the live caret/selection and confirm the exact expected text
+; pattern is still present immediately before the caret, then replace only the
+; prior capital with EM_SETSEL/EM_REPLACESEL. If that context no longer matches,
+; cancel the fix rather than risk a duplicate or garbled edit.
 _TryApplyPendingHotyClassicRewrite() {
     static emReplaceSel := 0x00C2
     static emSetSel := 0x00B1
@@ -1529,8 +1543,8 @@ _TryApplyPendingHotyClassicRewrite() {
 
     expectedPriorChar := pendingHotyReplacement
     StringUpper, expectedPriorChar, expectedPriorChar
-    expectedSpan := expectedPriorChar . pendingHotyTriggerChar
-    observedSpan := SubStr(controlText, selStart - 1, 2)
+    expectedSpan      := expectedPriorChar . pendingHotyTriggerChar
+    observedSpan      := SubStr(controlText, selStart - 1, 2)
     if (observedSpan != expectedSpan)
         return false
 
