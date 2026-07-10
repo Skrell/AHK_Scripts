@@ -220,6 +220,12 @@ Global pendingFixSlashQueuedTick                   := 0
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
 Global pendingHotyCtrl                             := ""
+; Focused control class captured with the deferred Hoty fix so the flush step can
+; choose the safer message-based rewrite path for classic Edit/RichEdit targets.
+Global pendingHotyCtrlClass                        := ""
+; Focused control HWND captured when the Hoty fix is queued so the flush step can
+; require the exact same control instance, not just the same ClassNN string.
+Global pendingHotyCtrlHwnd                         := 0
 ; Active top-level window captured for the deferred Hoty fix, preventing the timer
 ; from replaying a capitalization rewrite into whichever window became active later.
 Global pendingHotyHwnd                             := 0
@@ -232,6 +238,10 @@ Global pendingHotyQueuedTick                       := 0
 ; Replacement character captured from the prior capital hotkey so the deferred Hoty
 ; flush can send the intended rewrite only after the live key cycle has settled.
 Global pendingHotyReplacement                      := ""
+; Current lowercase trigger character captured when the Hoty fix is queued so a
+; later classic-control flush can confirm the exact prior-capital + current-letter
+; text context before replacing anything.
+Global pendingHotyTriggerChar                      := ""
 ; +----------------------------------------------------------------------------+
 ; | Post-Activation Explorer Click Recovery                                    |
 ; | Captures the first click into an inactive Explorer/file-dialog window so a |
@@ -1087,10 +1097,14 @@ Hoty:
         CancelPendingTypingFixes(False, False)
         typingFixSeq += 1
         pendingHotyHwnd        := WinExist("A")
-        ControlGetFocus, pendingHotyCtrl, ahk_id %pendingHotyHwnd%
+        pendingHotyCtrl        := ""
+        pendingHotyCtrlClass   := ""
+        pendingHotyCtrlHwnd    := 0
+        _TryGetFocusedControlSnapshot(pendingHotyHwnd, pendingHotyCtrl, pendingHotyCtrlHwnd, pendingHotyCtrlClass)
         pendingHotyId          := typingFixSeq
         pendingHotyQueuedTick  := A_TickCount
         pendingHotyReplacement := SubStr(A_PriorHotKey,3,1)
+        pendingHotyTriggerChar := SubStr(A_ThisHotKey,2,1)
         SetTimer, FlushPendingHotyReplacement, -40
         CapCount := 1
     }
@@ -1100,11 +1114,12 @@ Return
 
 ; Deferred Hoty rewrite:
 ; live key event -> store intended replacement -> one-shot timer -> wait for
-; brief physical idle -> verify same window still owns focus -> perform rewrite
+; brief physical idle -> verify same window/control context still matches ->
+; perform a safe rewrite path for that editor type
 ;
 ; Why this exists:
 ; user types      : A  A  a
-; immediate fix   :     +--> {Left}{BS}A{Right} while the "a" key cycle may
+; immediate fix   :     +--> {Left}{BS}a{Right} while the "a" key cycle may
 ;                       still be finishing
 ; risk            : main-thread hotkey gating + live caret movement can make
 ;                   the rewrite run against a half-settled text state
@@ -1114,7 +1129,10 @@ Return
 ; A  A  a
 ; |  |  +--> queue replacement only
 ; |  |      +--> timer retries until A_TimeIdlePhysical is calm
-; |  |          +--> rewrite after the real keypress is finished
+; |  |          +--> if same classic control + same text context, replace just the
+; |  |               prior capital with EM_SETSEL/EM_REPLACESEL
+; |  |          +--> otherwise keep the older blind-send fallback for non-classic
+; |  |               editors only
 FlushPendingHotyReplacement:
     if (!pendingHotyReplacement)
         Return
@@ -1135,19 +1153,35 @@ FlushPendingHotyReplacement:
         Return
     }
 
-    ; Only allow Send when the queued rewrite still belongs to the latest
+    ; Only allow the queued rewrite when it still belongs to the latest
     ; typing-fix sequence, the same window is still active, the same control
-    ; still has focus when we were able to capture one, and the queued work is
-    ; still within the short freshness budget.
-    if (!IsPendingTypingFixStillValid(pendingHotyId, pendingHotyHwnd, pendingHotyCtrl, pendingHotyQueuedTick))
+    ; still has focus when we were able to capture one, the exact same control
+    ; instance/class still matches when captured, and the queued work is still
+    ; within the short freshness budget.
+    if (!_IsPendingHotyStillValid())
     {
         _ClearPendingHotyState()
         Return
     }
 
-    StopAutoFix            := True
+    ; Classic Edit/RichEdit controls get a precise rewrite: validate that the
+    ; text immediately before the caret is still "Capital + current lowercase"
+    ; and replace only that prior capital. If that context drifted, cancel
+    ; instead of guessing with a blind caret-relative Send.
+    if (_TypingAutoFixIsClassicEditClass(pendingHotyCtrlClass))
+    {
+        StopAutoFix := True
+        _TryApplyPendingHotyClassicRewrite()
+        StopAutoFix := False
+        _ClearPendingHotyState()
+        Return
+    }
+
+    ; Non-classic editors keep the older blind-send fallback because there is no
+    ; equally reliable message-based single-character rewrite path available.
+    StopAutoFix := True
     Send % "{Left}{BS}" . pendingHotyReplacement . "{Right}"
-    StopAutoFix            := False
+    StopAutoFix := False
     _ClearPendingHotyState()
 Return
 
@@ -1313,16 +1347,22 @@ _ClearPendingFixSlashState() {
 ; sequence token, allowing the caller to cancel one slot or both explicitly.
 _ClearPendingHotyState() {
     global pendingHotyCtrl
+    global pendingHotyCtrlClass
+    global pendingHotyCtrlHwnd
     global pendingHotyHwnd
     global pendingHotyId
     global pendingHotyQueuedTick
     global pendingHotyReplacement
+    global pendingHotyTriggerChar
 
     pendingHotyCtrl        := ""
+    pendingHotyCtrlClass   := ""
+    pendingHotyCtrlHwnd    := 0
     pendingHotyHwnd        := 0
     pendingHotyId          := 0
     pendingHotyQueuedTick  := 0
     pendingHotyReplacement := ""
+    pendingHotyTriggerChar := ""
 }
 
 ; Cancels deferred typing rewrites and can optionally bump the shared sequence so
@@ -1354,6 +1394,47 @@ CancelPendingTypingWorkForFocusChange() {
     CancelPendingTypingWorkForPointerAction()
 }
 
+; Captures the currently focused control identity so deferred typing rewrites can
+; require the exact same edit target before they mutate caret-relative text.
+_TryGetFocusedControlSnapshot(activeHwnd, ByRef ctrlNN, ByRef ctrlHwnd, ByRef ctrlClass) {
+    ctrlNN := ""
+    ctrlHwnd := 0
+    ctrlClass := ""
+
+    if !activeHwnd
+        return false
+
+    ControlGetFocus, ctrlNN, ahk_id %activeHwnd%
+    if (ctrlNN = "")
+        return false
+
+    ControlGet, ctrlHwnd, Hwnd,, %ctrlNN%, ahk_id %activeHwnd%
+    if !ctrlHwnd
+        return false
+
+    WinGetClass, ctrlClass, ahk_id %ctrlHwnd%
+    return (ctrlClass != "")
+}
+
+; Reads the current selection range from a classic Edit/RichEdit control so a
+; deferred Hoty flush can verify caret position before issuing EM_REPLACESEL.
+_GetClassicControlSelectionRange(controlHwnd, ByRef selStart, ByRef selEnd) {
+    static emGetSel := 0x00B0
+
+    selStart := -1
+    selEnd := -1
+    if !controlHwnd
+        return false
+
+    VarSetCapacity(selectionStart, 4, 0)
+    VarSetCapacity(selectionEnd, 4, 0)
+    DllCall("SendMessage", "Ptr", controlHwnd, "UInt", emGetSel, "Ptr", &selectionStart, "Ptr", &selectionEnd, "Ptr")
+
+    selStart := NumGet(selectionStart, 0, "Int")
+    selEnd := NumGet(selectionEnd, 0, "Int")
+    return (selStart >= 0 && selEnd >= 0)
+}
+
 ; Returns true only when a deferred typing rewrite is still fresh, still points
 ; at the active window, and still targets the same focused control when exposed.
 IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedTick) {
@@ -1377,6 +1458,89 @@ IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedT
     }
 
     return True
+}
+
+; Extends the shared pending typing validation with exact control-instance checks
+; so the deferred Hoty rewrite cannot mutate a different control that reused the
+; same window/control names after focus churn.
+_IsPendingHotyStillValid() {
+    global pendingHotyCtrl
+    global pendingHotyCtrlClass
+    global pendingHotyCtrlHwnd
+    global pendingHotyHwnd
+    global pendingHotyId
+    global pendingHotyQueuedTick
+
+    if !IsPendingTypingFixStillValid(pendingHotyId, pendingHotyHwnd, pendingHotyCtrl, pendingHotyQueuedTick)
+        return false
+
+    if (!pendingHotyCtrlHwnd && pendingHotyCtrlClass = "")
+        return true
+
+    if !_TryGetFocusedControlSnapshot(pendingHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+        return false
+
+    if (pendingHotyCtrl != "" && currentCtrlNN != pendingHotyCtrl)
+        return false
+
+    if (pendingHotyCtrlHwnd && currentCtrlHwnd != pendingHotyCtrlHwnd)
+        return false
+
+    if (pendingHotyCtrlClass != "" && currentCtrlClass != pendingHotyCtrlClass)
+        return false
+
+    return true
+}
+
+; For classic Edit/RichEdit targets, validate the exact two-character context at
+; the live caret and replace only the prior capital. This avoids blind caret
+; movement when the timer fires after the keypress itself has already settled.
+_TryApplyPendingHotyClassicRewrite() {
+    static emReplaceSel := 0x00C2
+    static emSetSel := 0x00B1
+    global pendingHotyCtrl
+    global pendingHotyCtrlClass
+    global pendingHotyCtrlHwnd
+    global pendingHotyHwnd
+    global pendingHotyReplacement
+    global pendingHotyTriggerChar
+
+    if (!pendingHotyHwnd || !pendingHotyCtrlHwnd || pendingHotyCtrlClass = "")
+        return false
+
+    if !_TypingAutoFixIsClassicEditClass(pendingHotyCtrlClass)
+        return false
+
+    if !_TryGetFocusedControlSnapshot(pendingHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+        return false
+
+    if (currentCtrlNN != pendingHotyCtrl || currentCtrlHwnd != pendingHotyCtrlHwnd || currentCtrlClass != pendingHotyCtrlClass)
+        return false
+
+    if !_GetClassicControlSelectionRange(pendingHotyCtrlHwnd, selStart, selEnd)
+        return false
+
+    if (selStart != selEnd || selStart < 2)
+        return false
+
+    ControlGetText, controlText, , ahk_id %pendingHotyCtrlHwnd%
+    if (controlText = "" || StrLen(controlText) < selStart)
+        return false
+
+    expectedPriorChar := pendingHotyReplacement
+    StringUpper, expectedPriorChar, expectedPriorChar
+    expectedSpan := expectedPriorChar . pendingHotyTriggerChar
+    observedSpan := SubStr(controlText, selStart - 1, 2)
+    if (observedSpan != expectedSpan)
+        return false
+
+    VarSetCapacity(replacementBuffer, (StrLen(pendingHotyReplacement) + 1) * 2, 0)
+    StrPut(pendingHotyReplacement, &replacementBuffer, "UTF-16")
+
+    DllCall("SendMessage", "Ptr", pendingHotyCtrlHwnd, "UInt", emSetSel, "Ptr", selStart - 2, "Ptr", selStart - 1, "Ptr")
+    DllCall("SendMessage", "Ptr", pendingHotyCtrlHwnd, "UInt", emReplaceSel, "Ptr", 1, "Ptr", &replacementBuffer, "Ptr")
+    DllCall("SendMessage", "Ptr", pendingHotyCtrlHwnd, "UInt", emSetSel, "Ptr", selStart, "Ptr", selStart, "Ptr")
+    return true
 }
 
 IsPriorHotKeyLetterKey() {
@@ -1635,6 +1799,10 @@ IsPlainDialog32770(hWnd) {
     return !HasFileViewChild(hWnd)
 }
 
+; Returns true when the window contains a child control that strongly suggests a
+; shell/file-view surface such as Explorer items, a namespace tree, or a details
+; list. This lets the surrounding dialog/window filters distinguish plain utility
+; dialogs from shell-style containers that need Explorer-specific handling.
 HasFileViewChild(hParent) {
     ; Get list of all controls (ClassNNs) in the window.
     WinGet, ctrlList, ControlList, ahk_id %hParent%
@@ -1657,6 +1825,10 @@ HasFileViewChild(hParent) {
     return False
 }
 
+; Returns true when the window appears to host the kind of DirectUI/ListView
+; target that SendCtrlAdd() may need to focus immediately after activation. The
+; goal is to pay the fade-settle wait only for windows where early focus/send
+; attempts are known to be unreliable, while keeping unrelated activations cheap.
 NeedsSendCtrlAddFadeWait(hParent, focusedCtrlNN := "") {
     if (!hParent || !WinExist("ahk_id " . hParent))
         return False
@@ -1680,6 +1852,12 @@ NeedsSendCtrlAddFadeWait(hParent, focusedCtrlNN := "") {
     return False
 }
 
+; Returns true when activation-time SendCtrlAdd() should force the heavier
+; WaitForExplorerLoad() path before sending Ctrl+NumpadAdd. This exists because
+; real Explorer/open/save hosts can start with focus on breadcrumb/address/toolbar
+; controls even though the actual file view still needs to finish loading. The
+; decision therefore uses shell-host identity plus a previously captured target
+; scan, instead of trusting transient initial focus alone.
 ShouldForceExplorerLoadOnActivate(topClass, targetScan := "", topProc := "", topTitle := "") {
     if (topClass != "CabinetWClass" && topClass != "#32770")
         return False
@@ -3899,6 +4077,9 @@ Return
 !s::
     Critical, On
     StopAutoFix := True
+    ; Let the trigger key finish before the explicit paste/send path runs so
+    ; Alt+S is less likely to leave a stale modifier state behind.
+    KeyWait, s, T0.25
     BeginBlockKeys()
 
     if !_SwapSelectedBooleanLiteral()
@@ -7699,40 +7880,6 @@ GetActiveCaretRectKey(ByRef caretRectKey, ByRef caretHwnd := 0)
     return true
 }
 
-; Returns the focused ClassNN for a top-level window once focus has settled inside it.
-GetCtrlNNFromHwnd(hwndTop, hwndCtl)
-{
-    if (!hwndCtl || hwndCtl = hwndTop)
-        return ""
-
-    ; Walk up to the direct child owned by hwndTop so it can be matched against ControlListHwnd.
-    while (true)
-    {
-        parentHwnd := DllCall("user32\GetParent", "Ptr", hwndCtl, "Ptr")
-        if (!parentHwnd || parentHwnd = hwndTop)
-            break
-        if !DllCall("user32\IsChild", "Ptr", hwndTop, "Ptr", parentHwnd, "Int")
-            break
-        hwndCtl := parentHwnd
-    }
-
-    WinGet, ctrlNNList, ControlList, ahk_id %hwndTop%
-    WinGet, ctrlHwndList, ControlListHwnd, ahk_id %hwndTop%
-    if (ctrlNNList = "" || ctrlHwndList = "")
-        return ""
-
-    ctrlNNs := StrSplit(RTrim(ctrlNNList, "`r`n"), "`n", "`r")
-    ctrlHwnds := StrSplit(RTrim(ctrlHwndList, "`r`n"), "`n", "`r")
-
-    Loop, % ctrlHwnds.Length()
-    {
-        if ((ctrlHwnds[A_Index] + 0) = hwndCtl)
-            return (A_Index <= ctrlNNs.Length()) ? ctrlNNs[A_Index] : ""
-    }
-
-    return ""
-}
-
 EnsureFocusedHwnd(hwndTarget, totalMs := 60, refocusEveryMs := 15)
 {
     if !DllCall("user32\IsWindow", "Ptr", hwndTarget, "Int")
@@ -7744,8 +7891,8 @@ EnsureFocusedHwnd(hwndTarget, totalMs := 60, refocusEveryMs := 15)
     if (ControlGetFocusEx(tidTarget, hwndTarget, 0))
         return true
 
-    start := A_TickCount
-    nextRefocus := 0
+    start         := A_TickCount
+    nextRefocus   := 0
     didForeground := false
 
     Loop
@@ -14545,8 +14692,9 @@ Return
 ; 2) unchanged context can reuse the cached decision for a short interval
 ; 3) only then does the function pay for the slower UIA/MSAA editability checks
 ;
-; This is the only path that is allowed to pay for the slower UIA/MSAA
-; editability checks.
+; Within the typing-auto-fix gating flow, this is the only path that should pay
+; for the slower UIA/MSAA editability checks. Other helpers may still call the
+; same probes for unrelated caret/edit-detection logic.
 RefreshTypingAutoFixContext(activeHwnd := 0, ctrlNN := "", nowTick := "") {
     global c_typingAutoFixAllowed
     global c_typingAutoFixCtrlNN
@@ -14590,7 +14738,8 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrlNN := "", nowTick := "") {
 
     ; Once the window/control pair is unchanged, reuse the prior decision until the
     ; slower UIA/MSAA re-probe interval expires. A queued "pending_refresh"
-    ; context is the exception because the async timer still needs one real probe.
+    ; context is the exception because that marker means this focus target still
+    ; needs one real probe before cached reuse is allowed.
     contextChanged        := (activeHwnd != c_typingAutoFixHwnd || ctrlNN != c_typingAutoFixCtrlNN)
     pendingRefreshContext := (c_typingAutoFixReason = "pending_refresh")
     if (!contextChanged && !pendingRefreshContext && (nowTick - typingAutoFixSlowProbeTick) < k_typingAutoFixSlowPathMs)
@@ -14841,7 +14990,8 @@ _TypingAutoFixIsExcludedProcess(processName) {
 }
 
 ; Clears the queued async editability refresh so an older focus context cannot
-; continue to hold onto a probe request after the caller already resolved cheaply.
+; continue to hold onto a probe request after the caller already resolved the
+; current window/control state synchronously.
 ClearPendingTypingAutoFixRefresh() {
     global typingAutoFixRefreshCtrlNN
     global typingAutoFixRefreshHwnd
