@@ -8038,7 +8038,6 @@ _QueuePostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY) {
     SetTimer, PostActivationLButtonCheck, % -k_postActivationLButtonDelayMs
 }
 
-
 ; Deferred recovery for a first click into an inactive Explorer/file-dialog
 ; window. This intentionally does not replay the full $~LButton handler: by the
 ; time this timer runs, the original physical click already went to Windows, so
@@ -9194,7 +9193,7 @@ GetSendCtrlAddTargetCtrl(hwndTop, initFocusedCtrlNN := "", topClass := "", targe
 }
 
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False, targetScan := "") {
-    global UIA, k_isWin11, blockKeys
+    global UIA, k_isWin11
 
     TargetControl := ""
     didNavigate   := forceExplorerWait || (prevPath != "" && currentPath != "" && prevPath != currentPath)
@@ -12436,11 +12435,11 @@ ActivateTopMostWindow() {
 FindTopMostWindow() {
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
+    Critical, On
 
     targetID := 0
 
     WinGet, winList, List,
-    currentMon := MWAGetMonitorMouseIsIn()
     Loop, %winList%
     {
         hwndID := winList%A_Index%
@@ -12453,6 +12452,7 @@ FindTopMostWindow() {
 
             If (mmState > -1) {
                 If (MonCount > 1) {
+                    currentMon          := MWAGetMonitorMouseIsIn()
                     currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
                 }
                 Else
@@ -12465,6 +12465,7 @@ FindTopMostWindow() {
             }
         }
     }
+    Critical, Off
     Return targetID
 }
 
@@ -15243,13 +15244,19 @@ MouseIsOverTaskbarBlank() {
     if (controlClass = "TrayNotifyWnd")
         return False
 
-    return AreaLooksUniformFast(mousePosX, mousePosY, 0x1C1C1C, 2, 18)
+    return AreaLooksUniformFast(mousePosX, mousePosY, , 3, 10)
 }
 ; Use AreaLooksUniformFast() when:
 ; more thorough
 ; false positives are costly,
 ; you need confidence the whole region is really flat,
 ; the sample region is small enough that scanning all pixels is cheap.
+; TOLERANCE GUIDELINES -------------------
+; 6-8    very strict, may fail on mica blur
+; 10     lowest practical starting point
+; 12     safer low value for mica
+; 14-16  robust but still conservative
+; 18     already moderately forgiving
 AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 2, tolerance := 18) {
 
     ; Compute the width/height of the square sample region.
@@ -18066,6 +18073,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::catagory::category
 ::categiory::category
 ::catelog::catalog
+::catagorize::categorize
 ::catholocism::catholicism
 ::catterpilar::caterpillar
 ::catterpilars::caterpillars
@@ -19238,6 +19246,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its changed::it's changed
 ::its clear::it's clear
 ::its cold::it's cold
+::its communicated::it's communicated
 ::its complicated::it's complicated
 ::its developed::it's developed
 ::its difficult:: it's difficult
@@ -19252,6 +19261,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its finished::it's finished
 ::its given::it's given
 ::its gone::it's gone
+::its great::it's great
 ::its grown::it's grown
 ::its happened::it's happened
 ::its happening::it's happening
@@ -19283,6 +19293,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its really::it's really
 ::its right::it's right
 ::its run::it's run
+::its safe::it's safe
 ::its something::it's something
 ::its started::it's started
 ::its sunny::it's sunny
@@ -20395,6 +20406,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::tabacco::tobacco
 ::targetted::targeted
 ::targetting::targeting
+::tarrif::tariff
+::tarrifs::tariffs
 ::tath::that
 ::tattooes::tattoos
 ::taxanomic::taxonomic
