@@ -319,6 +319,7 @@ Global UIA                                         := UIA_Interface() ; Initiali
 Global StopRecursion                               := False
 Global blockKeys                                   := False
 Global blockMouse                                  := False
+Global blockWheel                                  := False
 Global gExiting                                    := False
 Global hHookKbd
 Global hHookMouse
@@ -953,14 +954,15 @@ LL_KeyboardHook(nCode, wParam, lParam)
 ; --------------------------------------------------
 LL_MouseHook(nCode, wParam, lParam)
 {
-    ; blockMouse swallows physical mouse messages for the active gesture while
-    ; keyboard-side blockKeys now lets physical KEYUP / SYSKEYUP pass through.
-    global blockMouse, hHookMouse
+    ; blockMouse swallows physical mouse messages for active drag/resize gestures.
+    ; blockWheel is the narrower guard used around SendCtrlNumpadAdd() so a live
+    ; wheel notch cannot be interpreted as Ctrl+Wheel during the synthetic chord.
+    global blockMouse, blockWheel, hHookMouse
 
     if (nCode < 0)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-    if (!blockMouse)
+    if (!blockMouse && !blockWheel)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
     else {
         ; MSLLHOOKSTRUCT:
@@ -988,15 +990,16 @@ LL_MouseHook(nCode, wParam, lParam)
         if (injected)
             return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-        ; Block wheel messages too
+        ; blockWheel and blockMouse both suppress wheel input during their
+        ; respective critical sections.
         if (wParam = 0x020A || wParam = 0x020E)  ; WM_MOUSEWHEEL / WM_MOUSEHWHEEL
             return 1
 
-        ; Block physical mouse button messages
-        if (wParam >= 0x0201 && wParam <= 0x0209)
+        ; Only the broader blockMouse mode suppresses physical button presses.
+        if (blockMouse && wParam >= 0x0201 && wParam <= 0x0209)
             return 1
 
-        ; Otherwise pass through (move, etc.)
+        ; Otherwise pass through (move, clicks while blockWheel-only, etc.)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
     }
 }
@@ -1897,6 +1900,18 @@ ShouldForceExplorerLoadOnActivate(topClass, targetScan := "", topProc := "", top
         || targetScan.hasDirect8
 }
 
+; Activation callback hot path:
+; users often type immediately after Alt+Tab, WinActivate, or a click-driven
+; focus change. Any slow work done directly in this callback can keep the
+; script thread busy long enough for those first physical keystrokes to queue up
+; and then flush late, which looks like bursty or garbled typing. The strategy
+; here is therefore:
+; 1) cancel stale typing work from the previous focus target immediately
+; 2) keep the synchronous activation path limited to cheap classification and
+;    minimal setup
+; 3) avoid holding timers off across slower waits/probes
+; 4) gate heavier shell-specific follow-up so only windows that truly need it
+;    pay that cost
 OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
     global StopRecursion
@@ -1910,8 +1925,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     DetectHiddenWindows, Off
     ; Only hold timers off while capturing the initial activation snapshot and
-    ; rejecting unsupported windows. Slower fade waits and send-path setup
-    ; should not block unrelated deferred typing timers.
+    ; rejecting unsupported windows. Slower fade waits and send-path setup must
+    ; not block unrelated deferred typing timers or the first queued typing work
+    ; that may arrive immediately after this activation.
     Thread, NoTimers, True
 
     Loop, 500 {
@@ -1956,7 +1972,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     ControlGetFocus, initFocusedCtrlForWait, ahk_id %hWnd%
     ; Base the fade-settle wait on the actual control shape that SendCtrlAdd()
     ; targets, so SysListView32-hosting apps such as 7-Zip still wait even
-    ; when their top-level class is not Explorer or #32770.
+    ; when their top-level class is not Explorer or #32770. Windows that do not
+    ; expose a likely shell/list target skip this wait so activation stays
+    ; cheaper for the first keystrokes typed right after focus lands.
     if (NeedsSendCtrlAddFadeWait(hWnd, initFocusedCtrlForWait)) {
         WaitForFadeInStop(hWnd)
     }
@@ -2949,37 +2967,48 @@ WatchRightButtonState:
         ResetRightButtonState(true)
 return
 
-; Wheel-driven Explorer column auto-fit runs through this deferred timer instead of
-; sending Ctrl+NumpadAdd directly from WheelUp/WheelDown. The delay lets rapid scroll
-; bursts animate normally, then fires only after a short quiet gap and cancels itself
-; if newer wheel input arrives first.
+; Wheel-driven Explorer column auto-fit is deferred onto this timer instead of
+; sending Ctrl+NumpadAdd directly from WheelUp/WheelDown.
+;
+; High-level flow:
+; 1) wait for wheel input to go quiet
+; 2) confirm the same Explorer/dialog window is still active
+; 3) reuse or resolve the shell-view target that should receive Ctrl+NumpadAdd
+; 4) focus that target if needed
+; 5) re-check that the same wheel request is still current
+; 6) send Ctrl+NumpadAdd as late as possible
+;
+; This keeps rapid wheel bursts responsive while making the final column-fit send
+; happen only after scrolling has settled and the target window/control still match.
 AdjustColumns:
     currentRequestId  := 0
     requiredQuietMs   := 0
     TargetControl     := ""
     TargetControlHwnd := 0
 
+    ; Stage 1: basic request validation.
     ; If the wheel hook never captured a valid Explorer target, there is nothing to do.
     if (!pendingAdjustColumnsRequestId || !pendingAdjustColumnsHwnd || pendingAdjustColumnsCtrl == "")
         return
 
-    ; Snapshot the request token once so every later stage can cheaply detect that a
-    ; newer wheel event replaced this work item while the timer was resolving targets
-    ; or attempting focus. This is the main stale-work guard for pause/resume scrolls.
+    ; Snapshot the request token once so every later stage can cheaply detect whether
+    ; a newer wheel event replaced this pending work item.
     currentRequestId := pendingAdjustColumnsRequestId
     requiredQuietMs  := (pendingAdjustColumnsClass == "#32770")
                        ? k_pendingAdjustColumnsDialogQuietMs
                        : k_pendingAdjustColumnsQuietMs
 
-    ; Defer any focus/send work until wheel activity has actually paused. If more
-    ; scrolling is still happening, re-arm a short retry instead of interfering with it.
+    ; Stage 2: quiet-gap gating.
+    ; Do not focus or send anything until wheel input has paused for the required
+    ; quiet window. If scrolling resumes, retry later instead of interfering with it.
     if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < requiredQuietMs) {
         SetTimer, AdjustColumns, % -k_pendingAdjustColumnsRetryMs
         return
     }
 
-    ; Only operate on the currently active Explorer/dialog window. This keeps the
-    ; deferred send from acting on a stale hover target after activation changed.
+    ; Stage 3: same-window validation.
+    ; Only operate on the same active Explorer/dialog window that originally queued
+    ; this request. If activation changed, cancel instead of mutating a stale target.
     if (WinExist("A") != pendingAdjustColumnsHwnd)
         return
 
@@ -2987,10 +3016,11 @@ AdjustColumns:
     if (adjustClassNow != pendingAdjustColumnsClass || (adjustClassNow != "CabinetWClass" && adjustClassNow != "#32770"))
         return
 
-    ; Reuse the last resolved target for a short burst on the same Explorer window
-    ; before falling back to the heavier SendCtrlAdd()-derived discovery below. This
-    ; is safe because the cache is validated against both HWND ownership and control
-    ; existence, and it avoids repeated ControlList scans during stop-and-go scrolling.
+    ; Stage 4: target resolution.
+    ; First try the short-lived target cache for this same window. That avoids
+    ; repeating shell-control discovery during stop-and-go wheel bursts.
+    ; The cache is only reused if the control still belongs to this window and its
+    ; live HWND still exists.
     if (c_pendingAdjustColumnsTargetHwnd = pendingAdjustColumnsHwnd
      && c_pendingAdjustColumnsTargetCtrl != ""
      && (A_TickCount - c_pendingAdjustColumnsTargetTick) < k_pendingAdjustColumnsTargetTtlMs) {
@@ -2999,49 +3029,49 @@ AdjustColumns:
             TargetControl := c_pendingAdjustColumnsTargetCtrl
     }
 
-    ; Reuse the same shared target scan + chooser as SendCtrlAdd(), while still
-    ; keeping the wheel path lightweight by stopping after target resolution.
+    ; If the cache is not usable, reuse the same target scan + chooser that
+    ; SendCtrlAdd() uses. The wheel path stops after target selection so it can
+    ; stay lighter than the full activation-driven SendCtrlAdd() flow.
     if (TargetControl == "") {
         targetScan := GetSendCtrlAddTargetScan(pendingAdjustColumnsHwnd, adjustClassNow)
         ; Wheel hover can transiently report DirectUIHWND2/3 even when a different
-        ; pane will ultimately handle Ctrl+NumpadAdd, so do not let those two names
-        ; win outright here. Fall back to the shared chooser instead.
+        ; pane is the real Ctrl+NumpadAdd target, so do not blindly trust those two
+        ; names here. Let the shared chooser resolve the final target instead.
         TargetControl := ChooseSendCtrlAddTarget(pendingAdjustColumnsHwnd, adjustClassNow, pendingAdjustColumnsCtrl, targetScan, False)
     }
 
-    ; If target resolution succeeds, use the richer Explorer-specific focus path. If it
-    ; does not, fall back to the older AutoCorrect_Sept5_works.ahk behavior, which still
-    ; successfully aligned columns in modern Explorer when the details pane already had a
-    ; real item focus. That older version simply delayed and sent Ctrl+NumpadAdd to the
-    ; active window, so resolution/focus is best-effort here rather than a hard gate.
+    ; Stage 5: focus preparation.
+    ; If a target was resolved, use the Explorer-specific focus path before sending.
+    ; If no target was resolved, do not hard-fail here: the older behavior of sending
+    ; Ctrl+NumpadAdd to the active window still sometimes succeeds when Explorer already
+    ; has a usable item focus inside the details view.
     if (TargetControl != "") {
-        ; Resolve the final target HWND once so the cached target can be validated before
-        ; any focus/send work continues.
+        ; Resolve the target HWND once so the cache and later focus work use a live control.
         if (!TargetControlHwnd)
             ControlGet, TargetControlHwnd, Hwnd,, %TargetControl%, ahk_id %pendingAdjustColumnsHwnd%
 
         if (TargetControlHwnd) {
-            ; Publish the resolved target for a short time so the next pause in the same
-            ; Explorer window can bypass DirectUI discovery entirely if nothing structural changed.
+            ; Publish the resolved target briefly so the next wheel pause in this same
+            ; window can skip shell-control discovery if nothing structural changed.
             c_pendingAdjustColumnsTargetCtrl := TargetControl
             c_pendingAdjustColumnsTargetHwnd := pendingAdjustColumnsHwnd
             c_pendingAdjustColumnsTargetTick := A_TickCount
 
-            ; Abort immediately if a newer wheel event superseded this request while target
-            ; discovery was happening. This prevents old timers from entering focus work once
-            ; scrolling has already resumed.
+            ; Abort if a newer wheel event superseded this request while target discovery
+            ; was running. Old timers should not continue into focus work.
             if (pendingAdjustColumnsRequestId != currentRequestId)
                 return
 
-            ; Use the same explicit ClassNN refocus step as the known-good SendCtrlAdd()
-            ; Explorer path. Modern Explorer can report focus inside the DirectUI subtree while
-            ; still ignoring Ctrl+NumpadAdd unless the exact target control is actively focused.
+            ; Use the same explicit ClassNN focus step as the known-good SendCtrlAdd()
+            ; Explorer path. Modern Explorer may report focus inside DirectUI while still
+            ; ignoring Ctrl+NumpadAdd unless the exact target control is actively focused.
             EnsureFocusedCtrlNN(pendingAdjustColumnsHwnd, TargetControl, 60, 15)
         }
     }
 
-    ; Abort if a newer wheel event superseded this pending request while focus work
-    ; was happening, or if scrolling resumed during the focus attempt.
+    ; Stage 6: final stale-work and quiet-gap checks.
+    ; Re-check both the request token and the quiet gap after focus work, because
+    ; wheel input may have resumed while this timer was still running.
     if (pendingAdjustColumnsRequestId != currentRequestId)
         return
 
@@ -3050,12 +3080,13 @@ AdjustColumns:
         return
     }
 
-    ; Reconfirm the same window is still active immediately before injecting keys.
+    ; Reconfirm the same window is still active immediately before the synthetic send.
     if (WinExist("A") != pendingAdjustColumnsHwnd)
         return
 
-    ; Keep the actual key injection small and late so the timer does all expensive
-    ; decision-making first and only emits Ctrl+NumpadAdd once the request is current.
+    ; Stage 7: final send.
+    ; Keep the actual key injection small and late so all expensive decisions happen
+    ; before this point and Ctrl+NumpadAdd is emitted only for a still-current request.
     SendCtrlNumpadAdd(6, currentRequestId, requiredQuietMs, pendingAdjustColumnsHwnd)
 return
 
@@ -8016,9 +8047,12 @@ EnsureFocusedCtrlTarget(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, to
 ; Queue a conservative post-activation recovery for the first click into an
 ; inactive Explorer/file-dialog window. The live $~LButton path now returns
 ; immediately in that case to keep activation cheap and avoid blocking focus
-; transfer with heavier blank-space or SendCtrlAdd classification. This helper
-; captures the click snapshot so a short timer can re-check only the safe shell
-; subset once the clicked window is actually active.
+; transfer with heavier blank-space or SendCtrlAdd classification. That matters
+; because users often start typing right after activating a window, and a slow
+; activation-click handler can keep the script thread busy long enough for those
+; first keystrokes to feel bursty or garbled. This helper captures the click
+; snapshot so a short timer can re-check only the safe shell subset once the
+; clicked window is actually active.
 _QueuePostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY) {
     global k_postActivationLButtonDelayMs
     global postActivationLButtonCtrl
@@ -8042,7 +8076,9 @@ _QueuePostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY) {
 ; window. This intentionally does not replay the full $~LButton handler: by the
 ; time this timer runs, the original physical click already went to Windows, so
 ; the only safe follow-up is the narrow shell case where Ctrl+NumpadAdd was the
-; already-expected result.
+; already-expected result. Deferring that shell-only work keeps the activation
+; click path cheap, which reduces the chance that immediate post-activation
+; typing inherits a long synchronous shell probe and appears delayed or garbled.
 PostActivationLButtonCheck:
     ; Copy the queued snapshot first; every later guard validates that it still
     ; describes the current foreground target.
@@ -10357,7 +10393,7 @@ EndBlockKeys() {
 ; before injecting Ctrl+NumpadAdd. This lets a just-arrived WheelUp/WheelDown event
 ; abort the send instead of being interpreted alongside a synthetic Ctrl chord.
 SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0) {
-    global pendingAdjustColumnsLastWheelTick, pendingAdjustColumnsRequestId, k_pendingAdjustColumnsSendGuardMs
+    global blockWheel, pendingAdjustColumnsLastWheelTick, pendingAdjustColumnsRequestId, k_pendingAdjustColumnsSendGuardMs
 
     if (guardRequestId || guardQuietMs || guardHwnd) {
         Sleep, %k_pendingAdjustColumnsSendGuardMs%
@@ -10372,9 +10408,13 @@ SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 
             return false
     }
 
+    ; Suppress only physical wheel input during the synthetic Ctrl chord so a
+    ; fresh wheel notch cannot be misread by Explorer as Ctrl+Wheel.
+    blockWheel := True
     BeginBlockKeys()
     Send, ^{NumpadAdd}
     EndBlockKeys()
+    blockWheel := False
     FixReleasedModifiers("Ctrl")
     ScheduleFixReleasedModifiers("Ctrl", reconcilePassCount)
     return true
@@ -19286,6 +19326,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its okay::it's okay
 ::its old::it's old
 ::its on::it's on
+::its our::it's our
 ::its over::it's over
 ::its possible::it's possible
 ::its raining::it's raining
