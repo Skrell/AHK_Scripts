@@ -208,6 +208,14 @@ Global pendingFixSlashAction                       := ""
 ; Focused control name captured when the "/ " fix is queued so the timer can
 ; cancel instead of rewriting text after focus moves to another control.
 Global pendingFixSlashCtrl                         := ""
+; Focused control class captured with the deferred slash-space fix so classic
+; Edit/RichEdit targets can use the same safer message-based phase-2 rewrite
+; path that Hoty now uses.
+Global pendingFixSlashCtrlClass                    := ""
+; Focused control HWND captured when the slash-space fix is queued so the flush
+; step can require the exact same control instance instead of trusting only the
+; ClassNN string.
+Global pendingFixSlashCtrlHwnd                     := 0
 ; Active top-level window captured when the deferred slash-space rewrite is armed;
 ; the flush step requires this same window to still be active before sending.
 Global pendingFixSlashHwnd                         := 0
@@ -1262,6 +1270,9 @@ FixSlash:
         pendingFixSlashAction     := "space"
         pendingFixSlashHwnd       := WinExist("A")
         ControlGetFocus, pendingFixSlashCtrl, ahk_id %pendingFixSlashHwnd%
+        pendingFixSlashCtrlClass  := ""
+        pendingFixSlashCtrlHwnd   := 0
+        _TryGetFocusedControlSnapshot(pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashCtrlHwnd, pendingFixSlashCtrlClass)
         pendingFixSlashId         := typingFixSeq
         pendingFixSlashQueuedTick := A_TickCount
         SetTimer, FlushPendingFixSlash, -40
@@ -1286,10 +1297,11 @@ Return
 ;
 ; Timer flow:
 ; detect "/ "
-;         +--> store action + active hwnd
+;         +--> store action + active hwnd + focused control snapshot
 ;             +--> timer waits for physical idle and StopAutoFix = false
-;                 +--> same window still active?
-;                     +--> yes: send final backspace/rewrite sequence
+;                 +--> same pending context still valid?
+;                     +--> yes: classic Edit/RichEdit proves live "/ " text and rewrites only slash
+;                     +--> yes: non-classic editor falls back to the older blind send
 ;                     +--> no : drop stale rewrite
 FlushPendingFixSlash:
     if (!pendingFixSlashAction)
@@ -1311,10 +1323,9 @@ FlushPendingFixSlash:
         Return
     }
 
-    ; Only allow Send when this is still the newest queued slash-space fix, the
-    ; original window is still active, the same control still has focus when
-    ; available, and the queued action remains fresh enough to trust.
-    if (!IsPendingTypingFixStillValid(pendingFixSlashId, pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashQueuedTick))
+    ; Only allow the rewrite when this is still the newest queued slash-space
+    ; fix and the same focused control identity still owns the caret context.
+    if (!_IsPendingFixSlashStillValid())
     {
         _ClearPendingFixSlashState()
         Return
@@ -1326,6 +1337,21 @@ FlushPendingFixSlash:
         Return
     }
 
+    ; Classic Edit/RichEdit controls get the same phase-2 treatment as Hoty:
+    ; prove the live caret/text still show the exact queued "/ " pattern, then
+    ; replace only the slash via EM_SETSEL/EM_REPLACESEL. If proof fails, cancel
+    ; instead of guessing with a blind caret-relative Send.
+    if (_TypingAutoFixIsClassicEditClass(pendingFixSlashCtrlClass))
+    {
+        StopAutoFix := True
+        _TryApplyPendingFixSlashClassicRewrite()
+        StopAutoFix := False
+        _ClearPendingFixSlashState()
+        Return
+    }
+
+    ; Non-classic editors keep the older blind-send fallback because there is no
+    ; equally reliable message-based single-character rewrite path available.
     StopAutoFix := True
     Send, % "{BS}{BS}{?}{SPACE}"
     StopAutoFix := False
@@ -1338,12 +1364,16 @@ Return
 _ClearPendingFixSlashState() {
     global pendingFixSlashAction
     global pendingFixSlashCtrl
+    global pendingFixSlashCtrlClass
+    global pendingFixSlashCtrlHwnd
     global pendingFixSlashHwnd
     global pendingFixSlashId
     global pendingFixSlashQueuedTick
 
     pendingFixSlashAction     := ""
     pendingFixSlashCtrl       := ""
+    pendingFixSlashCtrlClass  := ""
+    pendingFixSlashCtrlHwnd   := 0
     pendingFixSlashHwnd       := 0
     pendingFixSlashId         := 0
     pendingFixSlashQueuedTick := 0
@@ -1471,6 +1501,41 @@ IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedT
     return True
 }
 
+; FixSlash pending-work validator:
+; this is the guard that decides whether a queued slash-space rewrite is still
+; safe to attempt. It rejects stale or superseded work and requires the same
+; active window plus the same focused control identity before a delayed rewrite
+; can run. The goal is to cancel late fixes rather than let a timer mutate a
+; different field/control after the user has already moved on.
+_IsPendingFixSlashStillValid() {
+    global pendingFixSlashCtrl
+    global pendingFixSlashCtrlClass
+    global pendingFixSlashCtrlHwnd
+    global pendingFixSlashHwnd
+    global pendingFixSlashId
+    global pendingFixSlashQueuedTick
+
+    if !IsPendingTypingFixStillValid(pendingFixSlashId, pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashQueuedTick)
+        return False
+
+    if (!pendingFixSlashCtrlHwnd && pendingFixSlashCtrlClass = "")
+        return True
+
+    if !_TryGetFocusedControlSnapshot(pendingFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+        return False
+
+    if (pendingFixSlashCtrl != "" && currentCtrlNN != pendingFixSlashCtrl)
+        return False
+
+    if (pendingFixSlashCtrlHwnd && currentCtrlHwnd != pendingFixSlashCtrlHwnd)
+        return False
+
+    if (pendingFixSlashCtrlClass != "" && currentCtrlClass != pendingFixSlashCtrlClass)
+        return False
+
+    return True
+}
+
 ; Hoty pending-work validator:
 ; this is the guard that decides whether a queued Hoty rewrite is still safe to
 ; attempt. It rejects stale or superseded work and requires the same active
@@ -1504,6 +1569,55 @@ _IsPendingHotyStillValid() {
         return false
 
     return true
+}
+
+; Classic-control FixSlash rewrite:
+; for Edit/RichEdit targets, do not trust a blind {BS}{BS}{?}{SPACE} send.
+; Instead, inspect the live caret/selection and confirm the exact expected "/ "
+; pattern is still present immediately before the caret, then replace only the
+; slash with EM_SETSEL/EM_REPLACESEL. If that context no longer matches, cancel
+; the fix rather than risk a duplicate or garbled edit.
+_TryApplyPendingFixSlashClassicRewrite() {
+    static emReplaceSel := 0x00C2
+    static emSetSel := 0x00B1
+    global pendingFixSlashCtrl
+    global pendingFixSlashCtrlClass
+    global pendingFixSlashCtrlHwnd
+    global pendingFixSlashHwnd
+
+    if (!pendingFixSlashHwnd || !pendingFixSlashCtrlHwnd || pendingFixSlashCtrlClass = "")
+        return False
+
+    if !_TypingAutoFixIsClassicEditClass(pendingFixSlashCtrlClass)
+        return False
+
+    if !_TryGetFocusedControlSnapshot(pendingFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+        return False
+
+    if (currentCtrlNN != pendingFixSlashCtrl || currentCtrlHwnd != pendingFixSlashCtrlHwnd || currentCtrlClass != pendingFixSlashCtrlClass)
+        return False
+
+    if !_GetClassicControlSelectionRange(pendingFixSlashCtrlHwnd, selStart, selEnd)
+        return False
+
+    if (selStart != selEnd || selStart < 2)
+        return False
+
+    ControlGetText, controlText, , ahk_id %pendingFixSlashCtrlHwnd%
+    if (controlText = "" || StrLen(controlText) < selStart)
+        return False
+
+    observedSpan := SubStr(controlText, selStart - 1, 2)
+    if (observedSpan != "/ ")
+        return False
+
+    VarSetCapacity(replacementBuffer, (StrLen("?") + 1) * 2, 0)
+    StrPut("?", &replacementBuffer, "UTF-16")
+
+    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", selStart - 2, "Ptr", selStart - 1, "Ptr")
+    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emReplaceSel, "Ptr", 1, "Ptr", &replacementBuffer, "Ptr")
+    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", selStart, "Ptr", selStart, "Ptr")
+    return True
 }
 
 ; Classic-control Hoty rewrite:
@@ -2848,16 +2962,16 @@ $~WheelUp::
     WinGetClass, hoverClass, ahk_id %windowId%
     WinGetClass, activeClass, A
     isWheelOverTitleBar := MouseIsOverTitleBar()
+    wheelCanAdjustColumns := (wheelControl == "SysListView321")
+                          || ((wheelControl == "DirectUIHWND2" || wheelControl == "DirectUIHWND3")
+                           && (hoverClass == "CabinetWClass" || hoverClass == "#32770"))
 
     if (hoverClass != "ProgMan"
      && hoverClass != "WorkerW"
      && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-     && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
      && !(hoverClass == "CabinetWClass" && isWheelOverTitleBar)
      && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-     && (wheelControl == "SysListView321"
-      || wheelControl == "DirectUIHWND2"
-      || wheelControl == "DirectUIHWND3"))
+     && wheelCanAdjustColumns)
     {
         pendingAdjustColumnsClass         := hoverClass
         pendingAdjustColumnsCtrl          := wheelControl
@@ -2891,14 +3005,16 @@ $~WheelDown::
     WinGetClass, hoverClass, ahk_id %windowId%
     WinGetClass, activeClass, A
     isWheelOverTitleBar := MouseIsOverTitleBar()
+    wheelCanAdjustColumns := (wheelControl == "SysListView321")
+                          || (InStr(wheelControl, "DirectUIHWND", True)
+                           && (hoverClass == "CabinetWClass" || hoverClass == "#32770"))
 
     if (hoverClass != "ProgMan"
      && hoverClass != "WorkerW"
      && hoverClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-     && (hoverClass == "CabinetWClass" || hoverClass == "#32770")
      && !(hoverClass == "CabinetWClass" && isWheelOverTitleBar)
      && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
-     && (wheelControl == "SysListView321" || InStr(wheelControl, "DirectUIHWND", True)))
+     && wheelCanAdjustColumns)
     {
         pendingAdjustColumnsClass         := hoverClass
         pendingAdjustColumnsCtrl          := wheelControl
@@ -2967,13 +3083,13 @@ WatchRightButtonState:
         ResetRightButtonState(true)
 return
 
-; Wheel-driven Explorer column auto-fit is deferred onto this timer instead of
-; sending Ctrl+NumpadAdd directly from WheelUp/WheelDown.
+; Wheel-driven column auto-fit is deferred onto this timer instead of sending
+; Ctrl+NumpadAdd directly from WheelUp/WheelDown.
 ;
 ; High-level flow:
 ; 1) wait for wheel input to go quiet
-; 2) confirm the same Explorer/dialog window is still active
-; 3) reuse or resolve the shell-view target that should receive Ctrl+NumpadAdd
+; 2) confirm the same hovered window is still active
+; 3) reuse or resolve the target control that should receive Ctrl+NumpadAdd
 ; 4) focus that target if needed
 ; 5) re-check that the same wheel request is still current
 ; 6) send Ctrl+NumpadAdd as late as possible
@@ -2982,12 +3098,14 @@ return
 ; happen only after scrolling has settled and the target window/control still match.
 AdjustColumns:
     currentRequestId  := 0
+    isExplorerLikeWin := False
+    isPlainListView   := False
     requiredQuietMs   := 0
     TargetControl     := ""
     TargetControlHwnd := 0
 
     ; Stage 1: basic request validation.
-    ; If the wheel hook never captured a valid Explorer target, there is nothing to do.
+    ; If the wheel hook never captured a valid target, there is nothing to do.
     if (!pendingAdjustColumnsRequestId || !pendingAdjustColumnsHwnd || pendingAdjustColumnsCtrl == "")
         return
 
@@ -3007,18 +3125,27 @@ AdjustColumns:
     }
 
     ; Stage 3: same-window validation.
-    ; Only operate on the same active Explorer/dialog window that originally queued
+    ; Only operate on the same active window that originally queued
     ; this request. If activation changed, cancel instead of mutating a stale target.
     if (WinExist("A") != pendingAdjustColumnsHwnd)
         return
 
     WinGetClass, adjustClassNow, ahk_id %pendingAdjustColumnsHwnd%
-    if (adjustClassNow != pendingAdjustColumnsClass || (adjustClassNow != "CabinetWClass" && adjustClassNow != "#32770"))
+    isExplorerLikeWin := (adjustClassNow == "CabinetWClass" || adjustClassNow == "#32770")
+    isPlainListView   := (pendingAdjustColumnsCtrl == "SysListView321")
+
+    if (adjustClassNow != pendingAdjustColumnsClass)
+        return
+
+    ; Plain SysListView32 targets can use the generic quiet-gap path in any app.
+    ; DirectUI targets remain limited to Explorer/open-save style shell hosts where
+    ; the shared chooser knows how to resolve the real Ctrl+NumpadAdd destination.
+    if (!isPlainListView && !isExplorerLikeWin)
         return
 
     ; Stage 4: target resolution.
     ; First try the short-lived target cache for this same window. That avoids
-    ; repeating shell-control discovery during stop-and-go wheel bursts.
+    ; repeating target discovery during stop-and-go wheel bursts.
     ; The cache is only reused if the control still belongs to this window and its
     ; live HWND still exists.
     if (c_pendingAdjustColumnsTargetHwnd = pendingAdjustColumnsHwnd
@@ -3029,22 +3156,29 @@ AdjustColumns:
             TargetControl := c_pendingAdjustColumnsTargetCtrl
     }
 
-    ; If the cache is not usable, reuse the same target scan + chooser that
-    ; SendCtrlAdd() uses. The wheel path stops after target selection so it can
-    ; stay lighter than the full activation-driven SendCtrlAdd() flow.
+    ; If the cache is not usable, pick the lightest resolution path that matches
+    ; the hovered control shape:
+    ; - plain SysListView32: trust the captured control directly
+    ; - Explorer/dialog DirectUI: reuse the shared shell scan + chooser
     if (TargetControl == "") {
-        targetScan := GetSendCtrlAddTargetScan(pendingAdjustColumnsHwnd, adjustClassNow)
-        ; Wheel hover can transiently report DirectUIHWND2/3 even when a different
-        ; pane is the real Ctrl+NumpadAdd target, so do not blindly trust those two
-        ; names here. Let the shared chooser resolve the final target instead.
-        TargetControl := ChooseSendCtrlAddTarget(pendingAdjustColumnsHwnd, adjustClassNow, pendingAdjustColumnsCtrl, targetScan, False)
+        if (isPlainListView) {
+            TargetControl := pendingAdjustColumnsCtrl
+        }
+        else {
+            targetScan := GetSendCtrlAddTargetScan(pendingAdjustColumnsHwnd, adjustClassNow)
+            ; Wheel hover can transiently report DirectUIHWND2/3 even when a different
+            ; pane is the real Ctrl+NumpadAdd target, so do not blindly trust those two
+            ; names here. Let the shared chooser resolve the final target instead.
+            TargetControl := ChooseSendCtrlAddTarget(pendingAdjustColumnsHwnd, adjustClassNow, pendingAdjustColumnsCtrl, targetScan, False)
+        }
     }
 
     ; Stage 5: focus preparation.
-    ; If a target was resolved, use the Explorer-specific focus path before sending.
+    ; If a target was resolved, focus it before sending so Ctrl+NumpadAdd lands on
+    ; the intended list/shell view instead of an adjacent toolbar or breadcrumb.
     ; If no target was resolved, do not hard-fail here: the older behavior of sending
-    ; Ctrl+NumpadAdd to the active window still sometimes succeeds when Explorer already
-    ; has a usable item focus inside the details view.
+    ; Ctrl+NumpadAdd to the active window still sometimes succeeds when the target
+    ; view already has usable item focus and only the explicit control lookup missed it.
     if (TargetControl != "") {
         ; Resolve the target HWND once so the cache and later focus work use a live control.
         if (!TargetControlHwnd)
@@ -10377,11 +10511,26 @@ BeginBlockKeys() {
     blockKeys := True
 }
 
+BeginBlockWheel() {
+    Global blockWheel
+
+    ; Start a wheel-only blocking session so physical wheel input cannot mix
+    ; with a synthetic Ctrl chord during a tiny critical section.
+    blockWheel := True
+}
+
 EndBlockKeys() {
     Global blockKeys
 
     ; End the current key-blocking session.
     blockKeys := False
+}
+
+EndBlockWheel() {
+    Global blockWheel
+
+    ; End the current wheel-only blocking session.
+    blockWheel := False
 }
 
 ; Keep the wheel path on its own helper so deferred Explorer column-adjust sends
@@ -10393,7 +10542,7 @@ EndBlockKeys() {
 ; before injecting Ctrl+NumpadAdd. This lets a just-arrived WheelUp/WheelDown event
 ; abort the send instead of being interpreted alongside a synthetic Ctrl chord.
 SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0) {
-    global blockWheel, pendingAdjustColumnsLastWheelTick, pendingAdjustColumnsRequestId, k_pendingAdjustColumnsSendGuardMs
+    global pendingAdjustColumnsLastWheelTick, pendingAdjustColumnsRequestId, k_pendingAdjustColumnsSendGuardMs
 
     if (guardRequestId || guardQuietMs || guardHwnd) {
         Sleep, %k_pendingAdjustColumnsSendGuardMs%
@@ -10410,11 +10559,11 @@ SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 
 
     ; Suppress only physical wheel input during the synthetic Ctrl chord so a
     ; fresh wheel notch cannot be misread by Explorer as Ctrl+Wheel.
-    blockWheel := True
+    BeginBlockWheel()
     BeginBlockKeys()
     Send, ^{NumpadAdd}
     EndBlockKeys()
-    blockWheel := False
+    EndBlockWheel()
     FixReleasedModifiers("Ctrl")
     ScheduleFixReleasedModifiers("Ctrl", reconcilePassCount)
     return true
