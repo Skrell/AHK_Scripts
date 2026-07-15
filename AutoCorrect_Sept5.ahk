@@ -1196,14 +1196,39 @@ FlushPendingHotyReplacement:
     _ClearPendingHotyState()
 Return
 
-; Inline slash+Enter commit path:
-; slash followed by Enter is handled differently from the deferred slash+Space
-; fix because Enter should not be allowed to outrun the "/ -> ?" correction.
-; This helper briefly waits for the physical Enter key cycle and any in-progress
-; script send to settle, then commits the replacement and Enter together against
-; the same window/control snapshot. If that bounded settle window fails or the
-; context changed, it reports failure so the caller can fall back to one raw Enter
-; instead of risking a late or misplaced slash rewrite.
+; Shared FixSlash queue helper:
+; slash+Space and non-classic slash+Enter now follow the same deferred
+; queue/idle/validate/apply pattern already used by pendingHoty. The difference
+; is that slash+Space lets the real Space land immediately, while slash+Enter
+; withholds Enter until the queued slash decision is resolved.
+_QueuePendingFixSlash(action) {
+    global pendingFixSlashAction
+    global pendingFixSlashCtrl
+    global pendingFixSlashCtrlClass
+    global pendingFixSlashCtrlHwnd
+    global pendingFixSlashHwnd
+    global pendingFixSlashId
+    global pendingFixSlashQueuedTick
+    global typingFixSeq
+
+    CancelPendingTypingFixes(False, False)
+    typingFixSeq += 1
+    pendingFixSlashAction     := action
+    pendingFixSlashHwnd       := WinExist("A")
+    ControlGetFocus, pendingFixSlashCtrl, ahk_id %pendingFixSlashHwnd%
+    pendingFixSlashCtrlClass  := ""
+    pendingFixSlashCtrlHwnd   := 0
+    _TryGetFocusedControlSnapshot(pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashCtrlHwnd, pendingFixSlashCtrlClass)
+    pendingFixSlashId         := typingFixSeq
+    pendingFixSlashQueuedTick := A_TickCount
+    SetTimer, FlushPendingFixSlash, -40
+}
+
+; Inline slash+Enter fast path for classic edits:
+; non-classic editors now defer slash+Enter through the same pending-work
+; pattern as pendingHoty and slash+Space. This helper is kept only for classic
+; Edit/RichEdit controls where the old immediate Enter-thread behavior has been
+; the lower-risk path.
 _CommitFixSlashEnterInline() {
     global StopAutoFix
 
@@ -1240,10 +1265,11 @@ _CommitFixSlashEnterInline() {
     return True
 }
 
-; Returns true only for the exact slash+Enter pattern that should commit "?"
-; inline. This intentionally mirrors the older FixSlash qualification test, but
-; now lets the Enter hotkey decide immediately instead of queueing a timer first.
-_ShouldCommitFixSlashEnter() {
+; Returns true only for the exact slash+Enter pattern that FixSlash should own.
+; The Enter hotkey uses this shared qualifier first, then decides whether the
+; current control can keep the old classic inline fast path or needs the newer
+; deferred boundary-key barrier used by non-classic editors.
+_ShouldHandleFixSlashEnter() {
     global disableEnter
     global k_keys
     global StopAutoFix
@@ -1265,17 +1291,7 @@ FixSlash:
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
     If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
-        CancelPendingTypingFixes(False, False)
-        typingFixSeq += 1
-        pendingFixSlashAction     := "space"
-        pendingFixSlashHwnd       := WinExist("A")
-        ControlGetFocus, pendingFixSlashCtrl, ahk_id %pendingFixSlashHwnd%
-        pendingFixSlashCtrlClass  := ""
-        pendingFixSlashCtrlHwnd   := 0
-        _TryGetFocusedControlSnapshot(pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashCtrlHwnd, pendingFixSlashCtrlClass)
-        pendingFixSlashId         := typingFixSeq
-        pendingFixSlashQueuedTick := A_TickCount
-        SetTimer, FlushPendingFixSlash, -40
+        _QueuePendingFixSlash("space")
         disableEnter              := False
     }
     If IsPriorHotKeyLowerCase()   ; as long as a letter key is pressed we record the priorprior hotkey
@@ -1284,83 +1300,113 @@ FixSlash:
         X_PriorPriorHotKey := Substr(A_PriorHotkey,3,1) ; record only the letter key pressed If captialized
 Return
 
-; Deferred FixSlash rewrite:
-; letter -> "/" -> Space
-;              +--> queue slash rewrite intent instead of backspacing on the
-;                   same live Space event
+; Deferred FixSlash rewrite / boundary-key release:
+; pendingHoty, slash+Space, and non-classic slash+Enter now share the same
+; broad pattern:
+; queue work -> wait for brief physical idle -> revalidate same target ->
+; apply precise rewrite when possible, otherwise cancel or use a bounded
+; fallback for that editor type
 ;
 ; Why this exists:
-; immediate fix on live Space can race with:
+; immediate slash mutation on a live boundary key can race with:
 ; - the real punctuation key cycle finishing
-; - caret movement caused by Space
+; - caret movement caused by the boundary key
 ; - other typing auto-fix logic already running on the main thread
 ;
 ; Timer flow:
-; detect "/ "
+; detect slash fix pattern
 ;         +--> store action + active hwnd + focused control snapshot
 ;             +--> timer waits for physical idle and StopAutoFix = false
 ;                 +--> same pending context still valid?
-;                     +--> yes: classic Edit/RichEdit proves live "/ " text and rewrites only slash
-;                     +--> yes: non-classic editor falls back to the older blind send
+;                     +--> yes: classic Edit/RichEdit proves live queued slash text and rewrites only slash
+;                     +--> yes: non-classic editor uses the older blind-send fallback
+;                     +--> yes: queued Enter is released only after that rewrite attempt finishes
 ;                     +--> no : drop stale rewrite
 FlushPendingFixSlash:
     if (!pendingFixSlashAction)
         Return
 
-    ; Drop the queued slash-space rewrite if it has been pending longer than
+    pendingAction := pendingFixSlashAction
+
+    ; Drop the queued slash rewrite if it has been pending longer than
     ; k_pendingTypingFixMaxAgeMs. After that short age budget, skipping the
-    ; correction is safer than rewriting text in a newer typing context.
+    ; correction is safer than rewriting text in a newer typing context. For a
+    ; queued Enter, release a plain Enter only if the same coarse target is
+    ; still active; otherwise cancel it rather than sending Enter somewhere new.
     if (pendingFixSlashQueuedTick && (A_TickCount - pendingFixSlashQueuedTick) > k_pendingTypingFixMaxAgeMs)
     {
+        if (pendingAction = "enter")
+            _TryReleasePendingFixSlashEnterFallback()
         _ClearPendingFixSlashState()
         Return
     }
 
-    ; Let the physical Space key cycle settle before rewriting slash punctuation.
+    ; Let the physical boundary-key cycle settle before rewriting slash punctuation.
     if (A_TimeIdlePhysical < 40 || StopAutoFix)
     {
         SetTimer, FlushPendingFixSlash, -40
         Return
     }
 
-    ; Only allow the rewrite when this is still the newest queued slash-space
-    ; fix and the same focused control identity still owns the caret context.
+    ; Only allow the rewrite when this is still the newest queued slash action
+    ; and the same focused control identity still owns the caret context.
     if (!_IsPendingFixSlashStillValid())
     {
+        if (pendingAction = "enter")
+            _TryReleasePendingFixSlashEnterFallback()
         _ClearPendingFixSlashState()
         Return
     }
 
-    if (pendingFixSlashAction != "space")
+    if (pendingAction = "space")
     {
-        _ClearPendingFixSlashState()
-        Return
-    }
+        ; Classic Edit/RichEdit controls get the same phase-2 treatment as
+        ; Hoty: prove the live caret/text still show the exact queued "/ "
+        ; pattern, then replace only the slash via EM_SETSEL/EM_REPLACESEL. If
+        ; proof fails, cancel instead of guessing with a blind caret-relative Send.
+        if (_TypingAutoFixIsClassicEditClass(pendingFixSlashCtrlClass))
+        {
+            StopAutoFix := True
+            _TryApplyPendingFixSlashClassicRewrite()
+            StopAutoFix := False
+            _ClearPendingFixSlashState()
+            Return
+        }
 
-    ; Classic Edit/RichEdit controls get the same phase-2 treatment as Hoty:
-    ; prove the live caret/text still show the exact queued "/ " pattern, then
-    ; replace only the slash via EM_SETSEL/EM_REPLACESEL. If proof fails, cancel
-    ; instead of guessing with a blind caret-relative Send.
-    if (_TypingAutoFixIsClassicEditClass(pendingFixSlashCtrlClass))
-    {
+        ; Non-classic editors keep the older blind-send fallback because there is
+        ; no equally reliable message-based single-character rewrite path available.
         StopAutoFix := True
-        _TryApplyPendingFixSlashClassicRewrite()
+        Send, % "{BS}{BS}{?}{SPACE}"
         StopAutoFix := False
         _ClearPendingFixSlashState()
         Return
     }
 
-    ; Non-classic editors keep the older blind-send fallback because there is no
-    ; equally reliable message-based single-character rewrite path available.
-    StopAutoFix := True
-    Send, % "{BS}{BS}{?}{SPACE}"
-    StopAutoFix := False
+    if (pendingAction = "enter")
+    {
+        ; This is the same deferred pending-work pattern as pendingHoty and
+        ; slash+Space, except the boundary key itself is withheld until the
+        ; queued slash rewrite has either landed or been explicitly abandoned.
+        StopAutoFix := True
+        if (_TypingAutoFixIsClassicEditClass(pendingFixSlashCtrlClass))
+            _TryApplyPendingFixSlashClassicRewrite()
+        else
+        {
+            Send, % "{BS}{?}"
+            Sleep, 15
+        }
+        Send, {Enter}
+        StopAutoFix := False
+        _ClearPendingFixSlashState()
+        Return
+    }
+
     _ClearPendingFixSlashState()
 Return
 
-; Clears the deferred slash-space rewrite slot without invalidating the shared
-; sequence token, allowing the caller to decide whether newer timers should also
-; be dropped.
+; Clears the deferred FixSlash slot without invalidating the shared sequence
+; token, allowing the caller to decide whether newer timers should also be
+; dropped. This now covers both slash+Space rewrites and slash+Enter barriers.
 _ClearPendingFixSlashState() {
     global pendingFixSlashAction
     global pendingFixSlashCtrl
@@ -1502,9 +1548,10 @@ IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedT
 }
 
 ; FixSlash pending-work validator:
-; this is the guard that decides whether a queued slash-space rewrite is still
-; safe to attempt. It rejects stale or superseded work and requires the same
-; active window plus the same focused control identity before a delayed rewrite
+; this is the guard that decides whether a queued slash rewrite or slash+Enter
+; boundary release is still safe to attempt. It rejects stale or superseded
+; work and requires the same active window plus the same focused control identity
+; before a delayed rewrite
 ; can run. The goal is to cancel late fixes rather than let a timer mutate a
 ; different field/control after the user has already moved on.
 _IsPendingFixSlashStillValid() {
@@ -1533,6 +1580,31 @@ _IsPendingFixSlashStillValid() {
     if (pendingFixSlashCtrlClass != "" && currentCtrlClass != pendingFixSlashCtrlClass)
         return False
 
+    return True
+}
+
+; Coarse slash+Enter fallback:
+; if a queued slash+Enter barrier ages out or loses precise slash context, do
+; not release Enter into a different window/control. Only send a plain Enter
+; when the original active window and focused control name still match.
+_TryReleasePendingFixSlashEnterFallback() {
+    global pendingFixSlashCtrl
+    global pendingFixSlashHwnd
+    global StopAutoFix
+
+    if (!pendingFixSlashHwnd || !WinActive("ahk_id " . pendingFixSlashHwnd))
+        return False
+
+    if (pendingFixSlashCtrl != "")
+    {
+        ControlGetFocus, currentCtrl, ahk_id %pendingFixSlashHwnd%
+        if (currentCtrl != pendingFixSlashCtrl)
+            return False
+    }
+
+    StopAutoFix := True
+    Send, {Enter}
+    StopAutoFix := False
     return True
 }
 
@@ -1572,14 +1644,15 @@ _IsPendingHotyStillValid() {
 }
 
 ; Classic-control FixSlash rewrite:
-; for Edit/RichEdit targets, do not trust a blind {BS}{BS}{?}{SPACE} send.
-; Instead, inspect the live caret/selection and confirm the exact expected "/ "
+; for Edit/RichEdit targets, do not trust a blind slash rewrite send. Instead,
+; inspect the live caret/selection and confirm the exact expected queued slash
 ; pattern is still present immediately before the caret, then replace only the
 ; slash with EM_SETSEL/EM_REPLACESEL. If that context no longer matches, cancel
 ; the fix rather than risk a duplicate or garbled edit.
 _TryApplyPendingFixSlashClassicRewrite() {
     static emReplaceSel := 0x00C2
     static emSetSel := 0x00B1
+    global pendingFixSlashAction
     global pendingFixSlashCtrl
     global pendingFixSlashCtrlClass
     global pendingFixSlashCtrlHwnd
@@ -1600,23 +1673,48 @@ _TryApplyPendingFixSlashClassicRewrite() {
     if !_GetClassicControlSelectionRange(pendingFixSlashCtrlHwnd, selStart, selEnd)
         return False
 
-    if (selStart != selEnd || selStart < 2)
+    if (selStart != selEnd)
         return False
 
     ControlGetText, controlText, , ahk_id %pendingFixSlashCtrlHwnd%
     if (controlText = "" || StrLen(controlText) < selStart)
         return False
 
-    observedSpan := SubStr(controlText, selStart - 1, 2)
-    if (observedSpan != "/ ")
+    if (pendingFixSlashAction = "space")
+    {
+        if (selStart < 2)
+            return False
+
+        observedSpan := SubStr(controlText, selStart - 1, 2)
+        if (observedSpan != "/ ")
+            return False
+
+        replaceStart := selStart - 2
+        replaceEnd := selStart - 1
+        restoreCaretPos := selStart
+    }
+    else if (pendingFixSlashAction = "enter")
+    {
+        if (selStart < 1)
+            return False
+
+        observedChar := SubStr(controlText, selStart, 1)
+        if (observedChar != "/")
+            return False
+
+        replaceStart := selStart - 1
+        replaceEnd := selStart
+        restoreCaretPos := selStart
+    }
+    else
         return False
 
     VarSetCapacity(replacementBuffer, (StrLen("?") + 1) * 2, 0)
     StrPut("?", &replacementBuffer, "UTF-16")
 
-    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", selStart - 2, "Ptr", selStart - 1, "Ptr")
+    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", replaceStart, "Ptr", replaceEnd, "Ptr")
     DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emReplaceSel, "Ptr", 1, "Ptr", &replacementBuffer, "Ptr")
-    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", selStart, "Ptr", selStart, "Ptr")
+    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", restoreCaretPos, "Ptr", restoreCaretPos, "Ptr")
     return True
 }
 
@@ -4489,13 +4587,28 @@ Return
 
 #If disableEnter
 $Enter::
-    if (_ShouldCommitFixSlashEnter()) {
-        ; Once slash+Enter qualifies, cancel any older deferred rewrites and
-        ; resolve this boundary keypress immediately in the Enter thread. That
-        ; avoids losing the correction to timer age/context invalidation later.
-        CancelPendingTypingFixes(True, False)
-        if (!_CommitFixSlashEnterInline())
-            Send, {Enter}
+    if (_ShouldHandleFixSlashEnter()) {
+        currentFixSlashEnterHwnd := WinExist("A")
+        currentFixSlashEnterCtrlNN := ""
+        currentFixSlashEnterCtrlHwnd := 0
+        currentFixSlashEnterCtrlClass := ""
+
+        if (_TryGetFocusedControlSnapshot(currentFixSlashEnterHwnd, currentFixSlashEnterCtrlNN, currentFixSlashEnterCtrlHwnd, currentFixSlashEnterCtrlClass)
+            && _TypingAutoFixIsClassicEditClass(currentFixSlashEnterCtrlClass)) {
+            ; Classic Edit/RichEdit keeps the older immediate Enter-thread path.
+            ; Non-classic editors cannot prove the rewrite inline as reliably, so
+            ; those fall through to the deferred barrier below.
+            CancelPendingTypingFixes(True, False)
+            if (!_CommitFixSlashEnterInline())
+                Send, {Enter}
+        }
+        else {
+            ; This mirrors pendingHoty and deferred slash+Space: queue intent,
+            ; wait for brief idle, revalidate the same target, then apply or
+            ; cancel. The extra rule here is that Enter itself stays withheld
+            ; until the queued slash rewrite has been resolved.
+            _QueuePendingFixSlash("enter")
+        }
     }
     else
         Send, {Enter}
@@ -5941,7 +6054,7 @@ ClearRect(hwnd := "") {
                 Return
             }
             WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
-            sleep 5
+            sleep 10
         }
         Gui, GUI4Boarder: Hide
         Critical, Off
