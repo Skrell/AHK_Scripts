@@ -156,6 +156,39 @@ Global clipPreferExplicitCtrlV                     := False
 ; never let both the raw key and the rewrite path fire.
 Global disableEnter                                := False
 ; +----------------------------------------------------------------------------+
+; | Everything Edit1 Deferred Column Auto-Fit State                            |
+; | Queues Ctrl+NumpadAdd for Everything's search box so the send runs only    |
+; | after typing has gone quiet and the same Edit1 still owns focus.           |
+; +----------------------------------------------------------------------------+
+; Focused control name captured when Everything Edit1 auto-fit is queued so
+; the deferred send can require the same search field before firing.
+Global pendingEverythingAdjustCtrl                 := ""
+; Focused control class captured with the queued Everything auto-fit so the
+; flush step can require the same concrete control identity when available.
+Global pendingEverythingAdjustCtrlClass            := ""
+; Focused control HWND captured when Everything auto-fit is queued so the flush
+; step can reject a later Edit1 from a different control instance.
+Global pendingEverythingAdjustCtrlHwnd             := 0
+; Active Everything window captured for the deferred search-box auto-fit send.
+Global pendingEverythingAdjustHwnd                 := 0
+; Monotonic token incremented for each newer Everything Edit1 auto-fit request
+; so older timer callbacks can detect that typing already superseded them.
+Global pendingEverythingAdjustId                   := 0
+; Tick count recorded when the Everything Edit1 auto-fit request was queued.
+Global pendingEverythingAdjustQueuedTick           := 0
+; Source typing tick associated with the current Everything auto-fit request so
+; KeyTrack queues at most one deferred send per physical keypress burst update.
+Global pendingEverythingAdjustSourceTick           := 0
+; Maximum lifetime for a deferred Everything Edit1 auto-fit request before it
+; is dropped as stale rather than sent into a newer typing context.
+Global k_pendingEverythingAdjustMaxAgeMs           := 750
+; Short retry delay for the queued Everything Edit1 auto-fit timer while
+; waiting for the stronger typing-quiet gate to become true.
+Global k_pendingEverythingAdjustRetryMs            := 40
+; Minimum physical-idle gap required before Everything Edit1 is allowed to
+; receive the deferred Ctrl+NumpadAdd column auto-fit chord.
+Global k_pendingEverythingAdjustTypingQuietMs      := 110
+; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
 ; | caches for the deferred Explorer/file-dialog Ctrl+NumpadAdd send path.     |
@@ -1107,11 +1140,7 @@ Hoty:
     If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
         CancelPendingTypingFixes(False, False)
         typingFixSeq += 1
-        pendingHotyHwnd        := WinExist("A")
-        pendingHotyCtrl        := ""
-        pendingHotyCtrlClass   := ""
-        pendingHotyCtrlHwnd    := 0
-        _TryGetFocusedControlSnapshot(pendingHotyHwnd, pendingHotyCtrl, pendingHotyCtrlHwnd, pendingHotyCtrlClass)
+        _CaptureDeferredFocusContext(pendingHotyHwnd, pendingHotyCtrl, pendingHotyCtrlHwnd, pendingHotyCtrlClass)
         pendingHotyId          := typingFixSeq
         pendingHotyQueuedTick  := A_TickCount
         pendingHotyReplacement := SubStr(A_PriorHotKey,3,1)
@@ -1158,7 +1187,7 @@ FlushPendingHotyReplacement:
     }
 
     ; Let the physical key cycle settle before rewriting the prior capital letter.
-    if (A_TimeIdlePhysical < 40 || StopAutoFix)
+    if (!_IsDeferredTypingQuiet(40))
     {
         SetTimer, FlushPendingHotyReplacement, -40
         Return
@@ -1214,11 +1243,7 @@ _QueuePendingFixSlash(action) {
     CancelPendingTypingFixes(False, False)
     typingFixSeq += 1
     pendingFixSlashAction     := action
-    pendingFixSlashHwnd       := WinExist("A")
-    ControlGetFocus, pendingFixSlashCtrl, ahk_id %pendingFixSlashHwnd%
-    pendingFixSlashCtrlClass  := ""
-    pendingFixSlashCtrlHwnd   := 0
-    _TryGetFocusedControlSnapshot(pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashCtrlHwnd, pendingFixSlashCtrlClass)
+    _CaptureDeferredFocusContext(pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashCtrlHwnd, pendingFixSlashCtrlClass)
     pendingFixSlashId         := typingFixSeq
     pendingFixSlashQueuedTick := A_TickCount
     SetTimer, FlushPendingFixSlash, -40
@@ -1342,7 +1367,7 @@ FlushPendingFixSlash:
     }
 
     ; Let the physical boundary-key cycle settle before rewriting slash punctuation.
-    if (A_TimeIdlePhysical < 40 || StopAutoFix)
+    if (!_IsDeferredTypingQuiet(40))
     {
         SetTimer, FlushPendingFixSlash, -40
         Return
@@ -1467,6 +1492,7 @@ CancelPendingTypingFixes(invalidateSeq := False, resetDisableEnter := False) {
 ; queued rewrite/probe tied to the old caret position should be dropped first.
 CancelPendingTypingWorkForPointerAction() {
     CancelPendingTypingFixes(True, True)
+    _ClearPendingEverythingEditAdjustState()
     ClearPendingTypingAutoFixRefresh()
 }
 
@@ -1476,26 +1502,78 @@ CancelPendingTypingWorkForFocusChange() {
     CancelPendingTypingWorkForPointerAction()
 }
 
+; Shared deferred-work focus snapshot:
+; capture the active top-level HWND plus the currently focused control identity
+; so later timers can cheaply revalidate that they still own the same target
+; before attempting any delayed rewrite or synthetic send.
+_CaptureDeferredFocusContext(ByRef targetHwnd, ByRef targetCtrlNN, ByRef targetCtrlHwnd, ByRef targetCtrlClass, activeHwnd := 0) {
+    targetHwnd     := 0
+    targetCtrlNN   := ""
+    targetCtrlHwnd := 0
+    targetCtrlClass := ""
+
+    if (!activeHwnd)
+        activeHwnd := WinExist("A")
+
+    if (!activeHwnd)
+        return false
+
+    targetHwnd := activeHwnd
+    ControlGetFocus, targetCtrlNN, ahk_id %activeHwnd%
+    if (targetCtrlNN = "")
+        return true
+
+    ControlGet, targetCtrlHwnd, Hwnd,, %targetCtrlNN%, ahk_id %activeHwnd%
+    if (!targetCtrlHwnd)
+        return true
+
+    WinGetClass, targetCtrlClass, ahk_id %targetCtrlHwnd%
+    return true
+}
+
+; Shared deferred-work quiet check:
+; treat a delayed action as typing-safe only after the physical keyboard has
+; been idle for the requested interval and no higher-level typing fix is active.
+_IsDeferredTypingQuiet(minIdleMs := 40) {
+    global StopAutoFix
+
+    return (!StopAutoFix && A_TimeIdlePhysical >= minIdleMs)
+}
+
+; Shared deferred-work coarse validator:
+; require the same active window, optional same focused control name, optional
+; same logical request token, and optional freshness window before a delayed
+; action is allowed to proceed.
+_IsDeferredWorkStillValid(expectedHwnd, expectedCtrlNN := "", expectedId := 0, currentId := 0, queuedTick := 0, maxAgeMs := 0) {
+    if (!expectedHwnd)
+        return false
+
+    if (expectedId && currentId && expectedId != currentId)
+        return false
+
+    if (maxAgeMs && queuedTick && (A_TickCount - queuedTick) > maxAgeMs)
+        return false
+
+    if (!WinActive("ahk_id " . expectedHwnd))
+        return false
+
+    if (expectedCtrlNN != "")
+    {
+        ControlGetFocus, currentCtrl, ahk_id %expectedHwnd%
+        if (currentCtrl != expectedCtrlNN)
+            return false
+    }
+
+    return true
+}
+
 ; Captures the currently focused control identity so deferred typing rewrites can
 ; require the exact same edit target before they mutate caret-relative text.
 _TryGetFocusedControlSnapshot(activeHwnd, ByRef ctrlNN, ByRef ctrlHwnd, ByRef ctrlClass) {
-    ctrlNN    := ""
-    ctrlHwnd  := 0
-    ctrlClass := ""
-
-    if !activeHwnd
+    if !_CaptureDeferredFocusContext(snapshotHwnd, ctrlNN, ctrlHwnd, ctrlClass, activeHwnd)
         return false
 
-    ControlGetFocus, ctrlNN, ahk_id %activeHwnd%
-    if (ctrlNN = "")
-        return false
-
-    ControlGet, ctrlHwnd, Hwnd,, %ctrlNN%, ahk_id %activeHwnd%
-    if !ctrlHwnd
-        return false
-
-    WinGetClass, ctrlClass, ahk_id %ctrlHwnd%
-    return (ctrlClass != "")
+    return (snapshotHwnd && ctrlNN != "" && ctrlHwnd && ctrlClass != "")
 }
 
 ; Reads the current selection range from a classic Edit/RichEdit control so a
@@ -1528,23 +1606,7 @@ IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedT
     global k_pendingTypingFixMaxAgeMs
     global typingFixSeq
 
-    if (!pendingHwnd || pendingId != typingFixSeq)
-        return False
-
-    if (pendingQueuedTick && (A_TickCount - pendingQueuedTick) > k_pendingTypingFixMaxAgeMs)
-        return False
-
-    if (!WinActive("ahk_id " . pendingHwnd))
-        return False
-
-    if (pendingCtrl != "")
-    {
-        ControlGetFocus, currentCtrl, ahk_id %pendingHwnd%
-        if (currentCtrl != pendingCtrl)
-            return False
-    }
-
-    return True
+    return _IsDeferredWorkStillValid(pendingHwnd, pendingCtrl, pendingId, typingFixSeq, pendingQueuedTick, k_pendingTypingFixMaxAgeMs)
 }
 
 ; FixSlash pending-work validator:
@@ -2146,7 +2208,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         WinGetClass, vWinClass, % "ahk_id " hWnd
         WinGetTitle, vWinTitle, % "ahk_id " hWnd
         WinGet, vWinProc, ProcessName, ahk_id %hWnd%
-        If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768"))
+        If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768") || WinExist("ahk_class MsoCommandBarPopup"))
             break
         sleep, 1
     }
@@ -2425,7 +2487,11 @@ UnhookHooks:
     ; Do NOT call FreeLibrary on VirtualDesktopAccessor here (can hang on Win11)
 return
 
-; Uses UIA_Interface.ahk to find the Start button and return its center (screen coords).
+; Purpose        : support the taskbar/Start-button workflow that needs a reliable
+; screen coordinate target for the current Start button.
+; Why this exists: centralizes the script's Start-button lookup policy and its
+; fallback queries instead of scattering raw UIA taskbar probing inline.
+; Scope          : feature-specific helper.
 UIA_GetStartButtonCenter(ByRef sx, ByRef sy, ByRef buttonWidth) {
     global UIA
 
@@ -3319,7 +3385,7 @@ AdjustColumns:
     ; Stage 7: final send.
     ; Keep the actual key injection small and late so all expensive decisions happen
     ; before this point and Ctrl+NumpadAdd is emitted only for a still-current request.
-    SendCtrlNumpadAdd(6, currentRequestId, requiredQuietMs, pendingAdjustColumnsHwnd)
+    _SendCtrlNumpadAddIfStillValid(6, currentRequestId, requiredQuietMs, pendingAdjustColumnsHwnd)
 return
 
 MbuttonTimer:
@@ -5924,7 +5990,7 @@ LaunchWinFind:
                 Gui, ShadowFrFull:  Show, x%drawX% y%drawY% h0 w0
                 ; Gui, ShadowFrFull2: Show, x%drawX% y%drawY% h1 y1
                 ; sleep, 100
-                ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10, "Ptr", RegisterCallback("MyFader", "F"))
+                ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 1, "UInt", 10,  "Ptr", RegisterCallback("MyFader", "F"))
                 ; DllCall("SetTimer", "Ptr", A_ScriptHwnd, "Ptr", id := 2, "UInt", 150, "Ptr", RegisterCallback("MyTimer", "F"))
                 ; Menu, windows, show, % A_ScreenWidth/4, % A_ScreenHeight/3
                 ShowMenuX("windows", drawX, drawY, 0x14)
@@ -7406,6 +7472,12 @@ Explorer__RoleValueToNum(role) {
 
 ; ------------------------------------------------------------------
 
+; Purpose        : support point-probe-based UIA features that need a short, readable
+; adapter when sampling elements under the mouse or a computed dialog point.
+; Why this exists: keeps the calling code terse while forcing those call sites
+; onto the shared SafeUIA timeout/exception-handling path instead of direct
+; raw UIA point lookups.
+; Scope          : generic helper.
 UIA_SafeElementFromPoint_(x, y) {
     ; Requires: #Include UIA_Interface.ahk
     ; Returns a UIA element or "" if it fails.
@@ -7416,8 +7488,14 @@ Dialog_IsDetails_UIA_ByPoint(dlgHwnd := "") {
     ; Requires: #Include UIA_Interface.ahk
     ; Uses ElementFromPoint only (since ElementFromHandle fails for you)
 
-    static UIA_HeaderTypeId := 50034
+    static UIA_HeaderTypeId      := 50034
     static UIA_SplitButtonTypeId := 50031
+    static c_cachedItemsDlgHwnd  := 0
+    static c_cachedItemsEl       := ""
+    static c_cachedItemsTick     := 0
+    static k_cachedItemsTtlMs    := 250
+    static primaryProbes         := [[70,45],[60,45],[80,45],[70,55]]
+    static fallbackProbes        := [[75,35],[75,65]]
 
     global UIA
     if (!IsObject(UIA))
@@ -7428,26 +7506,42 @@ Dialog_IsDetails_UIA_ByPoint(dlgHwnd := "") {
     if (!dlgHwnd)
         return false
 
-    WinGetPos, wx, wy, ww, wh, ahk_id %dlgHwnd%
-    probes := [[70,45],[60,45],[80,45],[70,55],[60,55],[80,55],[75,35],[75,65],[55,50],[85,50]]
-
     items := ""
-    for probeIndex, p in probes
-    {
-        px := wx + (ww * p[1] // 100)
-        py := wy + (wh * p[2] // 100)
+    if (c_cachedItemsDlgHwnd = dlgHwnd && (A_TickCount - c_cachedItemsTick) <= k_cachedItemsTtlMs && IsObject(c_cachedItemsEl)) {
+        info := SafeUIA_GetElementSnapshot(c_cachedItemsEl, "className|controlType|name")
+        if (info.className = "UIItemsView" || (info.controlType = 50008 && info.name = "Items View"))
+            items := c_cachedItemsEl
+    }
 
-        el := UIA_SafeElementFromPoint_(px, py)
-        if !IsObject(el)
-            continue
+    if !IsObject(items) {
+        WinGetPos, wx, wy, ww, wh, ahk_id %dlgHwnd%
+        for probeListIndex, probeList in [primaryProbes, fallbackProbes]
+        {
+            for probeIndex, p in probeList
+            {
+                px := wx + (ww * p[1] // 100)
+                py := wy + (wh * p[2] // 100)
 
-        items := UIA_WalkUpToUIItemsView_(el)
-        if IsObject(items)
-            break
+                el := UIA_SafeElementFromPoint_(px, py)
+                if !IsObject(el)
+                    continue
+
+                items := UIA_WalkUpToUIItemsView_(el)
+                if IsObject(items)
+                    break
+            }
+
+            if IsObject(items)
+                break
+        }
     }
 
     if !IsObject(items)
         return false
+
+    c_cachedItemsDlgHwnd := dlgHwnd
+    c_cachedItemsEl := items
+    c_cachedItemsTick := A_TickCount
 
     ; Signal #1: Header exists (try multiple APIs)
     if (UIA_FindFirstByControlTypeAny_(items, UIA_HeaderTypeId))
@@ -7465,6 +7559,12 @@ Dialog_IsDetails_UIA_ByPoint(dlgHwnd := "") {
     return false
 }
 
+; Purpose        : support higher-level UIA detectors that only need a yes/no answer
+; about whether a subtree contains a given control type.
+; Why this exists: hides the library/fork differences in control-type search
+; APIs so feature code can ask one narrow question without repeating fallback
+; condition-building logic inline.
+; Scope          : generic helper.
 UIA_FindFirstByControlTypeAny_(rootEl, ctlTypeId) {
     ; Returns true if a descendant with ControlType == ctlTypeId exists.
     ; Uses UIA_Interface.ahk (CreatePropertyCondition + FindFirst) with a couple fallbacks.
@@ -7504,44 +7604,63 @@ UIA_FindFirstByControlTypeAny_(rootEl, ctlTypeId) {
     return IsObject(found2)
 }
 
+; Purpose        : support grid/details-view heuristics that need a cheap column-count
+; signal without caring which UIA pattern entry point succeeds.
+; Why this exists: normalizes several GridPattern access variants behind one
+; probe so callers do not duplicate pattern fallback and failure handling.
+; Scope          : generic helper.
 UIA_TryGetGridColumnCountAny_(el) {
     ; Returns GridPattern ColumnCount, or -1 if not available.
     ; Tries both numeric ID and string name variants (fork tolerance).
 
     static UIA_GridPatternId := 10006
+    static c_preferredGridPatternMode := ""
 
     if !IsObject(el)
-    return -1
+        return -1
+
+    modeOrder := []
+    if (c_preferredGridPatternMode != "")
+        modeOrder.Push(c_preferredGridPatternMode)
+    for modeIndex, mode in ["current_id", "id", "current_name", "name"]
+    {
+        if (mode != c_preferredGridPatternMode)
+            modeOrder.Push(mode)
+    }
 
     pat := ""
-
-    try
-        pat := el.GetCurrentPattern(UIA_GridPatternId)
-    catch
+    for modeIndex, mode in modeOrder
+    {
         pat := ""
+        if (mode = "current_id") {
+            try
+                pat := el.GetCurrentPattern(UIA_GridPatternId)
+            catch
+                pat := ""
+        }
+        else if (mode = "id") {
+            try
+                pat := el.GetPattern(UIA_GridPatternId)
+            catch
+                pat := ""
+        }
+        else if (mode = "current_name") {
+            try
+                pat := el.GetCurrentPattern("Grid")
+            catch
+                pat := ""
+        }
+        else if (mode = "name") {
+            try
+                pat := el.GetPattern("Grid")
+            catch
+                pat := ""
+        }
 
-    if !IsObject(pat)
-    {
-        try
-            pat := el.GetPattern(UIA_GridPatternId)
-        catch
-            pat := ""
-    }
-
-    if !IsObject(pat)
-    {
-        try
-            pat := el.GetCurrentPattern("Grid")
-        catch
-            pat := ""
-    }
-
-    if !IsObject(pat)
-    {
-        try
-            pat := el.GetPattern("Grid")
-        catch
-            pat := ""
+        if IsObject(pat) {
+            c_preferredGridPatternMode := mode
+            break
+        }
     }
 
     if !IsObject(pat)
@@ -7556,11 +7675,17 @@ UIA_TryGetGridColumnCountAny_(el) {
     return cols
 }
 
+; Purpose        : support UIA feature checks that depend on a specific named control
+; existing within a subtree, such as Explorer/details-view heuristics.
+; Why this exists: encapsulates the combined type-plus-name lookup and its
+; compatibility fallbacks so those policy checks stay readable at the call site.
+; Scope          : generic helper.
 UIA_FindFirstByControlTypeAndNameAny_(rootEl, ctlTypeId, wantName) {
     ; Returns true if a descendant exists with:
         ; ControlType == ctlTypeId AND Name == wantName
     ; Uses UIA_Interface.ahk (CreateAndCondition + FindFirst) with fallbacks.
 
+    static c_preferredFindModeByKey := {}
     global UIA
     static TreeScope_Subtree := 0x4
     static UIA_ControlTypePropertyId := 30003
@@ -7568,60 +7693,85 @@ UIA_FindFirstByControlTypeAndNameAny_(rootEl, ctlTypeId, wantName) {
 
     if !IsObject(rootEl)
         return false
+    if (ctlTypeId = "" || wantName = "")
+        return false
 
-    condType := ""
-    condName := ""
-    condAnd := ""
-
-    try
-        condType := UIA.CreatePropertyCondition(UIA_ControlTypePropertyId, ctlTypeId)
-    catch
-        condType := ""
-
-    try
-        condName := UIA.CreatePropertyCondition(UIA_NamePropertyId, wantName)
-    catch
-        condName := ""
-
-    if (IsObject(condType) && IsObject(condName))
+    modeKey := ctlTypeId . "|" . wantName
+    preferredMode := c_preferredFindModeByKey.HasKey(modeKey) ? c_preferredFindModeByKey[modeKey] : ""
+    modeOrder := []
+    if (preferredMode != "")
+        modeOrder.Push(preferredMode)
+    for modeIndex, mode in ["condition", "name"]
     {
-        try
-            condAnd := UIA.CreateAndCondition(condType, condName)
-        catch
-            condAnd := ""
+        if (mode != preferredMode)
+            modeOrder.Push(mode)
+    }
 
-        if IsObject(condAnd)
+    for modeIndex, mode in modeOrder
+    {
+        if (mode = "condition")
         {
-            found := ""
+            condAnd := ""
+            condName := ""
+            condType := ""
             try
-                found := rootEl.FindFirst(TreeScope_Subtree, condAnd)
+                condType := UIA.CreatePropertyCondition(UIA_ControlTypePropertyId, ctlTypeId)
             catch
-                found := ""
+                condType := ""
+            try
+                condName := UIA.CreatePropertyCondition(UIA_NamePropertyId, wantName)
+            catch
+                condName := ""
 
-            if IsObject(found)
-                return true
+            if (IsObject(condType) && IsObject(condName))
+            {
+                try
+                    condAnd := UIA.CreateAndCondition(condType, condName)
+                catch
+                    condAnd := ""
+
+                if IsObject(condAnd)
+                {
+                    found := ""
+                    try
+                        found := rootEl.FindFirst(TreeScope_Subtree, condAnd)
+                    catch
+                        found := ""
+
+                    if IsObject(found) {
+                        c_preferredFindModeByKey[modeKey] := "condition"
+                        return true
+                    }
+                }
+            }
+        }
+        else if (mode = "name")
+        {
+            found2 := ""
+            try
+                found2 := rootEl.FindFirstByName(wantName)
+            catch
+                found2 := ""
+
+            if IsObject(found2) {
+                info := SafeUIA_GetElementSnapshot(found2, "controlType")
+                if (info.controlType = ctlTypeId) {
+                    c_preferredFindModeByKey[modeKey] := "name"
+                    return true
+                }
+            }
         }
     }
 
-    ; Convenience fallback: Find by name, then verify control type if possible
-    found2 := ""
-    try
-        found2 := rootEl.FindFirstByName(wantName)
-    catch
-        found2 := ""
-
-    if !IsObject(found2)
-        return false
-
-    t := ""
-    try
-        t := found2.CurrentControlType
-    catch
-        t := ""
-
-    return (t = ctlTypeId)
+    return false
 }
 
+; Purpose        : support Explorer/file-dialog view detection by locating the nearest
+; Items View container above a probed descendant element.
+; Why this exists: the details-view heuristics operate on the shell view root,
+; not on an arbitrary leaf element, so this concentrates the upward-walk policy
+; in one place instead of repeating it around each probe sequence.
+; Scope          : feature-specific helper.
 UIA_WalkUpToUIItemsView_(el) {
     ; Walk up until we hit ClassName UIItemsView OR Name Items View (List)
     static UIA_ListTypeId := 50008
@@ -7629,29 +7779,12 @@ UIA_WalkUpToUIItemsView_(el) {
     cur := el
     Loop, 25
     {
-        cls := ""
-        try
-            cls := cur.CurrentClassName
-        catch
-            cls := ""
+        info := SafeUIA_GetElementSnapshot(cur, "className|controlType|name")
 
-        if (cls = "UIItemsView")
+        if (info.className = "UIItemsView")
             return cur
 
-        name := ""
-        ctype := ""
-
-        try
-            name := cur.CurrentName
-        catch
-            name := ""
-
-        try
-            ctype := cur.CurrentControlType
-        catch
-            ctype := ""
-
-        if (ctype = UIA_ListTypeId && name = "Items View")
+        if (info.controlType = UIA_ListTypeId && info.name = "Items View")
             return cur
 
         next := ""
@@ -7955,11 +8088,25 @@ IsCaretInEdit(useUIA := true, useMSAA := true) {
     return false
 }
 
+; Purpose        : support the typing/editability gate by answering whether the
+; currently focused UIA element should be treated as an editable text target.
+; Why this exists: the script needs one policy decision for "editable" that
+; combines control-type and pattern checks instead of spreading raw focused-
+; element inspection logic across typing hotpaths.
+; Scope          : feature-specific helper.
 UIA_IsFocusedEditable() {
     global UIA
+    static c_cachedActiveHwnd             := 0
+    static c_cachedFocusNativeHwnd        := 0
+    static c_cachedResult                 := false
+    static c_cachedTick                   := 0
+    static c_preferredEditablePatternMode := ""
+    static k_cachedEditableTtlMs          := 125
 
     if !IsObject(UIA)
         return false
+
+    WinGet, activeHwnd, ID, A
 
     focusEl := ""
     try
@@ -7970,55 +8117,87 @@ UIA_IsFocusedEditable() {
     if !IsObject(focusEl)
         return false
 
-    isEnabled := ""
-    try
-        isEnabled := focusEl.CurrentIsEnabled
-    catch
-        isEnabled := ""
-
-    if (isEnabled = false)
+    info := SafeUIA_GetElementSnapshot(focusEl, "controlType|isEnabled|nativeHwnd")
+    if (info.isEnabled = false)
         return false
 
-    controlType := ""
-    try
-        controlType := focusEl.CurrentControlType
-    catch
-        controlType := ""
-
     ; Direct Edit control type -> editable
-    if (controlType = 50004)
+    if (info.controlType = 50004) {
+        if (activeHwnd && info.nativeHwnd) {
+            c_cachedActiveHwnd      := activeHwnd
+            c_cachedFocusNativeHwnd := info.nativeHwnd
+            c_cachedResult          := true
+            c_cachedTick            := A_TickCount
+        }
         return true
-
-    ; ValuePattern: editable if not read-only
-    valuePat := ""
-    try
-        valuePat := focusEl.GetCurrentPatternAs("Value")
-    catch
-        valuePat := ""
-
-    if IsObject(valuePat)
-    {
-        isReadOnly := ""
-        try
-            isReadOnly := valuePat.CurrentIsReadOnly
-        catch
-            isReadOnly := ""
-
-        if (isReadOnly = false)
-            return true
     }
 
-    ; Optional: TextPattern presence is a strong hint for text controls
-    textPat := ""
-    try
-        textPat := focusEl.GetCurrentPatternAs("Text")
-    catch
-        textPat := ""
+    if (activeHwnd
+     && info.nativeHwnd
+     && activeHwnd = c_cachedActiveHwnd
+     && info.nativeHwnd = c_cachedFocusNativeHwnd
+     && (A_TickCount - c_cachedTick) <= k_cachedEditableTtlMs)
+        return c_cachedResult
 
-    if IsObject(textPat)
-        return true
+    result := false
+    patternOrder := []
+    if (c_preferredEditablePatternMode != "")
+        patternOrder.Push(c_preferredEditablePatternMode)
+    for patternIndex, patternMode in ["Value", "Text"]
+    {
+        if (patternMode != c_preferredEditablePatternMode)
+            patternOrder.Push(patternMode)
+    }
 
-    return false
+    for patternIndex, patternMode in patternOrder
+    {
+        if (patternMode = "Value")
+        {
+            valuePat := ""
+            try
+                valuePat := focusEl.GetCurrentPatternAs("Value")
+            catch
+                valuePat := ""
+
+            if IsObject(valuePat)
+            {
+                isReadOnly := ""
+                try
+                    isReadOnly := valuePat.CurrentIsReadOnly
+                catch
+                    isReadOnly := ""
+
+                if (isReadOnly = false) {
+                    c_preferredEditablePatternMode := "Value"
+                    result := true
+                    break
+                }
+            }
+        }
+        else if (patternMode = "Text")
+        {
+            textPat := ""
+            try
+                textPat := focusEl.GetCurrentPatternAs("Text")
+            catch
+                textPat := ""
+
+            if IsObject(textPat) {
+                c_preferredEditablePatternMode := "Text"
+                result := true
+                break
+            }
+        }
+    }
+
+    if (activeHwnd && info.nativeHwnd) {
+        c_cachedActiveHwnd := activeHwnd
+        c_cachedFocusNativeHwnd := info.nativeHwnd
+        c_cachedResult := result
+        c_cachedTick := A_TickCount
+    }
+
+    return result
 }
 
 MSAA_IsFocusedEditable() {
@@ -9699,6 +9878,7 @@ IsOverException(hWnd := "") {
         || (InStr("InstallShield", tit, True))
         || InStr(ctrlNN, "SysTabControl", True)
         || cl == "#32768"
+        || cl == "MsoCommandBarPopup"
         || cl == "Autohotkey"
         || cl == "AutohotkeyGUI"
         || cl == "SysShadow"
@@ -10770,56 +10950,235 @@ ScheduleFixReleasedModifiers(modifiers := "Shift Alt Ctrl", deferredRuns := 6) {
     if (deferredModifierFixRemaining < deferredRuns)
         deferredModifierFixRemaining := deferredRuns
 
-    ; Start the first delayed pass soon after the caller returns. The follow-up
-    ; passes are scheduled by RunDeferredModifierFix().
+; Start the first delayed pass soon after the caller returns. The follow-up
+; passes are scheduled by RunDeferredModifierFix().
     SetTimer, RunDeferredModifierFix, -40
 }
 
+; Clears the queued Everything Edit1 auto-fit state so context changes or a
+; completed send do not leave a stale deferred Ctrl+NumpadAdd request behind.
+_ClearPendingEverythingEditAdjustState() {
+    global pendingEverythingAdjustCtrl
+    global pendingEverythingAdjustCtrlClass
+    global pendingEverythingAdjustCtrlHwnd
+    global pendingEverythingAdjustHwnd
+    global pendingEverythingAdjustId
+    global pendingEverythingAdjustQueuedTick
+    global pendingEverythingAdjustSourceTick
+
+    pendingEverythingAdjustCtrl       := ""
+    pendingEverythingAdjustCtrlClass  := ""
+    pendingEverythingAdjustCtrlHwnd   := 0
+    pendingEverythingAdjustHwnd       := 0
+    pendingEverythingAdjustId         := 0
+    pendingEverythingAdjustQueuedTick := 0
+    pendingEverythingAdjustSourceTick := 0
+}
+
+; Queues a deferred Everything Edit1 column auto-fit request:
+; capture or accept the current search-box focus context, stamp the latest
+; typing tick, and let a short timer enforce a stronger typing-quiet pause
+; before sending.
+_QueuePendingEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
+    global k_pendingEverythingAdjustRetryMs
+    global pendingEverythingAdjustCtrl
+    global pendingEverythingAdjustCtrlClass
+    global pendingEverythingAdjustCtrlHwnd
+    global pendingEverythingAdjustHwnd
+    global pendingEverythingAdjustId
+    global pendingEverythingAdjustQueuedTick
+    global pendingEverythingAdjustSourceTick
+
+    if (!sourceTick)
+        return false
+
+    targetHwnd      := capturedHwnd
+    targetCtrlNN    := capturedCtrlNN
+    targetCtrlHwnd  := capturedCtrlHwnd
+    targetCtrlClass := capturedCtrlClass
+
+    if (!targetHwnd) {
+        if !_CaptureDeferredFocusContext(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
+            return false
+    }
+
+    if (!targetHwnd || targetCtrlNN != "Edit1")
+        return false
+
+    pendingEverythingAdjustHwnd       := targetHwnd
+    pendingEverythingAdjustCtrl       := targetCtrlNN
+    pendingEverythingAdjustCtrlHwnd   := targetCtrlHwnd
+    pendingEverythingAdjustCtrlClass  := targetCtrlClass
+    pendingEverythingAdjustId += 1
+    pendingEverythingAdjustQueuedTick := A_TickCount
+    pendingEverythingAdjustSourceTick := sourceTick
+    SetTimer, FlushPendingEverythingEditAdjust, % -k_pendingEverythingAdjustRetryMs
+    return true
+}
+
+; Returns true only for key events that should arm Everything's deferred
+; search-box auto-fit path. Keep this trigger list separate from KeyTrack() so
+; the queueing decision is documented once and can be tuned in one place.
+_IsEverythingEditAdjustTrigger(hotkey) {
+    global k_keys
+    global k_numbers
+
+    if (hotkey = "" || hotkey = "Enter" || hotkey = "LButton")
+        return false
+
+    hotkeyKey := SubStr(hotkey, 2)
+    return (   InStr(k_keys, hotkeyKey, False)
+            || InStr(k_numbers, hotkeyKey, False)
+            || hotkey == "~:"
+            || hotkey == "~/"
+            || hotkey == "$~Space"
+            || hotkey == "$CapsLock"
+            || hotkey == "$~Backspace")
+}
+
+; KeyTrack() queue helper for Everything Edit1:
+; allow one deferred auto-fit request per typing tick, require a qualifying
+; trigger hotkey, capture the exact current Edit1 identity once, and then hand
+; that context to the shared deferred-send queue.
+_TryQueueEverythingEditAdjustFromKeyTrack(sourceTick, hotkey, activeHwnd := 0) {
+    global pendingEverythingAdjustSourceTick
+
+    if (!sourceTick || pendingEverythingAdjustSourceTick = sourceTick)
+        return false
+
+    if (!_IsEverythingEditAdjustTrigger(hotkey))
+        return false
+
+    if !_CaptureDeferredFocusContext(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass, activeHwnd)
+        return false
+
+    if (targetCtrlNN != "Edit1")
+        return false
+
+    return _QueuePendingEverythingEditAdjust(sourceTick, targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
+}
+
+; Everything Edit1 pending-work validator:
+; require the same active search box, the same request token, and when possible
+; the same exact control HWND/class before the deferred Ctrl+NumpadAdd send runs.
+_IsPendingEverythingEditAdjustStillValid(expectedId := 0) {
+    global k_pendingEverythingAdjustMaxAgeMs
+    global pendingEverythingAdjustCtrl
+    global pendingEverythingAdjustCtrlClass
+    global pendingEverythingAdjustCtrlHwnd
+    global pendingEverythingAdjustHwnd
+    global pendingEverythingAdjustId
+    global pendingEverythingAdjustQueuedTick
+
+    currentId := pendingEverythingAdjustId
+    if (!expectedId)
+        expectedId := currentId
+
+    if !_IsDeferredWorkStillValid(pendingEverythingAdjustHwnd, pendingEverythingAdjustCtrl, expectedId, currentId, pendingEverythingAdjustQueuedTick, k_pendingEverythingAdjustMaxAgeMs)
+        return false
+
+    if (!pendingEverythingAdjustCtrlHwnd && pendingEverythingAdjustCtrlClass = "")
+        return true
+
+    if !_TryGetFocusedControlSnapshot(pendingEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+        return false
+
+    if (pendingEverythingAdjustCtrl != "" && currentCtrlNN != pendingEverythingAdjustCtrl)
+        return false
+
+    if (pendingEverythingAdjustCtrlHwnd && currentCtrlHwnd != pendingEverythingAdjustCtrlHwnd)
+        return false
+
+    if (pendingEverythingAdjustCtrlClass != "" && currentCtrlClass != pendingEverythingAdjustCtrlClass)
+        return false
+
+    return true
+}
+
+; Shared guarded Ctrl+NumpadAdd wrapper:
+; re-check any queued work token, optional focused control, optional typing-quiet
+; gate, and then delegate to the low-level send helper only if the action is
+; still safe for the original deferred target.
+_SendCtrlNumpadAddIfStillValid(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0, guardCtrlNN := "", requiredTypingQuietMs := 0, expectedDeferredId := 0, currentDeferredId := 0, queuedTick := 0, maxAgeMs := 0) {
+    if ((guardHwnd || guardCtrlNN != "" || expectedDeferredId || queuedTick || maxAgeMs)
+     && !_IsDeferredWorkStillValid(guardHwnd, guardCtrlNN, expectedDeferredId, currentDeferredId, queuedTick, maxAgeMs))
+        return false
+
+    if (requiredTypingQuietMs && !_IsDeferredTypingQuiet(requiredTypingQuietMs))
+        return false
+
+    return SendCtrlNumpadAdd(reconcilePassCount, guardRequestId, guardQuietMs, guardHwnd)
+}
+
+; Deferred Everything Edit1 Ctrl+NumpadAdd flush:
+; wait for a stronger post-typing idle window, confirm the same search field
+; still owns focus, then send the column auto-fit chord as late as possible.
+FlushPendingEverythingEditAdjust:
+    currentRequestId := pendingEverythingAdjustId
+    if (!currentRequestId || !pendingEverythingAdjustHwnd)
+        Return
+
+    if (!_IsPendingEverythingEditAdjustStillValid(currentRequestId))
+    {
+        if (currentRequestId = pendingEverythingAdjustId)
+            _ClearPendingEverythingEditAdjustState()
+        Return
+    }
+
+    if (!_IsDeferredTypingQuiet(k_pendingEverythingAdjustTypingQuietMs))
+    {
+        SetTimer, FlushPendingEverythingEditAdjust, % -k_pendingEverythingAdjustRetryMs
+        Return
+    }
+
+    if (_SendCtrlNumpadAddIfStillValid(6, 0, 0, pendingEverythingAdjustHwnd, pendingEverythingAdjustCtrl, k_pendingEverythingAdjustTypingQuietMs, currentRequestId, pendingEverythingAdjustId, pendingEverythingAdjustQueuedTick, k_pendingEverythingAdjustMaxAgeMs))
+    {
+        if (currentRequestId = pendingEverythingAdjustId)
+            _ClearPendingEverythingEditAdjustState()
+        Return
+    }
+
+    if (currentRequestId != pendingEverythingAdjustId)
+        Return
+
+    if (!_IsPendingEverythingEditAdjustStillValid(currentRequestId))
+    {
+        _ClearPendingEverythingEditAdjustState()
+        Return
+    }
+
+    if (!_IsDeferredTypingQuiet(k_pendingEverythingAdjustTypingQuietMs))
+        SetTimer, FlushPendingEverythingEditAdjust, % -k_pendingEverythingAdjustRetryMs
+Return
+
 KeyTrack() {
-    global k_keys, k_numbers, StopAutoFix, TimeOfLastHotkeyTyped, blockKeys
+    global StopAutoFix, TimeOfLastHotkeyTyped
 
     ListLines, Off
 
-    WinGetClass, currClass, A
+    activeHwnd := WinExist("A")
+    WinGetClass, currClass, ahk_id %activeHwnd%
     If (InStr(currClass, "EVERYTHING", True)) {
-        ControlGetFocus, currCtrl, A
-        If (currCtrl == "Edit1") {
-            StopAutoFix := True
-            ; A_PriorKey and Loops - How It Works
-            ; A_PriorKey reflects the last physical key pressed, even if that key was pressed during a Loop.
-            ; You can read A_PriorKey at any point in the Loop, and it will show the most recent key pressed up to that moment.
-            ; Require a short physical-idle gap before blocking keys so we do not
-            ; enter blockKeys in the middle of the user's final keydown/keyup cycle.
-            ; tooltip, % "lastKey- " . A_PriorKey . " - " . A_TickCount-TimeOfLastHotkeyTyped
-            If (   TimeOfLastHotkeyTyped
-                ; && ((A_TickCount-TimeOfLastHotkeyTyped) > 250)
-                && (A_TimeIdlePhysical >= 150)
-                && (A_ThisHotkey != "Enter" && A_ThisHotkey != "LButton")
-                && (   InStr(k_keys,    Substr(A_ThisHotkey,2), false)
-                    || InStr(k_numbers, Substr(A_ThisHotkey,2), false)
-                    || A_ThisHotkey == "~:"
-                    || A_ThisHotkey == "~/"
-                    || A_ThisHotkey == "$~Space"
-                    || A_ThisHotkey == "$CapsLock"
-                    || A_ThisHotkey == "$~Backspace") ) {
-
-                SetTimer, KeyTrack, Off
-
-                blockKeys := true
-                Send, ^{NumpadAdd}
-                blockKeys := false
-
-                SetTimer, KeyTrack, On
-                TimeOfLastHotkeyTyped :=
-            }
-            StopAutoFix := False
+        StopAutoFix := True
+        ; Everything/Edit1 now follows the same shared deferred-work shape as
+        ; the typing rewrite timers: qualify the key event, capture the exact
+        ; current search-box identity once, queue the work, and let the timer
+        ; handle the stronger quiet-gap revalidation before sending.
+        if (!_TryQueueEverythingEditAdjustFromKeyTrack(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd))
+        {
+            if (!_IsDeferredWorkStillValid(activeHwnd, "Edit1"))
+                _ClearPendingEverythingEditAdjustState()
         }
+        StopAutoFix := False
     }
     Else If (currClass == "XLMAIN") {
+        _ClearPendingEverythingEditAdjustState()
         StopAutoFix := True
     }
-    Else
+    Else {
+        _ClearPendingEverythingEditAdjustState()
         StopAutoFix := False
+    }
 
     ListLines, On
 Return
@@ -10873,6 +11232,7 @@ MouseIsOverTitleBar(xPos := "", yPos := "", excludeCaptions := True) {
         || (mClass == "ProgMan")
         || (mClass == "TaskListThumbnailWnd")
         || (mClass == "#32768")
+        || (mClass == "MsoCommandBarPopup")
         || (mClass == "Net UI Tool Window"))
         return False
 
@@ -10978,6 +11338,7 @@ _GetTitleBarProbeState(xPos := "", yPos := "", excludeCaptions := True, windowUn
         || (mClass == "ProgMan")
         || (mClass == "TaskListThumbnailWnd")
         || (mClass == "#32768")
+        || (mClass == "MsoCommandBarPopup")
         || (mClass == "Net UI Tool Window"))
         return ""
 
@@ -12119,6 +12480,7 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
         && (mClass != "ProgMan")
         && (mClass != "TaskListThumbnailWnd")
         && (mClass != "#32768")
+        && (mClass != "MsoCommandBarPopup")
         && (mClass != "Net UI Tool Window")) {
 
         WinGetPosEx(WindowUnderMouseID,x,y,w,h)
@@ -14957,7 +15319,7 @@ FlushTypingAutoFixRefresh:
 
     ; Retry while physical typing is still in flight so the slow accessibility
     ; probe does not jump back onto the same burst of live key handling.
-    if (A_TimeIdlePhysical < k_typingAutoFixRefreshDelayMs)
+    if (!_IsDeferredTypingQuiet(k_typingAutoFixRefreshDelayMs))
     {
         SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
         Return
@@ -16730,12 +17092,11 @@ SafeUIA_ElementFromPoint(x, y, default := "", transactionTimeout := 250, connect
     searching inside that window's automation tree.
 
     Parameters:
-    hwnd = target window/control handle to convert into a UIA root element.
-    default = value returned if hwnd is blank or UIA lookup fails.
-    activateChromiumAccessibility := False = pass-through flag for
-    UIA_Interface's ElementFromHandle(); when True, let the library try to
-    activate Chromium accessibility for that handle if needed.
-    transactionTimeout            := 2000 = per-call UIA transaction timeout in ms.
+    hwnd                                   = target window/control handle to convert into a UIA root element.
+    default                                = value returned if hwnd is blank or UIA lookup fails.
+    activateChromiumAccessibility := False = pass-through flag for UIA_Interface's ElementFromHandle(); when True, let the library try to
+                                     activate Chromium accessibility for that handle if needed.
+    transactionTimeout            := 2000  = per-call UIA transaction timeout in ms.
     connectionTimeout             := 20000 = per-call UIA connection timeout in ms.
 */
 SafeUIA_ElementFromHandle(hwnd, default := "", activateChromiumAccessibility := False, transactionTimeout := 2000, connectionTimeout := 20000) {
@@ -16808,13 +17169,11 @@ SafeUIA_ElementFromHandle(hwnd, default := "", activateChromiumAccessibility := 
     subtree search if needed.
 
     Parameters:
-    rootEl = starting UIA element whose subtree will be searched.
-    name = UIA Name property to match.
-    default = value returned if the search fails.
-    childScope    := 0x2  = first-pass scope, UIA_TreeScope_Children, meaning
-    search only direct children of rootEl.
-    fallbackScope := 0x4  = second-pass scope, UIA_TreeScope_Descendants,
-    meaning search all descendants under rootEl.
+    rootEl                = starting UIA element whose subtree will be searched.
+    name                  = UIA Name property to match.
+    default               = value returned if the search fails.
+    childScope    := 0x2  = first-pass scope, UIA_TreeScope_Children, meaning search only direct children of rootEl.
+    fallbackScope := 0x4  = second-pass scope, UIA_TreeScope_Descendants, meaning search all descendants under rootEl.
     matchMode     := 3    = exact-name match by default.
     caseSensitive := True = keep case-sensitive string matching by default.
     cacheRequest  := ""   = no UIA cache request unless the caller supplies one.
@@ -16844,13 +17203,11 @@ SafeUIA_FindFirstByNameFast(rootEl, name, default := "", childScope := 0x2, fall
     remaining budget on a broader search so common cases resolve sooner.
 
     Parameters:
-    rootEl = starting UIA element whose subtree will be polled.
-    expr = UIA_Interface FindFirstBy()/WaitElementExist() expression, such as
-    "Name=Open" or "ControlType=Button".
-    default = value returned if nothing is found before timeout.
+    rootEl                  = starting UIA element whose subtree will be polled.
+    expr                    = UIA_Interface FindFirstBy()/WaitElementExist() expression, such as "Name=Open" or "ControlType=Button".
+    default                 = value returned if nothing is found before timeout.
     fastTimeout     := 200  = initial narrow-search budget in ms.
-    fallbackTimeout := 5000 = total fallback budget in ms; the time already
-    spent in the fast pass is subtracted before the broader retry.
+    fallbackTimeout := 5000 = total fallback budget in ms; the time already spent in the fast pass is subtracted before the broader retry.
     fastScope       := 0x2  = UIA_TreeScope_Children for the quick first pass.
     fallbackScope   := 0x4  = UIA_TreeScope_Descendants for the broader retry.
     matchMode       := 3    = exact-match mode by default.
@@ -16892,13 +17249,14 @@ SafeUIA_WaitElementExistFast(rootEl, expr, default := "", fastTimeout := 200, fa
     Parameters:
     el = UIA element to read from.
     fields := "" = pipe-delimited property list to fetch. Blank means fetch the
-    wrapper's standard set:
-    autoId|className|controlType|localizedType|name|nativeHwnd
+                    wrapper's standard set:
+                    autoId|className|controlType|localizedType|name|nativeHwnd
 
     Returned object keys:
     autoId        = UIA AutomationId
     className     = UIA ClassName
     controlType   = numeric UIA control-type ID
+    isEnabled     = UIA enabled/disabled flag, when requested
     localizedType = human-readable localized control-type label
     name          = UIA Name
     nativeHwnd    = provider-reported native window handle, if any
@@ -16908,6 +17266,7 @@ SafeUIA_GetElementSnapshot(el, fields := "") {
     info := { autoId: ""
         , className: ""
         , controlType: ""
+        , isEnabled: ""
         , localizedType: ""
         , name: ""
         , nativeHwnd: 0 }
@@ -16932,6 +17291,12 @@ SafeUIA_GetElementSnapshot(el, fields := "") {
             info.controlType := el.CurrentControlType
         catch e
             info.controlType := ""
+    }
+    if InStr(fieldList, "|isEnabled|") {
+        try
+            info.isEnabled := el.CurrentIsEnabled
+        catch e
+            info.isEnabled := ""
     }
     if InStr(fieldList, "|localizedType|") {
         try
@@ -16959,7 +17324,7 @@ SafeUIA_GetElementSnapshot(el, fields := "") {
     Returns default if the element is missing or the UIA property read fails.
 
     Parameters:
-    el = UIA element to read from.
+    el            = UIA element to read from.
     default := "" = fallback value if the property cannot be read.
 */
 SafeUIA_GetControlType(el, default := "") {
@@ -16976,7 +17341,7 @@ SafeUIA_GetControlType(el, default := "") {
     "pane", instead of the numeric UIA control type ID.
 
     Parameters:
-    el = UIA element to read from.
+    el            = UIA element to read from.
     default := "" = fallback value if the property cannot be read.
 */
 SafeUIA_GetLocalizedControlType(el, default := "") {
@@ -16992,7 +17357,7 @@ SafeUIA_GetLocalizedControlType(el, default := "") {
     automation clients use to identify the element.
 
     Parameters:
-    el = UIA element to read from.
+    el            = UIA element to read from.
     default := "" = fallback value if the property cannot be read.
 */
 SafeUIA_GetName(el, default := "") {
@@ -17008,7 +17373,7 @@ SafeUIA_GetName(el, default := "") {
     such as UIItem, UIItemsView, DirectUI, or other framework-specific names.
 
     Parameters:
-    el = UIA element to read from.
+    el            = UIA element to read from.
     default := "" = fallback value if the property cannot be read.
 */
 SafeUIA_GetClassName(el, default := "") {
@@ -17024,9 +17389,9 @@ SafeUIA_GetClassName(el, default := "") {
     vertical layout information.
 
     Parameters:
-    el = UIA element to read from.
-    default := 0 = fallback orientation value if the property cannot be read.
-    Common values are 0 = none/unspecified, 1 = horizontal, 2 = vertical.
+    el                  = UIA element to read from.
+    default := 0        = fallback orientation value if the property cannot be read.
+                          Common values are 0 = none/unspecified, 1 = horizontal, 2 = vertical.
 */
 SafeUIA_GetOrientation(el, default := 0) {
     if !IsObject(el)
@@ -17072,9 +17437,9 @@ SafeUIA_GetAutoId(el) {
     for content-view traversal, not just structural UI chrome.
 
     Parameters:
-    el = UIA element to read from.
+    el           = UIA element to read from.
     default := 0 = fallback value if the property cannot be read.
-    Common values are 0 = False and 1 = True.
+                   Common values are 0 = False and 1 = True.
 */
 SafeUIA_GetIsContentElement(el, default := 0) {
     if !IsObject(el)
@@ -17091,9 +17456,9 @@ SafeUIA_GetIsContentElement(el, default := 0) {
     the control view of the automation tree.
 
     Parameters:
-    el = UIA element to read from.
+    el           = UIA element to read from.
     default := 0 = fallback value if the property cannot be read.
-    Common values are 0 = False and 1 = True.
+                   Common values are 0 = False and 1 = True.
 */
 SafeUIA_GetIsControlElement(el, default := 0) {
     if !IsObject(el)
@@ -17698,7 +18063,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:ceis::cies
 :?:eses::esses
 :?:tn::nt
-:?:toir:itor
+:?:toir::itor
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
