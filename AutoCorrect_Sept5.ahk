@@ -144,9 +144,9 @@ Global typingAutoFixRefreshQueuedTick              := 0
 ; detect that a newer key event already replaced their context and should win.
 Global typingFixSeq                                := 0
 ; Maximum lifetime for a deferred typing rewrite before it is discarded. Once a
-; queued fix has been pending longer than this limit, it is assumed the user may
+; queued fix has been tbc longer than this limit, it is assumed the user may
 ; already be typing in a newer text context, so the delayed Send is skipped.
-Global k_pendingTypingFixMaxAgeMs                  := 250
+Global k_tbcTypingFixMaxAgeMs                  := 250
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
 Global clipPreferExplicitCtrlV                     := False
@@ -162,32 +162,32 @@ Global disableEnter                                := False
 ; +----------------------------------------------------------------------------+
 ; Focused control name captured when Everything Edit1 auto-fit is queued so
 ; the deferred send can require the same search field before firing.
-Global pendingEverythingAdjustCtrl                 := ""
+Global tbcEverythingAdjustCtrl                 := ""
 ; Focused control class captured with the queued Everything auto-fit so the
 ; flush step can require the same concrete control identity when available.
-Global pendingEverythingAdjustCtrlClass            := ""
+Global tbcEverythingAdjustCtrlClass            := ""
 ; Focused control HWND captured when Everything auto-fit is queued so the flush
 ; step can reject a later Edit1 from a different control instance.
-Global pendingEverythingAdjustCtrlHwnd             := 0
+Global tbcEverythingAdjustCtrlHwnd             := 0
 ; Active Everything window captured for the deferred search-box auto-fit send.
-Global pendingEverythingAdjustHwnd                 := 0
+Global tbcEverythingAdjustHwnd                 := 0
 ; Monotonic token incremented for each newer Everything Edit1 auto-fit request
 ; so older timer callbacks can detect that typing already superseded them.
-Global pendingEverythingAdjustId                   := 0
+Global tbcEverythingAdjustId                   := 0
 ; Tick count recorded when the Everything Edit1 auto-fit request was queued.
-Global pendingEverythingAdjustQueuedTick           := 0
+Global tbcEverythingAdjustQueuedTick           := 0
 ; Source typing tick associated with the current Everything auto-fit request so
 ; KeyTrack queues at most one deferred send per physical keypress burst update.
-Global pendingEverythingAdjustSourceTick           := 0
+Global tbcEverythingAdjustSourceTick           := 0
 ; Maximum lifetime for a deferred Everything Edit1 auto-fit request before it
 ; is dropped as stale rather than sent into a newer typing context.
-Global k_pendingEverythingAdjustMaxAgeMs           := 750
+Global k_tbcEverythingAdjustMaxAgeMs           := 750
 ; Short retry delay for the queued Everything Edit1 auto-fit timer while
 ; waiting for the stronger typing-quiet gate to become true.
-Global k_pendingEverythingAdjustRetryMs            := 40
+Global k_tbcEverythingAdjustRetryMs            := 40
 ; Minimum physical-idle gap required before Everything Edit1 is allowed to
 ; receive the deferred Ctrl+NumpadAdd column auto-fit chord.
-Global k_pendingEverythingAdjustTypingQuietMs      := 110
+Global k_tbcEverythingAdjustTypingQuietMs      := 110
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -195,94 +195,94 @@ Global k_pendingEverythingAdjustTypingQuietMs      := 110
 ; +----------------------------------------------------------------------------+
 ; Window class for the most recent Explorer/file-dialog wheel target so the
 ; deferred adjust step can confirm the queued request still points at the same shell UI.
-Global pendingAdjustColumnsClass                   := ""
+Global tbcAdjustColumnsClass                   := ""
 ; Control under the mouse when the wheel event was queued; used as a hint before
 ; resolving the final DirectUI/ListView target at send time.
-Global pendingAdjustColumnsCtrl                    := ""
+Global tbcAdjustColumnsCtrl                    := ""
 ; Top-level Explorer or #32770 dialog HWND that should receive the deferred
 ; Ctrl+NumpadAdd once scrolling has gone quiet.
-Global pendingAdjustColumnsHwnd                    := 0
+Global tbcAdjustColumnsHwnd                    := 0
 ; Tick count of the most recent qualifying wheel event so AdjustColumns can defer
 ; work until the user pauses scrolling and cancel if wheel activity resumes.
-Global pendingAdjustColumnsLastWheelTick           := 0
+Global tbcAdjustColumnsLastWheelTick           := 0
 ; Minimum quiet period after the last wheel event before attempting Explorer
 ; column auto-fit; this avoids interrupting fast continuous scrolling.
-Global k_pendingAdjustColumnsQuietMs               := 110
+Global k_tbcAdjustColumnsQuietMs               := 110
 ; Stronger quiet period for #32770 file dialogs, where DirectUI scroll activity and
 ; deferred Ctrl+NumpadAdd sends are more likely to overlap visibly.
-Global k_pendingAdjustColumnsDialogQuietMs         := 180
+Global k_tbcAdjustColumnsDialogQuietMs         := 180
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
-Global pendingAdjustColumnsRequestId               := 0
+Global tbcAdjustColumnsRequestId               := 0
 ; Short retry delay used when the timer wakes up before scrolling is truly quiet,
 ; allowing fast re-checks without doing focus/send work on every wheel tick.
-Global k_pendingAdjustColumnsRetryMs               := 35
+Global k_tbcAdjustColumnsRetryMs               := 35
 ; Brief final hold just before injecting Ctrl+NumpadAdd so a last-moment wheel event
-; can update the pending request state and cause the send to abort cleanly.
-Global k_pendingAdjustColumnsSendGuardMs           := 20
+; can update the tbc request state and cause the send to abort cleanly.
+Global k_tbcAdjustColumnsSendGuardMs           := 20
 ; Cached final Explorer target ClassNN for the most recent wheel-adjust window so
 ; repeated pause/resume cycles can skip DirectUI/ListView rediscovery work.
-Global c_pendingAdjustColumnsTargetCtrl            := ""
+Global c_tbcAdjustColumnsTargetCtrl            := ""
 ; Top-level window HWND that owns the cached Explorer target ClassNN; the cache is
 ; only valid when a later wheel-adjust request points at this same shell window.
-Global c_pendingAdjustColumnsTargetHwnd            := 0
+Global c_tbcAdjustColumnsTargetHwnd            := 0
 ; Tick count when the cached Explorer target was last confirmed, limiting reuse to
 ; a short burst where the folder view structure is unlikely to have changed.
-Global c_pendingAdjustColumnsTargetTick            := 0
+Global c_tbcAdjustColumnsTargetTick            := 0
 ; Maximum age for the cached Explorer target before AdjustColumns falls back to
 ; full target resolution to avoid using a stale DirectUI/ListView guess.
-Global k_pendingAdjustColumnsTargetTtlMs           := 350
+Global k_tbcAdjustColumnsTargetTtlMs           := 350
 ; Deferred typing correction state so punctuation and capitalization rewrites can
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
 ; Slash uses this slot only for the deferred "/ " rewrite. The slash+Enter path
 ; is handled inline in the custom $Enter hotkey instead of through this timer.
-Global pendingFixSlashAction                       := ""
+Global tbcFixSlashAction                       := ""
 ; Focused control name captured when the "/ " fix is queued so the timer can
 ; cancel instead of rewriting text after focus moves to another control.
-Global pendingFixSlashCtrl                         := ""
+Global tbcFixSlashCtrl                         := ""
 ; Focused control class captured with the deferred slash-space fix so classic
 ; Edit/RichEdit targets can use the same safer message-based phase-2 rewrite
 ; path that Hoty now uses.
-Global pendingFixSlashCtrlClass                    := ""
+Global tbcFixSlashCtrlClass                    := ""
 ; Focused control HWND captured when the slash-space fix is queued so the flush
 ; step can require the exact same control instance instead of trusting only the
 ; ClassNN string.
-Global pendingFixSlashCtrlHwnd                     := 0
+Global tbcFixSlashCtrlHwnd                     := 0
 ; Active top-level window captured when the deferred slash-space rewrite is armed;
 ; the flush step requires this same window to still be active before sending.
-Global pendingFixSlashHwnd                         := 0
+Global tbcFixSlashHwnd                         := 0
 ; Sequence token assigned when the slash-space rewrite is queued so older timer
 ; callbacks can detect that a newer typing event already superseded the work.
-Global pendingFixSlashId                           := 0
+Global tbcFixSlashId                           := 0
 ; Tick count recorded when the slash-space rewrite is queued, used to drop the
-; request once it has been pending longer than k_pendingTypingFixMaxAgeMs.
-Global pendingFixSlashQueuedTick                   := 0
+; request once it has been tbc longer than k_tbcTypingFixMaxAgeMs.
+Global tbcFixSlashQueuedTick                   := 0
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
-Global pendingHotyCtrl                             := ""
+Global tbcHotyCtrl                             := ""
 ; Focused control class captured with the deferred Hoty fix so the flush step can
 ; choose the safer message-based rewrite path for classic Edit/RichEdit targets.
-Global pendingHotyCtrlClass                        := ""
+Global tbcHotyCtrlClass                        := ""
 ; Focused control HWND captured when the Hoty fix is queued so the flush step can
 ; require the exact same control instance, not just the same ClassNN string.
-Global pendingHotyCtrlHwnd                         := 0
+Global tbcHotyCtrlHwnd                         := 0
 ; Active top-level window captured for the deferred Hoty fix, preventing the timer
 ; from replaying a capitalization rewrite into whichever window became active later.
-Global pendingHotyHwnd                             := 0
+Global tbcHotyHwnd                             := 0
 ; Sequence token assigned to the deferred Hoty fix so only the newest queued
 ; typing rewrite can fire and any older timer callbacks self-cancel.
-Global pendingHotyId                               := 0
+Global tbcHotyId                               := 0
 ; Tick count captured when the Hoty fix is queued, allowing old capitalization fixes
 ; to expire quickly instead of landing after the surrounding typing context changed.
-Global pendingHotyQueuedTick                       := 0
+Global tbcHotyQueuedTick                       := 0
 ; Replacement character captured from the prior capital hotkey so the deferred Hoty
 ; flush can send the intended rewrite only after the live key cycle has settled.
-Global pendingHotyReplacement                      := ""
+Global tbcHotyReplacement                      := ""
 ; Current lowercase trigger character captured when the Hoty fix is queued so a
 ; later classic-control flush can confirm the exact prior-capital + current-letter
 ; text context before replacing anything.
-Global pendingHotyTriggerChar                      := ""
+Global tbcHotyTriggerChar                      := ""
 ; +----------------------------------------------------------------------------+
 ; | Post-Activation Explorer Click Recovery                                    |
 ; | Captures the first click into an inactive Explorer/file-dialog window so a |
@@ -764,7 +764,15 @@ EnableTimers:
 Return
 
 WatchLButtonResizeSync:
-    if (!lButtonResizeSyncActive || !GetKeyState("LButton", "P")) {
+    if (!lButtonResizeSyncActive) {
+        EndLButtonResizeSync()
+        SetTimer, WatchLButtonResizeSync, Off
+        GoSub, EnableTimers
+        return
+    }
+
+    if !GetKeyState("LButton", "P") {
+        _FinalizeLButtonResizeSync()
         EndLButtonResizeSync()
         SetTimer, WatchLButtonResizeSync, Off
         GoSub, EnableTimers
@@ -884,7 +892,7 @@ InitVDA()
     MoveWindowToDesktopNumberProc       := _gp("MoveWindowToDesktopNumber")
     IsPinnedWindowProc                  := _gp("IsPinnedWindow")
 
-    ; --- optional exports (may be missing depending on build/OS) ---
+    ; --- optional exports (may be missing detbc on build/OS) ---
     GetDesktopNameProc                  := _gp("GetDesktopName")
     SetDesktopNameProc                  := _gp("SetDesktopName")
     CreateDesktopProc                   := _gp("CreateDesktop")
@@ -1046,8 +1054,8 @@ LL_MouseHook(nCode, wParam, lParam)
 }
 
 MarkKeypressTime:
-    if (!StopAutoFix && (pendingFixSlashAction || pendingHotyReplacement))
-        CancelPendingTypingFixes(True, False)
+    if (!StopAutoFix && (tbcFixSlashAction || tbcHotyReplacement))
+        CancelTbcTypingFixes(True, False)
     TimeOfLastHotkeyTyped := A_TickCount
     lastHotkeyTyped       := A_ThisHotkey
 Return
@@ -1138,14 +1146,14 @@ Return
 Hoty:
     CapCount := (IsPriorHotKeyCapital() && A_TimeSincePriorHotkey < 999) ? CapCount + 1 : 1 ; note that CapCount is ALWAYS at least 1
     If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
-        CancelPendingTypingFixes(False, False)
+        CancelTbcTypingFixes(False, False)
         typingFixSeq += 1
-        _CaptureDeferredFocusContext(pendingHotyHwnd, pendingHotyCtrl, pendingHotyCtrlHwnd, pendingHotyCtrlClass)
-        pendingHotyId          := typingFixSeq
-        pendingHotyQueuedTick  := A_TickCount
-        pendingHotyReplacement := SubStr(A_PriorHotKey,3,1)
-        pendingHotyTriggerChar := SubStr(A_ThisHotKey,2,1)
-        SetTimer, FlushPendingHotyReplacement, -40
+        _CaptureDeferredFocusContext(tbcHotyHwnd, tbcHotyCtrl, tbcHotyCtrlHwnd, tbcHotyCtrlClass)
+        tbcHotyId          := typingFixSeq
+        tbcHotyQueuedTick  := A_TickCount
+        tbcHotyReplacement := SubStr(A_PriorHotKey,3,1)
+        tbcHotyTriggerChar := SubStr(A_ThisHotKey,2,1)
+        SetTimer, FlushTbcHotyReplacement, -40
         CapCount := 1
     }
     If StopAutoFix
@@ -1173,23 +1181,23 @@ Return
 ; |  |               prior capital with EM_SETSEL/EM_REPLACESEL
 ; |  |          +--> otherwise keep the older blind-send fallback for non-classic
 ; |  |               editors only
-FlushPendingHotyReplacement:
-    if (!pendingHotyReplacement)
+FlushTbcHotyReplacement:
+    if (!tbcHotyReplacement)
         Return
 
-    ; Drop the queued rewrite if it has been pending longer than
-    ; k_pendingTypingFixMaxAgeMs. Once that short age budget is exceeded, the user
+    ; Drop the queued rewrite if it has been tbc longer than
+    ; k_tbcTypingFixMaxAgeMs. Once that short age budget is exceeded, the user
     ; may already be editing later text and this delayed Send is no longer safe.
-    if (pendingHotyQueuedTick && (A_TickCount - pendingHotyQueuedTick) > k_pendingTypingFixMaxAgeMs)
+    if (tbcHotyQueuedTick && (A_TickCount - tbcHotyQueuedTick) > k_tbcTypingFixMaxAgeMs)
     {
-        _ClearPendingHotyState()
+        _ClearTbcHotyState()
         Return
     }
 
     ; Let the physical key cycle settle before rewriting the prior capital letter.
     if (!_IsDeferredTypingQuiet(40))
     {
-        SetTimer, FlushPendingHotyReplacement, -40
+        SetTimer, FlushTbcHotyReplacement, -40
         Return
     }
 
@@ -1198,9 +1206,9 @@ FlushPendingHotyReplacement:
     ; still has focus when we were able to capture one, the exact same control
     ; instance/class still matches when captured, and the queued work is still
     ; within the short freshness budget.
-    if (!_IsPendingHotyStillValid())
+    if (!_IsTbcHotyStillValid())
     {
-        _ClearPendingHotyState()
+        _ClearTbcHotyState()
         Return
     }
 
@@ -1208,50 +1216,50 @@ FlushPendingHotyReplacement:
     ; text immediately before the caret is still "Capital + current lowercase"
     ; and replace only that prior capital. If that context drifted, cancel
     ; instead of guessing with a blind caret-relative Send.
-    if (_TypingAutoFixIsClassicEditClass(pendingHotyCtrlClass))
+    if (_TypingAutoFixIsClassicEditClass(tbcHotyCtrlClass))
     {
         StopAutoFix := True
-        _TryApplyPendingHotyClassicRewrite()
+        _TryApplyTbcHotyClassicRewrite()
         StopAutoFix := False
-        _ClearPendingHotyState()
+        _ClearTbcHotyState()
         Return
     }
 
     ; Non-classic editors keep the older blind-send fallback because there is no
     ; equally reliable message-based single-character rewrite path available.
     StopAutoFix := True
-    Send % "{Left}{BS}" . pendingHotyReplacement . "{Right}"
+    Send % "{Left}{BS}" . tbcHotyReplacement . "{Right}"
     StopAutoFix := False
-    _ClearPendingHotyState()
+    _ClearTbcHotyState()
 Return
 
 ; Shared FixSlash queue helper:
 ; slash+Space and non-classic slash+Enter now follow the same deferred
-; queue/idle/validate/apply pattern already used by pendingHoty. The difference
+; queue/idle/validate/apply pattern already used by tbcHoty. The difference
 ; is that slash+Space lets the real Space land immediately, while slash+Enter
 ; withholds Enter until the queued slash decision is resolved.
-_QueuePendingFixSlash(action) {
-    global pendingFixSlashAction
-    global pendingFixSlashCtrl
-    global pendingFixSlashCtrlClass
-    global pendingFixSlashCtrlHwnd
-    global pendingFixSlashHwnd
-    global pendingFixSlashId
-    global pendingFixSlashQueuedTick
+_QueueTbcFixSlash(action) {
+    global tbcFixSlashAction
+    global tbcFixSlashCtrl
+    global tbcFixSlashCtrlClass
+    global tbcFixSlashCtrlHwnd
+    global tbcFixSlashHwnd
+    global tbcFixSlashId
+    global tbcFixSlashQueuedTick
     global typingFixSeq
 
-    CancelPendingTypingFixes(False, False)
+    CancelTbcTypingFixes(False, False)
     typingFixSeq += 1
-    pendingFixSlashAction     := action
-    _CaptureDeferredFocusContext(pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashCtrlHwnd, pendingFixSlashCtrlClass)
-    pendingFixSlashId         := typingFixSeq
-    pendingFixSlashQueuedTick := A_TickCount
-    SetTimer, FlushPendingFixSlash, -40
+    tbcFixSlashAction     := action
+    _CaptureDeferredFocusContext(tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashCtrlHwnd, tbcFixSlashCtrlClass)
+    tbcFixSlashId         := typingFixSeq
+    tbcFixSlashQueuedTick := A_TickCount
+    SetTimer, FlushTbcFixSlash, -40
 }
 
 ; Inline slash+Enter fast path for classic edits:
-; non-classic editors now defer slash+Enter through the same pending-work
-; pattern as pendingHoty and slash+Space. This helper is kept only for classic
+; non-classic editors now defer slash+Enter through the same tbc-work
+; pattern as tbcHoty and slash+Space. This helper is kept only for classic
 ; Edit/RichEdit controls where the old immediate Enter-thread behavior has been
 ; the lower-risk path.
 _CommitFixSlashEnterInline() {
@@ -1316,7 +1324,7 @@ FixSlash:
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
     If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
-        _QueuePendingFixSlash("space")
+        _QueueTbcFixSlash("space")
         disableEnter              := False
     }
     If IsPriorHotKeyLowerCase()   ; as long as a letter key is pressed we record the priorprior hotkey
@@ -1326,7 +1334,7 @@ FixSlash:
 Return
 
 ; Deferred FixSlash rewrite / boundary-key release:
-; pendingHoty, slash+Space, and non-classic slash+Enter now share the same
+; tbcHoty, slash+Space, and non-classic slash+Enter now share the same
 ; broad pattern:
 ; queue work -> wait for brief physical idle -> revalidate same target ->
 ; apply precise rewrite when possible, otherwise cancel or use a bounded
@@ -1342,59 +1350,59 @@ Return
 ; detect slash fix pattern
 ;         +--> store action + active hwnd + focused control snapshot
 ;             +--> timer waits for physical idle and StopAutoFix = false
-;                 +--> same pending context still valid?
+;                 +--> same tbc context still valid?
 ;                     +--> yes: classic Edit/RichEdit proves live queued slash text and rewrites only slash
 ;                     +--> yes: non-classic editor uses the older blind-send fallback
 ;                     +--> yes: queued Enter is released only after that rewrite attempt finishes
 ;                     +--> no : drop stale rewrite
-FlushPendingFixSlash:
-    if (!pendingFixSlashAction)
+FlushTbcFixSlash:
+    if (!tbcFixSlashAction)
         Return
 
-    pendingAction := pendingFixSlashAction
+    tbcAction := tbcFixSlashAction
 
-    ; Drop the queued slash rewrite if it has been pending longer than
-    ; k_pendingTypingFixMaxAgeMs. After that short age budget, skipping the
+    ; Drop the queued slash rewrite if it has been tbc longer than
+    ; k_tbcTypingFixMaxAgeMs. After that short age budget, skipping the
     ; correction is safer than rewriting text in a newer typing context. For a
     ; queued Enter, release a plain Enter only if the same coarse target is
     ; still active; otherwise cancel it rather than sending Enter somewhere new.
-    if (pendingFixSlashQueuedTick && (A_TickCount - pendingFixSlashQueuedTick) > k_pendingTypingFixMaxAgeMs)
+    if (tbcFixSlashQueuedTick && (A_TickCount - tbcFixSlashQueuedTick) > k_tbcTypingFixMaxAgeMs)
     {
-        if (pendingAction = "enter")
-            _TryReleasePendingFixSlashEnterFallback()
-        _ClearPendingFixSlashState()
+        if (tbcAction = "enter")
+            _TryReleaseTbcFixSlashEnterFallback()
+        _ClearTbcFixSlashState()
         Return
     }
 
     ; Let the physical boundary-key cycle settle before rewriting slash punctuation.
     if (!_IsDeferredTypingQuiet(40))
     {
-        SetTimer, FlushPendingFixSlash, -40
+        SetTimer, FlushTbcFixSlash, -40
         Return
     }
 
     ; Only allow the rewrite when this is still the newest queued slash action
     ; and the same focused control identity still owns the caret context.
-    if (!_IsPendingFixSlashStillValid())
+    if (!_IsTbcFixSlashStillValid())
     {
-        if (pendingAction = "enter")
-            _TryReleasePendingFixSlashEnterFallback()
-        _ClearPendingFixSlashState()
+        if (tbcAction = "enter")
+            _TryReleaseTbcFixSlashEnterFallback()
+        _ClearTbcFixSlashState()
         Return
     }
 
-    if (pendingAction = "space")
+    if (tbcAction = "space")
     {
         ; Classic Edit/RichEdit controls get the same phase-2 treatment as
         ; Hoty: prove the live caret/text still show the exact queued "/ "
         ; pattern, then replace only the slash via EM_SETSEL/EM_REPLACESEL. If
         ; proof fails, cancel instead of guessing with a blind caret-relative Send.
-        if (_TypingAutoFixIsClassicEditClass(pendingFixSlashCtrlClass))
+        if (_TypingAutoFixIsClassicEditClass(tbcFixSlashCtrlClass))
         {
             StopAutoFix := True
-            _TryApplyPendingFixSlashClassicRewrite()
+            _TryApplyTbcFixSlashClassicRewrite()
             StopAutoFix := False
-            _ClearPendingFixSlashState()
+            _ClearTbcFixSlashState()
             Return
         }
 
@@ -1403,18 +1411,18 @@ FlushPendingFixSlash:
         StopAutoFix := True
         Send, % "{BS}{BS}{?}{SPACE}"
         StopAutoFix := False
-        _ClearPendingFixSlashState()
+        _ClearTbcFixSlashState()
         Return
     }
 
-    if (pendingAction = "enter")
+    if (tbcAction = "enter")
     {
-        ; This is the same deferred pending-work pattern as pendingHoty and
+        ; This is the same deferred tbc-work pattern as tbcHoty and
         ; slash+Space, except the boundary key itself is withheld until the
         ; queued slash rewrite has either landed or been explicitly abandoned.
         StopAutoFix := True
-        if (_TypingAutoFixIsClassicEditClass(pendingFixSlashCtrlClass))
-            _TryApplyPendingFixSlashClassicRewrite()
+        if (_TypingAutoFixIsClassicEditClass(tbcFixSlashCtrlClass))
+            _TryApplyTbcFixSlashClassicRewrite()
         else
         {
             Send, % "{BS}{?}"
@@ -1422,67 +1430,67 @@ FlushPendingFixSlash:
         }
         Send, {Enter}
         StopAutoFix := False
-        _ClearPendingFixSlashState()
+        _ClearTbcFixSlashState()
         Return
     }
 
-    _ClearPendingFixSlashState()
+    _ClearTbcFixSlashState()
 Return
 
 ; Clears the deferred FixSlash slot without invalidating the shared sequence
 ; token, allowing the caller to decide whether newer timers should also be
 ; dropped. This now covers both slash+Space rewrites and slash+Enter barriers.
-_ClearPendingFixSlashState() {
-    global pendingFixSlashAction
-    global pendingFixSlashCtrl
-    global pendingFixSlashCtrlClass
-    global pendingFixSlashCtrlHwnd
-    global pendingFixSlashHwnd
-    global pendingFixSlashId
-    global pendingFixSlashQueuedTick
+_ClearTbcFixSlashState() {
+    global tbcFixSlashAction
+    global tbcFixSlashCtrl
+    global tbcFixSlashCtrlClass
+    global tbcFixSlashCtrlHwnd
+    global tbcFixSlashHwnd
+    global tbcFixSlashId
+    global tbcFixSlashQueuedTick
 
-    pendingFixSlashAction     := ""
-    pendingFixSlashCtrl       := ""
-    pendingFixSlashCtrlClass  := ""
-    pendingFixSlashCtrlHwnd   := 0
-    pendingFixSlashHwnd       := 0
-    pendingFixSlashId         := 0
-    pendingFixSlashQueuedTick := 0
+    tbcFixSlashAction     := ""
+    tbcFixSlashCtrl       := ""
+    tbcFixSlashCtrlClass  := ""
+    tbcFixSlashCtrlHwnd   := 0
+    tbcFixSlashHwnd       := 0
+    tbcFixSlashId         := 0
+    tbcFixSlashQueuedTick := 0
 }
 
 ; Clears the deferred capitalization rewrite slot without invalidating the shared
 ; sequence token, allowing the caller to cancel one slot or both explicitly.
-_ClearPendingHotyState() {
-    global pendingHotyCtrl
-    global pendingHotyCtrlClass
-    global pendingHotyCtrlHwnd
-    global pendingHotyHwnd
-    global pendingHotyId
-    global pendingHotyQueuedTick
-    global pendingHotyReplacement
-    global pendingHotyTriggerChar
+_ClearTbcHotyState() {
+    global tbcHotyCtrl
+    global tbcHotyCtrlClass
+    global tbcHotyCtrlHwnd
+    global tbcHotyHwnd
+    global tbcHotyId
+    global tbcHotyQueuedTick
+    global tbcHotyReplacement
+    global tbcHotyTriggerChar
 
-    pendingHotyCtrl        := ""
-    pendingHotyCtrlClass   := ""
-    pendingHotyCtrlHwnd    := 0
-    pendingHotyHwnd        := 0
-    pendingHotyId          := 0
-    pendingHotyQueuedTick  := 0
-    pendingHotyReplacement := ""
-    pendingHotyTriggerChar := ""
+    tbcHotyCtrl        := ""
+    tbcHotyCtrlClass   := ""
+    tbcHotyCtrlHwnd    := 0
+    tbcHotyHwnd        := 0
+    tbcHotyId          := 0
+    tbcHotyQueuedTick  := 0
+    tbcHotyReplacement := ""
+    tbcHotyTriggerChar := ""
 }
 
 ; Cancels deferred typing rewrites and can optionally bump the shared sequence so
 ; already-scheduled timers know a newer physical action superseded their work.
-CancelPendingTypingFixes(invalidateSeq := False, resetDisableEnter := False) {
+CancelTbcTypingFixes(invalidateSeq := False, resetDisableEnter := False) {
     global disableEnter
     global typingFixSeq
 
     if (invalidateSeq)
         typingFixSeq += 1
 
-    _ClearPendingFixSlashState()
-    _ClearPendingHotyState()
+    _ClearTbcFixSlashState()
+    _ClearTbcHotyState()
 
     if (resetDisableEnter)
         disableEnter := False
@@ -1490,16 +1498,16 @@ CancelPendingTypingFixes(invalidateSeq := False, resetDisableEnter := False) {
 
 ; A mouse click means the user is taking manual caret or focus control, so any
 ; queued rewrite/probe tied to the old caret position should be dropped first.
-CancelPendingTypingWorkForPointerAction() {
-    CancelPendingTypingFixes(True, True)
-    _ClearPendingEverythingEditAdjustState()
-    ClearPendingTypingAutoFixRefresh()
+CancelTbcTypingWorkForPointerAction() {
+    CancelTbcTypingFixes(True, True)
+    _ClearTbcEverythingEditAdjustState()
+    ClearTbcTypingAutoFixRefresh()
 }
 
 ; A focus change is also a pointer-like context break for deferred typing work,
 ; so reuse the same cancellation path the click handler uses.
-CancelPendingTypingWorkForFocusChange() {
-    CancelPendingTypingWorkForPointerAction()
+CancelTbcTypingWorkForFocusChange() {
+    CancelTbcTypingWorkForPointerAction()
 }
 
 ; Shared deferred-work focus snapshot:
@@ -1595,51 +1603,51 @@ _GetClassicControlSelectionRange(controlHwnd, ByRef selStart, ByRef selEnd) {
     return (selStart >= 0 && selEnd >= 0)
 }
 
-; Shared pending typing-fix validator:
+; Shared tbc typing-fix validator:
 ; this is the baseline safety check for deferred slash/typing rewrites. It makes
 ; sure the queued work still belongs to the latest typing-fix sequence, is still
 ; within the short freshness window, still targets the same active top-level
 ; window, and still points at the same focused control name when one was captured.
 ; It is intentionally conservative: if that coarse context no longer matches, the
 ; delayed rewrite is canceled rather than sent into a newer typing state.
-IsPendingTypingFixStillValid(pendingId, pendingHwnd, pendingCtrl, pendingQueuedTick) {
-    global k_pendingTypingFixMaxAgeMs
+IsTbcTypingFixStillValid(tbcId, tbcHwnd, tbcCtrl, tbcQueuedTick) {
+    global k_tbcTypingFixMaxAgeMs
     global typingFixSeq
 
-    return _IsDeferredWorkStillValid(pendingHwnd, pendingCtrl, pendingId, typingFixSeq, pendingQueuedTick, k_pendingTypingFixMaxAgeMs)
+    return _IsDeferredWorkStillValid(tbcHwnd, tbcCtrl, tbcId, typingFixSeq, tbcQueuedTick, k_tbcTypingFixMaxAgeMs)
 }
 
-; FixSlash pending-work validator:
+; FixSlash tbc-work validator:
 ; this is the guard that decides whether a queued slash rewrite or slash+Enter
 ; boundary release is still safe to attempt. It rejects stale or superseded
 ; work and requires the same active window plus the same focused control identity
 ; before a delayed rewrite
 ; can run. The goal is to cancel late fixes rather than let a timer mutate a
 ; different field/control after the user has already moved on.
-_IsPendingFixSlashStillValid() {
-    global pendingFixSlashCtrl
-    global pendingFixSlashCtrlClass
-    global pendingFixSlashCtrlHwnd
-    global pendingFixSlashHwnd
-    global pendingFixSlashId
-    global pendingFixSlashQueuedTick
+_IsTbcFixSlashStillValid() {
+    global tbcFixSlashCtrl
+    global tbcFixSlashCtrlClass
+    global tbcFixSlashCtrlHwnd
+    global tbcFixSlashHwnd
+    global tbcFixSlashId
+    global tbcFixSlashQueuedTick
 
-    if !IsPendingTypingFixStillValid(pendingFixSlashId, pendingFixSlashHwnd, pendingFixSlashCtrl, pendingFixSlashQueuedTick)
+    if !IsTbcTypingFixStillValid(tbcFixSlashId, tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashQueuedTick)
         return False
 
-    if (!pendingFixSlashCtrlHwnd && pendingFixSlashCtrlClass = "")
+    if (!tbcFixSlashCtrlHwnd && tbcFixSlashCtrlClass = "")
         return True
 
-    if !_TryGetFocusedControlSnapshot(pendingFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !_TryGetFocusedControlSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return False
 
-    if (pendingFixSlashCtrl != "" && currentCtrlNN != pendingFixSlashCtrl)
+    if (tbcFixSlashCtrl != "" && currentCtrlNN != tbcFixSlashCtrl)
         return False
 
-    if (pendingFixSlashCtrlHwnd && currentCtrlHwnd != pendingFixSlashCtrlHwnd)
+    if (tbcFixSlashCtrlHwnd && currentCtrlHwnd != tbcFixSlashCtrlHwnd)
         return False
 
-    if (pendingFixSlashCtrlClass != "" && currentCtrlClass != pendingFixSlashCtrlClass)
+    if (tbcFixSlashCtrlClass != "" && currentCtrlClass != tbcFixSlashCtrlClass)
         return False
 
     return True
@@ -1649,18 +1657,18 @@ _IsPendingFixSlashStillValid() {
 ; if a queued slash+Enter barrier ages out or loses precise slash context, do
 ; not release Enter into a different window/control. Only send a plain Enter
 ; when the original active window and focused control name still match.
-_TryReleasePendingFixSlashEnterFallback() {
-    global pendingFixSlashCtrl
-    global pendingFixSlashHwnd
+_TryReleaseTbcFixSlashEnterFallback() {
+    global tbcFixSlashCtrl
+    global tbcFixSlashHwnd
     global StopAutoFix
 
-    if (!pendingFixSlashHwnd || !WinActive("ahk_id " . pendingFixSlashHwnd))
+    if (!tbcFixSlashHwnd || !WinActive("ahk_id " . tbcFixSlashHwnd))
         return False
 
-    if (pendingFixSlashCtrl != "")
+    if (tbcFixSlashCtrl != "")
     {
-        ControlGetFocus, currentCtrl, ahk_id %pendingFixSlashHwnd%
-        if (currentCtrl != pendingFixSlashCtrl)
+        ControlGetFocus, currentCtrl, ahk_id %tbcFixSlashHwnd%
+        if (currentCtrl != tbcFixSlashCtrl)
             return False
     }
 
@@ -1670,36 +1678,36 @@ _TryReleasePendingFixSlashEnterFallback() {
     return True
 }
 
-; Hoty pending-work validator:
+; Hoty tbc-work validator:
 ; this is the guard that decides whether a queued Hoty rewrite is still safe to
 ; attempt. It rejects stale or superseded work and requires the same active
 ; window plus the same focused control identity before a delayed rewrite can run.
 ; The goal is to cancel late fixes rather than let a timer mutate a different
 ; field/control after the user has already moved on.
-_IsPendingHotyStillValid() {
-    global pendingHotyCtrl
-    global pendingHotyCtrlClass
-    global pendingHotyCtrlHwnd
-    global pendingHotyHwnd
-    global pendingHotyId
-    global pendingHotyQueuedTick
+_IsTbcHotyStillValid() {
+    global tbcHotyCtrl
+    global tbcHotyCtrlClass
+    global tbcHotyCtrlHwnd
+    global tbcHotyHwnd
+    global tbcHotyId
+    global tbcHotyQueuedTick
 
-    if !IsPendingTypingFixStillValid(pendingHotyId, pendingHotyHwnd, pendingHotyCtrl, pendingHotyQueuedTick)
+    if !IsTbcTypingFixStillValid(tbcHotyId, tbcHotyHwnd, tbcHotyCtrl, tbcHotyQueuedTick)
         return false
 
-    if (!pendingHotyCtrlHwnd && pendingHotyCtrlClass = "")
+    if (!tbcHotyCtrlHwnd && tbcHotyCtrlClass = "")
         return true
 
-    if !_TryGetFocusedControlSnapshot(pendingHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !_TryGetFocusedControlSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
-    if (pendingHotyCtrl != "" && currentCtrlNN != pendingHotyCtrl)
+    if (tbcHotyCtrl != "" && currentCtrlNN != tbcHotyCtrl)
         return false
 
-    if (pendingHotyCtrlHwnd && currentCtrlHwnd != pendingHotyCtrlHwnd)
+    if (tbcHotyCtrlHwnd && currentCtrlHwnd != tbcHotyCtrlHwnd)
         return false
 
-    if (pendingHotyCtrlClass != "" && currentCtrlClass != pendingHotyCtrlClass)
+    if (tbcHotyCtrlClass != "" && currentCtrlClass != tbcHotyCtrlClass)
         return false
 
     return true
@@ -1711,38 +1719,38 @@ _IsPendingHotyStillValid() {
 ; pattern is still present immediately before the caret, then replace only the
 ; slash with EM_SETSEL/EM_REPLACESEL. If that context no longer matches, cancel
 ; the fix rather than risk a duplicate or garbled edit.
-_TryApplyPendingFixSlashClassicRewrite() {
+_TryApplyTbcFixSlashClassicRewrite() {
     static emReplaceSel := 0x00C2
     static emSetSel := 0x00B1
-    global pendingFixSlashAction
-    global pendingFixSlashCtrl
-    global pendingFixSlashCtrlClass
-    global pendingFixSlashCtrlHwnd
-    global pendingFixSlashHwnd
+    global tbcFixSlashAction
+    global tbcFixSlashCtrl
+    global tbcFixSlashCtrlClass
+    global tbcFixSlashCtrlHwnd
+    global tbcFixSlashHwnd
 
-    if (!pendingFixSlashHwnd || !pendingFixSlashCtrlHwnd || pendingFixSlashCtrlClass = "")
+    if (!tbcFixSlashHwnd || !tbcFixSlashCtrlHwnd || tbcFixSlashCtrlClass = "")
         return False
 
-    if !_TypingAutoFixIsClassicEditClass(pendingFixSlashCtrlClass)
+    if !_TypingAutoFixIsClassicEditClass(tbcFixSlashCtrlClass)
         return False
 
-    if !_TryGetFocusedControlSnapshot(pendingFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !_TryGetFocusedControlSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return False
 
-    if (currentCtrlNN != pendingFixSlashCtrl || currentCtrlHwnd != pendingFixSlashCtrlHwnd || currentCtrlClass != pendingFixSlashCtrlClass)
+    if (currentCtrlNN != tbcFixSlashCtrl || currentCtrlHwnd != tbcFixSlashCtrlHwnd || currentCtrlClass != tbcFixSlashCtrlClass)
         return False
 
-    if !_GetClassicControlSelectionRange(pendingFixSlashCtrlHwnd, selStart, selEnd)
+    if !_GetClassicControlSelectionRange(tbcFixSlashCtrlHwnd, selStart, selEnd)
         return False
 
     if (selStart != selEnd)
         return False
 
-    ControlGetText, controlText, , ahk_id %pendingFixSlashCtrlHwnd%
+    ControlGetText, controlText, , ahk_id %tbcFixSlashCtrlHwnd%
     if (controlText = "" || StrLen(controlText) < selStart)
         return False
 
-    if (pendingFixSlashAction = "space")
+    if (tbcFixSlashAction = "space")
     {
         if (selStart < 2)
             return False
@@ -1755,7 +1763,7 @@ _TryApplyPendingFixSlashClassicRewrite() {
         replaceEnd := selStart - 1
         restoreCaretPos := selStart
     }
-    else if (pendingFixSlashAction = "enter")
+    else if (tbcFixSlashAction = "enter")
     {
         if (selStart < 1)
             return False
@@ -1774,9 +1782,9 @@ _TryApplyPendingFixSlashClassicRewrite() {
     VarSetCapacity(replacementBuffer, (StrLen("?") + 1) * 2, 0)
     StrPut("?", &replacementBuffer, "UTF-16")
 
-    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", replaceStart, "Ptr", replaceEnd, "Ptr")
-    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emReplaceSel, "Ptr", 1, "Ptr", &replacementBuffer, "Ptr")
-    DllCall("SendMessage", "Ptr", pendingFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", restoreCaretPos, "Ptr", restoreCaretPos, "Ptr")
+    DllCall("SendMessage", "Ptr", tbcFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", replaceStart, "Ptr", replaceEnd, "Ptr")
+    DllCall("SendMessage", "Ptr", tbcFixSlashCtrlHwnd, "UInt", emReplaceSel, "Ptr", 1, "Ptr", &replacementBuffer, "Ptr")
+    DllCall("SendMessage", "Ptr", tbcFixSlashCtrlHwnd, "UInt", emSetSel, "Ptr", restoreCaretPos, "Ptr", restoreCaretPos, "Ptr")
     return True
 }
 
@@ -1786,51 +1794,51 @@ _TryApplyPendingFixSlashClassicRewrite() {
 ; pattern is still present immediately before the caret, then replace only the
 ; prior capital with EM_SETSEL/EM_REPLACESEL. If that context no longer matches,
 ; cancel the fix rather than risk a duplicate or garbled edit.
-_TryApplyPendingHotyClassicRewrite() {
+_TryApplyTbcHotyClassicRewrite() {
     static emReplaceSel := 0x00C2
     static emSetSel := 0x00B1
-    global pendingHotyCtrl
-    global pendingHotyCtrlClass
-    global pendingHotyCtrlHwnd
-    global pendingHotyHwnd
-    global pendingHotyReplacement
-    global pendingHotyTriggerChar
+    global tbcHotyCtrl
+    global tbcHotyCtrlClass
+    global tbcHotyCtrlHwnd
+    global tbcHotyHwnd
+    global tbcHotyReplacement
+    global tbcHotyTriggerChar
 
-    if (!pendingHotyHwnd || !pendingHotyCtrlHwnd || pendingHotyCtrlClass = "")
+    if (!tbcHotyHwnd || !tbcHotyCtrlHwnd || tbcHotyCtrlClass = "")
         return false
 
-    if !_TypingAutoFixIsClassicEditClass(pendingHotyCtrlClass)
+    if !_TypingAutoFixIsClassicEditClass(tbcHotyCtrlClass)
         return false
 
-    if !_TryGetFocusedControlSnapshot(pendingHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !_TryGetFocusedControlSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
-    if (currentCtrlNN != pendingHotyCtrl || currentCtrlHwnd != pendingHotyCtrlHwnd || currentCtrlClass != pendingHotyCtrlClass)
+    if (currentCtrlNN != tbcHotyCtrl || currentCtrlHwnd != tbcHotyCtrlHwnd || currentCtrlClass != tbcHotyCtrlClass)
         return false
 
-    if !_GetClassicControlSelectionRange(pendingHotyCtrlHwnd, selStart, selEnd)
+    if !_GetClassicControlSelectionRange(tbcHotyCtrlHwnd, selStart, selEnd)
         return false
 
     if (selStart != selEnd || selStart < 2)
         return false
 
-    ControlGetText, controlText, , ahk_id %pendingHotyCtrlHwnd%
+    ControlGetText, controlText, , ahk_id %tbcHotyCtrlHwnd%
     if (controlText = "" || StrLen(controlText) < selStart)
         return false
 
-    expectedPriorChar := pendingHotyReplacement
+    expectedPriorChar := tbcHotyReplacement
     StringUpper, expectedPriorChar, expectedPriorChar
-    expectedSpan      := expectedPriorChar . pendingHotyTriggerChar
+    expectedSpan      := expectedPriorChar . tbcHotyTriggerChar
     observedSpan      := SubStr(controlText, selStart - 1, 2)
     if (observedSpan != expectedSpan)
         return false
 
-    VarSetCapacity(replacementBuffer, (StrLen(pendingHotyReplacement) + 1) * 2, 0)
-    StrPut(pendingHotyReplacement, &replacementBuffer, "UTF-16")
+    VarSetCapacity(replacementBuffer, (StrLen(tbcHotyReplacement) + 1) * 2, 0)
+    StrPut(tbcHotyReplacement, &replacementBuffer, "UTF-16")
 
-    DllCall("SendMessage", "Ptr", pendingHotyCtrlHwnd, "UInt", emSetSel, "Ptr", selStart - 2, "Ptr", selStart - 1, "Ptr")
-    DllCall("SendMessage", "Ptr", pendingHotyCtrlHwnd, "UInt", emReplaceSel, "Ptr", 1, "Ptr", &replacementBuffer, "Ptr")
-    DllCall("SendMessage", "Ptr", pendingHotyCtrlHwnd, "UInt", emSetSel, "Ptr", selStart, "Ptr", selStart, "Ptr")
+    DllCall("SendMessage", "Ptr", tbcHotyCtrlHwnd, "UInt", emSetSel, "Ptr", selStart - 2, "Ptr", selStart - 1, "Ptr")
+    DllCall("SendMessage", "Ptr", tbcHotyCtrlHwnd, "UInt", emReplaceSel, "Ptr", 1, "Ptr", &replacementBuffer, "Ptr")
+    DllCall("SendMessage", "Ptr", tbcHotyCtrlHwnd, "UInt", emSetSel, "Ptr", selStart, "Ptr", selStart, "Ptr")
     return true
 }
 
@@ -2195,7 +2203,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     ; A focus change means any deferred typing rewrite or async editability probe
     ; belongs to the previous target, so cancel that work immediately.
-    CancelPendingTypingWorkForFocusChange()
+    CancelTbcTypingWorkForFocusChange()
 
     DetectHiddenWindows, Off
     ; Only hold timers off while capturing the initial activation snapshot and
@@ -3137,11 +3145,11 @@ $~WheelUp::
      && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
      && wheelCanAdjustColumns)
     {
-        pendingAdjustColumnsClass         := hoverClass
-        pendingAdjustColumnsCtrl          := wheelControl
-        pendingAdjustColumnsHwnd          := windowId
-        pendingAdjustColumnsLastWheelTick := A_TickCount
-        pendingAdjustColumnsRequestId += 1
+        tbcAdjustColumnsClass         := hoverClass
+        tbcAdjustColumnsCtrl          := wheelControl
+        tbcAdjustColumnsHwnd          := windowId
+        tbcAdjustColumnsLastWheelTick := A_TickCount
+        tbcAdjustColumnsRequestId += 1
         SetTimer, AdjustColumns, Off
         SetTimer, AdjustColumns, -110
     }
@@ -3151,9 +3159,9 @@ $~WheelUp::
         Sleep, 1000
     }
     else {
-        pendingAdjustColumnsRequestId :=
-        pendingAdjustColumnsHwnd      :=
-        pendingAdjustColumnsCtrl      := ""
+        tbcAdjustColumnsRequestId :=
+        tbcAdjustColumnsHwnd      :=
+        tbcAdjustColumnsCtrl      := ""
     }
 
     Thread, NoTimers, False
@@ -3180,11 +3188,11 @@ $~WheelDown::
      && activeClass != "CASCADIA_HOSTING_WINDOW_CLASS"
      && wheelCanAdjustColumns)
     {
-        pendingAdjustColumnsClass         := hoverClass
-        pendingAdjustColumnsCtrl          := wheelControl
-        pendingAdjustColumnsHwnd          := windowId
-        pendingAdjustColumnsLastWheelTick := A_TickCount
-        pendingAdjustColumnsRequestId += 1
+        tbcAdjustColumnsClass         := hoverClass
+        tbcAdjustColumnsCtrl          := wheelControl
+        tbcAdjustColumnsHwnd          := windowId
+        tbcAdjustColumnsLastWheelTick := A_TickCount
+        tbcAdjustColumnsRequestId += 1
         SetTimer, AdjustColumns, Off
         SetTimer, AdjustColumns, -110
     }
@@ -3204,9 +3212,9 @@ $~WheelDown::
         Sleep, 1000
     }
     else {
-        pendingAdjustColumnsRequestId :=
-        pendingAdjustColumnsHwnd      :=
-        pendingAdjustColumnsCtrl      := ""
+        tbcAdjustColumnsRequestId :=
+        tbcAdjustColumnsHwnd      :=
+        tbcAdjustColumnsCtrl      := ""
     }
 
     Thread, NoTimers, False
@@ -3270,35 +3278,35 @@ AdjustColumns:
 
     ; Stage 1: basic request validation.
     ; If the wheel hook never captured a valid target, there is nothing to do.
-    if (!pendingAdjustColumnsRequestId || !pendingAdjustColumnsHwnd || pendingAdjustColumnsCtrl == "")
+    if (!tbcAdjustColumnsRequestId || !tbcAdjustColumnsHwnd || tbcAdjustColumnsCtrl == "")
         return
 
     ; Snapshot the request token once so every later stage can cheaply detect whether
-    ; a newer wheel event replaced this pending work item.
-    currentRequestId := pendingAdjustColumnsRequestId
-    requiredQuietMs  := (pendingAdjustColumnsClass == "#32770")
-                       ? k_pendingAdjustColumnsDialogQuietMs
-                       : k_pendingAdjustColumnsQuietMs
+    ; a newer wheel event replaced this tbc work item.
+    currentRequestId := tbcAdjustColumnsRequestId
+    requiredQuietMs  := (tbcAdjustColumnsClass == "#32770")
+                       ? k_tbcAdjustColumnsDialogQuietMs
+                       : k_tbcAdjustColumnsQuietMs
 
     ; Stage 2: quiet-gap gating.
     ; Do not focus or send anything until wheel input has paused for the required
     ; quiet window. If scrolling resumes, retry later instead of interfering with it.
-    if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < requiredQuietMs) {
-        SetTimer, AdjustColumns, % -k_pendingAdjustColumnsRetryMs
+    if ((A_TickCount - tbcAdjustColumnsLastWheelTick) < requiredQuietMs) {
+        SetTimer, AdjustColumns, % -k_tbcAdjustColumnsRetryMs
         return
     }
 
     ; Stage 3: same-window validation.
     ; Only operate on the same active window that originally queued
     ; this request. If activation changed, cancel instead of mutating a stale target.
-    if (WinExist("A") != pendingAdjustColumnsHwnd)
+    if (WinExist("A") != tbcAdjustColumnsHwnd)
         return
 
-    WinGetClass, adjustClassNow, ahk_id %pendingAdjustColumnsHwnd%
+    WinGetClass, adjustClassNow, ahk_id %tbcAdjustColumnsHwnd%
     isExplorerLikeWin := (adjustClassNow == "CabinetWClass" || adjustClassNow == "#32770")
-    isPlainListView   := (pendingAdjustColumnsCtrl == "SysListView321")
+    isPlainListView   := (tbcAdjustColumnsCtrl == "SysListView321")
 
-    if (adjustClassNow != pendingAdjustColumnsClass)
+    if (adjustClassNow != tbcAdjustColumnsClass)
         return
 
     ; Plain SysListView32 targets can use the generic quiet-gap path in any app.
@@ -3312,12 +3320,12 @@ AdjustColumns:
     ; repeating target discovery during stop-and-go wheel bursts.
     ; The cache is only reused if the control still belongs to this window and its
     ; live HWND still exists.
-    if (c_pendingAdjustColumnsTargetHwnd = pendingAdjustColumnsHwnd
-     && c_pendingAdjustColumnsTargetCtrl != ""
-     && (A_TickCount - c_pendingAdjustColumnsTargetTick) < k_pendingAdjustColumnsTargetTtlMs) {
-        ControlGet, TargetControlHwnd, Hwnd,, % c_pendingAdjustColumnsTargetCtrl, ahk_id %pendingAdjustColumnsHwnd%
+    if (c_tbcAdjustColumnsTargetHwnd = tbcAdjustColumnsHwnd
+     && c_tbcAdjustColumnsTargetCtrl != ""
+     && (A_TickCount - c_tbcAdjustColumnsTargetTick) < k_tbcAdjustColumnsTargetTtlMs) {
+        ControlGet, TargetControlHwnd, Hwnd,, % c_tbcAdjustColumnsTargetCtrl, ahk_id %tbcAdjustColumnsHwnd%
         if (TargetControlHwnd)
-            TargetControl := c_pendingAdjustColumnsTargetCtrl
+            TargetControl := c_tbcAdjustColumnsTargetCtrl
     }
 
     ; If the cache is not usable, pick the lightest resolution path that matches
@@ -3326,14 +3334,14 @@ AdjustColumns:
     ; - Explorer/dialog DirectUI: reuse the shared shell scan + chooser
     if (TargetControl == "") {
         if (isPlainListView) {
-            TargetControl := pendingAdjustColumnsCtrl
+            TargetControl := tbcAdjustColumnsCtrl
         }
         else {
-            targetScan := GetSendCtrlAddTargetScan(pendingAdjustColumnsHwnd, adjustClassNow)
+            targetScan := GetSendCtrlAddTargetScan(tbcAdjustColumnsHwnd, adjustClassNow)
             ; Wheel hover can transiently report DirectUIHWND2/3 even when a different
             ; pane is the real Ctrl+NumpadAdd target, so do not blindly trust those two
             ; names here. Let the shared chooser resolve the final target instead.
-            TargetControl := ChooseSendCtrlAddTarget(pendingAdjustColumnsHwnd, adjustClassNow, pendingAdjustColumnsCtrl, targetScan, False)
+            TargetControl := ChooseSendCtrlAddTarget(tbcAdjustColumnsHwnd, adjustClassNow, tbcAdjustColumnsCtrl, targetScan, False)
         }
     }
 
@@ -3346,46 +3354,46 @@ AdjustColumns:
     if (TargetControl != "") {
         ; Resolve the target HWND once so the cache and later focus work use a live control.
         if (!TargetControlHwnd)
-            ControlGet, TargetControlHwnd, Hwnd,, %TargetControl%, ahk_id %pendingAdjustColumnsHwnd%
+            ControlGet, TargetControlHwnd, Hwnd,, %TargetControl%, ahk_id %tbcAdjustColumnsHwnd%
 
         if (TargetControlHwnd) {
             ; Publish the resolved target briefly so the next wheel pause in this same
             ; window can skip shell-control discovery if nothing structural changed.
-            c_pendingAdjustColumnsTargetCtrl := TargetControl
-            c_pendingAdjustColumnsTargetHwnd := pendingAdjustColumnsHwnd
-            c_pendingAdjustColumnsTargetTick := A_TickCount
+            c_tbcAdjustColumnsTargetCtrl := TargetControl
+            c_tbcAdjustColumnsTargetHwnd := tbcAdjustColumnsHwnd
+            c_tbcAdjustColumnsTargetTick := A_TickCount
 
             ; Abort if a newer wheel event superseded this request while target discovery
             ; was running. Old timers should not continue into focus work.
-            if (pendingAdjustColumnsRequestId != currentRequestId)
+            if (tbcAdjustColumnsRequestId != currentRequestId)
                 return
 
             ; Use the same explicit ClassNN focus step as the known-good SendCtrlAdd()
             ; Explorer path. Modern Explorer may report focus inside DirectUI while still
             ; ignoring Ctrl+NumpadAdd unless the exact target control is actively focused.
-            EnsureFocusedCtrlNN(pendingAdjustColumnsHwnd, TargetControl, 60, 15)
+            EnsureFocusedCtrlNN(tbcAdjustColumnsHwnd, TargetControl, 60, 15)
         }
     }
 
     ; Stage 6: final stale-work and quiet-gap checks.
     ; Re-check both the request token and the quiet gap after focus work, because
     ; wheel input may have resumed while this timer was still running.
-    if (pendingAdjustColumnsRequestId != currentRequestId)
+    if (tbcAdjustColumnsRequestId != currentRequestId)
         return
 
-    if ((A_TickCount - pendingAdjustColumnsLastWheelTick) < requiredQuietMs) {
-        SetTimer, AdjustColumns, % -k_pendingAdjustColumnsRetryMs
+    if ((A_TickCount - tbcAdjustColumnsLastWheelTick) < requiredQuietMs) {
+        SetTimer, AdjustColumns, % -k_tbcAdjustColumnsRetryMs
         return
     }
 
     ; Reconfirm the same window is still active immediately before the synthetic send.
-    if (WinExist("A") != pendingAdjustColumnsHwnd)
+    if (WinExist("A") != tbcAdjustColumnsHwnd)
         return
 
     ; Stage 7: final send.
     ; Keep the actual key injection small and late so all expensive decisions happen
     ; before this point and Ctrl+NumpadAdd is emitted only for a still-current request.
-    _SendCtrlNumpadAddIfStillValid(6, currentRequestId, requiredQuietMs, pendingAdjustColumnsHwnd)
+    _SendCtrlNumpadAddIfStillValid(6, currentRequestId, requiredQuietMs, tbcAdjustColumnsHwnd)
 return
 
 MbuttonTimer:
@@ -4664,16 +4672,16 @@ $Enter::
             ; Classic Edit/RichEdit keeps the older immediate Enter-thread path.
             ; Non-classic editors cannot prove the rewrite inline as reliably, so
             ; those fall through to the deferred barrier below.
-            CancelPendingTypingFixes(True, False)
+            CancelTbcTypingFixes(True, False)
             if (!_CommitFixSlashEnterInline())
                 Send, {Enter}
         }
         else {
-            ; This mirrors pendingHoty and deferred slash+Space: queue intent,
+            ; This mirrors tbcHoty and deferred slash+Space: queue intent,
             ; wait for brief idle, revalidate the same target, then apply or
             ; cancel. The extra rule here is that Enter itself stays withheld
             ; until the queued slash rewrite has been resolved.
-            _QueuePendingFixSlash("enter")
+            _QueueTbcFixSlash("enter")
         }
     }
     else
@@ -4738,7 +4746,7 @@ $~+Space::
 Return
 
 $~^Backspace::
-    CancelPendingTypingFixes(True, True)
+    CancelTbcTypingFixes(True, True)
     Hotstring("Reset")
 Return
 
@@ -4746,19 +4754,19 @@ Return
 ; by FixSlash, so clear it here rather than letting a later "/" rewrite qualify
 ; against text the user has already changed or navigated away from.
 $~Backspace::
-    CancelPendingTypingFixes(True, True)
+    CancelTbcTypingFixes(True, True)
     TimeOfLastHotkeyTyped := A_TickCount
     lastHotkeyTyped := "~Backspace"
     X_PriorPriorHotKey :=
 Return
 
 $~Left::
-    CancelPendingTypingFixes(True, True)
+    CancelTbcTypingFixes(True, True)
     X_PriorPriorHotKey :=
 Return
 
 $~Right::
-    CancelPendingTypingFixes(True, True)
+    CancelTbcTypingFixes(True, True)
     X_PriorPriorHotKey :=
 Return
 
@@ -8604,7 +8612,7 @@ $~LButton::
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
     activeBeforeLButton := WinExist("A")
-    CancelPendingTypingWorkForPointerAction()
+    CancelTbcTypingWorkForPointerAction()
 
     ; If this press is aimed at a different top-level window, keep the click
     ; path as cheap as possible so Windows can complete the focus change before
@@ -10835,15 +10843,15 @@ EndBlockWheel() {
 ; before injecting Ctrl+NumpadAdd. This lets a just-arrived WheelUp/WheelDown event
 ; abort the send instead of being interpreted alongside a synthetic Ctrl chord.
 SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0) {
-    global pendingAdjustColumnsLastWheelTick, pendingAdjustColumnsRequestId, k_pendingAdjustColumnsSendGuardMs
+    global tbcAdjustColumnsLastWheelTick, tbcAdjustColumnsRequestId, k_tbcAdjustColumnsSendGuardMs
 
     if (guardRequestId || guardQuietMs || guardHwnd) {
-        Sleep, %k_pendingAdjustColumnsSendGuardMs%
+        Sleep, %k_tbcAdjustColumnsSendGuardMs%
 
-        if (guardRequestId && pendingAdjustColumnsRequestId != guardRequestId)
+        if (guardRequestId && tbcAdjustColumnsRequestId != guardRequestId)
             return false
 
-        if (guardQuietMs && (A_TickCount - pendingAdjustColumnsLastWheelTick) < guardQuietMs)
+        if (guardQuietMs && (A_TickCount - tbcAdjustColumnsLastWheelTick) < guardQuietMs)
             return false
 
         if (guardHwnd && WinExist("A") != guardHwnd)
@@ -10957,37 +10965,37 @@ ScheduleFixReleasedModifiers(modifiers := "Shift Alt Ctrl", deferredRuns := 6) {
 
 ; Clears the queued Everything Edit1 auto-fit state so context changes or a
 ; completed send do not leave a stale deferred Ctrl+NumpadAdd request behind.
-_ClearPendingEverythingEditAdjustState() {
-    global pendingEverythingAdjustCtrl
-    global pendingEverythingAdjustCtrlClass
-    global pendingEverythingAdjustCtrlHwnd
-    global pendingEverythingAdjustHwnd
-    global pendingEverythingAdjustId
-    global pendingEverythingAdjustQueuedTick
-    global pendingEverythingAdjustSourceTick
+_ClearTbcEverythingEditAdjustState() {
+    global tbcEverythingAdjustCtrl
+    global tbcEverythingAdjustCtrlClass
+    global tbcEverythingAdjustCtrlHwnd
+    global tbcEverythingAdjustHwnd
+    global tbcEverythingAdjustId
+    global tbcEverythingAdjustQueuedTick
+    global tbcEverythingAdjustSourceTick
 
-    pendingEverythingAdjustCtrl       := ""
-    pendingEverythingAdjustCtrlClass  := ""
-    pendingEverythingAdjustCtrlHwnd   := 0
-    pendingEverythingAdjustHwnd       := 0
-    pendingEverythingAdjustId         := 0
-    pendingEverythingAdjustQueuedTick := 0
-    pendingEverythingAdjustSourceTick := 0
+    tbcEverythingAdjustCtrl       := ""
+    tbcEverythingAdjustCtrlClass  := ""
+    tbcEverythingAdjustCtrlHwnd   := 0
+    tbcEverythingAdjustHwnd       := 0
+    tbcEverythingAdjustId         := 0
+    tbcEverythingAdjustQueuedTick := 0
+    tbcEverythingAdjustSourceTick := 0
 }
 
 ; Queues a deferred Everything Edit1 column auto-fit request:
 ; capture or accept the current search-box focus context, stamp the latest
 ; typing tick, and let a short timer enforce a stronger typing-quiet pause
 ; before sending.
-_QueuePendingEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
-    global k_pendingEverythingAdjustRetryMs
-    global pendingEverythingAdjustCtrl
-    global pendingEverythingAdjustCtrlClass
-    global pendingEverythingAdjustCtrlHwnd
-    global pendingEverythingAdjustHwnd
-    global pendingEverythingAdjustId
-    global pendingEverythingAdjustQueuedTick
-    global pendingEverythingAdjustSourceTick
+_QueueTbcEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
+    global k_tbcEverythingAdjustRetryMs
+    global tbcEverythingAdjustCtrl
+    global tbcEverythingAdjustCtrlClass
+    global tbcEverythingAdjustCtrlHwnd
+    global tbcEverythingAdjustHwnd
+    global tbcEverythingAdjustId
+    global tbcEverythingAdjustQueuedTick
+    global tbcEverythingAdjustSourceTick
 
     if (!sourceTick)
         return false
@@ -11005,14 +11013,14 @@ _QueuePendingEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN 
     if (!targetHwnd || targetCtrlNN != "Edit1")
         return false
 
-    pendingEverythingAdjustHwnd       := targetHwnd
-    pendingEverythingAdjustCtrl       := targetCtrlNN
-    pendingEverythingAdjustCtrlHwnd   := targetCtrlHwnd
-    pendingEverythingAdjustCtrlClass  := targetCtrlClass
-    pendingEverythingAdjustId += 1
-    pendingEverythingAdjustQueuedTick := A_TickCount
-    pendingEverythingAdjustSourceTick := sourceTick
-    SetTimer, FlushPendingEverythingEditAdjust, % -k_pendingEverythingAdjustRetryMs
+    tbcEverythingAdjustHwnd       := targetHwnd
+    tbcEverythingAdjustCtrl       := targetCtrlNN
+    tbcEverythingAdjustCtrlHwnd   := targetCtrlHwnd
+    tbcEverythingAdjustCtrlClass  := targetCtrlClass
+    tbcEverythingAdjustId += 1
+    tbcEverythingAdjustQueuedTick := A_TickCount
+    tbcEverythingAdjustSourceTick := sourceTick
+    SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
     return true
 }
 
@@ -11041,9 +11049,9 @@ _IsEverythingEditAdjustTrigger(hotkey) {
 ; trigger hotkey, capture the exact current Edit1 identity once, and then hand
 ; that context to the shared deferred-send queue.
 _TryQueueEverythingEditAdjustFromKeyTrack(sourceTick, hotkey, activeHwnd := 0) {
-    global pendingEverythingAdjustSourceTick
+    global tbcEverythingAdjustSourceTick
 
-    if (!sourceTick || pendingEverythingAdjustSourceTick = sourceTick)
+    if (!sourceTick || tbcEverythingAdjustSourceTick = sourceTick)
         return false
 
     if (!_IsEverythingEditAdjustTrigger(hotkey))
@@ -11055,41 +11063,41 @@ _TryQueueEverythingEditAdjustFromKeyTrack(sourceTick, hotkey, activeHwnd := 0) {
     if (targetCtrlNN != "Edit1")
         return false
 
-    return _QueuePendingEverythingEditAdjust(sourceTick, targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
+    return _QueueTbcEverythingEditAdjust(sourceTick, targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
 }
 
-; Everything Edit1 pending-work validator:
+; Everything Edit1 tbc-work validator:
 ; require the same active search box, the same request token, and when possible
 ; the same exact control HWND/class before the deferred Ctrl+NumpadAdd send runs.
-_IsPendingEverythingEditAdjustStillValid(expectedId := 0) {
-    global k_pendingEverythingAdjustMaxAgeMs
-    global pendingEverythingAdjustCtrl
-    global pendingEverythingAdjustCtrlClass
-    global pendingEverythingAdjustCtrlHwnd
-    global pendingEverythingAdjustHwnd
-    global pendingEverythingAdjustId
-    global pendingEverythingAdjustQueuedTick
+_IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
+    global k_tbcEverythingAdjustMaxAgeMs
+    global tbcEverythingAdjustCtrl
+    global tbcEverythingAdjustCtrlClass
+    global tbcEverythingAdjustCtrlHwnd
+    global tbcEverythingAdjustHwnd
+    global tbcEverythingAdjustId
+    global tbcEverythingAdjustQueuedTick
 
-    currentId := pendingEverythingAdjustId
+    currentId := tbcEverythingAdjustId
     if (!expectedId)
         expectedId := currentId
 
-    if !_IsDeferredWorkStillValid(pendingEverythingAdjustHwnd, pendingEverythingAdjustCtrl, expectedId, currentId, pendingEverythingAdjustQueuedTick, k_pendingEverythingAdjustMaxAgeMs)
+    if !_IsDeferredWorkStillValid(tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrl, expectedId, currentId, tbcEverythingAdjustQueuedTick, k_tbcEverythingAdjustMaxAgeMs)
         return false
 
-    if (!pendingEverythingAdjustCtrlHwnd && pendingEverythingAdjustCtrlClass = "")
+    if (!tbcEverythingAdjustCtrlHwnd && tbcEverythingAdjustCtrlClass = "")
         return true
 
-    if !_TryGetFocusedControlSnapshot(pendingEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !_TryGetFocusedControlSnapshot(tbcEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
-    if (pendingEverythingAdjustCtrl != "" && currentCtrlNN != pendingEverythingAdjustCtrl)
+    if (tbcEverythingAdjustCtrl != "" && currentCtrlNN != tbcEverythingAdjustCtrl)
         return false
 
-    if (pendingEverythingAdjustCtrlHwnd && currentCtrlHwnd != pendingEverythingAdjustCtrlHwnd)
+    if (tbcEverythingAdjustCtrlHwnd && currentCtrlHwnd != tbcEverythingAdjustCtrlHwnd)
         return false
 
-    if (pendingEverythingAdjustCtrlClass != "" && currentCtrlClass != pendingEverythingAdjustCtrlClass)
+    if (tbcEverythingAdjustCtrlClass != "" && currentCtrlClass != tbcEverythingAdjustCtrlClass)
         return false
 
     return true
@@ -11113,42 +11121,42 @@ _SendCtrlNumpadAddIfStillValid(reconcilePassCount := 6, guardRequestId := 0, gua
 ; Deferred Everything Edit1 Ctrl+NumpadAdd flush:
 ; wait for a stronger post-typing idle window, confirm the same search field
 ; still owns focus, then send the column auto-fit chord as late as possible.
-FlushPendingEverythingEditAdjust:
-    currentRequestId := pendingEverythingAdjustId
-    if (!currentRequestId || !pendingEverythingAdjustHwnd)
+FlushTbcEverythingEditAdjust:
+    currentRequestId := tbcEverythingAdjustId
+    if (!currentRequestId || !tbcEverythingAdjustHwnd)
         Return
 
-    if (!_IsPendingEverythingEditAdjustStillValid(currentRequestId))
+    if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
     {
-        if (currentRequestId = pendingEverythingAdjustId)
-            _ClearPendingEverythingEditAdjustState()
+        if (currentRequestId = tbcEverythingAdjustId)
+            _ClearTbcEverythingEditAdjustState()
         Return
     }
 
-    if (!_IsDeferredTypingQuiet(k_pendingEverythingAdjustTypingQuietMs))
+    if (!_IsDeferredTypingQuiet(k_tbcEverythingAdjustTypingQuietMs))
     {
-        SetTimer, FlushPendingEverythingEditAdjust, % -k_pendingEverythingAdjustRetryMs
+        SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
         Return
     }
 
-    if (_SendCtrlNumpadAddIfStillValid(6, 0, 0, pendingEverythingAdjustHwnd, pendingEverythingAdjustCtrl, k_pendingEverythingAdjustTypingQuietMs, currentRequestId, pendingEverythingAdjustId, pendingEverythingAdjustQueuedTick, k_pendingEverythingAdjustMaxAgeMs))
+    if (_SendCtrlNumpadAddIfStillValid(6, 0, 0, tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrl, k_tbcEverythingAdjustTypingQuietMs, currentRequestId, tbcEverythingAdjustId, tbcEverythingAdjustQueuedTick, k_tbcEverythingAdjustMaxAgeMs))
     {
-        if (currentRequestId = pendingEverythingAdjustId)
-            _ClearPendingEverythingEditAdjustState()
+        if (currentRequestId = tbcEverythingAdjustId)
+            _ClearTbcEverythingEditAdjustState()
         Return
     }
 
-    if (currentRequestId != pendingEverythingAdjustId)
+    if (currentRequestId != tbcEverythingAdjustId)
         Return
 
-    if (!_IsPendingEverythingEditAdjustStillValid(currentRequestId))
+    if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
     {
-        _ClearPendingEverythingEditAdjustState()
+        _ClearTbcEverythingEditAdjustState()
         Return
     }
 
-    if (!_IsDeferredTypingQuiet(k_pendingEverythingAdjustTypingQuietMs))
-        SetTimer, FlushPendingEverythingEditAdjust, % -k_pendingEverythingAdjustRetryMs
+    if (!_IsDeferredTypingQuiet(k_tbcEverythingAdjustTypingQuietMs))
+        SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
 Return
 
 KeyTrack() {
@@ -11167,16 +11175,16 @@ KeyTrack() {
         if (!_TryQueueEverythingEditAdjustFromKeyTrack(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd))
         {
             if (!_IsDeferredWorkStillValid(activeHwnd, "Edit1"))
-                _ClearPendingEverythingEditAdjustState()
+                _ClearTbcEverythingEditAdjustState()
         }
         StopAutoFix := False
     }
     Else If (currClass == "XLMAIN") {
-        _ClearPendingEverythingEditAdjustState()
+        _ClearTbcEverythingEditAdjustState()
         StopAutoFix := True
     }
     Else {
-        _ClearPendingEverythingEditAdjustState()
+        _ClearTbcEverythingEditAdjustState()
         StopAutoFix := False
     }
 
@@ -11624,10 +11632,10 @@ _IsFullMonitorHeightWindow(hwndID, monitorNum) {
             && Abs(winBottomEdge - monInfoBottom) <= strictDockEdgeTolerance)
 }
 
-; Return true when the dragged window's far horizontal edge is already docked
-; at live-resize start to a visible window whose facing edge is already flush
-; to it. This is evaluated once up front so the live drag does not switch
-; modes mid-resize.
+; Return true when the dragged window's far horizontal edge is already anchored
+; at live-resize start, either by the monitor work-area boundary or by a visible
+; window whose facing edge is already flush to it. This is evaluated once up
+; front so the live drag does not switch modes mid-resize.
 _IsLiveResizeFarEdgeDocked(hwndID, monitorNum, edgeHit, refX := "", refY := "", refW := "", refH := "") {
     static HTLEFT  := 10  ; Non-client left resize border.
     static HTRIGHT := 11  ; Non-client right resize border.
@@ -11635,6 +11643,7 @@ _IsLiveResizeFarEdgeDocked(hwndID, monitorNum, edgeHit, refX := "", refY := "", 
     liveResizeFarEdgeGapTolerance    := 10
     liveResizeFarEdgeTouchTolerance  := 10
     liveResizeFarEdgeVerticalOverlap := 100
+    strictDockEdgeTolerance          := 3
 
     if (!hwndID || monitorNum < 1)
         return false
@@ -11644,10 +11653,17 @@ _IsLiveResizeFarEdgeDocked(hwndID, monitorNum, edgeHit, refX := "", refY := "", 
             return false
     }
 
+    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+    refRightEdge := refX + refW
+
     if (edgeHit = HTRIGHT) {
+        if (Abs(refX - monInfoLeft) <= strictDockEdgeTolerance)
+            return true
         candidateTargetEdge := "right"
     }
     else if (edgeHit = HTLEFT) {
+        if (Abs(refRightEdge - monInfoRight) <= strictDockEdgeTolerance)
+            return true
         candidateTargetEdge := "left"
     }
     else
@@ -11761,13 +11777,13 @@ _BuildLiveResizePeerHwndIDs(draggedHwndID, monitorNum, edgeHit, sharedEdgeTolera
 
 ; Apply the live-resize partner updates, preserving partial-axis WinMove calls
 ; when shared-edge sync is only supposed to affect width or height.
-_ApplyLiveResizeSyncPendingMoves(pendingMoves) {
-    if (!IsObject(pendingMoves) || !pendingMoves.MaxIndex())
+_ApplyLiveResizeSyncTbcMoves(tbcMoves) {
+    if (!IsObject(tbcMoves) || !tbcMoves.MaxIndex())
         return false
 
     hasAxisSpecificMove := false
-    for pendingIndex, pendingMove in pendingMoves {
-        if (pendingMove.axis = "horizontal" || pendingMove.axis = "vertical") {
+    for tbcIndex, tbcMove in tbcMoves {
+        if (tbcMove.axis = "horizontal" || tbcMove.axis = "vertical") {
             hasAxisSpecificMove := true
             break
         }
@@ -11775,38 +11791,38 @@ _ApplyLiveResizeSyncPendingMoves(pendingMoves) {
 
     ; Horizontal shared-edge sync must not touch height, and vertical sync must
     ; not touch width. Move-only horizontal updates are stricter still: they
-    ; must not pass width at all. If any pending move is axis-specific, apply
+    ; must not pass width at all. If any tbc move is axis-specific, apply
     ; the whole set with WinMove so blank parameters preserve the untouched axis
     ; exactly.
     if (hasAxisSpecificMove) {
-        for pendingIndex, pendingMove in pendingMoves {
-            pendingAxis   := pendingMove.axis
-            pendingHwndID := pendingMove.hwnd
+        for tbcIndex, tbcMove in tbcMoves {
+            tbcAxis   := tbcMove.axis
+            tbcHwndID := tbcMove.hwnd
 
-            if (pendingAxis = "horizontal") {
-                pendingX := pendingMove.x
-                if (pendingMove.moveOnly) {
-                    WinMove, ahk_id %pendingHwndID%, , %pendingX%
+            if (tbcAxis = "horizontal") {
+                tbcX := tbcMove.x
+                if (tbcMove.moveOnly) {
+                    WinMove, ahk_id %tbcHwndID%, , %tbcX%
                     continue
                 }
 
-                pendingW := pendingMove.w
-                WinMove, ahk_id %pendingHwndID%, , %pendingX%, , %pendingW%
+                tbcW := tbcMove.w
+                WinMove, ahk_id %tbcHwndID%, , %tbcX%, , %tbcW%
                 continue
             }
 
-            if (pendingAxis = "vertical") {
-                pendingH := pendingMove.h
-                pendingY := pendingMove.y
-                WinMove, ahk_id %pendingHwndID%, , , %pendingY%, , %pendingH%
+            if (tbcAxis = "vertical") {
+                tbcH := tbcMove.h
+                tbcY := tbcMove.y
+                WinMove, ahk_id %tbcHwndID%, , , %tbcY%, , %tbcH%
                 continue
             }
 
-            pendingH := pendingMove.h
-            pendingW := pendingMove.w
-            pendingX := pendingMove.x
-            pendingY := pendingMove.y
-            WinMove, ahk_id %pendingHwndID%, , %pendingX%, %pendingY%, %pendingW%, %pendingH%
+            tbcH := tbcMove.h
+            tbcW := tbcMove.w
+            tbcX := tbcMove.x
+            tbcY := tbcMove.y
+            WinMove, ahk_id %tbcHwndID%, , %tbcX%, %tbcY%, %tbcW%, %tbcH%
         }
 
         return true
@@ -11817,17 +11833,17 @@ _ApplyLiveResizeSyncPendingMoves(pendingMoves) {
     static SWP_NOZORDER     := 0x0004
 
     swpFlags := SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOZORDER
-    hdwp := DllCall("BeginDeferWindowPos", "Int", pendingMoves.MaxIndex(), "Ptr")
+    hdwp := DllCall("BeginDeferWindowPos", "Int", tbcMoves.MaxIndex(), "Ptr")
     if (hdwp) {
-        for pendingIndex, pendingMove in pendingMoves {
+        for tbcIndex, tbcMove in tbcMoves {
             hdwp := DllCall("DeferWindowPos"
                 , "Ptr", hdwp
-                , "Ptr", pendingMove.hwnd
+                , "Ptr", tbcMove.hwnd
                 , "Ptr", 0
-                , "Int", pendingMove.x
-                , "Int", pendingMove.y
-                , "Int", pendingMove.w
-                , "Int", pendingMove.h
+                , "Int", tbcMove.x
+                , "Int", tbcMove.y
+                , "Int", tbcMove.w
+                , "Int", tbcMove.h
                 , "UInt", swpFlags
                 , "Ptr")
             if (!hdwp)
@@ -11838,16 +11854,232 @@ _ApplyLiveResizeSyncPendingMoves(pendingMoves) {
             return true
     }
 
-    for pendingIndex, pendingMove in pendingMoves {
-        pendingHwndID := pendingMove.hwnd
-        pendingH      := pendingMove.h
-        pendingW      := pendingMove.w
-        pendingX      := pendingMove.x
-        pendingY      := pendingMove.y
-        WinMove, ahk_id %pendingHwndID%, , %pendingX%, %pendingY%, %pendingW%, %pendingH%
+    for tbcIndex, tbcMove in tbcMoves {
+        tbcHwndID := tbcMove.hwnd
+        tbcH      := tbcMove.h
+        tbcW      := tbcMove.w
+        tbcX      := tbcMove.x
+        tbcY      := tbcMove.y
+        WinMove, ahk_id %tbcHwndID%, , %tbcX%, %tbcY%, %tbcW%, %tbcH%
     }
 
     return true
+}
+
+; Build one live-resize move plan from the dragged window's current geometry so
+; both the timer-driven updates and the final LButton-up safety net can enforce
+; the same shared-edge flush rules.
+_BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
+    global lButtonResizeSyncFullHeightOppositeMoveOnly
+    global lButtonResizeSyncHit
+    global lButtonResizeSyncPartners
+
+    static HTBOTTOM := 15  ; Non-client bottom resize border.
+    static HTLEFT   := 10  ; Non-client left resize border.
+    static HTRIGHT  := 11  ; Non-client right resize border.
+    static HTTOP    := 12  ; Non-client top resize border.
+
+    draggedRightEdge  := draggedX + draggedW
+    draggedBottomEdge := draggedY + draggedH
+    didResizeAny      := false
+    tbcMoves      := []
+    validPartners     := []
+
+    for partnerIndex, partnerInfo in lButtonResizeSyncPartners {
+        partnerHwndID      := partnerInfo.hwnd
+        partnerFixedEdge   := partnerInfo.fixedEdge
+        partnerRole        := partnerInfo.role
+        usedMoveOnlyPartnerHandling := false
+        ; Only issue WinMove when the target rect actually changed. This avoids
+        ; redundant no-op resizes, which is especially important for heavier
+        ; windows like Explorer that repaint more expensively.
+        shouldMovePartner  := false
+
+        if (!partnerHwndID || !WinExist("ahk_id " . partnerHwndID))
+            continue
+
+        ; partnerOffsetX / partnerOffsetY convert between the visual outer edges
+        ; we reason about and the window rect coordinates WinMove expects.
+        if !WinGetPosEx(partnerHwndID, partnerX, partnerY, partnerW, partnerH, partnerOffsetX, partnerOffsetY)
+            continue
+
+        if (lButtonResizeSyncHit = HTRIGHT) {
+            if (partnerRole = "peer") {
+                ; Same-side peers keep their far-left edge fixed and directly
+                ; mirror the dragged right edge so the whole column stays the
+                ; same width during live edge resizing.
+                targetLeftEdge  := partnerFixedEdge
+                targetRightEdge := draggedRightEdge
+            }
+            else if (lButtonResizeSyncFullHeightOppositeMoveOnly) {
+                ; Full-height horizontal drags that started without a docked far
+                ; edge keep the opposite partner's width fixed and slide the
+                ; whole window so its left edge remains flush to the dragged
+                ; right edge.
+                targetMoveX       := draggedRightEdge + partnerOffsetX
+                usedMoveOnlyPartnerHandling := true
+                shouldMovePartner := (partnerX != targetMoveX)
+                if (shouldMovePartner)
+                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, x: targetMoveX })
+            }
+            else {
+                ; Opposite-side partners keep their far-right edge fixed and
+                ; slide only the shared left edge so it stays flush with the
+                ; dragged window's right edge.
+                targetLeftEdge  := draggedRightEdge
+                targetRightEdge := partnerFixedEdge
+            }
+
+            if (!usedMoveOnlyPartnerHandling) {
+                targetOuterWidth  := targetRightEdge - targetLeftEdge
+                if (targetOuterWidth <= 0)
+                    continue
+
+                targetMoveX       := targetLeftEdge + partnerOffsetX
+                targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
+                shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
+                if (shouldMovePartner)
+                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
+            }
+        }
+        else if (lButtonResizeSyncHit = HTLEFT) {
+            if (partnerRole = "peer") {
+                ; Same-side peers keep their far-right edge fixed and directly
+                ; mirror the dragged left edge so the whole column stays the
+                ; same width during live edge resizing.
+                targetLeftEdge  := draggedX
+                targetRightEdge := partnerFixedEdge
+            }
+            else if (lButtonResizeSyncFullHeightOppositeMoveOnly) {
+                ; Mirror the right-edge rule above: preserve the opposite
+                ; partner's width and shift it so its right edge stays flush to
+                ; the dragged left edge.
+                partnerOuterWidth := partnerW - 2*Abs(partnerOffsetX)
+                if (partnerOuterWidth <= 0)
+                    continue
+
+                targetLeftEdge    := draggedX - partnerOuterWidth
+                targetMoveX       := targetLeftEdge + partnerOffsetX
+                usedMoveOnlyPartnerHandling := true
+                shouldMovePartner := (partnerX != targetMoveX)
+                if (shouldMovePartner)
+                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, x: targetMoveX })
+            }
+            else {
+                ; Opposite-side partners keep their far-left edge fixed and
+                ; slide only the shared right edge so it stays flush with the
+                ; dragged window's left edge.
+                targetLeftEdge  := partnerFixedEdge
+                targetRightEdge := draggedX
+            }
+
+            if (!usedMoveOnlyPartnerHandling) {
+                targetOuterWidth  := targetRightEdge - targetLeftEdge
+                if (targetOuterWidth <= 0)
+                    continue
+
+                targetMoveX       := targetLeftEdge + partnerOffsetX
+                targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
+                shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
+                if (shouldMovePartner)
+                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
+            }
+        }
+        else if (lButtonResizeSyncHit = HTBOTTOM) {
+            if (partnerRole = "peer") {
+                ; Same-side peers keep their far-top edge fixed and directly
+                ; mirror the dragged bottom edge so the whole row stays the
+                ; same height during live edge resizing.
+                targetTopEdge    := partnerFixedEdge
+                targetBottomEdge := draggedBottomEdge
+            }
+            else {
+                ; Opposite-side partners keep their far-bottom edge fixed and
+                ; move only the shared top edge so it stays flush with the
+                ; dragged window's bottom edge.
+                targetTopEdge    := draggedBottomEdge
+                targetBottomEdge := partnerFixedEdge
+            }
+
+            targetOuterHeight := targetBottomEdge - targetTopEdge
+            if (targetOuterHeight <= 0)
+                continue
+
+            targetMoveY       := targetTopEdge
+            ; The script's vertical offset conversion needs the established +1
+            ; pixel compensation. Without it, the visual bottom edge commonly
+            ; lands one pixel short after the frame-offset math is applied.
+            targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
+            shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
+            if (shouldMovePartner)
+                tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, y: targetMoveY })
+        }
+        else if (lButtonResizeSyncHit = HTTOP) {
+            if (partnerRole = "peer") {
+                ; Same-side peers keep their far-bottom edge fixed and directly
+                ; mirror the dragged top edge so the whole row stays the same
+                ; height during live edge resizing.
+                targetTopEdge    := draggedY
+                targetBottomEdge := partnerFixedEdge
+            }
+            else {
+                ; Opposite-side partners keep their far-top edge fixed and move
+                ; only the shared bottom edge so it stays flush with the dragged
+                ; window's top edge.
+                targetTopEdge    := partnerFixedEdge
+                targetBottomEdge := draggedY
+            }
+
+            targetOuterHeight := targetBottomEdge - targetTopEdge
+            if (targetOuterHeight <= 0)
+                continue
+
+            targetMoveY       := targetTopEdge
+            ; As above, preserve the script's vertical offset conversion pattern,
+            ; including the +1 pixel bottom-edge compensation.
+            targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
+            shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
+            if (shouldMovePartner)
+                tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, y: targetMoveY })
+        }
+        else
+            return false
+
+        if (shouldMovePartner)
+            didResizeAny := true
+
+        validPartners.Push(partnerInfo)
+    }
+
+    return { didResizeAny: didResizeAny, tbcMoves: tbcMoves, validPartners: validPartners }
+}
+
+; Run one last shared-edge reconciliation after LButton-up so any partner that
+; lagged or overshot during the native drag animation is snapped flush before
+; the temporary resize state is torn down.
+_FinalizeLButtonResizeSync() {
+    global lButtonResizeSyncActive
+    global lButtonResizeSyncDraggedHwnd
+    global lButtonResizeSyncPartners
+
+    if (!lButtonResizeSyncActive || !IsObject(lButtonResizeSyncPartners) || !lButtonResizeSyncPartners.MaxIndex())
+        return false
+
+    if (!WinExist("ahk_id " . lButtonResizeSyncDraggedHwnd))
+        return false
+
+    if !WinGetPosEx(lButtonResizeSyncDraggedHwnd, draggedX, draggedY, draggedW, draggedH, null, null)
+        return false
+
+    movePlan := _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH)
+    if !IsObject(movePlan)
+        return false
+
+    if (movePlan.tbcMoves.MaxIndex())
+        _ApplyLiveResizeSyncTbcMoves(movePlan.tbcMoves)
+
+    lButtonResizeSyncPartners := movePlan.validPartners
+    return movePlan.didResizeAny
 }
 
 ; Capture the original topmost state for the dragged window and every active
@@ -12211,7 +12443,7 @@ EndLButtonResizeSync() {
 ; While a native edge resize is in progress, keep each matched same-side peer
 ; and opposite-side partner in sync with the dragged window. Peers mirror the
 ; dragged edge directly, while opposite-side partners either preserve their far
-; edge or preserve their current size, depending on the cached full-height mode.
+; edge or preserve their current size, detbc on the cached full-height mode.
 UpdateLButtonResizeSync() {
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
@@ -12263,190 +12495,22 @@ UpdateLButtonResizeSync() {
         lButtonResizeSyncDraggedTransparent := true
     }
 
-    draggedRightEdge  := draggedX + draggedW
-    draggedBottomEdge := draggedY + draggedH
-    didResizeAny      := false
-    pendingMoves      := []
-    validPartners     := []
-
-    for partnerIndex, partnerInfo in lButtonResizeSyncPartners {
-        partnerHwndID      := partnerInfo.hwnd
-        partnerFixedEdge   := partnerInfo.fixedEdge
-        partnerRole        := partnerInfo.role
-        usedMoveOnlyPartnerHandling := false
-        ; Only issue WinMove when the target rect actually changed. This avoids
-        ; redundant no-op resizes, which is especially important for heavier
-        ; windows like Explorer that repaint more expensively.
-        shouldMovePartner  := false
-
-        if (!partnerHwndID || !WinExist("ahk_id " . partnerHwndID))
-            continue
-
-        ; partnerOffsetX / partnerOffsetY convert between the visual outer edges
-        ; we reason about and the window rect coordinates WinMove expects.
-        if !WinGetPosEx(partnerHwndID, partnerX, partnerY, partnerW, partnerH, partnerOffsetX, partnerOffsetY)
-            continue
-
-        if (lButtonResizeSyncHit = HTRIGHT) {
-            if (partnerRole = "peer") {
-                ; Same-side peers keep their far-left edge fixed and directly
-                ; mirror the dragged right edge so the whole column stays the
-                ; same width during live edge resizing.
-                targetLeftEdge  := partnerFixedEdge
-                targetRightEdge := draggedRightEdge
-            }
-            else if (lButtonResizeSyncFullHeightOppositeMoveOnly) {
-                ; Full-height horizontal drags that started without a docked far
-                ; edge keep the opposite partner's width fixed and slide the
-                ; whole window so its left edge remains flush to the dragged
-                ; right edge.
-                targetMoveX       := draggedRightEdge + partnerOffsetX
-                usedMoveOnlyPartnerHandling := true
-                shouldMovePartner := (partnerX != targetMoveX)
-                if (shouldMovePartner)
-                    pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, x: targetMoveX })
-            }
-            else {
-                ; Opposite-side partners keep their far-right edge fixed and
-                ; slide only the shared left edge so it stays flush with the
-                ; dragged window's right edge.
-                targetLeftEdge  := draggedRightEdge
-                targetRightEdge := partnerFixedEdge
-            }
-
-            if (!usedMoveOnlyPartnerHandling) {
-                targetOuterWidth  := targetRightEdge - targetLeftEdge
-                if (targetOuterWidth <= 0)
-                    continue
-
-                targetMoveX       := targetLeftEdge + partnerOffsetX
-                targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
-                shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
-                if (shouldMovePartner)
-                    pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
-            }
-        }
-        else if (lButtonResizeSyncHit = HTLEFT) {
-            if (partnerRole = "peer") {
-                ; Same-side peers keep their far-right edge fixed and directly
-                ; mirror the dragged left edge so the whole column stays the
-                ; same width during live edge resizing.
-                targetLeftEdge  := draggedX
-                targetRightEdge := partnerFixedEdge
-            }
-            else if (lButtonResizeSyncFullHeightOppositeMoveOnly) {
-                ; Mirror the right-edge rule above: preserve the opposite
-                ; partner's width and shift it so its right edge stays flush to
-                ; the dragged left edge.
-                partnerOuterWidth := partnerW - 2*Abs(partnerOffsetX)
-                if (partnerOuterWidth <= 0)
-                    continue
-
-                targetLeftEdge    := draggedX - partnerOuterWidth
-                targetMoveX       := targetLeftEdge + partnerOffsetX
-                usedMoveOnlyPartnerHandling := true
-                shouldMovePartner := (partnerX != targetMoveX)
-                if (shouldMovePartner)
-                    pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, x: targetMoveX })
-            }
-            else {
-                ; Opposite-side partners keep their far-left edge fixed and
-                ; slide only the shared right edge so it stays flush with the
-                ; dragged window's left edge.
-                targetLeftEdge  := partnerFixedEdge
-                targetRightEdge := draggedX
-            }
-
-            if (!usedMoveOnlyPartnerHandling) {
-                targetOuterWidth  := targetRightEdge - targetLeftEdge
-                if (targetOuterWidth <= 0)
-                    continue
-
-                targetMoveX       := targetLeftEdge + partnerOffsetX
-                targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
-                shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
-                if (shouldMovePartner)
-                    pendingMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
-            }
-        }
-        else if (lButtonResizeSyncHit = HTBOTTOM) {
-            if (partnerRole = "peer") {
-                ; Same-side peers keep their far-top edge fixed and directly
-                ; mirror the dragged bottom edge so the whole row stays the
-                ; same height during live edge resizing.
-                targetTopEdge    := partnerFixedEdge
-                targetBottomEdge := draggedBottomEdge
-            }
-            else {
-                ; Opposite-side partners keep their far-bottom edge fixed and
-                ; move only the shared top edge so it stays flush with the
-                ; dragged window's bottom edge.
-                targetTopEdge    := draggedBottomEdge
-                targetBottomEdge := partnerFixedEdge
-            }
-
-            targetOuterHeight := targetBottomEdge - targetTopEdge
-            if (targetOuterHeight <= 0)
-                continue
-
-            targetMoveY       := targetTopEdge
-            ; The script's vertical offset conversion needs the established +1
-            ; pixel compensation. Without it, the visual bottom edge commonly
-            ; lands one pixel short after the frame-offset math is applied.
-            targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
-            shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
-            if (shouldMovePartner)
-                pendingMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, y: targetMoveY })
-        }
-        else if (lButtonResizeSyncHit = HTTOP) {
-            if (partnerRole = "peer") {
-                ; Same-side peers keep their far-bottom edge fixed and directly
-                ; mirror the dragged top edge so the whole row stays the same
-                ; height during live edge resizing.
-                targetTopEdge    := draggedY
-                targetBottomEdge := partnerFixedEdge
-            }
-            else {
-                ; Opposite-side partners keep their far-top edge fixed and move
-                ; only the shared bottom edge so it stays flush with the dragged
-                ; window's top edge.
-                targetTopEdge    := partnerFixedEdge
-                targetBottomEdge := draggedY
-            }
-
-            targetOuterHeight := targetBottomEdge - targetTopEdge
-            if (targetOuterHeight <= 0)
-                continue
-
-            targetMoveY       := targetTopEdge
-            ; As above, preserve the script's vertical offset conversion pattern,
-            ; including the +1 pixel bottom-edge compensation.
-            targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
-            shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
-            if (shouldMovePartner)
-                pendingMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, y: targetMoveY })
-        }
-        else {
-            EndLButtonResizeSync()
-            return false
-        }
-
-        if (shouldMovePartner)
-            didResizeAny := true
-
-        validPartners.Push(partnerInfo)
+    movePlan := _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH)
+    if !IsObject(movePlan) {
+        EndLButtonResizeSync()
+        return false
     }
 
-    if (pendingMoves.MaxIndex())
-        _ApplyLiveResizeSyncPendingMoves(pendingMoves)
+    if (movePlan.tbcMoves.MaxIndex())
+        _ApplyLiveResizeSyncTbcMoves(movePlan.tbcMoves)
 
-    lButtonResizeSyncPartners := validPartners
+    lButtonResizeSyncPartners := movePlan.validPartners
     if (!lButtonResizeSyncPartners.MaxIndex()) {
         EndLButtonResizeSync()
         return false
     }
 
-    return didResizeAny
+    return movePlan.didResizeAny
 }
 
 MouseIsOverCaptionButtons(xPos := "", yPos := "") {
@@ -12860,7 +12924,7 @@ Clip(Text := "", Reselect := "", Restore := "")
             ; ClipboardAll must be on its own line in v1
             BackUpClip := ClipboardAll
         } else {
-            ; cancel any pending restore before starting a new clipboard transaction
+            ; cancel any tbc restore before starting a new clipboard transaction
             SetTimer, ClipRestore, Off
         }
 
@@ -15293,28 +15357,28 @@ IsGoogleDocWindow() {
 ; Async editability-refresh timing:
 ; synchronous path (old)
 ; t=0   Hoty or slash+Space queues a deferred rewrite
-;       pending...QueuedTick := A_TickCount
-;       SetTimer, FlushPending..., -40
+;       tbc...QueuedTick := A_TickCount
+;       SetTimer, FlushTbc..., -40
 ; t=20  first key in a newly active window runs RefreshTypingAutoFixContext()
 ;       and can spend noticeable time in UIA/MSAA editability checks
 ; t=40  deferred rewrite timer is due, but the script thread is still busy
-; t=230 slow probe finishes, so FlushPending... finally runs with age = 230 ms
+; t=230 slow probe finishes, so FlushTbc... finally runs with age = 230 ms
 ;
 ; async path (current)
 ; t=0   Hoty or slash+Space queues a deferred rewrite
-;       pending...QueuedTick := A_TickCount
-;       SetTimer, FlushPending..., -40
+;       tbc...QueuedTick := A_TickCount
+;       SetTimer, FlushTbc..., -40
 ; t=20  first key does only cheap cache / exclusion checks
 ;       QueueTypingAutoFixRefresh() arms SetTimer, FlushTypingAutoFixRefresh, -25
 ; t=40  deferred rewrite timer runs close to schedule
 ; t=45+ FlushTypingAutoFixRefresh pays the UIA/MSAA cost off the live key path
 FlushTypingAutoFixRefresh:
-    pendingRefreshId         := typingAutoFixRefreshId
-    pendingRefreshHwnd       := typingAutoFixRefreshHwnd
-    pendingRefreshCtrlNN     := typingAutoFixRefreshCtrlNN
-    pendingRefreshQueuedTick := typingAutoFixRefreshQueuedTick
+    tbcRefreshId         := typingAutoFixRefreshId
+    tbcRefreshHwnd       := typingAutoFixRefreshHwnd
+    tbcRefreshCtrlNN     := typingAutoFixRefreshCtrlNN
+    tbcRefreshQueuedTick := typingAutoFixRefreshQueuedTick
 
-    if (!pendingRefreshHwnd)
+    if (!tbcRefreshHwnd)
         Return
 
     ; Retry while physical typing is still in flight so the slow accessibility
@@ -15327,36 +15391,36 @@ FlushTypingAutoFixRefresh:
 
     ; Only refresh when the queued target still matches the active window and,
     ; when available, the same focused control.
-    if (!WinActive("ahk_id " . pendingRefreshHwnd))
+    if (!WinActive("ahk_id " . tbcRefreshHwnd))
     {
-        if (pendingRefreshId = typingAutoFixRefreshId)
-            ClearPendingTypingAutoFixRefresh()
+        if (tbcRefreshId = typingAutoFixRefreshId)
+            ClearTbcTypingAutoFixRefresh()
         Return
     }
 
-    if (pendingRefreshCtrlNN != "")
+    if (tbcRefreshCtrlNN != "")
     {
-        ControlGetFocus, currentCtrl, ahk_id %pendingRefreshHwnd%
-        if (currentCtrl != pendingRefreshCtrlNN)
+        ControlGetFocus, currentCtrl, ahk_id %tbcRefreshHwnd%
+        if (currentCtrl != tbcRefreshCtrlNN)
         {
-            if (pendingRefreshId = typingAutoFixRefreshId)
-                ClearPendingTypingAutoFixRefresh()
+            if (tbcRefreshId = typingAutoFixRefreshId)
+                ClearTbcTypingAutoFixRefresh()
             Return
         }
     }
 
     ; If a newer async refresh request replaced this one, exit without touching
     ; the cache so only the newest focus context can update it.
-    if (pendingRefreshId         != typingAutoFixRefreshId
-     || pendingRefreshHwnd       != typingAutoFixRefreshHwnd
-     || pendingRefreshCtrlNN     != typingAutoFixRefreshCtrlNN
-     || pendingRefreshQueuedTick != typingAutoFixRefreshQueuedTick)
+    if (tbcRefreshId         != typingAutoFixRefreshId
+     || tbcRefreshHwnd       != typingAutoFixRefreshHwnd
+     || tbcRefreshCtrlNN     != typingAutoFixRefreshCtrlNN
+     || tbcRefreshQueuedTick != typingAutoFixRefreshQueuedTick)
         Return
 
-    RefreshTypingAutoFixContext(pendingRefreshHwnd, pendingRefreshCtrlNN)
+    RefreshTypingAutoFixContext(tbcRefreshHwnd, tbcRefreshCtrlNN)
 
-    if (pendingRefreshId = typingAutoFixRefreshId)
-        ClearPendingTypingAutoFixRefresh()
+    if (tbcRefreshId = typingAutoFixRefreshId)
+        ClearTbcTypingAutoFixRefresh()
 Return
 
 ; Recompute the cached typing-auto-fix eligibility decision for the current
@@ -15416,12 +15480,12 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrlNN := "", nowTick := "") {
     }
 
     ; Once the window/control pair is unchanged, reuse the prior decision until the
-    ; slower UIA/MSAA re-probe interval expires. A queued "pending_refresh"
+    ; slower UIA/MSAA re-probe interval expires. A queued "tbc_refresh"
     ; context is the exception because that marker means this focus target still
     ; needs one real probe before cached reuse is allowed.
     contextChanged        := (activeHwnd != c_typingAutoFixHwnd || ctrlNN != c_typingAutoFixCtrlNN)
-    pendingRefreshContext := (c_typingAutoFixReason = "pending_refresh")
-    if (!contextChanged && !pendingRefreshContext && (nowTick - typingAutoFixSlowProbeTick) < k_typingAutoFixSlowPathMs)
+    tbcRefreshContext := (c_typingAutoFixReason = "tbc_refresh")
+    if (!contextChanged && !tbcRefreshContext && (nowTick - typingAutoFixSlowProbeTick) < k_typingAutoFixSlowPathMs)
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, c_typingAutoFixAllowed, c_typingAutoFixReason, nowTick)
 
     ; A new context or expired slow-path TTL means it is time to refresh accessibility state.
@@ -15479,7 +15543,7 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrlNN := "", nowTick := "") {
 ;    |
 ;    |-- no active hwnd?
 ;    |      |
-;    |      +--> ClearPendingTypingAutoFixRefresh()
+;    |      +--> ClearTbcTypingAutoFixRefresh()
 ;    |      +--> _TypingAutoFixSetCache(false, "no_active_window")
 ;    |      +--> return false
 ;    |
@@ -15489,26 +15553,26 @@ RefreshTypingAutoFixContext(activeHwnd := 0, ctrlNN := "", nowTick := "") {
 ;    |
 ;    |-- excluded process?
 ;    |      |
-;    |      +--> ClearPendingTypingAutoFixRefresh()
+;    |      +--> ClearTbcTypingAutoFixRefresh()
 ;    |      +--> _TypingAutoFixSetCache(false, "excluded_process")
 ;    |      +--> return false
 ;    |
 ;    |-- Google Docs / Sheets?
 ;    |      |
-;    |      +--> ClearPendingTypingAutoFixRefresh()
+;    |      +--> ClearTbcTypingAutoFixRefresh()
 ;    |      +--> _TypingAutoFixSetCache(false, "google_docs")
 ;    |      +--> return false
 ;    |
 ;    |-- classic Edit / RichEdit control?
 ;    |      |
-;    |      +--> ClearPendingTypingAutoFixRefresh()
+;    |      +--> ClearTbcTypingAutoFixRefresh()
 ;    |      +--> _TypingAutoFixSetCache(true, "classic_edit")
 ;    |      +--> return true
 ;    |
 ;    |-- context changed?
 ;    |      |
 ;    |      +--> QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick)
-;    |      +--> _TypingAutoFixSetCache(false, "pending_refresh")
+;    |      +--> _TypingAutoFixSetCache(false, "tbc_refresh")
 ;    |      +--> return false for THIS keypress
 ;    |      |
 ;    |      +--> later...
@@ -15671,7 +15735,7 @@ _TypingAutoFixIsExcludedProcess(processName) {
 ; Clears the queued async editability refresh so an older focus context cannot
 ; continue to hold onto a probe request after the caller already resolved the
 ; current window/control state synchronously.
-ClearPendingTypingAutoFixRefresh() {
+ClearTbcTypingAutoFixRefresh() {
     global typingAutoFixRefreshCtrlNN
     global typingAutoFixRefreshHwnd
     global typingAutoFixRefreshQueuedTick
@@ -15696,7 +15760,7 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, nowTick := "") {
         nowTick := A_TickCount
 
     if !activeHwnd {
-        ClearPendingTypingAutoFixRefresh()
+        ClearTbcTypingAutoFixRefresh()
         return _TypingAutoFixSetCache(0, "", false, "no_active_window", nowTick)
     }
 
@@ -15712,14 +15776,14 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, nowTick := "") {
     ; Cheap process exclusions resolve synchronously and do not need an async probe.
     WinGet, processName, ProcessName, ahk_id %activeHwnd%
     if (_TypingAutoFixIsExcludedProcess(processName)) {
-        ClearPendingTypingAutoFixRefresh()
+        ClearTbcTypingAutoFixRefresh()
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "excluded_process", nowTick)
     }
 
     ; Google Docs/Sheets keep their own editing model and are intentionally excluded.
     WinGetTitle, title, ahk_id %activeHwnd%
     if (InStr(title, "Google Sheets", False) || InStr(title, "Google Docs", False)) {
-        ClearPendingTypingAutoFixRefresh()
+        ClearTbcTypingAutoFixRefresh()
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "google_docs", nowTick)
     }
 
@@ -15727,7 +15791,7 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, nowTick := "") {
     ctrlClass := ""
     if (_TypingAutoFixTryGetFocusedControlClass(activeHwnd, ctrlNN, ctrlClass)) {
         if (_TypingAutoFixIsClassicEditClass(ctrlClass)) {
-            ClearPendingTypingAutoFixRefresh()
+            ClearTbcTypingAutoFixRefresh()
             return _TypingAutoFixSetCache(activeHwnd, ctrlNN, true, "classic_edit", nowTick)
         }
     }
@@ -15735,7 +15799,7 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, nowTick := "") {
     contextChanged := (activeHwnd != c_typingAutoFixHwnd || ctrlNN != c_typingAutoFixCtrlNN)
     if (contextChanged) {
         QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, nowTick)
-        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "pending_refresh", nowTick)
+        return _TypingAutoFixSetCache(activeHwnd, ctrlNN, false, "tbc_refresh", nowTick)
     }
 
     ; Same context but older cache: keep the current answer for this keypress and
@@ -20289,10 +20353,14 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::octohedral::octahedral
 ::octohedron::octahedron
 ::ocurr::occur
+::ocurring::occurring
+::ocuring::occurring
 ::ocurrance::occurrence
 ::odouriferous::odoriferous
 ::odourous::odorous
 ::offereings::offerings
+::offerred::offered
+::oferred::offered
 ::officaly::officially
 ::ofits::of its
 ::oft he::of the ; Could be legitimate in poetry, but more usually a typo.
@@ -21437,7 +21505,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ::nd::and
 ::hilighting::highlighting
-::releasses::releases
 ::ahven't::haven't
 ::ahvent::haven't
 ::arent'::aren't
@@ -21548,21 +21615,15 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ram::RAM
 ::rescheulde::reschedule
 ::awhiel::awhile
-::locaation::location
 ::determing::determining
-::offerred::offered
 ::documention::documentation
 ::ar eyou::are you
 ::al lthe::all the
 ::interestin::interest in
-::inteeresting::interesting
 ::implmenetation::implementation
-::incompatibiility::incompatibility
 ::intesreting::interesting
 ::releated::related
-::resset::reset
 ::confusgin::confusing
-::pilling::piling
 ::your a::you're a
 ::your an::you're an
 ::your her::you're her
@@ -21591,7 +21652,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::Techncially::Technically
 ::tehcncailly::technically
 ::spreadhsset::spreadsheet
-::confirmmed::confirmed
 ::implmeneted::implemented
 ::Unforntuately::Unfortunately
 ::spreadhseet::spreadsheet
@@ -21677,7 +21737,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::shcematic::schematic
 ::shcematics::schematics
 ::hwy::why
-::adddressing::addressing
 ::disucsison::discussion
 ::Produciton::ProductIon
 ::doucments::documents
@@ -21724,7 +21783,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::depednencey::dependencey
 ::minimim::minimum
 ::fukcing::fucking
-::oover::over
 ::ecrypted::encrypted
 ::NTO::NOT
 ::canabalize::cannibalize
