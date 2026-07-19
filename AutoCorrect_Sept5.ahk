@@ -8024,78 +8024,6 @@ ExplorerClickClassify_GetParentTW(el) {
         return ""
 }
 
-ExplorerClickClassify_HasAncestorClass(el, classNeedle, maxDepth) {
-    walkEl := el
-    depth := 0
-
-    while (IsObject(walkEl) && depth < maxDepth)
-    {
-        if (SafeUIA_GetClassName(walkEl, "") == classNeedle)
-            return 1
-        walkEl := ExplorerClickClassify_GetParentTW(walkEl)
-        depth++
-    }
-
-    return 0
-}
-
-ExplorerClickClassify_HasAncestorControlType(el, typeNeedle, maxDepth) {
-    walkEl := el
-    depth := 0
-
-    while (IsObject(walkEl) && depth < maxDepth)
-    {
-        if (SafeUIA_GetControlType(walkEl, 0) == typeNeedle)
-            return 1
-        walkEl := ExplorerClickClassify_GetParentTW(walkEl)
-        depth++
-    }
-
-    return 0
-}
-; =========================================
-; Smart IsCaretInEdit – AHK v1.1+
-;   useUIA  = try UIA (UIA_Interface.ahk) if available
-;   useMSAA = try MSAA (Acc.ahk) if available
-; =========================================
-IsCaretInEdit(useUIA := true, useMSAA := true) {
-    WinGet, hWnd, ID, A
-    if !hWnd
-        return false
-
-    ; ================================
-    ; 1) Classic Win32 detection
-    ; ================================
-    ControlGetFocus, ctrlNN, ahk_id %hWnd%
-    if (ctrlNN != "") {
-        ControlGet, hCtrl, Hwnd,, %ctrlNN%, ahk_id %hWnd%
-        if (hCtrl) {
-            WinGetClass, cls, ahk_id %hCtrl%
-
-            ; Classic edit controls
-            if (cls = "Edit"
-             || cls = "RichEdit20A"
-             || cls = "RichEdit20W"
-             || cls = "RICHEDIT50W")
-                return true
-        }
-    }
-
-    ; ================================
-    ; 2) UIA detection (if enabled)
-    ; ================================
-    if (useUIA && UIA_IsFocusedEditable())
-        return true
-
-    ; ================================
-    ; 3) MSAA fallback (if enabled)
-    ; ================================
-    if (useMSAA && MSAA_IsFocusedEditable())
-        return true
-
-    return false
-}
-
 ; Purpose        : support the typing/editability gate by answering whether the
 ; currently focused UIA element should be treated as an editable text target.
 ; Why this exists: the script needs one policy decision for "editable" that
@@ -17091,14 +17019,14 @@ Acc_ParentSafe(accObj) {
 */
 SafeUIA_ElementFromPoint(x, y, default := "", transactionTimeout := 250, connectionTimeout := 20000) {
     global UIA
-    priorConnectionTimeout := ""
+    priorConnectionTimeout  := ""
     priorTransactionTimeout := ""
     result := default
 
     if (transactionTimeout <= 0)
         transactionTimeout := 250
     if (connectionTimeout <= 0)
-        connectionTimeout := 20000
+        connectionTimeout  := 20000
 
     if (!IsObject(UIA))
         UIA := UIA_Interface()
@@ -18160,6 +18088,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:critiz::criticiz
 :*:desicant::desiccant
 :*:desicat::desiccat
+:*:disparat::disparit
 :*:dissapoint::disappoint
 :*:divsion::division
 :*:dcument::document
@@ -18278,6 +18207,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::requiremts::requirement
 ::requireement::requirement
 ::termainl::terminal
+::SO::So
 ::onesself::oneself
 ::violance::violence
 ::stuats::status
@@ -19066,6 +18996,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::corrisponding::corresponding
 ::corrisponds::corresponds
 ::corruptable::corruptible
+::corrolary::corollary
+::corralary::corollary
+::corallary::corollary
 ::cotten::cotton
 ::couldthe::could the
 ::countains::contains
