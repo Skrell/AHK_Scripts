@@ -323,6 +323,9 @@ Global MbuttonIsEnter                              := False
 Global suspendRightButtonForMButtonDrag            := False
 Global lastActWinID                                :=
 Global WindowTitleID                               :=
+Global WindowTitleIcon                             := ""
+Global WindowTitleText                             := ""
+Global WindowTitleGuiReady                         := False
 Global k_keys                                      := "abcdefghijklmnopqrstuvwxyz"
 Global k_numbers                                   := "0123456789"
 Global k_DoubleClickTime                           := DllCall("GetDoubleClickTime")
@@ -338,12 +341,12 @@ Global lButtonResizeSyncActive                     := False
 Global lButtonResizeSyncDraggedHwnd                := 0
 Global lButtonResizeSyncDraggedStartedAlwaysOnTop  := False
 Global lButtonResizeSyncDraggedTransparent         := False
-Global lButtonResizeSyncFullHeightOppositeMoveOnly := False
 Global lButtonResizeSyncHit                        := 0
 Global lButtonResizeSyncLastDraggedH               := ""
 Global lButtonResizeSyncLastDraggedW               := ""
 Global lButtonResizeSyncLastDraggedX               := ""
 Global lButtonResizeSyncLastDraggedY               := ""
+Global lButtonResizeSyncOverlaySeq                := 0
 Global lButtonResizeSyncPartners                   := []
 Global lButtonResizeSyncTopmostStates              := {}
 Global trayClickPosX                               := 0
@@ -5134,7 +5137,7 @@ AltupCleanup:
     StopRecursion        := False
     Thread, NoTimers, False
     Critical, Off
-    Gui, WindowTitle: Destroy
+    HideWindowTitlePopup()
     GoSub, EnableTimers
 Return
 ;============================================================================================================================
@@ -5315,7 +5318,7 @@ $!x::
     tooltip, Canceled Operation!
     CanceledWinSwap := True
     Gui, GUI4Boarder: Hide
-    Gui, WindowTitle: Destroy
+    HideWindowTitlePopup()
 
     lastActWinID := GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, Off, ahk_id %lastActWinID%
@@ -5510,6 +5513,7 @@ Cycle() {
     DetectHiddenWindows, Off
     failedSwitch := False
     why := ""
+    currentMon := MWAGetMonitorMouseIsIn()
     WinGet, actId, ID, A
     WinGet, allWindows, List
 
@@ -5519,7 +5523,6 @@ Cycle() {
         hwndID := allWindows%A_Index%
 
         If (MonCount > 1) {
-            currentMon := MWAGetMonitorMouseIsIn()
             currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
         }
         Else {
@@ -5527,12 +5530,9 @@ Cycle() {
         }
 
         If (currentMonHasActWin) {
-            WinGetPosEx(hwndID, wx, wy, ww, wh, null, null)
-
-            If (!IsWindowElevated(hwndID) && IsAltTabWindow(hwndID)) {
+            ; If (!IsWindowElevated(hwndID) && IsAltTabWindow(hwndID)) {
+            If (IsAltTabWindow(hwndID)) {
                 WinGet, state, MinMax, ahk_id %hwndID%
-                ; WinGet, exe, ProcessName, ahk_id %hwndID%
-                ; WinGetClass, cl, ahk_id %hwndID%
                 If (state > -1) {
                     ValidWindows.push(hwndID)
                     ; If (prev_cl != cl || prev_exe != exe) {
@@ -5547,6 +5547,7 @@ Cycle() {
                         Else {
                             Critical, Off
 
+                            WinGetPosEx(hwndID, wx, wy, ww, wh, null, null)
                             Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 40)
 
                             If !GetKeyState("LAlt","P")
@@ -5625,7 +5626,6 @@ Cycle() {
 
                 gwHwndId := GroupedWindows[cycleCount]
                 WinActivate,   ahk_id %gwHwndId%
-                WinWaitActive, ahk_id %gwHwndId%, , 2
                 WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
                 Overlay_MoveHole(wx, wy, ww, wh)
 
@@ -6212,7 +6212,6 @@ DrawRect:
     WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
     WinSet, AlwaysOnTop, On, ahk_id %Highlighter%
     WinActivate, ahk_id %activeWin%
-    WinWaitActive, ahk_id %activeWin%, , 2
     Critical, Off
 Return
 ; ------------------  ChatGPT ------------------------------------------------------------------
@@ -11560,6 +11559,37 @@ _IsFullMonitorHeightWindow(hwndID, monitorNum) {
             && Abs(winBottomEdge - monInfoBottom) <= strictDockEdgeTolerance)
 }
 
+; Return true when the window already looks like a left- or right-side
+; 3-edge dock during live-resize arm time: full monitor height plus the named
+; outer monitor edge. This is the shape that should make the opposite pane act
+; like a side follower instead of a split pane.
+_IsLiveResizeThreeEdgeDockedOnSide(hwndID, monitorNum, dockSide, refX := "", refY := "", refW := "", refH := "") {
+    liveResizeThreeEdgeDockTolerance := 10
+
+    if (!hwndID || monitorNum < 1)
+        return false
+
+    if (refX = "" || refY = "" || refW = "" || refH = "") {
+        if !WinGetPosEx(hwndID, refX, refY, refW, refH, null, null)
+            return false
+    }
+
+    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+    refRightEdge  := refX + refW
+    refBottomEdge := refY + refH
+
+    if (   Abs(refY - monInfoTop) > liveResizeThreeEdgeDockTolerance
+        || Abs(refBottomEdge - monInfoBottom) > liveResizeThreeEdgeDockTolerance)
+        return false
+
+    if (dockSide = "left")
+        return (Abs(refX - monInfoLeft) <= liveResizeThreeEdgeDockTolerance)
+    if (dockSide = "right")
+        return (Abs(refRightEdge - monInfoRight) <= liveResizeThreeEdgeDockTolerance)
+
+    return false
+}
+
 ; Return true when the dragged window's far horizontal edge is already anchored
 ; at live-resize start, either by the monitor work-area boundary or by a visible
 ; window whose facing edge is already flush to it. This is evaluated once up
@@ -11569,9 +11599,13 @@ _IsLiveResizeFarEdgeDocked(hwndID, monitorNum, edgeHit, refX := "", refY := "", 
     static HTRIGHT := 11  ; Non-client right resize border.
 
     liveResizeFarEdgeGapTolerance    := 10
+    ; Live-resize arm time needs a looser work-area edge check than the strict
+    ; 3px "looks docked" helpers elsewhere. Snapped panes on Windows 11 can sit
+    ; a few pixels off the reported work-area boundary while still behaving as a
+    ; true anchored far edge during native resize.
+    liveResizeFarEdgeMonitorTolerance := 10
     liveResizeFarEdgeTouchTolerance  := 10
     liveResizeFarEdgeVerticalOverlap := 100
-    strictDockEdgeTolerance          := 3
 
     if (!hwndID || monitorNum < 1)
         return false
@@ -11585,12 +11619,12 @@ _IsLiveResizeFarEdgeDocked(hwndID, monitorNum, edgeHit, refX := "", refY := "", 
     refRightEdge := refX + refW
 
     if (edgeHit = HTRIGHT) {
-        if (Abs(refX - monInfoLeft) <= strictDockEdgeTolerance)
+        if (Abs(refX - monInfoLeft) <= liveResizeFarEdgeMonitorTolerance)
             return true
         candidateTargetEdge := "right"
     }
     else if (edgeHit = HTLEFT) {
-        if (Abs(refRightEdge - monInfoRight) <= strictDockEdgeTolerance)
+        if (Abs(refRightEdge - monInfoRight) <= liveResizeFarEdgeMonitorTolerance)
             return true
         candidateTargetEdge := "left"
     }
@@ -11794,11 +11828,61 @@ _ApplyLiveResizeSyncTbcMoves(tbcMoves) {
     return true
 }
 
+; During live drag, drive lightweight overlay cards for any follower window that
+; was successfully hidden, and fall back to real WinMove only for followers that
+; could not be converted into an overlay-backed preview surface.
+_ApplyLButtonResizeSyncPreviewMoves(tbcMoves) {
+    if (!IsObject(tbcMoves) || !tbcMoves.MaxIndex())
+        return false
+
+    realTbcMoves := []
+    for tbcIndex, tbcMove in tbcMoves {
+        partnerInfo := tbcMove.partnerInfo
+        overlayInfo := IsObject(partnerInfo) ? partnerInfo.overlayInfo : ""
+
+        if !IsObject(overlayInfo) {
+            realTbcMoves.Push(tbcMove)
+            continue
+        }
+
+        targetX := overlayInfo.x
+        targetY := overlayInfo.y
+        targetW := overlayInfo.w
+        targetH := overlayInfo.h
+
+        if (tbcMove.axis = "horizontal") {
+            targetX := tbcMove.x
+            if (!tbcMove.moveOnly)
+                targetW := tbcMove.w
+        }
+        else if (tbcMove.axis = "vertical") {
+            targetH := tbcMove.h
+            targetY := tbcMove.y
+        }
+        else {
+            targetH := tbcMove.h
+            targetW := tbcMove.w
+            targetX := tbcMove.x
+            targetY := tbcMove.y
+        }
+
+        if (_UpdateLButtonResizeSyncFollowerOverlayRect(overlayInfo, targetX, targetY, targetW, targetH))
+            continue
+
+        _ReleaseLButtonResizeSyncFollower(partnerInfo)
+        realTbcMoves.Push(tbcMove)
+    }
+
+    if (!realTbcMoves.MaxIndex())
+        return true
+
+    return _ApplyLiveResizeSyncTbcMoves(realTbcMoves)
+}
+
 ; Build one live-resize move plan from the dragged window's current geometry so
 ; both the timer-driven updates and the final LButton-up safety net can enforce
 ; the same shared-edge flush rules.
 _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
-    global lButtonResizeSyncFullHeightOppositeMoveOnly
     global lButtonResizeSyncHit
     global lButtonResizeSyncPartners
 
@@ -11815,8 +11899,9 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
 
     for partnerIndex, partnerInfo in lButtonResizeSyncPartners {
         partnerHwndID      := partnerInfo.hwnd
-        partnerFixedEdge   := partnerInfo.fixedEdge
-        partnerRole        := partnerInfo.role
+        partnerFixedEdge    := partnerInfo.fixedEdge
+        partnerMoveOnly     := partnerInfo.useMoveOnly
+        partnerRole         := partnerInfo.role
         usedMoveOnlyPartnerHandling := false
         ; Only issue WinMove when the target rect actually changed. This avoids
         ; redundant no-op resizes, which is especially important for heavier
@@ -11839,16 +11924,16 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 targetLeftEdge  := partnerFixedEdge
                 targetRightEdge := draggedRightEdge
             }
-            else if (lButtonResizeSyncFullHeightOppositeMoveOnly) {
+            else if (partnerMoveOnly) {
                 ; Full-height horizontal drags that started without a docked far
-                ; edge keep the opposite partner's width fixed and slide the
-                ; whole window so its left edge remains flush to the dragged
-                ; right edge.
+                ; edge only slide opposite-side followers whose own far edge is
+                ; still floating. Opposite-side panes that are actually
+                ; anchored on their far edge resize instead.
                 targetMoveX       := draggedRightEdge + partnerOffsetX
                 usedMoveOnlyPartnerHandling := true
                 shouldMovePartner := (partnerX != targetMoveX)
                 if (shouldMovePartner)
-                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, x: targetMoveX })
+                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
             }
             else {
                 ; Opposite-side partners keep their far-right edge fixed and
@@ -11867,7 +11952,7 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
                 shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
                 if (shouldMovePartner)
-                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
+                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, partnerInfo: partnerInfo, w: targetMoveWidth, x: targetMoveX })
             }
         }
         else if (lButtonResizeSyncHit = HTLEFT) {
@@ -11878,10 +11963,11 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 targetLeftEdge  := draggedX
                 targetRightEdge := partnerFixedEdge
             }
-            else if (lButtonResizeSyncFullHeightOppositeMoveOnly) {
-                ; Mirror the right-edge rule above: preserve the opposite
-                ; partner's width and shift it so its right edge stays flush to
-                ; the dragged left edge.
+            else if (partnerMoveOnly) {
+                ; Mirror the right-edge rule above for opposite-side followers
+                ; whose own far edge is floating: preserve width and shift the
+                ; whole window so its right edge stays flush to the dragged
+                ; left edge.
                 partnerOuterWidth := partnerW - 2*Abs(partnerOffsetX)
                 if (partnerOuterWidth <= 0)
                     continue
@@ -11891,7 +11977,7 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 usedMoveOnlyPartnerHandling := true
                 shouldMovePartner := (partnerX != targetMoveX)
                 if (shouldMovePartner)
-                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, x: targetMoveX })
+                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
             }
             else {
                 ; Opposite-side partners keep their far-left edge fixed and
@@ -11910,7 +11996,7 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 targetMoveWidth   := targetOuterWidth + 2*Abs(partnerOffsetX)
                 shouldMovePartner := (partnerX != targetMoveX || partnerW != targetMoveWidth)
                 if (shouldMovePartner)
-                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, w: targetMoveWidth, x: targetMoveX })
+                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, partnerInfo: partnerInfo, w: targetMoveWidth, x: targetMoveX })
             }
         }
         else if (lButtonResizeSyncHit = HTBOTTOM) {
@@ -11940,7 +12026,7 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
             targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
             shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
             if (shouldMovePartner)
-                tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, y: targetMoveY })
+                tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, partnerInfo: partnerInfo, y: targetMoveY })
         }
         else if (lButtonResizeSyncHit = HTTOP) {
             if (partnerRole = "peer") {
@@ -11968,7 +12054,7 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
             targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
             shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
             if (shouldMovePartner)
-                tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, y: targetMoveY })
+                tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, partnerInfo: partnerInfo, y: targetMoveY })
         }
         else
             return false
@@ -12006,8 +12092,189 @@ _FinalizeLButtonResizeSync() {
     if (movePlan.tbcMoves.MaxIndex())
         _ApplyLiveResizeSyncTbcMoves(movePlan.tbcMoves)
 
+    _ReleaseLButtonResizeSyncDroppedFollowers(lButtonResizeSyncPartners, movePlan.validPartners)
     lButtonResizeSyncPartners := movePlan.validPartners
     return movePlan.didResizeAny
+}
+
+; Build one opaque preview card for a synced follower window so the live drag
+; can animate a cheap surface instead of continuously resizing the real window.
+_CreateLButtonResizeSyncFollowerOverlay(hwndID, overlayX, overlayY, overlayW, overlayH) {
+    global lButtonResizeSyncOverlaySeq
+
+    if (!hwndID || overlayW <= 0 || overlayH <= 0)
+        return false
+
+    lButtonResizeSyncOverlaySeq++
+    overlayGuiName := "LButtonResizeSyncOverlay" . lButtonResizeSyncOverlaySeq
+    iconSpec := _GetLButtonResizeSyncFollowerOverlaySpec(hwndID)
+    iconSize := _GetLButtonResizeSyncFollowerOverlayIconSize(overlayW, overlayH)
+    iconX := Floor((overlayW - iconSize) / 2)
+    iconY := Floor((overlayH - iconSize) / 2)
+
+    overlayIconHwnd := 0
+
+    Gui, %overlayGuiName%: New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x20 +HwndoverlayHwnd
+    Gui, %overlayGuiName%: Margin, 0, 0
+    Gui, %overlayGuiName%: Color, 4A4A4A
+
+    if (IsObject(iconSpec) && iconSpec.path != "") {
+        iconControlOptions := "hwndoverlayIconHwnd x" . iconX . " y" . iconY . " w" . iconSize . " h" . iconSize
+        if (iconSpec.options != "")
+            iconControlOptions .= " " . iconSpec.options
+        Gui, %overlayGuiName%: Add, Picture, %iconControlOptions%, % iconSpec.path
+    }
+
+    Gui, %overlayGuiName%: Show, NA x%overlayX% y%overlayY% w%overlayW% h%overlayH%
+    return { guiName: overlayGuiName, hasIcon: (IsObject(iconSpec) && iconSpec.path != ""), hwnd: overlayHwnd, iconHwnd: overlayIconHwnd, restoreTransparency: "", w: overlayW, x: overlayX, y: overlayY, h: overlayH }
+}
+
+; Read one follower window's icon source so the overlay card can still identify
+; the hidden app even while the real window stays frozen underneath it.
+_GetLButtonResizeSyncFollowerOverlaySpec(hwndID) {
+    if (!hwndID)
+        return { options: "Icon3", path: A_WinDir . "\System32\SHELL32.dll" }
+
+    WinGet, processPath, ProcessPath, ahk_id %hwndID%
+    if (processPath != "")
+        return { options: "", path: processPath }
+
+    return { options: "Icon3", path: A_WinDir . "\System32\SHELL32.dll" }
+}
+
+; Size the follower overlay icon conservatively so small panes still get an
+; identifiable app glyph without the placeholder card feeling crowded.
+_GetLButtonResizeSyncFollowerOverlayIconSize(overlayW, overlayH) {
+    shortestEdge := Min(overlayW, overlayH)
+    return Max(32, Min(72, Floor(shortestEdge / 5)))
+}
+
+; Hide each synced follower window and swap in an overlay placeholder so the
+; live timer no longer forces heavy apps to repaint on every drag tick.
+_PrepareLButtonResizeSyncFollowerOverlays(ByRef resizeTargets) {
+    if !IsObject(resizeTargets)
+        return false
+
+    preparedAnyFollower := false
+    for resizeTargetIndex, resizeTargetInfo in resizeTargets {
+        followerHwndID := resizeTargetInfo.hwnd
+        if (!followerHwndID || !WinExist("ahk_id " . followerHwndID))
+            continue
+
+        if !WinGetPosEx(followerHwndID, followerX, followerY, followerW, followerH, null, null)
+            continue
+
+        overlayInfo := _CreateLButtonResizeSyncFollowerOverlay(followerHwndID, followerX, followerY, followerW, followerH)
+        if !IsObject(overlayInfo)
+            continue
+
+        WinGet, followerTransparency, Transparent, ahk_id %followerHwndID%
+        overlayInfo.restoreTransparency := followerTransparency
+        WinSet, Transparent, 0, ahk_id %followerHwndID%
+
+        resizeTargetInfo.overlayInfo := overlayInfo
+        resizeTargets[resizeTargetIndex] := resizeTargetInfo
+        preparedAnyFollower := true
+    }
+
+    return preparedAnyFollower
+}
+
+; Restore any follower that fell out of the active sync set mid-drag so it does
+; not remain hidden once the geometry no longer qualifies for live tracking.
+_ReleaseLButtonResizeSyncDroppedFollowers(previousPartners, currentPartners) {
+    if !IsObject(previousPartners)
+        return false
+
+    currentPartnerMap := {}
+    if (IsObject(currentPartners)) {
+        for currentPartnerIndex, currentPartnerInfo in currentPartners {
+            if (currentPartnerInfo.hwnd)
+                currentPartnerMap[currentPartnerInfo.hwnd] := true
+        }
+    }
+
+    releasedAnyFollower := false
+    for previousPartnerIndex, previousPartnerInfo in previousPartners {
+        if (previousPartnerInfo.hwnd && currentPartnerMap.HasKey(previousPartnerInfo.hwnd))
+            continue
+
+        if (_ReleaseLButtonResizeSyncFollower(previousPartnerInfo)) {
+            previousPartners[previousPartnerIndex] := previousPartnerInfo
+            releasedAnyFollower := true
+        }
+    }
+
+    return releasedAnyFollower
+}
+
+; Restore one follower window to its normal visibility and destroy the matching
+; overlay card so cleanup can run both on button-up and on mid-drag drop-out.
+_ReleaseLButtonResizeSyncFollower(ByRef partnerInfo) {
+    if !IsObject(partnerInfo)
+        return false
+
+    overlayInfo := partnerInfo.overlayInfo
+    if !IsObject(overlayInfo)
+        return false
+
+    overlayGuiName := overlayInfo.guiName
+    if (overlayGuiName != "")
+        Gui, %overlayGuiName%: Destroy
+
+    followerHwndID := partnerInfo.hwnd
+    if (followerHwndID && WinExist("ahk_id " . followerHwndID)) {
+        if (overlayInfo.restoreTransparency = "")
+            WinSet, Transparent, Off, ahk_id %followerHwndID%
+        else
+            WinSet, Transparent, % overlayInfo.restoreTransparency, ahk_id %followerHwndID%
+        WinSet, Redraw,, ahk_id %followerHwndID%
+    }
+
+    partnerInfo.overlayInfo := ""
+    return true
+}
+
+; Restore every follower window still participating in the live resize cohort.
+_ReleaseLButtonResizeSyncFollowerOverlays(ByRef resizeTargets) {
+    if !IsObject(resizeTargets)
+        return false
+
+    releasedAnyFollower := false
+    for resizeTargetIndex, resizeTargetInfo in resizeTargets {
+        if (_ReleaseLButtonResizeSyncFollower(resizeTargetInfo)) {
+            resizeTargets[resizeTargetIndex] := resizeTargetInfo
+            releasedAnyFollower := true
+        }
+    }
+
+    return releasedAnyFollower
+}
+
+; Resize and reposition one follower overlay card while keeping its centered app
+; icon aligned to the current preview rect.
+_UpdateLButtonResizeSyncFollowerOverlayRect(ByRef overlayInfo, overlayX, overlayY, overlayW, overlayH) {
+    if !IsObject(overlayInfo)
+        return false
+
+    overlayHwnd := overlayInfo.hwnd
+    if (!overlayHwnd || !WinExist("ahk_id " . overlayHwnd) || overlayW <= 0 || overlayH <= 0)
+        return false
+
+    WinMove, ahk_id %overlayHwnd%, , %overlayX%, %overlayY%, %overlayW%, %overlayH%
+
+    if (overlayInfo.hasIcon && overlayInfo.iconHwnd && DllCall("IsWindow", "ptr", overlayInfo.iconHwnd)) {
+        iconSize := _GetLButtonResizeSyncFollowerOverlayIconSize(overlayW, overlayH)
+        iconX := Floor((overlayW - iconSize) / 2)
+        iconY := Floor((overlayH - iconSize) / 2)
+        DllCall("MoveWindow", "ptr", overlayInfo.iconHwnd, "int", iconX, "int", iconY, "int", iconSize, "int", iconSize, "int", True)
+    }
+
+    overlayInfo.x := overlayX
+    overlayInfo.y := overlayY
+    overlayInfo.w := overlayW
+    overlayInfo.h := overlayH
+    return true
 }
 
 ; Capture the original topmost state for the dragged window and every active
@@ -12152,8 +12419,10 @@ _TrackLiveResizeSyncTopmostState(hwndID, ByRef topmostStates) {
 ; | - mirror the dragged edge        |
 ; |                                  |
 ; | opposite-side partners:          |
-; | - keep far edge fixed            |
-; | - move the shared boundary       |
+; | - anchored far edge: resize      |
+; |   against that fixed far edge    |
+; | - floating far edge: keep width  |
+; |   and slide with the boundary    |
 ; +----------------------------------+
         ; |
         ; v
@@ -12191,7 +12460,6 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncDraggedStartedAlwaysOnTop
     global lButtonResizeSyncDraggedTransparent
-    global lButtonResizeSyncFullHeightOppositeMoveOnly
     global lButtonResizeSyncHit
     global lButtonResizeSyncLastDraggedH
     global lButtonResizeSyncLastDraggedW
@@ -12272,7 +12540,10 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
         if !WinGetPosEx(sameSidePeerHwndID, sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH, null, null)
             continue
 
-        resizeTargetInfo := { hwnd: sameSidePeerHwndID, role: "peer" }
+        ; Cache the peer's "full monitor height" state once at arm time so the
+        ; live-resize plan can distinguish true split panes from floating side
+        ; followers without recomputing geometry on every timer tick.
+        resizeTargetInfo := { hwnd: sameSidePeerHwndID, isFullHeight: _IsFullMonitorHeightWindow(sameSidePeerHwndID, monitorNum), role: "peer" }
         resizeTargetInfo.fixedEdge := _GetLiveResizeSyncFixedEdge(sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH, edgeHit, "peer")
         lButtonResizeSyncPartners.Push(resizeTargetInfo)
         resizeTargetHwndMap[sameSidePeerHwndID] := true
@@ -12291,8 +12562,9 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
                 continue
             if (partnerHwndID = draggedHwndID)
                 continue
+            partnerIsFullHeight := _IsFullMonitorHeightWindow(partnerHwndID, monitorNum)
             if (   suppressVerticalFullHeightCluster
-                && _IsFullMonitorHeightWindow(partnerHwndID, monitorNum))
+                && partnerIsFullHeight)
                 continue
             if (sameSidePeerHwndMap.HasKey(partnerHwndID))
                 continue
@@ -12301,7 +12573,10 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
             if !WinGetPosEx(partnerHwndID, partnerX, partnerY, partnerW, partnerH, null, null)
                 continue
 
-            resizeTargetInfo := { hwnd: partnerHwndID, role: "opposite" }
+            ; Cache the partner's current geometry traits at arm time. The
+            ; actual horizontal move-vs-resize choice is made below from this
+            ; partner's own far-edge anchor state, not from height alone.
+            resizeTargetInfo := { hwnd: partnerHwndID, isFullHeight: partnerIsFullHeight, role: "opposite" }
             resizeTargetInfo.fixedEdge := _GetLiveResizeSyncFixedEdge(partnerX, partnerY, partnerW, partnerH, edgeHit, "opposite")
             lButtonResizeSyncPartners.Push(resizeTargetInfo)
             resizeTargetHwndMap[partnerHwndID] := true
@@ -12311,20 +12586,81 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     if (!lButtonResizeSyncPartners.MaxIndex())
         return false
 
+    draggedOuterDockSide := ""
+    if (edgeHit = HTRIGHT)
+        draggedOuterDockSide := "left"
+    else if (edgeHit = HTLEFT)
+        draggedOuterDockSide := "right"
+
+    draggedStartsAsSideDock := (   draggedOuterDockSide != ""
+                                && _IsLiveResizeThreeEdgeDockedOnSide(draggedHwndID, monitorNum, draggedOuterDockSide, draggedX, draggedY, draggedW, draggedH))
+
+    liveResizeMoveSupportTolerance := 10
+    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+
+    ; Horizontal opposite-side followers should move by default when the
+    ; dragged window is a true left/right 3-edge dock. Only keep them in the
+    ; resize path when their own far side is backed by a true 3-edge dock,
+    ; either directly or through the next flush pane on that far side.
+    for resizeTargetIndex, resizeTargetInfo in lButtonResizeSyncPartners {
+        if (resizeTargetInfo.role != "opposite") {
+            resizeTargetInfo.useMoveOnly := false
+            continue
+        }
+
+        if (!draggedStartsAsSideDock || (edgeHit != HTLEFT && edgeHit != HTRIGHT)) {
+            resizeTargetInfo.useMoveOnly := false
+            continue
+        }
+
+        if !WinGetPosEx(resizeTargetInfo.hwnd, partnerX, partnerY, partnerW, partnerH, null, null) {
+            resizeTargetInfo.useMoveOnly := false
+            continue
+        }
+
+        partnerBottomEdge       := partnerY + partnerH
+        partnerTouchesTopOrBottom := (   Abs(partnerY - monInfoTop) <= liveResizeMoveSupportTolerance
+                                      || Abs(partnerBottomEdge - monInfoBottom) <= liveResizeMoveSupportTolerance)
+
+        if (!partnerTouchesTopOrBottom) {
+            resizeTargetInfo.useMoveOnly := false
+            continue
+        }
+
+        partnerFarDockSide          := (edgeHit = HTRIGHT) ? "right" : "left"
+        partnerFarNeighborTargetEdge := (edgeHit = HTRIGHT) ? "left" : "right"
+        partnerBackedByThreeEdgeDock := _IsLiveResizeThreeEdgeDockedOnSide(resizeTargetInfo.hwnd, monitorNum, partnerFarDockSide, partnerX, partnerY, partnerW, partnerH)
+
+        if (!partnerBackedByThreeEdgeDock) {
+            farSidePartnerHwndIDs := Find2DEdgePartnerWindows(resizeTargetInfo.hwnd, monitorNum, liveResizeEdgeTouchTolerance, 0, 0, 100, partnerFarNeighborTargetEdge, liveResizeEdgeGapTolerance, partnerX, partnerY, partnerW, partnerH)
+            if (IsObject(farSidePartnerHwndIDs) && farSidePartnerHwndIDs.MaxIndex()) {
+                for farSidePartnerIndex, farSidePartnerHwndID in farSidePartnerHwndIDs {
+                    if (!farSidePartnerHwndID || farSidePartnerHwndID = resizeTargetInfo.hwnd)
+                        continue
+                    if !WinGetPosEx(farSidePartnerHwndID, farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH, null, null)
+                        continue
+                    if (_IsLiveResizeThreeEdgeDockedOnSide(farSidePartnerHwndID, monitorNum, partnerFarDockSide, farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH)) {
+                        partnerBackedByThreeEdgeDock := true
+                        break
+                    }
+                }
+            }
+        }
+
+        resizeTargetInfo.useMoveOnly := !partnerBackedByThreeEdgeDock
+    }
+
     lButtonResizeSyncActive                    := true
     lButtonResizeSyncDraggedHwnd               := draggedHwndID
     lButtonResizeSyncDraggedStartedAlwaysOnTop := IsAlwaysOnTop(draggedHwndID)
     lButtonResizeSyncDraggedTransparent        := false
-    lButtonResizeSyncFullHeightOppositeMoveOnly := (   draggedIsFullHeight
-                                                    && !_IsLiveResizeFarEdgeDocked(draggedHwndID, monitorNum, edgeHit, draggedX, draggedY, draggedW, draggedH))
     lButtonResizeSyncHit                       := edgeHit
     lButtonResizeSyncLastDraggedH              := draggedH
     lButtonResizeSyncLastDraggedW              := draggedW
     lButtonResizeSyncLastDraggedX              := draggedX
     lButtonResizeSyncLastDraggedY              := draggedY
     lButtonResizeSyncTopmostStates             := _CaptureLiveResizeSyncTopmostStates(draggedHwndID, lButtonResizeSyncPartners)
-    if !lButtonResizeSyncDraggedStartedAlwaysOnTop
-        WinSet, Transparent, 255, ahk_id %draggedHwndID%
+    _PrepareLButtonResizeSyncFollowerOverlays(lButtonResizeSyncPartners)
 
     SetTimer, WatchLButtonResizeSync, 10
     return true
@@ -12339,7 +12675,6 @@ EndLButtonResizeSync() {
     global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncDraggedStartedAlwaysOnTop
     global lButtonResizeSyncDraggedTransparent
-    global lButtonResizeSyncFullHeightOppositeMoveOnly
     global lButtonResizeSyncHit
     global lButtonResizeSyncLastDraggedH
     global lButtonResizeSyncLastDraggedW
@@ -12349,16 +12684,17 @@ EndLButtonResizeSync() {
     global lButtonResizeSyncTopmostStates
 
     if (   lButtonResizeSyncDraggedHwnd
+        && lButtonResizeSyncDraggedTransparent
         && !lButtonResizeSyncDraggedStartedAlwaysOnTop
         && WinExist("ahk_id " . lButtonResizeSyncDraggedHwnd))
         WinSet, Transparent, Off, ahk_id %lButtonResizeSyncDraggedHwnd%
 
+    _ReleaseLButtonResizeSyncFollowerOverlays(lButtonResizeSyncPartners)
     _RestoreLiveResizeSyncTopmostStates(lButtonResizeSyncTopmostStates, lButtonResizeSyncDraggedHwnd)
     lButtonResizeSyncActive                    := false
     lButtonResizeSyncDraggedHwnd               := 0
     lButtonResizeSyncDraggedStartedAlwaysOnTop := false
     lButtonResizeSyncDraggedTransparent        := false
-    lButtonResizeSyncFullHeightOppositeMoveOnly := false
     lButtonResizeSyncHit                       := 0
     lButtonResizeSyncLastDraggedH              := ""
     lButtonResizeSyncLastDraggedW              := ""
@@ -12371,13 +12707,13 @@ EndLButtonResizeSync() {
 ; While a native edge resize is in progress, keep each matched same-side peer
 ; and opposite-side partner in sync with the dragged window. Peers mirror the
 ; dragged edge directly, while opposite-side partners either preserve their far
-; edge or preserve their current size, detbc on the cached full-height mode.
+; edge and resize, or preserve width and slide, based on the partner's cached
+; arm-time far-edge anchor state.
 UpdateLButtonResizeSync() {
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncDraggedStartedAlwaysOnTop
     global lButtonResizeSyncDraggedTransparent
-    global lButtonResizeSyncFullHeightOppositeMoveOnly
     global lButtonResizeSyncHit
     global lButtonResizeSyncLastDraggedH
     global lButtonResizeSyncLastDraggedW
@@ -12418,11 +12754,6 @@ UpdateLButtonResizeSync() {
     lButtonResizeSyncLastDraggedX := draggedX
     lButtonResizeSyncLastDraggedY := draggedY
 
-    if (!lButtonResizeSyncDraggedStartedAlwaysOnTop && !lButtonResizeSyncDraggedTransparent) {
-        WinSet, Transparent, 180, ahk_id %lButtonResizeSyncDraggedHwnd%
-        lButtonResizeSyncDraggedTransparent := true
-    }
-
     movePlan := _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH)
     if !IsObject(movePlan) {
         EndLButtonResizeSync()
@@ -12430,8 +12761,9 @@ UpdateLButtonResizeSync() {
     }
 
     if (movePlan.tbcMoves.MaxIndex())
-        _ApplyLiveResizeSyncTbcMoves(movePlan.tbcMoves)
+        _ApplyLButtonResizeSyncPreviewMoves(movePlan.tbcMoves)
 
+    _ReleaseLButtonResizeSyncDroppedFollowers(lButtonResizeSyncPartners, movePlan.validPartners)
     lButtonResizeSyncPartners := movePlan.validPartners
     if (!lButtonResizeSyncPartners.MaxIndex()) {
         EndLButtonResizeSync()
@@ -16154,6 +16486,9 @@ AreaLooksUniformFast9(centerPosX, centerPosY, targetColor := "", sampleRadius :=
 ClearWindowTitlePopup() {
     global WindowTitleID, WindowTitle
 
+    if !(WindowTitleID && WinExist("ahk_id " . WindowTitleID))
+        return
+
     delayTime  := 20
     alphaStart := 200
     alphaStep  := 25
@@ -16167,26 +16502,89 @@ ClearWindowTitlePopup() {
         alphaNow -= alphaStep
     }
 
-    Gui, WindowTitle:Destroy
+    Gui, WindowTitle:Hide
     return
 }
 
-DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
-    global bufferedCycleAdvance, hitTAB, hitTilde, k_Opacity, WindowTitleID, WindowTitle
-    static IsWindowTitleGuiInitialized := False
+; Create the Alt+Tab title popup once so rapid cycle steps can reuse the same
+; GUI and only mutate its icon/text instead of rebuilding the window each time.
+EnsureWindowTitlePopupGui() {
+    global WindowTitleGuiReady, WindowTitleID, WindowTitleIcon, WindowTitleText
 
-    strArray := []
-    CustomColor := "000000"  ; Can be any RGB color (it will be made transparent below).
+    if (WindowTitleGuiReady && WindowTitleID && WinExist("ahk_id " . WindowTitleID))
+        return WindowTitleID
 
-    If (WindowTitleID && WinExist("ahk_id " . WindowTitleID)) {
-        Gui, WindowTitle: Destroy
+    Gui, WindowTitle:Destroy
+    Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID
+    Gui, WindowTitle: Color, 000000
+    Gui, WindowTitle: Margin, 20, 16
+    Gui, WindowTitle: Font, s24
+    Gui, WindowTitle: Add, Picture, vWindowTitleIcon x0 y0 w48 h48 Hidden
+    Gui, WindowTitle: Add, Text, vWindowTitleText x0 y8 cWhite,
+
+    WindowTitleGuiReady := True
+    return WindowTitleID
+}
+
+; Measure the retained title control's current string with its actual GUI font
+; so DrawWindowTitlePopup() can size and vertically align the text precisely.
+_MeasureWindowTitlePopupTextSize(textHwnd, text, ByRef textWidth, ByRef textHeight) {
+    textWidth  := 0
+    textHeight := 0
+
+    if (!textHwnd || text = "")
+        return false
+
+    textDC := DllCall("user32\GetDC", "ptr", textHwnd, "ptr")
+    if !textDC
+        return false
+
+    textFont := DllCall("user32\SendMessage", "ptr", textHwnd, "uint", 0x31, "ptr", 0, "ptr", 0, "ptr")
+    if (textFont)
+        oldFont := DllCall("gdi32\SelectObject", "ptr", textDC, "ptr", textFont, "ptr")
+
+    VarSetCapacity(textSize, 8, 0)
+    if !DllCall("gdi32\GetTextExtentPoint32", "ptr", textDC, "str", text, "int", StrLen(text), "ptr", &textSize) {
+        if (oldFont)
+            DllCall("gdi32\SelectObject", "ptr", textDC, "ptr", oldFont, "ptr")
+        DllCall("user32\ReleaseDC", "ptr", textHwnd, "ptr", textDC)
+        return false
     }
+
+    if (oldFont)
+        DllCall("gdi32\SelectObject", "ptr", textDC, "ptr", oldFont, "ptr")
+    DllCall("user32\ReleaseDC", "ptr", textHwnd, "ptr", textDC)
+
+    textWidth  := NumGet(textSize, 0, "int")
+    textHeight := NumGet(textSize, 4, "int")
+    return true
+}
+
+; Hides the retained Alt+Tab title popup without tearing down the underlying
+; GUI so the next cycle can show it again without paying reconstruction cost.
+HideWindowTitlePopup() {
+    global WindowTitleID
+
+    if (WindowTitleID && WinExist("ahk_id " . WindowTitleID))
+        Gui, WindowTitle:Hide
+}
+
+DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
+    global bufferedCycleAdvance, hitTAB, hitTilde, k_Opacity, WindowTitleID, WindowTitle, WindowTitleIcon, WindowTitleText
+
+    cardPadX      := 20
+    cardPadY      := 16
+    iconGap       := 16
+    iconSize      := 48
+    textWidthPad  := 12
 
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
     ; Popup creation can take long enough for the next Tab/` press to arrive before the
     ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
     bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
+
+    EnsureWindowTitlePopupGui()
 
     If (StrLen(vtext) > 60) {
         vtext := SubStr(vtext, 1, 60) . "..."
@@ -16198,28 +16596,90 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
     bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
 
-    Gui, WindowTitle: +LastFound +AlwaysOnTop -Caption +ToolWindow +HwndWindowTitleID ; +ToolWindow avoids a taskbar button and an alt-tab menu item.
-    Gui, WindowTitle: Color, %CustomColor%
-    Gui, WindowTitle: Font, s24  ; Set a large font size (32-point).
     If (pathToExe) {
         If InStr(pathToExe, "ApplicationFrameHost", False) {
-            Gui, WindowTitle: Add, Picture, xm-20 w48 h48 Icon3, %A_WinDir%\System32\SHELL32.dll
+            ; *Icon3 *w48 *h48 C:\Windows\System32\SHELL32.dll tells the Picture control to load icon resource 3 from SHELL32.dll and display it at 48x4
+            iconSpec := "*Icon3 *w48 *h48 " . A_WinDir . "\System32\SHELL32.dll"
         }
         Else {
-            Gui, WindowTitle: Add, Picture, xm-20 w48 h48, %pathToExe%
+            iconSpec := "*w48 *h48 " . pathToExe
         }
     }
-    Gui, WindowTitle: Add, Text, xp+64 yp+8 cWhite, %vtext%  ; XX & YY serve to auto-size the window.
-    Gui, WindowTitle: Show, Center NoActivate AutoSize ; NoActivate avoids deactivating the currently active window.
-    WinSet, Transparent, 1, ahk_id %WindowTitleID%
+    Else {
+        iconSpec := ""
+    }
+
+    ; In `GuiControl, WindowTitle:, WindowTitleText, %vtext%`:
+    ; `WindowTitle` names the GUI, the blank slot means "change this control's
+    ; value/text", and `WindowTitleText` is the specific Text control to update.
+    ; Set that retained Text control first so later measurement uses this cycle's
+    ; current window/app label instead of the previous cycle's stale text.
+    GuiControl, WindowTitle:, WindowTitleText, %vtext%
+    ; Read back the text control HWND so the measurement helper can query the
+    ; exact font metrics of this live control instead of estimating width.
+    GuiControlGet, textHwnd, WindowTitle:Hwnd, WindowTitleText
+    _MeasureWindowTitlePopupTextSize(textHwnd, vtext, textWidth, textHeight)
+    if (textWidth < 24)
+        textWidth  := 24
+    if (textHeight < 24)
+        textHeight := 24
+    textWidth += textWidthPad
+
+    if (iconSpec != "") {
+        ; Outer GUI: WindowTitle
+        ; popupWidth = leftPad + icon + gap + textWidth + rightPad
+        ; popupHeight = topPad + max(iconHeight, textHeight) + bottomPad
+        ; +------------------------------------------------------+
+        ; |                                                      |
+        ; |  x=iconX,y=iconY                                     |
+        ; |  +--------+   x=textX,y=textY                        |
+        ; |  |  icon  |   +-------------------------------+      |
+        ; |  |Picture |   | window title text             |      |
+        ; |  +--------+   | Text control                  |      |
+        ; |               +-------------------------------+      |
+        ; |                                                      |
+        ; +------------------------------------------------------+
+        contentHeight := Max(iconSize, textHeight)
+        iconX         := cardPadX
+        iconY         := cardPadY + Floor((contentHeight - iconSize) / 2)
+        textX         := cardPadX + iconSize + iconGap
+        textY         := cardPadY + Floor((contentHeight - textHeight) / 2)
+        popupWidth    := cardPadX + iconSize + iconGap + textWidth + cardPadX
+        popupHeight   := cardPadY + contentHeight + cardPadY
+
+        ; Here the target control is `WindowTitleIcon`, the retained Picture
+        ; control inside the `WindowTitle` GUI. This swaps that control's image
+        ; to the current app icon source without rebuilding the GUI.
+        GuiControl, WindowTitle:, WindowTitleIcon, %iconSpec%
+        ; `MoveDraw` is the GuiControl subcommand. It tells AutoHotkey to move
+        ; and resize the `WindowTitleIcon` Picture control to this rectangle,
+        ; then redraw that control immediately in its new slot.
+        GuiControl, WindowTitle:MoveDraw, WindowTitleIcon, % "x" iconX " y" iconY " w" iconSize " h" iconSize
+        ; `Show` is another GuiControl subcommand. It makes the
+        ; `WindowTitleIcon` Picture control visible when this entry has an icon.
+        GuiControl, WindowTitle:Show, WindowTitleIcon
+    }
+    else {
+        textX       := cardPadX
+        textY       := cardPadY
+        popupWidth  := cardPadX + textWidth + cardPadX
+        popupHeight := cardPadY + textHeight + cardPadY
+        ; `Hide` is the matching GuiControl subcommand. It hides the
+        ; `WindowTitleIcon` Picture control for text-only entries so the text
+        ; can use the simpler no-icon card layout.
+        GuiControl, WindowTitle:Hide, WindowTitleIcon
+    }
+
+    ; `MoveDraw` here targets the `WindowTitleText` Text control. Resize and
+    ; reposition that specific control to the measured rectangle, then redraw it
+    ; immediately before the popup window itself is shown.
+    GuiControl, WindowTitle:MoveDraw, WindowTitleText, % "x" textX " y" textY " w" textWidth " h" textHeight
 
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
     ; Popup creation can take long enough for the next Tab/` press to arrive before the
     ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
     bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
-
-    WinGetPos, , , popupWidth, popupHeight, ahk_id %WindowTitleID%
 
     If (centerOnWin) {
         WinGetPos, targetX, targetY, targetWidth, targetHeight, ahk_id %hwnd%
@@ -16231,7 +16691,8 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
         drawY := Round(CoordYCenterScreen() - (popupHeight / 2))
     }
 
-    WinMove, ahk_id %WindowTitleID%,, %drawX%, %drawY%
+    Gui, WindowTitle: Show, % "x" drawX " y" drawY " w" popupWidth " h" popupHeight " NoActivate"
+    WinSet, Transparent, 1, ahk_id %WindowTitleID%
 
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
@@ -19956,7 +20417,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its raining::it's raining
 ::its ready::it's ready
 ::its really::it's really
-::its right::it's right
 ::its run::it's run
 ::its safe::it's safe
 ::its something::it's something
