@@ -23,8 +23,8 @@
 ; | Holds the DLL name/path, module handle, and exported function pointers     |
 ; | used by the virtual-desktop helpers.                                       |
 ; +----------------------------------------------------------------------------+
-Global k_VDA_DllName := "VirtualDesktopAccessor_Win11.dll"
-Global k_dllPath := A_ScriptDir . "\" . k_VDA_DllName  ; destination: next to EXE/script
+Global k_VDA_DllName                               := "VirtualDesktopAccessor_Win11.dll"
+Global k_dllPath                                   := A_ScriptDir . "\" . k_VDA_DllName  ; destination: next to EXE/script
 Global hVirtualDesktopAccessor                     := 0
 Global GetDesktopCountProc                         := 0
 Global GoToDesktopNumberProc                       := 0
@@ -146,7 +146,7 @@ Global typingFixSeq                                := 0
 ; Maximum lifetime for a deferred typing rewrite before it is discarded. Once a
 ; queued fix has been tbc longer than this limit, it is assumed the user may
 ; already be typing in a newer text context, so the delayed Send is skipped.
-Global k_tbcTypingFixMaxAgeMs                  := 250
+Global k_tbcTypingFixMaxAgeMs                      := 250
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
 Global clipPreferExplicitCtrlV                     := False
@@ -162,32 +162,32 @@ Global disableEnter                                := False
 ; +----------------------------------------------------------------------------+
 ; Focused control name captured when Everything Edit1 auto-fit is queued so
 ; the deferred send can require the same search field before firing.
-Global tbcEverythingAdjustCtrl                 := ""
+Global tbcEverythingAdjustCtrl                     := ""
 ; Focused control class captured with the queued Everything auto-fit so the
 ; flush step can require the same concrete control identity when available.
-Global tbcEverythingAdjustCtrlClass            := ""
+Global tbcEverythingAdjustCtrlClass                := ""
 ; Focused control HWND captured when Everything auto-fit is queued so the flush
 ; step can reject a later Edit1 from a different control instance.
-Global tbcEverythingAdjustCtrlHwnd             := 0
+Global tbcEverythingAdjustCtrlHwnd                 := 0
 ; Active Everything window captured for the deferred search-box auto-fit send.
-Global tbcEverythingAdjustHwnd                 := 0
+Global tbcEverythingAdjustHwnd                     := 0
 ; Monotonic token incremented for each newer Everything Edit1 auto-fit request
 ; so older timer callbacks can detect that typing already superseded them.
-Global tbcEverythingAdjustId                   := 0
+Global tbcEverythingAdjustId                       := 0
 ; Tick count recorded when the Everything Edit1 auto-fit request was queued.
-Global tbcEverythingAdjustQueuedTick           := 0
+Global tbcEverythingAdjustQueuedTick               := 0
 ; Source typing tick associated with the current Everything auto-fit request so
 ; KeyTrack queues at most one deferred send per physical keypress burst update.
-Global tbcEverythingAdjustSourceTick           := 0
+Global tbcEverythingAdjustSourceTick               := 0
 ; Maximum lifetime for a deferred Everything Edit1 auto-fit request before it
 ; is dropped as stale rather than sent into a newer typing context.
-Global k_tbcEverythingAdjustMaxAgeMs           := 750
+Global k_tbcEverythingAdjustMaxAgeMs               := 750
 ; Short retry delay for the queued Everything Edit1 auto-fit timer while
 ; waiting for the stronger typing-quiet gate to become true.
-Global k_tbcEverythingAdjustRetryMs            := 40
+Global k_tbcEverythingAdjustRetryMs                := 40
 ; Minimum physical-idle gap required before Everything Edit1 is allowed to
 ; receive the deferred Ctrl+NumpadAdd column auto-fit chord.
-Global k_tbcEverythingAdjustTypingQuietMs      := 110
+Global k_tbcEverythingAdjustTypingQuietMs          := 110
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -195,94 +195,94 @@ Global k_tbcEverythingAdjustTypingQuietMs      := 110
 ; +----------------------------------------------------------------------------+
 ; Window class for the most recent Explorer/file-dialog wheel target so the
 ; deferred adjust step can confirm the queued request still points at the same shell UI.
-Global tbcAdjustColumnsClass                   := ""
+Global tbcAdjustColumnsClass                       := ""
 ; Control under the mouse when the wheel event was queued; used as a hint before
 ; resolving the final DirectUI/ListView target at send time.
-Global tbcAdjustColumnsCtrl                    := ""
+Global tbcAdjustColumnsCtrl                        := ""
 ; Top-level Explorer or #32770 dialog HWND that should receive the deferred
 ; Ctrl+NumpadAdd once scrolling has gone quiet.
-Global tbcAdjustColumnsHwnd                    := 0
+Global tbcAdjustColumnsHwnd                        := 0
 ; Tick count of the most recent qualifying wheel event so AdjustColumns can defer
 ; work until the user pauses scrolling and cancel if wheel activity resumes.
-Global tbcAdjustColumnsLastWheelTick           := 0
+Global tbcAdjustColumnsLastWheelTick               := 0
 ; Minimum quiet period after the last wheel event before attempting Explorer
 ; column auto-fit; this avoids interrupting fast continuous scrolling.
-Global k_tbcAdjustColumnsQuietMs               := 110
+Global k_tbcAdjustColumnsQuietMs                   := 110
 ; Stronger quiet period for #32770 file dialogs, where DirectUI scroll activity and
 ; deferred Ctrl+NumpadAdd sends are more likely to overlap visibly.
-Global k_tbcAdjustColumnsDialogQuietMs         := 180
+Global k_tbcAdjustColumnsDialogQuietMs             := 180
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
-Global tbcAdjustColumnsRequestId               := 0
+Global tbcAdjustColumnsRequestId                   := 0
 ; Short retry delay used when the timer wakes up before scrolling is truly quiet,
 ; allowing fast re-checks without doing focus/send work on every wheel tick.
-Global k_tbcAdjustColumnsRetryMs               := 35
+Global k_tbcAdjustColumnsRetryMs                   := 35
 ; Brief final hold just before injecting Ctrl+NumpadAdd so a last-moment wheel event
 ; can update the tbc request state and cause the send to abort cleanly.
-Global k_tbcAdjustColumnsSendGuardMs           := 20
+Global k_tbcAdjustColumnsSendGuardMs               := 20
 ; Cached final Explorer target ClassNN for the most recent wheel-adjust window so
 ; repeated pause/resume cycles can skip DirectUI/ListView rediscovery work.
-Global c_tbcAdjustColumnsTargetCtrl            := ""
+Global c_tbcAdjustColumnsTargetCtrl                := ""
 ; Top-level window HWND that owns the cached Explorer target ClassNN; the cache is
 ; only valid when a later wheel-adjust request points at this same shell window.
-Global c_tbcAdjustColumnsTargetHwnd            := 0
+Global c_tbcAdjustColumnsTargetHwnd                := 0
 ; Tick count when the cached Explorer target was last confirmed, limiting reuse to
 ; a short burst where the folder view structure is unlikely to have changed.
-Global c_tbcAdjustColumnsTargetTick            := 0
+Global c_tbcAdjustColumnsTargetTick                := 0
 ; Maximum age for the cached Explorer target before AdjustColumns falls back to
 ; full target resolution to avoid using a stale DirectUI/ListView guess.
-Global k_tbcAdjustColumnsTargetTtlMs           := 350
+Global k_tbcAdjustColumnsTargetTtlMs               := 350
 ; Deferred typing correction state so punctuation and capitalization rewrites can
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
 ; Slash uses this slot only for the deferred "/ " rewrite. The slash+Enter path
 ; is handled inline in the custom $Enter hotkey instead of through this timer.
-Global tbcFixSlashAction                       := ""
+Global tbcFixSlashAction                           := ""
 ; Focused control name captured when the "/ " fix is queued so the timer can
 ; cancel instead of rewriting text after focus moves to another control.
-Global tbcFixSlashCtrl                         := ""
+Global tbcFixSlashCtrl                             := ""
 ; Focused control class captured with the deferred slash-space fix so classic
 ; Edit/RichEdit targets can use the same safer message-based phase-2 rewrite
 ; path that Hoty now uses.
-Global tbcFixSlashCtrlClass                    := ""
+Global tbcFixSlashCtrlClass                        := ""
 ; Focused control HWND captured when the slash-space fix is queued so the flush
 ; step can require the exact same control instance instead of trusting only the
 ; ClassNN string.
-Global tbcFixSlashCtrlHwnd                     := 0
+Global tbcFixSlashCtrlHwnd                         := 0
 ; Active top-level window captured when the deferred slash-space rewrite is armed;
 ; the flush step requires this same window to still be active before sending.
-Global tbcFixSlashHwnd                         := 0
+Global tbcFixSlashHwnd                             := 0
 ; Sequence token assigned when the slash-space rewrite is queued so older timer
 ; callbacks can detect that a newer typing event already superseded the work.
-Global tbcFixSlashId                           := 0
+Global tbcFixSlashId                               := 0
 ; Tick count recorded when the slash-space rewrite is queued, used to drop the
 ; request once it has been tbc longer than k_tbcTypingFixMaxAgeMs.
-Global tbcFixSlashQueuedTick                   := 0
+Global tbcFixSlashQueuedTick                       := 0
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
-Global tbcHotyCtrl                             := ""
+Global tbcHotyCtrl                                 := ""
 ; Focused control class captured with the deferred Hoty fix so the flush step can
 ; choose the safer message-based rewrite path for classic Edit/RichEdit targets.
-Global tbcHotyCtrlClass                        := ""
+Global tbcHotyCtrlClass                            := ""
 ; Focused control HWND captured when the Hoty fix is queued so the flush step can
 ; require the exact same control instance, not just the same ClassNN string.
-Global tbcHotyCtrlHwnd                         := 0
+Global tbcHotyCtrlHwnd                             := 0
 ; Active top-level window captured for the deferred Hoty fix, preventing the timer
 ; from replaying a capitalization rewrite into whichever window became active later.
-Global tbcHotyHwnd                             := 0
+Global tbcHotyHwnd                                 := 0
 ; Sequence token assigned to the deferred Hoty fix so only the newest queued
 ; typing rewrite can fire and any older timer callbacks self-cancel.
-Global tbcHotyId                               := 0
+Global tbcHotyId                                   := 0
 ; Tick count captured when the Hoty fix is queued, allowing old capitalization fixes
 ; to expire quickly instead of landing after the surrounding typing context changed.
-Global tbcHotyQueuedTick                       := 0
+Global tbcHotyQueuedTick                           := 0
 ; Replacement character captured from the prior capital hotkey so the deferred Hoty
 ; flush can send the intended rewrite only after the live key cycle has settled.
-Global tbcHotyReplacement                      := ""
+Global tbcHotyReplacement                          := ""
 ; Current lowercase trigger character captured when the Hoty fix is queued so a
 ; later classic-control flush can confirm the exact prior-capital + current-letter
 ; text context before replacing anything.
-Global tbcHotyTriggerChar                      := ""
+Global tbcHotyTriggerChar                          := ""
 ; +----------------------------------------------------------------------------+
 ; | Post-Activation Explorer Click Recovery                                    |
 ; | Captures the first click into an inactive Explorer/file-dialog window so a |
@@ -310,47 +310,106 @@ Global k_postActivationLButtonDelayMs              := 35
 ; +----------------------------------------------------------------------------+
 ; | Runtime Context And Click/Drag Scratch State                               |
 ; | Stores the current desktop, monitor, Explorer path, click target, and      |
-; | in-progress drag metadata shared across mouse and window-management flows.  |
+; | in-progress drag metadata shared across mouse and window-management flows. |
 ; +----------------------------------------------------------------------------+
-Global TimeOfLastHotkeyTyped                       := A_TickCount
-Global currentMon                                  := 0
-Global previousMon                                 := 0
-Global targetDesktop                               := 0
-Global currentPath                                 := ""
-Global prevPath                                    := ""
-Global _winCtrlD                                   := ""
-Global MbuttonIsEnter                              := False
-Global suspendRightButtonForMButtonDrag            := False
-Global lastActWinID                                :=
-Global WindowTitleID                               :=
-Global WindowTitleIcon                             := ""
-Global WindowTitleText                             := ""
-Global WindowTitleGuiReady                         := False
-Global k_keys                                      := "abcdefghijklmnopqrstuvwxyz"
-Global k_numbers                                   := "0123456789"
-Global k_DoubleClickTime                           := DllCall("GetDoubleClickTime")
-Global k_SingleClickTime                           := floor(DllCall("GetDoubleClickTime") * 0.5)
+; Platform/runtime flags cached once for OS-specific behavior.
 Global k_isWin11                                   := DetectWin11()
+; True when Explorer is using the modern Windows 11 implementation.
 Global k_isModernExplorerInReg                     := IsExplorerModern()
+; System double-click interval cached once for click timing logic.
+Global k_DoubleClickTime                           := DllCall("GetDoubleClickTime")
+; Half-double-click interval used as the script's single-click timing threshold.
+Global k_SingleClickTime                           := floor(DllCall("GetDoubleClickTime") * 0.5)
+; Lowercase alphabet characters used by text and hotstring helpers.
+Global k_keys                                      := "abcdefghijklmnopqrstuvwxyz"
+; Decimal digit characters used by text and hotstring helpers.
+Global k_numbers                                   := "0123456789"
+; +----------------------------------------------------------------------------+
+; | Monitor/Desktop/Context State                                              |
+; | Shared monitor, desktop, Explorer-path, and click-position context reused  |
+; | across window activation, taskbar, and shell-navigation flows.             |
+; +----------------------------------------------------------------------------+
+; Monitor index currently targeted by monitor-aware window flows.
+Global currentMon                                  := 0
+; Previously targeted monitor index for cross-monitor transitions.
+Global previousMon                                 := 0
+; Virtual desktop index being targeted by desktop-switching logic.
+Global targetDesktop                               := 0
+; Current Explorer path snapshot used by folder-aware actions.
+Global currentPath                                 := ""
+; Previous Explorer path snapshot used for path-change comparisons.
+Global prevPath                                    := ""
+; Cached taskbar height used by taskbar-aware positioning logic.
 Global TaskBarHeight                               := 0
-Global lastHotkeyTyped                             := ""
-Global DraggingWindow                              := False
-Global allowDoubleClicks                           := True
-Global disableSendCtrlHwnd                         := ""
-Global lButtonResizeSyncActive                     := False
-Global lButtonResizeSyncDraggedHwnd                := 0
-Global lButtonResizeSyncDraggedStartedAlwaysOnTop  := False
-Global lButtonResizeSyncDraggedTransparent         := False
-Global lButtonResizeSyncHit                        := 0
-Global lButtonResizeSyncLastDraggedH               := ""
-Global lButtonResizeSyncLastDraggedW               := ""
-Global lButtonResizeSyncLastDraggedX               := ""
-Global lButtonResizeSyncLastDraggedY               := ""
-Global lButtonResizeSyncOverlaySeq                := 0
-Global lButtonResizeSyncPartners                   := []
-Global lButtonResizeSyncTopmostStates              := {}
+; Screen X coordinate of the last taskbar/tray click.
 Global trayClickPosX                               := 0
+; Screen Y coordinate of the last taskbar/tray click.
 Global trayClickPosY                               := 0
+; Cached Win+Ctrl+D helper state used by desktop creation logic.
+Global _winCtrlD                                   := ""
+; +----------------------------------------------------------------------------+
+; | Window/UI State                                                            |
+; | Shared HWNDs and retained popup content reused across activation and cycle |
+; | UI updates.                                                                |
+; +----------------------------------------------------------------------------+
+; HWND of the last active window tracked by activation logic.
+Global lastActWinID                                :=
+; HWND whose Ctrl sends should be temporarily blocked from synthetic input.
+Global disableSendCtrlHwnd                         := ""
+; HWND of the retained WindowTitle popup GUI.
+Global WindowTitleID                               :=
+; Current icon source spec shown in the WindowTitle popup.
+Global WindowTitleIcon                             := ""
+; Current text shown in the WindowTitle popup.
+Global WindowTitleText                             := ""
+; True once the retained WindowTitle popup GUI has been created.
+Global WindowTitleGuiReady                         := False
+; +----------------------------------------------------------------------------+
+; | Input/Gesture State                                                        |
+; | Shared typing, click, and drag flags that let separate hotkeys and mouse   |
+; | handlers coordinate one in-progress gesture.                               |
+; +----------------------------------------------------------------------------+
+; Master toggle that lets custom click logic emit double-clicks.
+Global allowDoubleClicks                           := True
+; True while the custom live window-drag flow is in progress.
+Global DraggingWindow                              := False
+; Name of the most recently triggered hotkey for repeat-sensitive logic.
+Global lastHotkeyTyped                             := ""
+; True when MButton should behave like Enter for the current gesture.
+Global MbuttonIsEnter                              := False
+; Temporarily suppresses native RButton handling during MButton drag flows.
+Global suspendRightButtonForMButtonDrag            := False
+; Tick count of the most recent hotkey-triggered send used by typing heuristics.
+Global TimeOfLastHotkeyTyped                       := A_TickCount
+; +----------------------------------------------------------------------------+
+; | Live-Resize Session State                                                  |
+; | Shared per-drag session state for synced left-button resize, including the |
+; | dragged window, follower windows, and resize-ghost bookkeeping.            |
+; +----------------------------------------------------------------------------+
+; True while the synced left-button resize workflow is armed and running.
+Global lButtonResizeSyncActive                     := False
+; HWND of the actively dragged window in the synced resize workflow.
+Global lButtonResizeSyncDraggedHwnd                := 0
+; Whether the dragged window started the resize already topmost.
+Global lButtonResizeSyncDraggedStartedAlwaysOnTop  := False
+; Whether the dragged window has been made transparent during synced resize.
+Global lButtonResizeSyncDraggedTransparent         := False
+; Monotonic suffix used to generate unique resize-ghost GUI names.
+Global lButtonResizeGhostSeq                       := 0
+; Hit-test code for the edge or corner currently being dragged.
+Global lButtonResizeSyncHit                        := 0
+; Last tracked dragged-window height during synced resize.
+Global lButtonResizeSyncLastDraggedH               := ""
+; Last tracked dragged-window width during synced resize.
+Global lButtonResizeSyncLastDraggedW               := ""
+; Last tracked dragged-window X position during synced resize.
+Global lButtonResizeSyncLastDraggedX               := ""
+; Last tracked dragged-window Y position during synced resize.
+Global lButtonResizeSyncLastDraggedY               := ""
+; Active follower-window records participating in synced resize.
+Global lButtonResizeSyncPartners                   := []
+; Original AlwaysOnTop states captured for synced-resize cleanup.
+Global lButtonResizeSyncTopmostStates              := {}
 
 ; +----------------------------------------------------------------------------+
 ; | Hook, UIA, And Input-Guard State                                           |
@@ -525,10 +584,10 @@ Gui, ShadowFrFull2: +AlwaysOnTop +ToolWindow -DPIScale +E0x08000000 +E0x20 -Capt
 Gui, ShadowFrFull2: Color, FF00FF
 FrameShadow(IGUIF2)
 
-Gui, GUI4Boarder: New
-Gui, GUI4Boarder: +HwndHighlighter
-Gui, GUI4Boarder: +AlwaysOnTop +Toolwindow -Caption +Owner +Lastfound
-Gui, GUI4Boarder: Color, %k_border_color%
+Gui, GUIHighlighter: New
+Gui, GUIHighlighter: +HwndHighlighter
+Gui, GUIHighlighter: +AlwaysOnTop +Toolwindow -Caption +Owner +Lastfound
+Gui, GUIHighlighter: Color, %k_border_color%
 
 ; --- Overlay GUI init (create once at startup) ---
 ;
@@ -576,14 +635,13 @@ global overlayFadeToken    := 0
 global overlayAlphaCurrent := 0
 global overlayHwnd         := 0
 global overlayKeyColor     := "FF00FF"      ; RGB hex string
-global overlayHoleCtrl     := "OverlayHole"
 global overlayIsReady      := False
 
 Gui, Overlay:New, +AlwaysOnTop -Caption +ToolWindow +E0x20 +HwndoverlayHwnd
 Gui, Overlay:Color, 000000
 
 ; Solid filled rectangle in key color
-Gui, Overlay:Add, Text, x0 y0 w1 h1 v%overlayHoleCtrl% Background%overlayKeyColor%
+Gui, Overlay:Add, Text, x0 y0 w1 h1 Background%overlayKeyColor%
 
 Overlay_Prewarm()
 overlayIsReady := True
@@ -2266,17 +2324,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     LbuttonEnabled := False
 
-    If (vWinClass == "wxWindowNR" && vWinProc == "clipdiary-portable.exe") {
-        EnsureFocusedCtrlNN(hWnd, "Edit1", 60, 10)
-        BeginBlockKeys()
-        Send, {LCtrl UP}
-        Send, {LShift UP}
-        Send, {. UP}
-        Send, {Backspace}
-        ControlFocus, Edit1, ahk_id %hWnd%
-        EndBlockKeys()
-    }
-
     if ( !HasVal(prevActiveWindows, hWnd) || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
         Critical, On
         prevActiveWindows.push(hWnd)
@@ -2941,11 +2988,11 @@ return
     WinGet, exStyle, ExStyle, ahk_id %hwndId%
 
     if IsAlwaysOnTop(hwndId) {
-        Gui, GUI4Boarder: Color, 0x00FF00
+        Gui, GUIHighlighter: Color, 0x00FF00
         WinSet, Transparent, Off, ahk_id %hwndId%
     }
     else {
-        Gui, GUI4Boarder: Color, 0xFF0000
+        Gui, GUIHighlighter: Color, 0xFF0000
         transDelta := 5
         iterations := (255 - k_Opacity) / transDelta
         transVal := 255
@@ -2966,7 +3013,7 @@ return
     Sleep, 200
     ClearRect()
     BlockInput, MouseMoveOff
-    Gui, GUI4Boarder: Color, %k_border_color%
+    Gui, GUIHighlighter: Color, %k_border_color%
     WinSet, AlwaysOnTop, Toggle, ahk_id %hwndId%
 return
 
@@ -5317,7 +5364,7 @@ Return
 $!x::
     tooltip, Canceled Operation!
     CanceledWinSwap := True
-    Gui, GUI4Boarder: Hide
+    Gui, GUIHighlighter: Hide
     HideWindowTitlePopup()
 
     lastActWinID := GroupedWindows[cycleCount]
@@ -5548,7 +5595,7 @@ Cycle() {
                             Critical, Off
 
                             WinGetPosEx(hwndID, wx, wy, ww, wh, null, null)
-                            Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 40)
+                            Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 30)
 
                             If !GetKeyState("LAlt","P")
                                 Return 0
@@ -5559,7 +5606,7 @@ Cycle() {
                         cycleCount := 3
                         Critical, Off
 
-                        Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 40)
+                        Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 30)
 
                         If !GetKeyState("LAlt","P")
                             Return 0
@@ -5762,7 +5809,7 @@ CycleAppWindows(activeProcessName, activeClass) {
     WinActivate, ahk_id %gwHwndId%
 
     WinGetPosEx(gwHwndId, wx, wy, ww, wh, null, null)
-    Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,,40)
+    Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 30)
 
     lastActWinID := gwHwndId
 
@@ -6090,7 +6137,7 @@ Return
 ; ------------------------------------  Drawing Functions ------------------------------------------------
 ; ========================================================================================================
 ClearRect(hwnd := "") {
-    global DrawingRect, Highlighter, GUI4Boarder
+    global DrawingRect, Highlighter, GUIHighlighter
 
     If DrawingRect {
         Critical, On
@@ -6099,7 +6146,7 @@ ClearRect(hwnd := "") {
             DrawingRect := False
             If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 Critical, Off
-                Gui, GUI4Boarder: Hide
+                Gui, GUIHighlighter: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
@@ -6115,14 +6162,14 @@ ClearRect(hwnd := "") {
             WinSet, Transparent, %current_trans%, ahk_id %Highlighter%
             If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 Critical, Off
-                Gui, GUI4Boarder: Hide
+                Gui, GUIHighlighter: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
             }
             If (hwnd != "" && !WinExist("ahk_id " . hwnd)) {
                 Critical, Off
-                Gui, GUI4Boarder: Hide
+                Gui, GUIHighlighter: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
@@ -6130,7 +6177,7 @@ ClearRect(hwnd := "") {
             WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
             sleep 10
         }
-        Gui, GUI4Boarder: Hide
+        Gui, GUIHighlighter: Hide
         Critical, Off
     }
 Return
@@ -6138,7 +6185,7 @@ Return
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=110505
 DrawRect:
-    Gui, GUI4Boarder: Hide
+    Gui, GUIHighlighter: Hide
     DrawingRect := True
     WinGet, activeWin, ID, A
     x := y := w := h := 0
@@ -6205,7 +6252,7 @@ DrawRect:
     }
 
     Critical, On
-    Gui,GUI4Boarder: Show, w%newW% h%newH% x%newX% y%newY% NA, Table awaiting Action
+    Gui,GUIHighlighter: Show, w%newW% h%newH% x%newX% y%newY% NA, Table awaiting Action
     WinSet, Region, %outerX%-%outerY%  %outerX2%-%outerY%  %outerX2%-%outerY2%  %outerX%-%outerY2%  %outerX%-%outerY%  %innerX%-%innerY%  %innerX2%-%innerY%  %innerX2%-%innerY2%  %innerX%-%innerY2%  %innerX%-%innerY%, ahk_id %Highlighter%
 
     WinSet, Transparent, Off, ahk_id %Highlighter%
@@ -6265,7 +6312,7 @@ Measure_End() {
 }
 
 ; Lazily create the small click-through GUIs used by the measurement tool so the
-; feature stays self-contained and does not interfere with Overlay_* or GUI4Boarder.
+; feature stays self-contained and does not interfere with Overlay_* or GUIHighlighter.
 Measure_EnsureGui() {
     global MeasureText, measureGuiReady
 
@@ -6506,8 +6553,13 @@ Overlay_GetWorkArea(monNum, ByRef areaLeft, ByRef areaTop, ByRef areaRight, ByRe
 
 Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, clickThrough := True, fadeMs := 100) {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
+    static HWND_TOPMOST   := -1
+    static SWP_NOMOVE     := 0x0002
+    static SWP_NOACTIVATE := 0x0010
+    static SWP_NOSIZE     := 0x0001
+    static SWP_SHOWWINDOW := 0x0040
 
-    if (!overlayIsReady || !overlayHwnd)
+    if (!overlayIsReady || !overlayHwnd || !DllCall("IsWindow", "ptr", overlayHwnd))
         return 0
 
     ; Stop any older show/hide fade before positioning the next preview. This
@@ -6587,6 +6639,16 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
     ; Windows has to composite on each alpha step, which helps the fade feel more
     ; immediate and reduces the chance of cross-monitor redraw artifacts.
     Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
+    ; Reassert this dimmer HWND in the topmost band each time it is shown so the
+    ; retained WindowTitle popup cannot leave the hole-overlay visually buried.
+    DllCall("user32\SetWindowPos"
+        , "ptr", overlayHwnd
+        , "ptr", HWND_TOPMOST
+        , "int", 0
+        , "int", 0
+        , "int", 0
+        , "int", 0
+        , "uint", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
 
     ; If currently transparent, reset alpha baseline.
     ; This guarantees the fade always starts from a known invisible state after a
@@ -6729,6 +6791,11 @@ Overlay_SetHoleRegion(overlayHwnd, holeX, holeY, holeW, holeH) {
 
 Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "", doRedraw := True) {
     global overlayHwnd, overlayIsReady
+    static HWND_TOPMOST   := -1
+    static SWP_NOMOVE     := 0x0002
+    static SWP_NOACTIVATE := 0x0010
+    static SWP_NOSIZE     := 0x0001
+    static SWP_SHOWWINDOW := 0x0040
 
     static lastHolePosX  := 0
     static lastHolePosY  := 0
@@ -6736,7 +6803,7 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     static lastHoleSizeH := 0
     static hasLastHole   := False
 
-    if (!overlayIsReady || !overlayHwnd)
+    if (!overlayIsReady || !overlayHwnd || !DllCall("IsWindow", "ptr", overlayHwnd))
         return 0
 
     ; If any values are omitted, reuse prior ones.
@@ -6797,6 +6864,16 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     ; feel like a continuous animation instead of a series of flashes.
     ; Make sure the overlay is positioned on the selected monitor's work area.
     Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
+    ; Reassert the overlay here too because repeated Alt+Tab moves reuse the same
+    ; HWND and must keep it above normal windows even after other popups reshuffle z-order.
+    DllCall("user32\SetWindowPos"
+        , "ptr", overlayHwnd
+        , "ptr", HWND_TOPMOST
+        , "int", 0
+        , "int", 0
+        , "int", 0
+        , "int", 0
+        , "uint", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
 
     ; Convert screen coords to overlay-relative coords.
     holeRelX := clipLeft - areaLeft
@@ -6818,7 +6895,7 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
 Overlay_Prewarm() {
     global overlayAlphaCurrent, overlayHwnd
 
-    if (!overlayHwnd)
+    if (!overlayHwnd || !DllCall("IsWindow", "ptr", overlayHwnd))
         return 0
 
     ; Pre-show the overlay once at startup as a tiny fully transparent window.
@@ -6842,7 +6919,7 @@ Overlay_Prewarm() {
 Overlay_Hide(fadeMs := 100) {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
 
-    if (!overlayIsReady || !overlayHwnd)
+    if (!overlayIsReady || !overlayHwnd || !DllCall("IsWindow", "ptr", overlayHwnd))
         return
 
     ; Let the hide fade continue after Alt/Esc release. That gives the overlay a
@@ -6870,7 +6947,7 @@ Overlay_Hide(fadeMs := 100) {
 Overlay_SetOpacity(alphaVal, fadeMs := 0) {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
 
-    if (!overlayIsReady || !overlayHwnd)
+    if (!overlayIsReady || !overlayHwnd || !DllCall("IsWindow", "ptr", overlayHwnd))
         return 0
 
     if (alphaVal < 0)
@@ -11135,7 +11212,7 @@ MouseTrack() {
             WinActivate, ahk_id %escHwndID%
             GoSub, DrawRect
             ClearRect()
-            Gui, GUI4Boarder: Hide
+            Gui, GUIHighlighter: Hide
 
             previousMon := currentMon
             StopRecursion := False
@@ -11598,14 +11675,14 @@ _IsLiveResizeFarEdgeDocked(hwndID, monitorNum, edgeHit, refX := "", refY := "", 
     static HTLEFT  := 10  ; Non-client left resize border.
     static HTRIGHT := 11  ; Non-client right resize border.
 
-    liveResizeFarEdgeGapTolerance    := 10
+    liveResizeFarEdgeGapTolerance     := 10
     ; Live-resize arm time needs a looser work-area edge check than the strict
     ; 3px "looks docked" helpers elsewhere. Snapped panes on Windows 11 can sit
     ; a few pixels off the reported work-area boundary while still behaving as a
     ; true anchored far edge during native resize.
     liveResizeFarEdgeMonitorTolerance := 10
-    liveResizeFarEdgeTouchTolerance  := 10
-    liveResizeFarEdgeVerticalOverlap := 100
+    liveResizeFarEdgeTouchTolerance   := 10
+    liveResizeFarEdgeVerticalOverlap  := 100
 
     if (!hwndID || monitorNum < 1)
         return false
@@ -11829,7 +11906,7 @@ _ApplyLiveResizeSyncTbcMoves(tbcMoves) {
 }
 
 ; During live drag, drive lightweight overlay cards for any follower window that
-; was successfully hidden, and fall back to real WinMove only for followers that
+; was successfully made fully transparent, and fall back to real WinMove only for followers that
 ; could not be converted into an overlay-backed preview surface.
 _ApplyLButtonResizeSyncPreviewMoves(tbcMoves) {
     if (!IsObject(tbcMoves) || !tbcMoves.MaxIndex())
@@ -11837,36 +11914,51 @@ _ApplyLButtonResizeSyncPreviewMoves(tbcMoves) {
 
     realTbcMoves := []
     for tbcIndex, tbcMove in tbcMoves {
-        partnerInfo := tbcMove.partnerInfo
-        overlayInfo := IsObject(partnerInfo) ? partnerInfo.overlayInfo : ""
+        partnerInfo   := tbcMove.partnerInfo
+        ghostCardInfo := IsObject(partnerInfo) ? partnerInfo.ghostCardInfo : ""
+        tbcHwndID     := tbcMove.hwnd
 
-        if !IsObject(overlayInfo) {
+        if !IsObject(ghostCardInfo) {
             realTbcMoves.Push(tbcMove)
             continue
         }
 
-        targetX := overlayInfo.x
-        targetY := overlayInfo.y
-        targetW := overlayInfo.w
-        targetH := overlayInfo.h
+        ; The move plan stores real-window WinMove coordinates, but the gray
+        ; follower card is later moved as a GUI that should visually match the
+        ; outer frame reported by WinGetPosEx(). Example: if WinMove needs
+        ; x=92/w=516 for a window whose visible frame is really x=100/w=500,
+        ; feeding 92/516 straight into the overlay would make the gray card
+        ; hang 8 px across the shared edge. Reverse that offset math here so
+        ; the overlay GUI is moved in visible-frame coordinates, while the real
+        ; follower window still keeps the original WinMove rect.
+        if !WinGetPosEx(tbcHwndID, currentX, currentY, currentW, currentH, partnerOffsetX, partnerOffsetY) {
+            _ReleaseLButtonResizeSyncFollower(partnerInfo)
+            realTbcMoves.Push(tbcMove)
+            continue
+        }
+
+        targetX := ghostCardInfo.x
+        targetY := ghostCardInfo.y
+        targetW := ghostCardInfo.w
+        targetH := ghostCardInfo.h
 
         if (tbcMove.axis = "horizontal") {
-            targetX := tbcMove.x
+            targetX := tbcMove.x - partnerOffsetX
             if (!tbcMove.moveOnly)
-                targetW := tbcMove.w
+                targetW := tbcMove.w - 2*Abs(partnerOffsetX)
         }
         else if (tbcMove.axis = "vertical") {
-            targetH := tbcMove.h
             targetY := tbcMove.y
+            targetH := tbcMove.h - 2*Abs(partnerOffsetY) - 1
         }
         else {
-            targetH := tbcMove.h
-            targetW := tbcMove.w
-            targetX := tbcMove.x
+            targetH := tbcMove.h - 2*Abs(partnerOffsetY) - 1
+            targetW := tbcMove.w - 2*Abs(partnerOffsetX)
+            targetX := tbcMove.x - partnerOffsetX
             targetY := tbcMove.y
         }
 
-        if (_UpdateLButtonResizeSyncFollowerOverlayRect(overlayInfo, targetX, targetY, targetW, targetH))
+        if (_UpdateLButtonResizeSyncGhostCardRect(ghostCardInfo, targetX, targetY, targetW, targetH))
             continue
 
         _ReleaseLButtonResizeSyncFollower(partnerInfo)
@@ -11899,9 +11991,9 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
 
     for partnerIndex, partnerInfo in lButtonResizeSyncPartners {
         partnerHwndID      := partnerInfo.hwnd
-        partnerFixedEdge    := partnerInfo.fixedEdge
-        partnerMoveOnly     := partnerInfo.useMoveOnly
-        partnerRole         := partnerInfo.role
+        partnerFixedEdge   := partnerInfo.fixedEdge
+        partnerMoveOnly    := partnerInfo.useMoveOnly
+        partnerRole        := partnerInfo.role
         usedMoveOnlyPartnerHandling := false
         ; Only issue WinMove when the target rect actually changed. This avoids
         ; redundant no-op resizes, which is especially important for heavier
@@ -12099,39 +12191,41 @@ _FinalizeLButtonResizeSync() {
 
 ; Build one opaque preview card for a synced follower window so the live drag
 ; can animate a cheap surface instead of continuously resizing the real window.
-_CreateLButtonResizeSyncFollowerOverlay(hwndID, overlayX, overlayY, overlayW, overlayH) {
-    global lButtonResizeSyncOverlaySeq
+_CreateLButtonResizeSyncGhostCard(hwndID, ghostX, ghostY, ghostW, ghostH) {
+    global lButtonResizeGhostSeq
 
-    if (!hwndID || overlayW <= 0 || overlayH <= 0)
+    if (!hwndID || ghostW <= 0 || ghostH <= 0)
         return false
 
-    lButtonResizeSyncOverlaySeq++
-    overlayGuiName := "LButtonResizeSyncOverlay" . lButtonResizeSyncOverlaySeq
-    iconSpec := _GetLButtonResizeSyncFollowerOverlaySpec(hwndID)
-    iconSize := _GetLButtonResizeSyncFollowerOverlayIconSize(overlayW, overlayH)
-    iconX := Floor((overlayW - iconSize) / 2)
-    iconY := Floor((overlayH - iconSize) / 2)
+    lButtonResizeGhostSeq++
+    resizeGhostGuiName  := "LButtonResizeSyncOverlay" . lButtonResizeGhostSeq
+    iconSpec            := _GetLButtonResizeSyncGhostCardSpec(hwndID)
+    iconSize            := _GetLButtonResizeSyncGhostCardIconSize(ghostW, ghostH)
+    iconX               := Floor((ghostW - iconSize) / 2)
+    iconY               := Floor((ghostH - iconSize) / 2)
 
-    overlayIconHwnd := 0
+    followerGhostHwnd := 0
+    ghostIconHwnd     := 0
 
-    Gui, %overlayGuiName%: New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x20 +HwndoverlayHwnd
-    Gui, %overlayGuiName%: Margin, 0, 0
-    Gui, %overlayGuiName%: Color, 4A4A4A
+    ; Keep the follower card HWND isolated from the global Alt+Tab ghost HWND.
+    Gui, %resizeGhostGuiName%: New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x20 +HwndfollowerGhostHwnd
+    Gui, %resizeGhostGuiName%: Margin, 0, 0
+    Gui, %resizeGhostGuiName%: Color, 4A4A4A
 
     if (IsObject(iconSpec) && iconSpec.path != "") {
-        iconControlOptions := "hwndoverlayIconHwnd x" . iconX . " y" . iconY . " w" . iconSize . " h" . iconSize
+        iconControlOptions := "hwndghostIconHwnd x" . iconX . " y" . iconY . " w" . iconSize . " h" . iconSize
         if (iconSpec.options != "")
             iconControlOptions .= " " . iconSpec.options
-        Gui, %overlayGuiName%: Add, Picture, %iconControlOptions%, % iconSpec.path
+        Gui, %resizeGhostGuiName%: Add, Picture, %iconControlOptions%, % iconSpec.path
     }
 
-    Gui, %overlayGuiName%: Show, NA x%overlayX% y%overlayY% w%overlayW% h%overlayH%
-    return { guiName: overlayGuiName, hasIcon: (IsObject(iconSpec) && iconSpec.path != ""), hwnd: overlayHwnd, iconHwnd: overlayIconHwnd, restoreTransparency: "", w: overlayW, x: overlayX, y: overlayY, h: overlayH }
+    Gui, %resizeGhostGuiName%: Show, NA x%ghostX% y%ghostY% w%ghostW% h%ghostH%
+    return { guiName: resizeGhostGuiName, hwnd: followerGhostHwnd, iconHwnd: ghostIconHwnd, restoreTransparency: "", w: ghostW, x: ghostX, y: ghostY, h: ghostH }
 }
 
-; Read one follower window's icon source so the overlay card can still identify
-; the hidden app even while the real window stays frozen underneath it.
-_GetLButtonResizeSyncFollowerOverlaySpec(hwndID) {
+; Read one follower window's icon source so the ghost card can still identify
+; the visually removed app even while the real window stays transparent underneath it.
+_GetLButtonResizeSyncGhostCardSpec(hwndID) {
     if (!hwndID)
         return { options: "Icon3", path: A_WinDir . "\System32\SHELL32.dll" }
 
@@ -12142,16 +12236,16 @@ _GetLButtonResizeSyncFollowerOverlaySpec(hwndID) {
     return { options: "Icon3", path: A_WinDir . "\System32\SHELL32.dll" }
 }
 
-; Size the follower overlay icon conservatively so small panes still get an
+; Size the follower ghost icon conservatively so small panes still get an
 ; identifiable app glyph without the placeholder card feeling crowded.
-_GetLButtonResizeSyncFollowerOverlayIconSize(overlayW, overlayH) {
-    shortestEdge := Min(overlayW, overlayH)
+_GetLButtonResizeSyncGhostCardIconSize(ghostW, ghostH) {
+    shortestEdge := Min(ghostW, ghostH)
     return Max(32, Min(72, Floor(shortestEdge / 5)))
 }
 
-; Hide each synced follower window and swap in an overlay placeholder so the
-; live timer no longer forces heavy apps to repaint on every drag tick.
-_PrepareLButtonResizeSyncFollowerOverlays(ByRef resizeTargets) {
+; Make each synced follower window fully transparent and swap in an overlay
+; placeholder so the live timer no longer forces heavy apps to repaint on every drag tick.
+_PrepareLButtonResizeSyncGhostCards(ByRef resizeTargets) {
     if !IsObject(resizeTargets)
         return false
 
@@ -12164,15 +12258,15 @@ _PrepareLButtonResizeSyncFollowerOverlays(ByRef resizeTargets) {
         if !WinGetPosEx(followerHwndID, followerX, followerY, followerW, followerH, null, null)
             continue
 
-        overlayInfo := _CreateLButtonResizeSyncFollowerOverlay(followerHwndID, followerX, followerY, followerW, followerH)
-        if !IsObject(overlayInfo)
+        ghostCardInfo := _CreateLButtonResizeSyncGhostCard(followerHwndID, followerX, followerY, followerW, followerH)
+        if !IsObject(ghostCardInfo)
             continue
 
         WinGet, followerTransparency, Transparent, ahk_id %followerHwndID%
-        overlayInfo.restoreTransparency := followerTransparency
+        ghostCardInfo.restoreTransparency := followerTransparency
         WinSet, Transparent, 0, ahk_id %followerHwndID%
 
-        resizeTargetInfo.overlayInfo := overlayInfo
+        resizeTargetInfo.ghostCardInfo := ghostCardInfo
         resizeTargets[resizeTargetIndex] := resizeTargetInfo
         preparedAnyFollower := true
     }
@@ -12181,7 +12275,7 @@ _PrepareLButtonResizeSyncFollowerOverlays(ByRef resizeTargets) {
 }
 
 ; Restore any follower that fell out of the active sync set mid-drag so it does
-; not remain hidden once the geometry no longer qualifies for live tracking.
+; not remain transparent once the geometry no longer qualifies for live tracking.
 _ReleaseLButtonResizeSyncDroppedFollowers(previousPartners, currentPartners) {
     if !IsObject(previousPartners)
         return false
@@ -12208,35 +12302,35 @@ _ReleaseLButtonResizeSyncDroppedFollowers(previousPartners, currentPartners) {
     return releasedAnyFollower
 }
 
-; Restore one follower window to its normal visibility and destroy the matching
-; overlay card so cleanup can run both on button-up and on mid-drag drop-out.
+; Restore one follower window's previous transparency state and destroy the
+; matching overlay card so cleanup can run both on button-up and on mid-drag drop-out.
 _ReleaseLButtonResizeSyncFollower(ByRef partnerInfo) {
     if !IsObject(partnerInfo)
         return false
 
-    overlayInfo := partnerInfo.overlayInfo
-    if !IsObject(overlayInfo)
+    ghostCardInfo := partnerInfo.ghostCardInfo
+    if !IsObject(ghostCardInfo)
         return false
 
-    overlayGuiName := overlayInfo.guiName
-    if (overlayGuiName != "")
-        Gui, %overlayGuiName%: Destroy
+    resizeGhostGuiName := ghostCardInfo.guiName
+    if (resizeGhostGuiName != "")
+        Gui, %resizeGhostGuiName%: Destroy
 
     followerHwndID := partnerInfo.hwnd
     if (followerHwndID && WinExist("ahk_id " . followerHwndID)) {
-        if (overlayInfo.restoreTransparency = "")
+        if (ghostCardInfo.restoreTransparency = "")
             WinSet, Transparent, Off, ahk_id %followerHwndID%
         else
-            WinSet, Transparent, % overlayInfo.restoreTransparency, ahk_id %followerHwndID%
+            WinSet, Transparent, % ghostCardInfo.restoreTransparency, ahk_id %followerHwndID%
         WinSet, Redraw,, ahk_id %followerHwndID%
     }
 
-    partnerInfo.overlayInfo := ""
+    partnerInfo.ghostCardInfo := ""
     return true
 }
 
 ; Restore every follower window still participating in the live resize cohort.
-_ReleaseLButtonResizeSyncFollowerOverlays(ByRef resizeTargets) {
+_ReleaseLButtonResizeSyncGhostCards(ByRef resizeTargets) {
     if !IsObject(resizeTargets)
         return false
 
@@ -12253,27 +12347,27 @@ _ReleaseLButtonResizeSyncFollowerOverlays(ByRef resizeTargets) {
 
 ; Resize and reposition one follower overlay card while keeping its centered app
 ; icon aligned to the current preview rect.
-_UpdateLButtonResizeSyncFollowerOverlayRect(ByRef overlayInfo, overlayX, overlayY, overlayW, overlayH) {
-    if !IsObject(overlayInfo)
+_UpdateLButtonResizeSyncGhostCardRect(ByRef ghostCardInfo, ghostX, ghostY, ghostW, ghostH) {
+    if !IsObject(ghostCardInfo)
         return false
 
-    overlayHwnd := overlayInfo.hwnd
-    if (!overlayHwnd || !WinExist("ahk_id " . overlayHwnd) || overlayW <= 0 || overlayH <= 0)
+    followerGhostHwnd := ghostCardInfo.hwnd
+    if (!followerGhostHwnd || !WinExist("ahk_id " . followerGhostHwnd) || ghostW <= 0 || ghostH <= 0)
         return false
 
-    WinMove, ahk_id %overlayHwnd%, , %overlayX%, %overlayY%, %overlayW%, %overlayH%
+    WinMove, ahk_id %followerGhostHwnd%, , %ghostX%, %ghostY%, %ghostW%, %ghostH%
 
-    if (overlayInfo.hasIcon && overlayInfo.iconHwnd && DllCall("IsWindow", "ptr", overlayInfo.iconHwnd)) {
-        iconSize := _GetLButtonResizeSyncFollowerOverlayIconSize(overlayW, overlayH)
-        iconX := Floor((overlayW - iconSize) / 2)
-        iconY := Floor((overlayH - iconSize) / 2)
-        DllCall("MoveWindow", "ptr", overlayInfo.iconHwnd, "int", iconX, "int", iconY, "int", iconSize, "int", iconSize, "int", True)
+    if (ghostCardInfo.iconHwnd && DllCall("IsWindow", "ptr", ghostCardInfo.iconHwnd)) {
+        iconSize := _GetLButtonResizeSyncGhostCardIconSize(ghostW, ghostH)
+        iconX := Floor((ghostW - iconSize) / 2)
+        iconY := Floor((ghostH - iconSize) / 2)
+        DllCall("MoveWindow", "ptr", ghostCardInfo.iconHwnd, "int", iconX, "int", iconY, "int", iconSize, "int", iconSize, "int", True)
     }
 
-    overlayInfo.x := overlayX
-    overlayInfo.y := overlayY
-    overlayInfo.w := overlayW
-    overlayInfo.h := overlayH
+    ghostCardInfo.x := ghostX
+    ghostCardInfo.y := ghostY
+    ghostCardInfo.w := ghostW
+    ghostCardInfo.h := ghostH
     return true
 }
 
@@ -12660,7 +12754,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     lButtonResizeSyncLastDraggedX              := draggedX
     lButtonResizeSyncLastDraggedY              := draggedY
     lButtonResizeSyncTopmostStates             := _CaptureLiveResizeSyncTopmostStates(draggedHwndID, lButtonResizeSyncPartners)
-    _PrepareLButtonResizeSyncFollowerOverlays(lButtonResizeSyncPartners)
+    _PrepareLButtonResizeSyncGhostCards(lButtonResizeSyncPartners)
 
     SetTimer, WatchLButtonResizeSync, 10
     return true
@@ -12689,7 +12783,7 @@ EndLButtonResizeSync() {
         && WinExist("ahk_id " . lButtonResizeSyncDraggedHwnd))
         WinSet, Transparent, Off, ahk_id %lButtonResizeSyncDraggedHwnd%
 
-    _ReleaseLButtonResizeSyncFollowerOverlays(lButtonResizeSyncPartners)
+    _ReleaseLButtonResizeSyncGhostCards(lButtonResizeSyncPartners)
     _RestoreLiveResizeSyncTopmostStates(lButtonResizeSyncTopmostStates, lButtonResizeSyncDraggedHwnd)
     lButtonResizeSyncActive                    := false
     lButtonResizeSyncDraggedHwnd               := 0
@@ -16572,6 +16666,12 @@ HideWindowTitlePopup() {
 DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     global bufferedCycleAdvance, hitTAB, hitTilde, k_Opacity, WindowTitleID, WindowTitle, WindowTitleIcon, WindowTitleText
 
+    static HWND_TOPMOST   := -1
+    static SWP_NOMOVE     := 0x0002
+    static SWP_NOACTIVATE := 0x0010
+    static SWP_NOSIZE     := 0x0001
+    static SWP_SHOWWINDOW := 0x0040
+
     cardPadX      := 20
     cardPadY      := 16
     iconGap       := 16
@@ -16692,6 +16792,18 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     }
 
     Gui, WindowTitle: Show, % "x" drawX " y" drawY " w" popupWidth " h" popupHeight " NoActivate"
+    ; The retained WindowTitle GUI is no longer recreated on every Alt+Tab step,
+    ; so explicitly raise this popup HWND to the top of the topmost band after
+    ; Show. Without this, the already-visible dim Overlay GUI can stay above it
+    ; in z-order and make the title card appear to have vanished.
+    DllCall("user32\SetWindowPos"
+        , "ptr", WindowTitleID
+        , "ptr", HWND_TOPMOST
+        , "int", 0
+        , "int", 0
+        , "int", 0
+        , "int", 0
+        , "uint", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
     WinSet, Transparent, 1, ahk_id %WindowTitleID%
 
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
