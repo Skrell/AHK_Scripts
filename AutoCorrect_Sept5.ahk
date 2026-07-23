@@ -426,8 +426,8 @@ Global blockWheel                                  := False
 Global gExiting                                    := False
 Global hHookKbd
 Global hHookMouse
-Global deferredModifiersToFix                      := ""
-Global deferredModifierFixRemaining                := 0
+Global deferredModifierFamilies                    := ""
+Global deferredModifierReconciliationRemaining     := 0
 ; +----------------------------------------------------------------------------+
 ; | Window Snap And Drag Configuration                                         |
 ; | These are the coarse behavior knobs for snapping, monitor work-area rules, |
@@ -3717,7 +3717,7 @@ $*MButton::
         If !startedAlwaysOnTop {
             WinGet, trans, Transparent, ahk_id %hWnd%
             If (trans == 255 && (abs(dx) > deltaPxTrig || abs(dy) > deltaPxTrig)) {
-                targetTrans := 180
+                targetTrans := 170
                 WinSet, Transparent, %targetTrans%, ahk_id %hWnd%
             }
         }
@@ -4151,30 +4151,30 @@ Return
     KeyWait, d, T0.25
     BeginBlockKeys()
 
-    ; Let each movement burst finish visually before issuing the next key so the
-    ; delete-line sequence relies less on fixed timing alone.
+    ; Keep the trigger's held Ctrl+Shift logically released during the edit
+    ; burst so plain navigation/Delete cannot inherit them between sends.
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    Send, {Down}
+    Send, {Ctrl Up}{Shift Up}{Down}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    Send, {Home}{Home}
+    Send, {Ctrl Up}{Shift Up}{Home}{Home}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     ; Use explicit Shift down/up pairs instead of +{Up}/+{Home} so the
     ; synthetic selection does not leave Shift logically stuck afterward.
-    Send, {Shift Down}{Up}{Shift Up}
+    Send, {Ctrl Up}{Shift Down}{Up}{Shift Up}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    Send, {Shift Down}{Home}{Shift Up}
+    Send, {Ctrl Up}{Shift Down}{Home}{Shift Up}
     ; Send, {End}
     ; Send, +{Home}+{Home}+{Home}
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
-    Send, {Delete}
+    Send, {Ctrl Up}{Shift Up}{Delete}
     EndBlockKeys()
     ; Reconcile any synthetic modifier-up/down imbalance left by the selection
     ; and navigation sends without disturbing modifiers that are still held.
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
 
     ; Your environment reset
     Hotstring("Reset")
@@ -4196,8 +4196,8 @@ Return
         EndBlockKeys()
         Critical, Off
         Send ^d
-        FixReleasedModifiers("Shift Alt Ctrl")
-        ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+        SyncModifierSidesToPhys("Shift Alt Ctrl")
+        ScheduleModifierReconciliation("Shift Alt Ctrl")
         Return
     }
     ; Let the trigger key finish before entering blocked mode so held Ctrl can
@@ -4221,8 +4221,7 @@ Return
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Ctrl Up}{Home}{Home}{Shift Down}{End}{Shift Up}
     EndBlockKeys()
-    if GetKeyState("Ctrl", "P")
-        Send, {Ctrl Down}
+    SyncModifierSidesToPhys("Ctrl")
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
 
     ; 2) Copy the line text via your clipboard-safe helper
@@ -4235,8 +4234,8 @@ Return
         Hotstring("Reset")
         StopAutoFix             := False
         Critical, Off
-        FixReleasedModifiers("Shift Alt Ctrl")
-        ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+        SyncModifierSidesToPhys("Shift Alt Ctrl")
+        ScheduleModifierReconciliation("Shift Alt Ctrl")
         Return
     }
 
@@ -4245,8 +4244,7 @@ Return
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     Send, {Ctrl Up}{End}{Enter}{Shift Down}{Home}{Shift Up}
     EndBlockKeys()
-    if GetKeyState("Ctrl", "P")
-        Send, {Ctrl Down}
+    SyncModifierSidesToPhys("Ctrl")
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
     if (fastInsertWindowId || fastInsertControlHwnd || fastInsertControlClassNN != "")
@@ -4272,8 +4270,7 @@ Return
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
         Send, {Ctrl Up}{Up} ; {Home}{Home}
         EndBlockKeys()
-        if GetKeyState("Ctrl", "P")
-            Send, {Ctrl Down}
+        SyncModifierSidesToPhys("Ctrl")
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 60, 2, 100)
     }
     ; Optional                  : if you prefer immediate clipboard restore instead of the ~700ms timer, uncomment:
@@ -4282,8 +4279,8 @@ Return
     ; Your environment reset
     Hotstring("Reset")
     StopAutoFix                 := False
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4489,8 +4486,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4538,8 +4535,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4553,8 +4550,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4568,8 +4565,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4583,8 +4580,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4598,8 +4595,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4613,8 +4610,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4628,8 +4625,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4643,8 +4640,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4658,8 +4655,8 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    FixReleasedModifiers("Shift Alt Ctrl")
-    ScheduleFixReleasedModifiers("Shift Alt Ctrl")
+    SyncModifierSidesToPhys("Shift Alt Ctrl")
+    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -5026,7 +5023,7 @@ Return
     StopRecursion := True
     GoSub, SwitchToVD1
     StopRecursion := False
-    FixReleasedModifiers("Ctrl Win")
+    SyncModifierSidesToPhys("Ctrl Win")
     Critical, Off
 Return
 
@@ -5056,7 +5053,7 @@ Return
     StopRecursion := True
     GoSub, SwitchToVD2
     StopRecursion := False
-    FixReleasedModifiers("Ctrl Win")
+    SyncModifierSidesToPhys("Ctrl Win")
     Critical, Off
 Return
 
@@ -5087,7 +5084,7 @@ Return
     Critical, On
     StopRecursion := True
     GoSub, SwitchToVD3
-    FixReleasedModifiers("Ctrl Win")
+    SyncModifierSidesToPhys("Ctrl Win")
     StopRecursion := False
     Critical, Off
 Return
@@ -5120,7 +5117,7 @@ Return
     StopRecursion := True
     GoSub, SwitchToVD4
     StopRecursion := False
-    FixReleasedModifiers("Ctrl Win")
+    SyncModifierSidesToPhys("Ctrl Win")
     Critical, Off
 Return
 
@@ -5284,7 +5281,7 @@ $!+Tab::
         If !CanceledWinSwap {
             If (cycleCount > 2) {
                 startHighlight := True
-                Overlay_FadeTo(overlayHwnd, 255, 10)
+                Overlay_FadeTo(overlayHwnd, 255, 5)
             }
 
             GoSub, Altup
@@ -5294,7 +5291,7 @@ $!+Tab::
 
         GoSub, AltupCleanup
 
-        FixReleasedModifiers("Alt")
+        SyncModifierSidesToPhys("Alt")
     }
 Return
 
@@ -5346,7 +5343,7 @@ Return
         If !CanceledWinSwap {
             If (cycleCount > 2) {
                 startHighlight := True
-                Overlay_FadeTo(overlayHwnd, 255, 10)
+                Overlay_FadeTo(overlayHwnd, 255, 5)
             }
 
             GoSub, Altup
@@ -5356,7 +5353,7 @@ Return
 
         GoSub, AltupCleanup
 
-        FixReleasedModifiers("Alt")
+        SyncModifierSidesToPhys("Alt")
     }
 Return
 
@@ -5376,7 +5373,7 @@ $!x::
     tooltip,
     GoSub, Altup
     GoSub, AltupCleanup
-    FixReleasedModifiers("Alt")
+    SyncModifierSidesToPhys("Alt")
 Return
 #If
 
@@ -5408,7 +5405,7 @@ $!Lbutton::
 
                 GoSub, AltupCleanup
 
-                FixReleasedModifiers("Alt")
+                SyncModifierSidesToPhys("Alt")
                 break
             }
             sleep, 5
@@ -7164,7 +7161,7 @@ $~^LButton::
     }
 
     KeyWait, Ctrl, U
-    FixReleasedModifiers("Ctrl")
+    SyncModifierSidesToPhys("Ctrl")
 
     StopRecursion := False
     Thread, NoTimers, False
@@ -7187,7 +7184,7 @@ $^LButton::
     BringAppWindowsOnMonitorToTop(targetProcess, targetClass, currentMon, targetID)
 
     KeyWait, Ctrl, U
-    FixReleasedModifiers("Ctrl")
+    SyncModifierSidesToPhys("Ctrl")
     StopRecursion := False
     Thread, NoTimers, False
 return
@@ -9038,7 +9035,7 @@ FindExplorerItemsViewElement(targetHwndID)
     ; These symbolic UIA_*ControlTypeId names are intentional: UIA_Interface
     ; resolves them inside FindFirstBy("ControlType=...") just like the
     ; equivalent numeric IDs, which keeps this search readable.
-    for controlTypeIndex, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
+    for controlTypeIndex, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId"] {
         itemsEl := ""
         try
             itemsEl := exEl.FindFirstBy("ControlType=" . ctlType)
@@ -9050,6 +9047,47 @@ FindExplorerItemsViewElement(targetHwndID)
     }
 
     return SafeUIA_FindFirstByNameFast(exEl, "Items View")
+}
+
+; Grouped Details views can expose items before their header/grid scaffolding is
+; ready, so reuse the existing generic details probes as a stronger signal.
+ExplorerItemsViewHasDetailsSignals(shellEl) {
+    static UIA_HeaderTypeId      := 50034
+    static UIA_SplitButtonTypeId := 50031
+
+    if !IsObject(shellEl)
+        return false
+
+    if (UIA_FindFirstByControlTypeAny_(shellEl, UIA_HeaderTypeId))
+        return true
+
+    cols := UIA_TryGetGridColumnCountAny_(shellEl)
+    if (cols >= 2)
+        return true
+
+    return UIA_FindFirstByControlTypeAndNameAny_(shellEl, UIA_SplitButtonTypeId, "Name")
+}
+
+WaitForExplorerDetailsReady(shellEl, timeoutMs := 1200, pollSleepMs := 25) {
+    if !IsObject(shellEl)
+        return false
+
+    deadlineTick := A_TickCount + timeoutMs
+    stableHitCount := 0
+
+    while (A_TickCount <= deadlineTick) {
+        if (ExplorerItemsViewHasDetailsSignals(shellEl)) {
+            stableHitCount += 1
+            if (stableHitCount >= 2)
+                return true
+        } else {
+            stableHitCount := 0
+        }
+
+        Sleep, %pollSleepMs%
+    }
+
+    return ExplorerItemsViewHasDetailsSignals(shellEl)
 }
 
 ; Resolve the real Explorer Items View HWND with a cheap-first split:
@@ -9126,7 +9164,7 @@ ResolveFocusTargetHwnd(hwndTop, ctrlNN, topClass := "")
 ; 2) wait for either a real item or a known empty/search-result message
 ; 3) when this caller needs focus inside the view, perform the slower UIA-backed
 ;    focus confirmation/retry path instead of trusting only control-level signals
-WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False) {
+WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False, requireDetailsReady := False) {
     global UIA
 
     try {
@@ -9138,6 +9176,8 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
         }
 
         SafeUIA_WaitElementExistFast(shellEl, "ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search.", "", 200, 5000)
+        if (requireDetailsReady)
+            WaitForExplorerDetailsReady(shellEl)
 
         If (!isCabinetWClass10 && !skipFocus) {
             hCtl := GetItemsViewHwndFromUIA(shellEl)
@@ -9806,7 +9846,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 }
             }
             EndBlockKeys()
-            FixReleasedModifiers("Ctrl")
+            SyncModifierSidesToPhys("Ctrl")
         }
     }
 Return
@@ -10839,8 +10879,8 @@ EndBlockWheel() {
 }
 
 ; Keep the wheel path on its own helper so deferred Explorer column-adjust sends
-; always use the same key blocking and modifier cleanup sequence without changing
-; the click-path sends restored from AutoCorrect_Sept5_works.ahk.
+; always use the same wheel-blocking guard rails without forcing unrelated
+; synthetic Ctrl chords onto this narrower Explorer-specific path.
 ;
 ; When a guarded wheel-adjust send is requested, wait one last very short moment and
 ; re-check the current request token, quiet window, and active window immediately
@@ -10869,68 +10909,99 @@ SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 
     Send, ^{NumpadAdd}
     EndBlockKeys()
     EndBlockWheel()
-    FixReleasedModifiers("Ctrl")
-    ScheduleFixReleasedModifiers("Ctrl", reconcilePassCount)
+    SyncModifierSidesToPhys("Ctrl")
+    ScheduleModifierReconciliation("Ctrl", reconcilePassCount)
     return true
 }
 
-; Release only the named modifiers that are no longer physically held so call
-; sites can reconcile just the modifier family they actually disturbed.
+; Send a clean synthetic Ctrl chord without losing the user's physically held
+; modifiers. Sending {Ctrl Up}, {Shift Up}, and similar events changes the
+; modifier state seen by the target application even if the user still holds
+; the physical key. Because that key never physically transitions up and down,
+; Windows does not send a replacement key-down event. Without reconciliation,
+; a later D press while Ctrl is still physically held can arrive as plain D
+; instead of Ctrl+D.
 ;
-; Use side-specific scan codes instead of generic {Shift up}/{Alt up} names so
-; each left/right GetKeyState() check can release the exact physical modifier
-; that may still be logically stuck.
-;
-; Scan codes also stay tied to the physical key instead of a layout-dependent
-; key name.
-;
-; Pair them with {Blind} so AHK sends only that explicit key-up without
-; trying to restore or remap other modifiers around the cleanup send.
-FixReleasedModifiers(modifiers := "Shift Alt Ctrl Win") {
+; The inverse race can leave a modifier logically stuck: the script restores a
+; synthetic modifier-down, then the user releases the real key just after the
+; sequence. The immediate and deferred reconciliation passes make the target
+; application's modifier state match the physical keyboard state again.
+_SendManagedCtrlChord(chordKey, reconcilePassCount := 6, explicitCtrlPath := False) {
+    SendInput, {Blind}{sc02A up}{sc036 up}{sc01D up}{sc11D up}{sc038 up}{sc138 up}{sc15B up}{sc15C up}
+    if (explicitCtrlPath)
+        SendInput, {Ctrl Down}%chordKey%{Ctrl Up}
+    else
+        SendInput, ^%chordKey%
+
+    ; A modifier pressed while SendInput runs can be physically down before
+    ; the target application receives its real key-down event. Live sync can
+    ; then send one duplicate down event in that tiny buffered-input window.
+    ; This is an intentional tradeoff for the simpler, live-state behavior.
+    SyncModifierSidesToPhys("Shift Alt Ctrl Win")
+    ScheduleModifierReconciliation("Shift Alt Ctrl Win", reconcilePassCount)
+}
+
+; Synchronize named modifier sides with the physical keyboard state. Every
+; requested side is sent down if physically held, otherwise up. This repairs
+; modifiers synthetically released by navigation and modifiers left logically
+; down after the user has physically released them.
+SyncModifierSidesToPhys(modifiers := "Shift Alt Ctrl Win") {
     if (InStr(modifiers, "Shift")) {
-        if (!GetKeyState("LShift", "P"))
-            SendInput, {Blind}{sc02A up}
-        if (!GetKeyState("RShift", "P"))
-            SendInput, {Blind}{sc036 up}
+        isPhysicallyHeld := GetKeyState("LShift", "P")
+        keyState := isPhysicallyHeld ? "down" : "up"
+        SendInput, {Blind}{sc02A %keyState%}
+
+        isPhysicallyHeld := GetKeyState("RShift", "P")
+        keyState := isPhysicallyHeld ? "down" : "up"
+        SendInput, {Blind}{sc036 %keyState%}
     }
 
     if (InStr(modifiers, "Ctrl")) {
-        if (!GetKeyState("LCtrl", "P"))
-            SendInput, {Blind}{sc01D up}
-        if (!GetKeyState("RCtrl", "P"))
-            SendInput, {Blind}{sc11D up}
+        isPhysicallyHeld := GetKeyState("LCtrl", "P")
+        keyState := isPhysicallyHeld ? "down" : "up"
+        SendInput, {Blind}{sc01D %keyState%}
+
+        isPhysicallyHeld := GetKeyState("RCtrl", "P")
+        keyState := isPhysicallyHeld ? "down" : "up"
+        SendInput, {Blind}{sc11D %keyState%}
     }
 
     if (InStr(modifiers, "Alt")) {
-        if (!GetKeyState("LAlt", "P"))
-            SendInput, {Blind}{sc038 up}
-        if (!GetKeyState("RAlt", "P"))
-            SendInput, {Blind}{sc138 up}
+        isPhysicallyHeld := GetKeyState("LAlt", "P")
+        keyState := isPhysicallyHeld ? "down" : "up"
+        SendInput, {Blind}{sc038 %keyState%}
+
+        isPhysicallyHeld := GetKeyState("RAlt", "P")
+        keyState := isPhysicallyHeld ? "down" : "up"
+        SendInput, {Blind}{sc138 %keyState%}
     }
 
     if (InStr(modifiers, "Win")) {
-        if (!GetKeyState("LWin", "P"))
-            SendInput, {Blind}{sc15B up}
-        if (!GetKeyState("RWin", "P"))
-            SendInput, {Blind}{sc15C up}
+        isPhysicallyHeld := GetKeyState("LWin", "P")
+        keyState := isPhysicallyHeld ? "down" : "up"
+        SendInput, {Blind}{sc15B %keyState%}
+
+        isPhysicallyHeld := GetKeyState("RWin", "P")
+        keyState := isPhysicallyHeld ? "down" : "up"
+        SendInput, {Blind}{sc15C %keyState%}
     }
 }
 
-; Re-check modifier-up state shortly after a hotkey returns so a physical key-up
-; that happens just after the immediate cleanup still gets reconciled.
-RunDeferredModifierFix() {
-    Global deferredModifiersToFix
-    Global deferredModifierFixRemaining
+; Re-check modifier state shortly after a hotkey returns so a physical key-up
+; that happens just after the immediate reconciliation still gets applied.
+RunDeferredModifierReconciliation() {
+    Global deferredModifierFamilies
+    Global deferredModifierReconciliationRemaining
 
-    if (deferredModifiersToFix = "" || deferredModifierFixRemaining <= 0)
+    if (deferredModifierFamilies = "" || deferredModifierReconciliationRemaining <= 0)
         return
 
-    FixReleasedModifiers(deferredModifiersToFix)
-    deferredModifierFixRemaining -= 1
-    if (deferredModifierFixRemaining > 0)
-        SetTimer, RunDeferredModifierFix, -75
+    SyncModifierSidesToPhys(deferredModifierFamilies)
+    deferredModifierReconciliationRemaining -= 1
+    if (deferredModifierReconciliationRemaining > 0)
+        SetTimer, RunDeferredModifierReconciliation, -75
     else
-        deferredModifiersToFix := ""
+        deferredModifierFamilies := ""
 }
 
 ; Queue one or more delayed modifier reconciliation passes after the immediate
@@ -10948,23 +11019,23 @@ RunDeferredModifierFix() {
 ;     before Windows/AutoHotkey reports the user's real modifier release, so a
 ;     single delayed check can still be too early. More passes extend the
 ;     reconciliation window without blocking the caller.
-ScheduleFixReleasedModifiers(modifiers := "Shift Alt Ctrl", deferredRuns := 6) {
-    Global deferredModifiersToFix
-    Global deferredModifierFixRemaining
+ScheduleModifierReconciliation(modifiers := "Shift Alt Ctrl", deferredRuns := 6) {
+    Global deferredModifierFamilies
+    Global deferredModifierReconciliationRemaining
 
     ; Always reconcile the latest requested modifier set so the timer re-checks
     ; the modifiers most relevant to the newest send/hotkey sequence.
-    deferredModifiersToFix := modifiers
+    deferredModifierFamilies := modifiers
     ; Only grow the remaining pass budget. This prevents a later caller with a
     ; smaller deferredRuns from shortening a longer reconciliation window that is
     ; already in progress and may still be needed to catch a late physical
     ; modifier release.
-    if (deferredModifierFixRemaining < deferredRuns)
-        deferredModifierFixRemaining := deferredRuns
+    if (deferredModifierReconciliationRemaining < deferredRuns)
+        deferredModifierReconciliationRemaining := deferredRuns
 
-; Start the first delayed pass soon after the caller returns. The follow-up
-; passes are scheduled by RunDeferredModifierFix().
-    SetTimer, RunDeferredModifierFix, -40
+    ; Start the first delayed pass soon after the caller returns. Follow-up
+    ; passes are scheduled by RunDeferredModifierReconciliation().
+    SetTimer, RunDeferredModifierReconciliation, -40
 }
 
 ; Clears the queued Everything Edit1 auto-fit state so context changes or a
@@ -13230,17 +13301,6 @@ HasVal(haystack, needle) {
     Return 0
 }
 
-;========================
-; Paste text and restore the user's clipboard afterward.
-; Uses a short one-shot timer to avoid paste race conditions.
-;========================
-_SendClipboardPaste()
-{
-    ; Always send an explicit Ctrl+V chord for callers that opt into this path.
-    ; Some modern editors misread {Blind}v and occasionally type a literal v.
-    SendInput, {Ctrl Down}v{Ctrl Up}
-}
-
 ; Retry plain-text clipboard writes a few times so transient clipboard locks do
 ; not terminate the script with a SetClipboardData exception.
 _TrySetClipboardText(text, retries := 6, sleepMs := 15)
@@ -13283,13 +13343,14 @@ Clip(Text := "", Reselect := "", Restore := "")
         }
 
         if (isReadCall) {
-            ; Clear only before reads so ClipWait measures the fresh ^c result.
-            ; Write calls can replace the clipboard directly without this extra churn.
+            ; Clear only before reads so ClipWait measures the fresh managed
+            ; copy result. Write calls can replace the clipboard directly
+            ; without this extra churn.
             clearStartTick := A_TickCount
             Clipboard := ""
             clearMs := A_TickCount - clearStartTick
 
-            SendInput, ^c
+            _SendManagedCtrlChord("c")
             if (clearMs > 50) {
                 ClipWait, 0.6, 1
             } else {
@@ -13303,9 +13364,11 @@ Clip(Text := "", Reselect := "", Restore := "")
             }
             ClipWait, 10
             if (clipPreferExplicitCtrlV)
-                _SendClipboardPaste()
+                ; Some modern editors misread {Blind}v and occasionally type
+                ; a literal v, so use an explicit managed Ctrl+V chord.
+                _SendManagedCtrlChord("v", 6, True)
             else
-                SendInput, ^v
+                _SendManagedCtrlChord("v")
             Sleep, 20  ; small buffer in case more keystrokes (e.g., Enter) follow a paste
         }
 
