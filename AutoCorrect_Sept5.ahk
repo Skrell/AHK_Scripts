@@ -4207,14 +4207,13 @@ Return
 
     didFastInsert                  := False
     didRestoreCaretWithMessages    := False
-    fastInsertControlClassNN       := ""
     fastInsertControlHwnd          := 0
-    fastInsertWindowId             := 0
+    fastInsertWindowId             := DllCall("user32\GetForegroundWindow", "Ptr")
     originalFastInsertLineStartIdx := -1
-    if _GetFastInsertWrappedTextTarget(fastInsertWindowId, fastInsertControlClassNN, fastInsertControlHwnd)
+    if (_GetFastInsertWrappedTextTarget(fastInsertWindowId, fastInsertControlHwnd) = "classic_edit")
         ; Save the exact original line-start index so the fast message-based
         ; insert path can put the caret back on that same logical line later.
-        _GetCurrentLineStartIndexInClassicControl(fastInsertWindowId, fastInsertControlClassNN, fastInsertControlHwnd, originalFastInsertLineStartIdx)
+        _GetCurrentLineStartIndexInClassicControl(fastInsertWindowId, fastInsertControlHwnd, originalFastInsertLineStartIdx)
 
     ; 1) Go to absolute start of the line and select it with one plain-navigation
     ; burst so held Ctrl cannot slip back in between the selection keys.
@@ -4225,7 +4224,7 @@ Return
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
 
     ; 2) Copy the line text via your clipboard-safe helper
-    lineText                    := Clip()   ; returns the copied text, clipboard will auto-restore later
+    lineText                    := Clip("", "", "", "Shift Alt Ctrl Win", fastInsertWindowId)   ; returns the copied text, clipboard will auto-restore later
     if (lineText = "")
     {
         ; Abort before the Enter step if selection/copy failed so this hotkey
@@ -4247,21 +4246,21 @@ Return
     SyncModifierSidesToPhys("Ctrl")
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
     GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    if (fastInsertWindowId || fastInsertControlHwnd || fastInsertControlClassNN != "")
-        didFastInsert := _FastInsertWrappedTextIntoClassicControl(fastInsertWindowId, fastInsertControlClassNN, fastInsertControlHwnd, lineText)
-    if !didFastInsert
+    if (fastInsertControlHwnd)
+        didFastInsert := _FastInsertWrappedTextIntoClassicControl(fastInsertWindowId, fastInsertControlHwnd, lineText)
+    if (!didFastInsert && _IsForegroundWindow(fastInsertWindowId))
     {
         ; Some editors are picky about paste timing/chords here, so force the
         ; clipboard helper onto the stricter explicit Ctrl+V path for this step.
         clipPreferExplicitCtrlV := True
-        Clip(lineText)       ; paste via helper when no classic control path is available
+        Clip(lineText, "", "", "Shift Alt Ctrl Win", fastInsertWindowId)       ; paste via helper when no classic control path is available
         clipPreferExplicitCtrlV := False
     }
     WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 30)
     if (didFastInsert && originalFastInsertLineStartIdx >= 0)
         ; After a fast EM_REPLACESEL insert, restore directly to the saved line
         ; start instead of trying to infer the original position by keystrokes.
-        didRestoreCaretWithMessages := _MoveCaretToIndexInClassicControl(fastInsertWindowId, fastInsertControlClassNN, fastInsertControlHwnd, originalFastInsertLineStartIdx)
+        didRestoreCaretWithMessages := _MoveCaretToIndexInClassicControl(fastInsertWindowId, fastInsertControlHwnd, originalFastInsertLineStartIdx)
 
     ; 4) Return caret to the original line at column 1 (reliably cross-editor)
     if !didRestoreCaretWithMessages
@@ -4291,10 +4290,14 @@ ControlExist(ctrlNN, winTitle := "", winText := "") {
     Return !!hCtl
 }
 
-; Replaces the current selection in a classic Edit/RichEdit control using
-; control messages so WrapClipboardText can avoid the slower app-level ^v path.
-_FastInsertWrappedTextIntoClassicControl(windowId, controlClassNN, controlHwnd, text) {
+; Replaces the current selection in a still-focused classic Edit/RichEdit HWND
+; using a bounded message send so WrapClipboardText can avoid app-level ^v.
+_FastInsertWrappedTextIntoClassicControl(windowId, controlHwnd, text) {
     static emReplaceSel := 0x00C2
+    static smtoAbortIfHung := 0x0002
+
+    if !_IsExpectedFocusedControl(windowId, controlHwnd)
+        return false
 
     replacementText := StrReplace(text, "`r")
     replacementText := StrReplace(replacementText, "`n", "`r`n")
@@ -4302,86 +4305,77 @@ _FastInsertWrappedTextIntoClassicControl(windowId, controlClassNN, controlHwnd, 
     VarSetCapacity(replacementBuffer, (StrLen(replacementText) + 1) * 2, 0)
     StrPut(replacementText, &replacementBuffer, "UTF-16")
 
-    if RegExMatch(controlClassNN, "i)^Edit\d+$") {
-        ControlFocus, %controlClassNN%, ahk_id %windowId%
-        SendMessage, %emReplaceSel%, 1, &replacementBuffer, %controlClassNN%, ahk_id %windowId%
-        return (ErrorLevel != "FAIL")
-    }
-
-    if RegExMatch(controlClassNN, "i)^(RICHEDIT\w*\d+|RichEdit\w*\d+)$") {
-        ControlFocus, %controlClassNN%, ahk_id %windowId%
-        SendMessage, %emReplaceSel%, 1, &replacementBuffer, %controlClassNN%, ahk_id %windowId%
-        return (ErrorLevel != "FAIL")
-    }
-
-    if (controlHwnd) {
-        WinGetClass, controlClassName, ahk_id %controlHwnd%
-
-        if (controlClassName = "Edit" || RegExMatch(controlClassName, "i)^(RICHEDIT\w*|RichEdit\w*)$")) {
-            ControlFocus, , ahk_id %controlHwnd%
-            SendMessage, %emReplaceSel%, 1, &replacementBuffer, , ahk_id %controlHwnd%
-            return (ErrorLevel != "FAIL")
-        }
-    }
-
-    return false
+    ; EM_REPLACESEL is synchronous. Abort rather than stall a wrapper hotkey if
+    ; the target application has stopped processing window messages.
+    messageResult := 0
+    return !!DllCall("user32\SendMessageTimeoutW"
+        , "Ptr", controlHwnd
+        , "UInt", emReplaceSel
+        , "Ptr", 1
+        , "Ptr", &replacementBuffer
+        , "UInt", smtoAbortIfHung
+        , "UInt", 250
+        , "Ptr*", messageResult
+        , "Ptr")
 }
 
-; Resolves the currently-focused classic editable control, if there is one.
-_GetFastInsertWrappedTextTarget(ByRef windowId, ByRef controlClassNN, ByRef controlHwnd) {
-    WinGet, windowId, ID, A
-    if !windowId
-        return false
-
-    ControlGetFocus, controlClassNN, ahk_id %windowId%
+; Resolves the originally active window's focused target without using a
+; ClassNN. Custom GPU controls such as Intermediate D3D Window are classified
+; as not_classic and use the managed clipboard path instead of EM_REPLACESEL.
+_GetFastInsertWrappedTextTarget(windowId, ByRef controlHwnd) {
     controlHwnd := 0
+    if !_IsForegroundWindow(windowId)
+        return "target_gone"
 
-    if (controlClassNN != "")
-        ControlGet, controlHwnd, Hwnd,, %controlClassNN%, ahk_id %windowId%
+    windowTid := DllCall("user32\GetWindowThreadProcessId", "Ptr", windowId, "UInt*", 0, "UInt")
+    if !windowTid
+        return "target_gone"
 
-    if RegExMatch(controlClassNN, "i)^Edit\d+$")
-        return true
+    focusedHwnd := GetThreadFocusHwnd(windowTid)
+    if !focusedHwnd
+        return "target_gone"
 
-    if RegExMatch(controlClassNN, "i)^(RICHEDIT\w*\d+|RichEdit\w*\d+)$")
-        return true
+    if !DllCall("user32\IsWindow", "Ptr", focusedHwnd, "Int")
+        return "target_gone"
 
-    if (controlHwnd) {
-        WinGetClass, controlClassName, ahk_id %controlHwnd%
-        if (controlClassName = "Edit" || RegExMatch(controlClassName, "i)^(RICHEDIT\w*|RichEdit\w*)$"))
-            return true
-    }
+    if (focusedHwnd != windowId && !DllCall("user32\IsChild", "Ptr", windowId, "Ptr", focusedHwnd, "Int"))
+        return "target_gone"
 
-    return false
+    if !_IsForegroundWindow(windowId)
+        return "target_gone"
+
+    controlHwnd := focusedHwnd
+    controlClassName := _GetWindowClassName(controlHwnd)
+    if !_IsExpectedFocusedControl(windowId, controlHwnd)
+        return "target_gone"
+
+    return _IsClassicEditControlClass(controlClassName) ? "classic_edit" : "not_classic"
 }
 
 ; Captures the exact logical line-start caret index in a classic Edit/RichEdit
 ; control so later restoration can return to the original line precisely.
-_GetCurrentLineStartIndexInClassicControl(windowId, controlClassNN, controlHwnd, ByRef lineStartIndex) {
+_GetCurrentLineStartIndexInClassicControl(windowId, controlHwnd, ByRef lineStartIndex) {
     static emGetSel := 0x00B0
     static emLineFromChar := 0x00C9
     static emLineIndex := 0x00BB
     lineStartIndex := -1
 
-    targetHwnd := controlHwnd
-    if (!targetHwnd && controlClassNN != "")
-        ControlGet, targetHwnd, Hwnd,, %controlClassNN%, ahk_id %windowId%
-    if !targetHwnd
+    if !_IsExpectedFocusedControl(windowId, controlHwnd)
         return false
 
-    ControlFocus, , ahk_id %targetHwnd%
     VarSetCapacity(selectionStart, 4, 0)
     VarSetCapacity(selectionEnd, 4, 0)
-    DllCall("SendMessage", "Ptr", targetHwnd, "UInt", emGetSel, "Ptr", &selectionStart, "Ptr", &selectionEnd, "Ptr")
+    DllCall("SendMessage", "Ptr", controlHwnd, "UInt", emGetSel, "Ptr", &selectionStart, "Ptr", &selectionEnd, "Ptr")
 
     caretIndex := NumGet(selectionStart, 0, "Int")
     if (caretIndex < 0)
         return false
 
-    currentLineNumber := DllCall("SendMessage", "Ptr", targetHwnd, "UInt", emLineFromChar, "Ptr", caretIndex, "Ptr", 0, "Int")
+    currentLineNumber := DllCall("SendMessage", "Ptr", controlHwnd, "UInt", emLineFromChar, "Ptr", caretIndex, "Ptr", 0, "Int")
     if (currentLineNumber < 0)
         return false
 
-    lineStartIndex := DllCall("SendMessage", "Ptr", targetHwnd, "UInt", emLineIndex, "Ptr", currentLineNumber, "Ptr", 0, "Int")
+    lineStartIndex := DllCall("SendMessage", "Ptr", controlHwnd, "UInt", emLineIndex, "Ptr", currentLineNumber, "Ptr", 0, "Int")
     if (lineStartIndex < 0)
         return false
 
@@ -4390,30 +4384,71 @@ _GetCurrentLineStartIndexInClassicControl(windowId, controlClassNN, controlHwnd,
 
 ; Moves the caret to an exact character index in a classic Edit/RichEdit
 ; control after a synchronous EM_REPLACESEL insertion.
-_MoveCaretToIndexInClassicControl(windowId, controlClassNN, controlHwnd, caretIndex) {
+_MoveCaretToIndexInClassicControl(windowId, controlHwnd, caretIndex) {
     static emSetSel := 0x00B1
-
-    targetHwnd := controlHwnd
-    if (!targetHwnd && controlClassNN != "")
-        ControlGet, targetHwnd, Hwnd,, %controlClassNN%, ahk_id %windowId%
-    if !targetHwnd
-        return false
 
     if (caretIndex < 0)
         return false
 
-    ControlFocus, , ahk_id %targetHwnd%
-    DllCall("SendMessage", "Ptr", targetHwnd, "UInt", emSetSel, "Ptr", caretIndex, "Ptr", caretIndex, "Ptr")
+    if !_IsExpectedFocusedControl(windowId, controlHwnd)
+        return false
+
+    DllCall("SendMessage", "Ptr", controlHwnd, "UInt", emSetSel, "Ptr", caretIndex, "Ptr", caretIndex, "Ptr")
     return true
 }
 
-; Attempts a fast classic-control replacement before falling back to clipboard
-; paste for unknown or non-Win32 editable targets.
-TryFastInsertWrappedText(text) {
-    if !_GetFastInsertWrappedTextTarget(windowId, controlClassNN, controlHwnd)
+; Reads a Win32 window class without a ClassNN lookup, which can become stale
+; while a custom control is rebuilding its child-window hierarchy.
+_GetWindowClassName(windowHwnd) {
+    if (!windowHwnd || !DllCall("user32\IsWindow", "Ptr", windowHwnd, "Int"))
+        return ""
+
+    VarSetCapacity(className, 512 * 2, 0)
+    if !DllCall("user32\GetClassNameW", "Ptr", windowHwnd, "Ptr", &className, "Int", 512, "Int")
+        return ""
+
+    return StrGet(&className, "UTF-16")
+}
+
+; Verifies that the captured top-level target is still foreground and that the
+; same child HWND still owns keyboard focus before a direct edit message runs.
+_IsExpectedFocusedControl(windowId, controlHwnd) {
+    if (!_IsForegroundWindow(windowId) || !controlHwnd)
         return false
 
-    return _FastInsertWrappedTextIntoClassicControl(windowId, controlClassNN, controlHwnd, text)
+    if !DllCall("user32\IsWindow", "Ptr", controlHwnd, "Int")
+        return false
+
+    if (controlHwnd != windowId && !DllCall("user32\IsChild", "Ptr", windowId, "Ptr", controlHwnd, "Int"))
+        return false
+
+    windowTid := DllCall("user32\GetWindowThreadProcessId", "Ptr", windowId, "UInt*", 0, "UInt")
+    return (windowTid && GetThreadFocusHwnd(windowTid) = controlHwnd)
+}
+
+; Returns true only for the native Edit and RichEdit window classes that accept
+; the EM_REPLACESEL message used by the fast insertion path.
+_IsClassicEditControlClass(controlClassName) {
+    return (controlClassName = "Edit" || RegExMatch(controlClassName, "i)^RICHEDIT\w*$"))
+}
+
+; Confirms that a clipboard chord will still go to the captured foreground
+; window. A different foreground HWND means the operation must be cancelled.
+_IsForegroundWindow(windowId) {
+    return (windowId && DllCall("user32\IsWindow", "Ptr", windowId, "Int")
+        && DllCall("user32\GetForegroundWindow", "Ptr") = windowId)
+}
+
+; Attempts a fast classic-control replacement. The result explicitly tells the
+; caller whether clipboard paste is safe for a non-classic target or must stop.
+TryFastInsertWrappedText(windowId, text) {
+    targetState := _GetFastInsertWrappedTextTarget(windowId, controlHwnd)
+    if (targetState != "classic_edit")
+        return targetState
+
+    ; If the focus target changes between resolution and the send, do not fall
+    ; back to Ctrl+V: that chord could modify a different control or application.
+    return _FastInsertWrappedTextIntoClassicControl(windowId, controlHwnd, text) ? "classic_edit" : "target_gone"
 }
 
 ; Wraps clipboard text and preserves a single trailing space outside the wrapper.
@@ -4423,8 +4458,9 @@ WrapClipboardText(leftText, rightText) {
     ; These hotkeys are Alt+Shift chords. Keep those modifiers logically up
     ; after the synthetic Ctrl+C/Ctrl+V sends so applications cannot treat a
     ; following key as an Alt menu accelerator or Shift-modified shortcut.
-    modifiersToSync := ""
-    clipboardText    := Clip("", "", "", modifiersToSync)
+    modifiersToSync  := ""
+    targetWindowId   := DllCall("user32\GetForegroundWindow", "Ptr")
+    clipboardText    := Clip("", "", "", modifiersToSync, targetWindowId)
 
     hasTrailingSpace := SubStr(clipboardText, 0) == " "
     wrappedText      := RTrim(clipboardText, " ")
@@ -4433,8 +4469,9 @@ WrapClipboardText(leftText, rightText) {
     if (hasTrailingSpace)
         wrappedText .= " "
 
-    if !TryFastInsertWrappedText(wrappedText)
-        Clip(wrappedText, "", "", modifiersToSync)
+    insertResult := TryFastInsertWrappedText(targetWindowId, wrappedText)
+    if (insertResult = "not_classic")
+        Clip(wrappedText, "", "", modifiersToSync, targetWindowId)
 
     ; Send, ^!+m
 }
@@ -4468,7 +4505,8 @@ _RunWrapClipboardText(leftText, rightText) {
 _SwapSelectedBooleanLiteral() {
     global clipPreferExplicitCtrlV
 
-    selectedText := Clip()
+    targetWindowId := DllCall("user32\GetForegroundWindow", "Ptr")
+    selectedText := Clip("", "", "", "Shift Alt Ctrl Win", targetWindowId)
     if (selectedText = "")
         return false
 
@@ -4483,13 +4521,14 @@ _SwapSelectedBooleanLiteral() {
     else
         return false
 
-    if !TryFastInsertWrappedText(replacementText) {
+    insertResult := TryFastInsertWrappedText(targetWindowId, replacementText)
+    if (insertResult = "not_classic") {
         clipPreferExplicitCtrlV := True
-        Clip(replacementText)
+        Clip(replacementText, "", "", "Shift Alt Ctrl Win", targetWindowId)
         clipPreferExplicitCtrlV := False
     }
 
-    return true
+    return (insertResult != "target_gone")
 }
 
 !a::
@@ -8200,8 +8239,9 @@ return
 
 GetThreadFocusHwnd(tid)
 {
-    ; GUITHREADINFO size differs slightly by arch; this works for both.
-    size := 48 + (A_PtrSize * 2)
+    ; GUITHREADINFO = two DWORDs, six HWNDs, and one RECT. hwndFocus follows
+    ; hwndActive, so its offset is 8 + one pointer on both architectures.
+    size := 24 + (A_PtrSize * 6)
     VarSetCapacity(gui, size, 0)
     NumPut(size, gui, 0, "UInt")
 
@@ -8209,7 +8249,7 @@ GetThreadFocusHwnd(tid)
     if (!ok)
         return 0
 
-    return NumGet(gui, 12, "Ptr") ; hwndFocus
+    return NumGet(gui, 8 + A_PtrSize, "Ptr") ; hwndFocus
 }
 
 ControlGetFocusEx(tidTarget, hwndTarget, timeoutMs := 15)
@@ -10853,7 +10893,12 @@ SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 
 ; synthetic modifier-down, then the user releases the real key just after the
 ; sequence. The immediate and deferred reconciliation passes make the target
 ; application's modifier state match the physical keyboard state again.
-_SendManagedCtrlChord(chordKey, reconcilePassCount := 6, explicitCtrlPath := False, modifiersToSync := "Shift Alt Ctrl Win") {
+_SendManagedCtrlChord(chordKey, reconcilePassCount := 6, explicitCtrlPath := False, modifiersToSync := "Shift Alt Ctrl Win", expectedWindowId := 0) {
+    ; Recheck immediately before injection. Clipboard preparation can take long
+    ; enough for a different application to become foreground in the meantime.
+    if (expectedWindowId && !_IsForegroundWindow(expectedWindowId))
+        return false
+
     SendInput, {Blind}{sc02A up}{sc036 up}{sc01D up}{sc11D up}{sc038 up}{sc138 up}{sc15B up}{sc15C up}
     if (explicitCtrlPath)
         SendInput, {Ctrl Down}%chordKey%{Ctrl Up}
@@ -10871,6 +10916,7 @@ _SendManagedCtrlChord(chordKey, reconcilePassCount := 6, explicitCtrlPath := Fal
         SyncModifierSidesToPhys(modifiersToSync)
         ScheduleModifierReconciliation(modifiersToSync, reconcilePassCount)
     }
+    return true
 }
 
 ; Synchronize named modifier sides with the physical keyboard state. Every
@@ -13253,7 +13299,8 @@ _TrySetClipboardText(text, retries := 6, sleepMs := 15)
 ; Copies the selection or pastes text through a managed Ctrl chord.
 ; modifiersToSync selects the physical modifier families reasserted after the
 ; chord; an empty string leaves them logically up for Alt/Shift hotkey callers.
-Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ctrl Win")
+; expectedWindowId cancels the chord if a different window becomes foreground.
+Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ctrl Win", expectedWindowId := 0)
 {
     global clipPreferExplicitCtrlV
     static BackUpClip := "", Stored := False, LastClip := "", Restored := ""
@@ -13267,6 +13314,9 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
     } else {
         clipResult := ""
         isReadCall := (Text = "")
+
+        if (expectedWindowId && !_IsForegroundWindow(expectedWindowId))
+            return ""
 
         if !Stored {
             Stored := True
@@ -13285,7 +13335,17 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
             Clipboard := ""
             clearMs := A_TickCount - clearStartTick
 
-            _SendManagedCtrlChord("c", 6, False, modifiersToSync)
+            ; A copy chord after a focus change would read from an unrelated
+            ; application, so restore the saved clipboard and stop instead.
+            if (expectedWindowId && !_IsForegroundWindow(expectedWindowId)) {
+                Clip("", "", "RESTORE")
+                return ""
+            }
+
+            if !_SendManagedCtrlChord("c", 6, False, modifiersToSync, expectedWindowId) {
+                Clip("", "", "RESTORE")
+                return ""
+            }
             if (clearMs > 50) {
                 ClipWait, 0.6, 1
             } else {
@@ -13298,12 +13358,24 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
                 return ""
             }
             ClipWait, 10
+
+            ; Clipboard writes can take long enough for the user to change
+            ; windows. Never send Ctrl+V to that newly foreground target.
+            if (expectedWindowId && !_IsForegroundWindow(expectedWindowId)) {
+                Clip("", "", "RESTORE")
+                return ""
+            }
+
             if (clipPreferExplicitCtrlV)
                 ; Some modern editors misread {Blind}v and occasionally type
                 ; a literal v, so use an explicit managed Ctrl+V chord.
-                _SendManagedCtrlChord("v", 6, True, modifiersToSync)
+                didPaste := _SendManagedCtrlChord("v", 6, True, modifiersToSync, expectedWindowId)
             else
-                _SendManagedCtrlChord("v", 6, False, modifiersToSync)
+                didPaste := _SendManagedCtrlChord("v", 6, False, modifiersToSync, expectedWindowId)
+            if !didPaste {
+                Clip("", "", "RESTORE")
+                return ""
+            }
             Sleep, 20  ; small buffer in case more keystrokes (e.g., Enter) follow a paste
         }
 
