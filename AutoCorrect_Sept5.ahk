@@ -308,6 +308,22 @@ Global postActivationLButtonId                     := 0
 ; transfer before the deferred shell-view re-check runs.
 Global k_postActivationLButtonDelayMs              := 35
 ; +----------------------------------------------------------------------------+
+; | Header Navigation Column Auto-Fit State                                    |
+; | Captures a shell header navigation command until the native click has had  |
+; | time to begin loading the destination before Ctrl+NumpadAdd is sent.       |
+; +----------------------------------------------------------------------------+
+; Class of the Explorer or file-dialog window that owns the queued header
+; navigation command. The timer verifies it again before sending anything.
+Global headerNavigationCtrlAddClass                 := ""
+; Top-level Explorer or file-dialog HWND that owns the queued header command.
+Global headerNavigationCtrlAddHwnd                  := 0
+; Monotonic token incremented for every queued header command so a timer for an
+; earlier click exits when a newer header command supersedes it.
+Global headerNavigationCtrlAddId                    := 0
+; Short one-shot delay that lets Refresh, Back, Forward, Up, and breadcrumb
+; clicks start native navigation before the script adjusts the Details columns.
+Global k_headerNavigationCtrlAddDelayMs             := 125
+; +----------------------------------------------------------------------------+
 ; | Runtime Context And Click/Drag Scratch State                               |
 ; | Stores the current desktop, monitor, Explorer path, click target, and      |
 ; | in-progress drag metadata shared across mouse and window-management flows. |
@@ -427,7 +443,7 @@ Global gExiting                                    := False
 Global hHookKbd
 Global hHookMouse
 Global deferredModifierFamilies                    := ""
-Global deferredModifierReconciliationRemaining     := 0
+Global deferredModifierSyncRemaining               := 0
 ; +----------------------------------------------------------------------------+
 ; | Window Snap And Drag Configuration                                         |
 ; | These are the coarse behavior knobs for snapping, monitor work-area rules, |
@@ -4174,7 +4190,7 @@ Return
     ; Reconcile any synthetic modifier-up/down imbalance left by the selection
     ; and navigation sends without disturbing modifiers that are still held.
     SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
+    ScheduleModifierSync("Shift Alt Ctrl")
 
     ; Your environment reset
     Hotstring("Reset")
@@ -4197,7 +4213,7 @@ Return
         Critical, Off
         Send ^d
         SyncModifierSidesToPhys("Shift Alt Ctrl")
-        ScheduleModifierReconciliation("Shift Alt Ctrl")
+        ScheduleModifierSync("Shift Alt Ctrl")
         Return
     }
     ; Let the trigger key finish before entering blocked mode so held Ctrl can
@@ -4234,7 +4250,7 @@ Return
         StopAutoFix             := False
         Critical, Off
         SyncModifierSidesToPhys("Shift Alt Ctrl")
-        ScheduleModifierReconciliation("Shift Alt Ctrl")
+        ScheduleModifierSync("Shift Alt Ctrl")
         Return
     }
 
@@ -4279,7 +4295,7 @@ Return
     Hotstring("Reset")
     StopAutoFix                 := False
     SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
+    ScheduleModifierSync("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4355,10 +4371,10 @@ _GetFastInsertWrappedTextTarget(windowId, ByRef controlHwnd) {
 ; Captures the exact logical line-start caret index in a classic Edit/RichEdit
 ; control so later restoration can return to the original line precisely.
 _GetCurrentLineStartIndexInClassicControl(windowId, controlHwnd, ByRef lineStartIndex) {
-    static emGetSel := 0x00B0
+    static emGetSel       := 0x00B0
     static emLineFromChar := 0x00C9
-    static emLineIndex := 0x00BB
-    lineStartIndex := -1
+    static emLineIndex    := 0x00BB
+    lineStartIndex        := -1
 
     if !_IsExpectedFocusedControl(windowId, controlHwnd)
         return false
@@ -4506,7 +4522,7 @@ _SwapSelectedBooleanLiteral() {
     global clipPreferExplicitCtrlV
 
     targetWindowId := DllCall("user32\GetForegroundWindow", "Ptr")
-    selectedText := Clip("", "", "", "Shift Alt Ctrl Win", targetWindowId)
+    selectedText   := Clip("", "", "", "Shift Alt Ctrl Win", targetWindowId)
     if (selectedText = "")
         return false
 
@@ -8444,6 +8460,40 @@ EnsureFocusedCtrlTarget(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, to
     return EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
 }
 
+; Return true only when a native SysTreeView32 click targets an item that can
+; select a folder. UI Automation crosses the application boundary safely; a
+; Button below the TreeItem is the expand/collapse glyph, not a folder click.
+_IsTreeViewFolderSelectionClick(hwndTop, ctrlNN, screenX, screenY) {
+    static UIA_ButtonTypeId   := 50000
+    static UIA_TreeItemTypeId := 50024
+
+    if (!hwndTop || !WinExist("ahk_id " . hwndTop) || !InStr(ctrlNN, "SysTreeView32", True))
+        return false
+
+    hitEl := SafeUIA_ElementFromPoint(screenX, screenY, "", 250)
+    if !IsObject(hitEl)
+        return false
+
+    depth  := 0
+    walkEl := hitEl
+    while (IsObject(walkEl) && depth < 12) {
+        info := SafeUIA_GetElementSnapshot(walkEl, "controlType")
+
+        ; The native TreeView exposes its expand/collapse glyph as a Button
+        ; below the TreeItem. Stop before the TreeItem so glyph clicks never
+        ; invoke SendCtrlAdd().
+        if (info.controlType = UIA_ButtonTypeId)
+            return false
+        if (info.controlType = UIA_TreeItemTypeId)
+            return true
+
+        walkEl := ExplorerClickClassify_GetParentTW(walkEl)
+        depth++
+    }
+
+    return false
+}
+
 #MaxThreadsPerHotkey 2
 #If
 ; Queue a conservative post-activation recovery for the first click into an
@@ -8473,6 +8523,54 @@ _QueuePostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY) {
     postActivationLButtonY    := clickY
     SetTimer, PostActivationLButtonCheck, % -k_postActivationLButtonDelayMs
 }
+
+; Queue the common follow-up for navigation commands in an Explorer or file
+; dialog header. Running SendCtrlAdd directly from $~LButton can focus the
+; Details view and send Ctrl+NumpadAdd before Refresh, Back, Forward, Up, or a
+; breadcrumb click has started its native navigation. The short timer keeps the
+; click's native command dispatch separate from the later column adjustment.
+_ScheduleHeaderNavigationCtrlAdd(hwnd, windowClass) {
+    global headerNavigationCtrlAddClass
+    global headerNavigationCtrlAddHwnd
+    global headerNavigationCtrlAddId
+    global k_headerNavigationCtrlAddDelayMs
+
+    if (!hwnd || !(windowClass == "CabinetWClass" || windowClass == "#32770"))
+        return
+
+    headerNavigationCtrlAddClass := windowClass
+    headerNavigationCtrlAddHwnd  := hwnd
+    headerNavigationCtrlAddId    += 1
+    SetTimer, HeaderNavigationCtrlAdd, % -k_headerNavigationCtrlAddDelayMs
+}
+
+; Run the delayed header-navigation follow-up only when the original Explorer
+; or file-dialog window is still active. SendCtrlAdd then waits for the Details
+; view to settle, including grouped layouts, before it focuses that view and
+; sends Ctrl+NumpadAdd.
+HeaderNavigationCtrlAdd:
+    queuedClass := headerNavigationCtrlAddClass
+    queuedHwnd  := headerNavigationCtrlAddHwnd
+    queuedId    := headerNavigationCtrlAddId
+
+    if (!queuedHwnd || !WinExist("ahk_id " . queuedHwnd) || WinExist("A") != queuedHwnd)
+        Return
+
+    ; A held button is a drag or another in-progress click, not a completed
+    ; header command whose Details columns should be adjusted yet.
+    if (GetKeyState("LButton", "P") || queuedId != headerNavigationCtrlAddId)
+        Return
+
+    WinGetClass, currentClass, ahk_id %queuedHwnd%
+    if (currentClass != queuedClass || !(currentClass == "CabinetWClass" || currentClass == "#32770"))
+        Return
+
+    ; A newer queued header click must own the next Ctrl+NumpadAdd send.
+    if (queuedId != headerNavigationCtrlAddId)
+        Return
+
+    SendCtrlAdd(queuedHwnd, , , currentClass, "", True, "", True)
+Return
 
 ; Deferred recovery for a first click into an inactive Explorer/file-dialog
 ; window. This intentionally does not replay the full $~LButton handler: by the
@@ -8591,6 +8689,7 @@ $~LButton::
     }
 
     WinGetClass, _winClassD, ahk_id %_winIdD%
+    treeClickSelectsFolder := _IsTreeViewFolderSelectionClick(_winIdD, _winCtrlD, lbX1, lbY1)
     titleBarState := _GetTitleBarProbeState(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)
 
     if (titleBarState == "caption")
@@ -8871,7 +8970,7 @@ $~LButton::
             }
             Else {
                 If InStr(cname, "Refresh", True) {
-                    SendCtrlAdd(_winIdU, , , _winClassD, "", True)
+                    _ScheduleHeaderNavigationCtrlAdd(_winIdU, _winClassD)
                 }
                 Else If (  (ctype == 50000) ; handles explorer based buttons
                         || (ctype == 50011) ; handles #32770 breadcrumb bar
@@ -8879,34 +8978,20 @@ $~LButton::
                         || (ctype == 50031 && !InStr(cname,  "Open",  True)) ; handles #32770 breadcrumb bar
                         || (ctype == 50031 && !InStr(cltype, "split", True))) { ; handles normal explorer breadcrumb bar
 
-                    ; tooltip, here3
-                    currentPath := ""
-                    Loop,20 {
-                        currentPath := GetExplorerPath(_winIdU)
-                        If (currentPath != "" && currentPath != prevPath)
-                            break
-                        sleep, 15
-                    }
-                    SendCtrlAdd(_winIdU, prevPath, currentPath, _winClassD)
+                    _ScheduleHeaderNavigationCtrlAdd(_winIdU, _winClassD)
                 }
             }
         }
-        Else If (   InStr(_winCtrlU, "SysTreeView32", True)
+        Else If (   treeClickSelectsFolder
                 && (_winClassD == "CabinetWClass" || _winClassD == "#32770")
                 && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
 
-            ; tooltip, here4
-            currentPath := ""
-            Loop,20 {
-                currentPath := GetExplorerPath(_winIdU)
-                If (currentPath != "" && currentPath != prevPath)
-                    break
-                sleep, 15
-            }
-            ; tooltip, sending
-            ; If the path probe already proved navigation happened, avoid forcing
-            ; the load wait and let SendCtrlAdd() infer didNavigate from the path delta.
-            SendCtrlAdd(_winIdU, prevPath, currentPath, _winClassD, _winCtrlU, (currentPath == "" || currentPath == prevPath))
+            ; The UIA TreeItem check is the folder-selection signal. #32770
+            ; breadcrumb text can still show the old folder after a Quick Access
+            ; tree click, even while the Details view is changing. The shared wait
+            ; resolves that view and waits for its grouped Details layout before
+            ; Ctrl+NumpadAdd.
+            SendCtrlAdd(_winIdD, , , _winClassD, _winCtrlD, True, "", True)
         }
     }
     Else If (InStr(_winCtrlU, "SysHeader", True) && (abs(lbX1-lbX2) >= 15 || abs(lbY1-lbY2) >= 15)) { ; dragged to size one of the header columns
@@ -9040,14 +9125,27 @@ WaitForExplorerDetailsReady(shellEl, timeoutMs := 1200, pollSleepMs := 25) {
         return false
 
     deadlineTick := A_TickCount + timeoutMs
+    previousLayoutSignature := ""
     stableHitCount := 0
 
     while (A_TickCount <= deadlineTick) {
         if (ExplorerItemsViewHasDetailsSignals(shellEl)) {
-            stableHitCount += 1
+            ; The header/grid can exist while Explorer is still rearranging grouped
+            ; rows.  Require the same column-count and Items View bounds twice so
+            ; Ctrl+NumpadAdd runs after that layout phase has settled.
+            gridColumnCount := UIA_TryGetGridColumnCountAny_(shellEl)
+            layoutSignature := gridColumnCount . "|" . SafeUIA_GetElementRectangleSignature(shellEl)
+
+            if (layoutSignature = previousLayoutSignature)
+                stableHitCount += 1
+            else
+                stableHitCount := 1
+
+            previousLayoutSignature := layoutSignature
             if (stableHitCount >= 2)
                 return true
         } else {
+            previousLayoutSignature := ""
             stableHitCount := 0
         }
 
@@ -9673,7 +9771,7 @@ GetSendCtrlAddTargetCtrl(hwndTop, initFocusedCtrlNN := "", topClass := "", targe
     return ChooseSendCtrlAddTarget(hwndTop, topClass, initFocusedCtrlNN, targetScan, allowFocusedDirect23)
 }
 
-SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False, targetScan := "") {
+SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False, targetScan := "", requireDetailsReady := False) {
     global UIA, k_isWin11
 
     TargetControl := ""
@@ -9732,7 +9830,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         ; tooltip, targeted is %TargetControl% with init at %initFocusedCtrlNN%
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (didNavigate) {
-                WaitForExplorerLoad(initTargetHwnd, False, True)
+                WaitForExplorerLoad(initTargetHwnd, False, True, requireDetailsReady)
             }
             ; tooltip, here7a targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
@@ -9742,7 +9840,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
         Else If (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (didNavigate) {
-                WaitForExplorerLoad(initTargetHwnd, True, False)
+                WaitForExplorerLoad(initTargetHwnd, True, False, requireDetailsReady)
             }
             ; tooltip, here7b targeted is %TargetControl% with init at %initFocusedCtrlNN%
             If (TargetControl != initFocusedCtrlNN) {
@@ -9755,7 +9853,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 ; This fallback shell branch already resolved a real content target.
                 ; Skip the slower UIA focus-confirmation part when focus is already
                 ; on that target and only the content-readiness wait still matters.
-                WaitForExplorerLoad(initTargetHwnd, (TargetControl == initFocusedCtrlNN), False)
+                WaitForExplorerLoad(initTargetHwnd, (TargetControl == initFocusedCtrlNN), False, requireDetailsReady)
             }
             if (TargetControl != initFocusedCtrlNN) {
 
@@ -10877,7 +10975,7 @@ SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 
     EndBlockKeys()
     EndBlockWheel()
     SyncModifierSidesToPhys("Ctrl")
-    ScheduleModifierReconciliation("Ctrl", reconcilePassCount)
+    ScheduleModifierSync("Ctrl", reconcilePassCount)
     return true
 }
 
@@ -10885,13 +10983,13 @@ SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 
 ; modifiers. Sending {Ctrl Up}, {Shift Up}, and similar events changes the
 ; modifier state seen by the target application even if the user still holds
 ; the physical key. Because that key never physically transitions up and down,
-; Windows does not send a replacement key-down event. Without reconciliation,
+; Windows does not send a replacement key-down event. Without sync,
 ; a later D press while Ctrl is still physically held can arrive as plain D
 ; instead of Ctrl+D.
 ;
 ; The inverse race can leave a modifier logically stuck: the script restores a
 ; synthetic modifier-down, then the user releases the real key just after the
-; sequence. The immediate and deferred reconciliation passes make the target
+; sequence. The immediate and deferred sync passes make the target
 ; application's modifier state match the physical keyboard state again.
 _SendManagedCtrlChord(chordKey, reconcilePassCount := 6, explicitCtrlPath := False, modifiersToSync := "Shift Alt Ctrl Win", expectedWindowId := 0) {
     ; Recheck immediately before injection. Clipboard preparation can take long
@@ -10914,7 +11012,7 @@ _SendManagedCtrlChord(chordKey, reconcilePassCount := 6, explicitCtrlPath := Fal
     ; those modifiers stay logically up instead of activating app menu shortcuts.
     if (modifiersToSync != "") {
         SyncModifierSidesToPhys(modifiersToSync)
-        ScheduleModifierReconciliation(modifiersToSync, reconcilePassCount)
+        ScheduleModifierSync(modifiersToSync, reconcilePassCount)
     }
     return true
 }
@@ -10966,29 +11064,29 @@ SyncModifierSidesToPhys(modifiers := "Shift Alt Ctrl Win") {
 }
 
 ; Re-check modifier state shortly after a hotkey returns so a physical key-up
-; that happens just after the immediate reconciliation still gets applied.
-RunDeferredModifierReconciliation() {
+; that happens just after the immediate sync still gets applied.
+RunDeferredModifierSync() {
     Global deferredModifierFamilies
-    Global deferredModifierReconciliationRemaining
+    Global deferredModifierSyncRemaining
 
-    if (deferredModifierFamilies = "" || deferredModifierReconciliationRemaining <= 0)
+    if (deferredModifierFamilies = "" || deferredModifierSyncRemaining <= 0)
         return
 
     SyncModifierSidesToPhys(deferredModifierFamilies)
-    deferredModifierReconciliationRemaining -= 1
-    if (deferredModifierReconciliationRemaining > 0)
-        SetTimer, RunDeferredModifierReconciliation, -75
+    deferredModifierSyncRemaining -= 1
+    if (deferredModifierSyncRemaining > 0)
+        SetTimer, RunDeferredModifierSync, -75
     else
         deferredModifierFamilies := ""
 }
 
-; Queue one or more delayed modifier reconciliation passes after the immediate
+; Queue one or more delayed modifier sync passes after the immediate
 ; cleanup has already run. This gives AutoHotkey time to observe physical
 ; key-up events that may land just after the hotkey/send sequence finishes.
 ;
 ; modifiers:
 ;     Space-delimited modifier families to re-check on each deferred pass.
-;     Only those families are examined, so call sites can limit reconciliation
+;     Only those families are examined, so call sites can limit sync
 ;     to the modifiers they may have disturbed.
 ;
 ; deferredRuns:
@@ -10996,24 +11094,24 @@ RunDeferredModifierReconciliation() {
 ;     cleanup window. Multiple passes matter because a synthetic send can end
 ;     before Windows/AutoHotkey reports the user's real modifier release, so a
 ;     single delayed check can still be too early. More passes extend the
-;     reconciliation window without blocking the caller.
-ScheduleModifierReconciliation(modifiers := "Shift Alt Ctrl", deferredRuns := 6) {
+;     sync window without blocking the caller.
+ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6) {
     Global deferredModifierFamilies
-    Global deferredModifierReconciliationRemaining
+    Global deferredModifierSyncRemaining
 
     ; Always reconcile the latest requested modifier set so the timer re-checks
     ; the modifiers most relevant to the newest send/hotkey sequence.
     deferredModifierFamilies := modifiers
     ; Only grow the remaining pass budget. This prevents a later caller with a
-    ; smaller deferredRuns from shortening a longer reconciliation window that is
+    ; smaller deferredRuns from shortening a longer sync window that is
     ; already in progress and may still be needed to catch a late physical
     ; modifier release.
-    if (deferredModifierReconciliationRemaining < deferredRuns)
-        deferredModifierReconciliationRemaining := deferredRuns
+    if (deferredModifierSyncRemaining < deferredRuns)
+        deferredModifierSyncRemaining := deferredRuns
 
     ; Start the first delayed pass soon after the caller returns. Follow-up
-    ; passes are scheduled by RunDeferredModifierReconciliation().
-    SetTimer, RunDeferredModifierReconciliation, -40
+    ; passes are scheduled by RunDeferredModifierSync().
+    SetTimer, RunDeferredModifierSync, -40
 }
 
 ; Clears the queued Everything Edit1 auto-fit state so context changes or a
@@ -17953,6 +18051,53 @@ SafeUIA_GetElementSnapshot(el, fields := "") {
     }
 
     return info
+}
+/*
+    Return a rounded UIA bounding rectangle as a stable comparison string.
+    Explorer can expose a Details header while it is still repositioning grouped
+    rows; callers use this value to wait until that visible layout stops moving.
+*/
+SafeUIA_GetElementRectangleSignature(el) {
+    if !IsObject(el)
+        return ""
+
+    rect := ""
+    try
+        rect := el.CurrentBoundingRectangle
+    catch e
+        rect := ""
+
+    if !IsObject(rect) {
+        try
+            rect := el.BoundingRectangle
+        catch e
+            rect := ""
+    }
+
+    if !IsObject(rect)
+        return ""
+
+    try {
+        left   := rect.l
+        top    := rect.t
+        right  := rect.r
+        bottom := rect.b
+        if (left != "" && top != "" && right != "" && bottom != "")
+            return Round(left) . "|" . Round(top) . "|" . Round(right) . "|" . Round(bottom)
+    } catch e {
+    }
+
+    try {
+        left   := rect.x
+        top    := rect.y
+        width  := rect.w
+        height := rect.h
+        if (left != "" && top != "" && width != "" && height != "")
+            return Round(left) . "|" . Round(top) . "|" . Round(left + width) . "|" . Round(top + height)
+    } catch e {
+    }
+
+    return ""
 }
 /*
     Read an element's numeric UIA control type, such as List, Pane, or Header.
