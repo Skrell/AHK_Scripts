@@ -4420,7 +4420,11 @@ TryFastInsertWrappedText(text) {
 WrapClipboardText(leftText, rightText) {
     ; Send, ^!+m
 
-    clipboardText    := Clip()
+    ; These hotkeys are Alt+Shift chords. Keep those modifiers logically up
+    ; after the synthetic Ctrl+C/Ctrl+V sends so applications cannot treat a
+    ; following key as an Alt menu accelerator or Shift-modified shortcut.
+    modifiersToSync := ""
+    clipboardText    := Clip("", "", "", modifiersToSync)
 
     hasTrailingSpace := SubStr(clipboardText, 0) == " "
     wrappedText      := RTrim(clipboardText, " ")
@@ -4430,9 +4434,33 @@ WrapClipboardText(leftText, rightText) {
         wrappedText .= " "
 
     if !TryFastInsertWrappedText(wrappedText)
-        Clip(wrappedText)
+        Clip(wrappedText, "", "", modifiersToSync)
 
     ; Send, ^!+m
+}
+
+; Runs a wrapper hotkey with input blocking and typing fixes temporarily disabled.
+; The finally block always releases the keyboard block, even when clipboard or
+; target-control work raises an error before the normal cleanup path runs.
+_RunWrapClipboardText(leftText, rightText) {
+    global StopAutoFix
+
+    Critical, On
+    StopAutoFix := True
+    BeginBlockKeys()
+    try {
+        WrapClipboardText(leftText, rightText)
+    } finally {
+        ; Release input-state guards before optional cleanup so a failure here
+        ; cannot leave physical key-down events permanently blocked.
+        EndBlockKeys()
+        StopAutoFix := False
+        try {
+            Hotstring("Reset")
+        } finally {
+            Critical, Off
+        }
+    }
 }
 
 ; Swap a selected true/false literal to the opposite value while preserving only
@@ -4486,8 +4514,6 @@ Return
     Hotstring("Reset")
     StopAutoFix := False
     EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
     Critical, Off
 Return
 
@@ -4526,138 +4552,39 @@ Return
 Return
 
 !+':: ;'
-    Critical, On
-    StopAutoFix := True
-    BeginBlockKeys()
-
-    WrapClipboardText("""", """")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
-    Critical, Off
+    _RunWrapClipboardText("""", """")
 Return
 
 !+[::
-    Critical, On
-    StopAutoFix := True
-    BeginBlockKeys()
-
-    WrapClipboardText("{", "}")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
-    Critical, Off
+    _RunWrapClipboardText("{", "}")
 Return
 
 !+]::
-    Critical, On
-    StopAutoFix := True
-    BeginBlockKeys()
-
-    WrapClipboardText("{", "}")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
-    Critical, Off
+    _RunWrapClipboardText("{", "}")
 Return
 
 !+<::
-    Critical, On
-    StopAutoFix := True
-    BeginBlockKeys()
-
-    WrapClipboardText("<", ">")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
-    Critical, Off
+    _RunWrapClipboardText("<", ">")
 Return
 
 !+>::
-    Critical, On
-    StopAutoFix := True
-    BeginBlockKeys()
-
-    WrapClipboardText("<", ">")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
-    Critical, Off
+    _RunWrapClipboardText("<", ">")
 Return
 
 !+(::
-    Critical, On
-    StopAutoFix := True
-    BeginBlockKeys()
-
-    WrapClipboardText("(", ")")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
-    Critical, Off
+    _RunWrapClipboardText("(", ")")
 Return
 
 !+)::
-    Critical, On
-    StopAutoFix := True
-    BeginBlockKeys()
-
-    WrapClipboardText("(", ")")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
-    Critical, Off
+    _RunWrapClipboardText("(", ")")
 Return
 
 !+b::
-    Critical, On
-    StopAutoFix := True
-    BeginBlockKeys()
-
-    WrapClipboardText("\b", "\b")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
-    Critical, Off
+    _RunWrapClipboardText("\b", "\b")
 Return
 
 !+5::
-    Critical, On
-    StopAutoFix := True
-    BeginBlockKeys()
-
-    WrapClipboardText("%", "%")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierReconciliation("Shift Alt Ctrl")
-    Critical, Off
+    _RunWrapClipboardText("%", "%")
 Return
 
 $!i::
@@ -10926,7 +10853,7 @@ SendCtrlNumpadAdd(reconcilePassCount := 6, guardRequestId := 0, guardQuietMs := 
 ; synthetic modifier-down, then the user releases the real key just after the
 ; sequence. The immediate and deferred reconciliation passes make the target
 ; application's modifier state match the physical keyboard state again.
-_SendManagedCtrlChord(chordKey, reconcilePassCount := 6, explicitCtrlPath := False) {
+_SendManagedCtrlChord(chordKey, reconcilePassCount := 6, explicitCtrlPath := False, modifiersToSync := "Shift Alt Ctrl Win") {
     SendInput, {Blind}{sc02A up}{sc036 up}{sc01D up}{sc11D up}{sc038 up}{sc138 up}{sc15B up}{sc15C up}
     if (explicitCtrlPath)
         SendInput, {Ctrl Down}%chordKey%{Ctrl Up}
@@ -10937,8 +10864,13 @@ _SendManagedCtrlChord(chordKey, reconcilePassCount := 6, explicitCtrlPath := Fal
     ; the target application receives its real key-down event. Live sync can
     ; then send one duplicate down event in that tiny buffered-input window.
     ; This is an intentional tradeoff for the simpler, live-state behavior.
-    SyncModifierSidesToPhys("Shift Alt Ctrl Win")
-    ScheduleModifierReconciliation("Shift Alt Ctrl Win", reconcilePassCount)
+    ;
+    ; Callers whose hotkey itself holds Alt or Shift can pass an empty set so
+    ; those modifiers stay logically up instead of activating app menu shortcuts.
+    if (modifiersToSync != "") {
+        SyncModifierSidesToPhys(modifiersToSync)
+        ScheduleModifierReconciliation(modifiersToSync, reconcilePassCount)
+    }
 }
 
 ; Synchronize named modifier sides with the physical keyboard state. Every
@@ -13318,7 +13250,10 @@ _TrySetClipboardText(text, retries := 6, sleepMs := 15)
     return False
 }
 
-Clip(Text := "", Reselect := "", Restore := "")
+; Copies the selection or pastes text through a managed Ctrl chord.
+; modifiersToSync selects the physical modifier families reasserted after the
+; chord; an empty string leaves them logically up for Alt/Shift hotkey callers.
+Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ctrl Win")
 {
     global clipPreferExplicitCtrlV
     static BackUpClip := "", Stored := False, LastClip := "", Restored := ""
@@ -13350,7 +13285,7 @@ Clip(Text := "", Reselect := "", Restore := "")
             Clipboard := ""
             clearMs := A_TickCount - clearStartTick
 
-            _SendManagedCtrlChord("c")
+            _SendManagedCtrlChord("c", 6, False, modifiersToSync)
             if (clearMs > 50) {
                 ClipWait, 0.6, 1
             } else {
@@ -13366,9 +13301,9 @@ Clip(Text := "", Reselect := "", Restore := "")
             if (clipPreferExplicitCtrlV)
                 ; Some modern editors misread {Blind}v and occasionally type
                 ; a literal v, so use an explicit managed Ctrl+V chord.
-                _SendManagedCtrlChord("v", 6, True)
+                _SendManagedCtrlChord("v", 6, True, modifiersToSync)
             else
-                _SendManagedCtrlChord("v")
+                _SendManagedCtrlChord("v", 6, False, modifiersToSync)
             Sleep, 20  ; small buffer in case more keystrokes (e.g., Enter) follow a paste
         }
 
