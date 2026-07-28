@@ -1,4 +1,4 @@
-; c = case sensitive
+﻿; c = case sensitive
 ; c1 = ignore the case that was typed, always use the same case for output
 ; * = immediate change (no need for space, period, or enter)
 ; ? = triggered even when the character typed immediately before it is alphanumeric
@@ -265,8 +265,9 @@ Global k_tbcAdjustColumnsTargetTtlMs               := 350
 ; Deferred typing correction state so punctuation and capitalization rewrites can
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
-; Slash uses this slot only for the deferred "/ " rewrite. The slash+Enter path
-; is handled inline in the custom $Enter hotkey instead of through this timer.
+; Slash uses this slot for deferred "/ " rewrites and for slash+Enter in
+; non-classic editors. Classic Edit/RichEdit slash+Enter is handled inline by
+; the custom $Enter hotkey instead of through this timer.
 Global tbcFixSlashAction                           := ""
 ; Focused control name captured when the "/ " fix is queued so the timer can
 ; cancel instead of rewriting text after focus moves to another control.
@@ -531,6 +532,7 @@ Global hHookKbd
 Global hHookMouse
 Global deferredModifierFamilies                    := ""
 Global deferredModifierSyncRemaining               := 0
+Global deferredModifierTargetHwnd                  := 0
 ; +----------------------------------------------------------------------------+
 ; | Window Snap And Drag Configuration                                         |
 ; | These are the coarse behavior knobs for snapping, monitor work-area rules, |
@@ -1082,7 +1084,9 @@ InitVDA()
 ; --------------------------------------------------
 ; ---- Low-level hardware key filter ----
 ; --------------------------------------------------
-; Common filter logic for keyboard while blockKeys is active.
+; Low-level keyboard filtering and physical typing bookkeeping. When blockKeys
+; is active, physical key-down events may be swallowed; when it is inactive,
+; qualifying physical key-downs are still recorded before being passed through.
 ;
 ; Why physical KEYUP events must be allowed through:
 ;   Normal key lifecycle:
@@ -1126,11 +1130,13 @@ LL_KeyboardHook(nCode, wParam, lParam)
     flags    := NumGet(lParam + 0, 8, "UInt")
     injected := (flags & 0x10)  ; LLKHF_INJECTED
 
-    ; Allow injected keys (from Send/SendInput)
+    ; Allow script- or externally-injected events; only physical user input is
+    ; used for typing and boundary bookkeeping below.
     if (injected)
         return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-    ; If not blocking, just pass through
+    ; If not blocking, finish physical typing/boundary bookkeeping above, then
+    ; pass the unchanged event through to the active application.
     if (!blockKeys)
     {
         ; Track physical text-input key-downs separately from the script's exact
@@ -1181,13 +1187,14 @@ LL_KeyboardHook(nCode, wParam, lParam)
     if (wParam = 0x0101 || wParam = 0x0105)  ; WM_KEYUP / WM_SYSKEYUP
         return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-    ; After repeated physical key presses, disable blocking and allow typing again.
-    ; (Count only physical KEYDOWN / SYSKEYDOWN so KEYUP events don't inflate the count.)
+    ; Emergency watchdog for failed or interrupted cleanup that leaves blockKeys
+    ; enabled indefinitely. After 20 blocked physical key-down events, forcibly
+    ; end blocking and allow the twentieth key through so normal typing resumes.
+    ; Key-up events are excluded so complete key cycles do not inflate the count.
     if (wParam = 0x0100 || wParam = 0x0104)  ; WM_KEYDOWN / WM_SYSKEYDOWN
     {
         blockedPressCount += 1
 
-        ; After 10 physical key presses, disable blocking and allow typing again
         if (blockedPressCount >= 20)
         {
             EndBlockKeys()
@@ -1714,14 +1721,14 @@ _ClearTypingAutoFixEligibilityCache() {
     global hotstringAutoFixBoundaryReleasePending
     global hotstringAutoFixRequiredBoundarySeq
 
-    c_typingAutoFixAllowed              := false
-    c_typingAutoFixCtrlHwnd             := 0
-    c_typingAutoFixCtrlNN               := ""
-    c_typingAutoFixHwnd                 := 0
-    c_typingAutoFixReason               := "pointer_context_changed"
-    c_typingAutoFixTick                 := 0
+    c_typingAutoFixAllowed                 := false
+    c_typingAutoFixCtrlHwnd                := 0
+    c_typingAutoFixCtrlNN                  := ""
+    c_typingAutoFixHwnd                    := 0
+    c_typingAutoFixReason                  := "pointer_context_changed"
+    c_typingAutoFixTick                    := 0
     hotstringAutoFixBoundaryReleasePending := False
-    hotstringAutoFixRequiredBoundarySeq := 0
+    hotstringAutoFixRequiredBoundarySeq    := 0
     SetTimer, ReleaseHotstringAutoFixBoundary, Off
     Hotstring("Reset")
 }
@@ -4343,150 +4350,163 @@ Return
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
+    ctrlShiftDModifierTargetHwnd := DllCall("user32\GetForegroundWindow", "Ptr")
     Critical, On
     StopAutoFix                 := True
     caretRectKeyBeforeMove      := ""
-    ; Let the trigger key finish before entering blocked mode so held modifiers
-    ; can remain down while repeated D taps still retrigger the hotkey cleanly.
-    KeyWait, d, T0.25
-    BeginBlockKeys()
+    try {
+        ; Let the trigger key finish before entering blocked mode so held modifiers
+        ; can remain down while repeated D taps still retrigger the hotkey cleanly.
+        KeyWait, d, T0.25
+        BeginBlockKeys()
 
-    ; Keep the trigger's held Ctrl+Shift logically released during the edit
-    ; burst so plain navigation/Delete cannot inherit them between sends.
-    GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    Send, {Ctrl Up}{Shift Up}{Down}
-    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
-    GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    Send, {Ctrl Up}{Shift Up}{Home}{Home}
-    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
-    GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    ; Use explicit Shift down/up pairs instead of +{Up}/+{Home} so the
-    ; synthetic selection does not leave Shift logically stuck afterward.
-    Send, {Ctrl Up}{Shift Down}{Up}{Shift Up}
-    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
-    GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    Send, {Ctrl Up}{Shift Down}{Home}{Shift Up}
-    ; Send, {End}
-    ; Send, +{Home}+{Home}+{Home}
-    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
-    Send, {Ctrl Up}{Shift Up}{Delete}
-    EndBlockKeys()
-    ; Match the modifier state seen by the target application to the physical
-    ; Shift, Alt, and Ctrl keys after the selection and navigation sends.
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierSync("Shift Alt Ctrl")
+        ; Keep the trigger's held Ctrl+Shift logically released during the edit
+        ; burst so plain navigation/Delete cannot inherit them between sends.
+        GetActiveCaretRectKey(caretRectKeyBeforeMove)
+        Send, {Ctrl Up}{Shift Up}{Down}
+        WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
+        GetActiveCaretRectKey(caretRectKeyBeforeMove)
+        Send, {Ctrl Up}{Shift Up}{Home}{Home}
+        WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
+        GetActiveCaretRectKey(caretRectKeyBeforeMove)
+        ; Use explicit Shift down/up pairs instead of +{Up}/+{Home} so the
+        ; synthetic selection does not leave Shift logically stuck afterward.
+        Send, {Ctrl Up}{Shift Down}{Up}{Shift Up}
+        WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
+        GetActiveCaretRectKey(caretRectKeyBeforeMove)
+        Send, {Ctrl Up}{Shift Down}{Home}{Shift Up}
+        ; Send, {End}
+        ; Send, +{Home}+{Home}+{Home}
+        WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
+        Send, {Ctrl Up}{Shift Up}{Delete}
 
-    ; Your environment reset
-    Hotstring("Reset")
-    StopAutoFix                 := False
-    Critical, Off
+        ; Your environment reset
+        Hotstring("Reset")
+    } finally {
+        ; Always release the input guard and repair every modifier family this
+        ; hotkey explicitly releases, even if navigation or caret work fails.
+        EndBlockKeys()
+        StopAutoFix := False
+        try {
+            SyncModifierSidesToPhys("Shift Alt Ctrl", ctrlShiftDModifierTargetHwnd)
+            ScheduleModifierSync("Shift Alt Ctrl", 6, ctrlShiftDModifierTargetHwnd)
+        } finally {
+            Critical, Off
+        }
+    }
 Return
 
 ^d::
     if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
         Send, {Esc}
 
+    ctrlDModifierTargetHwnd     := DllCall("user32\GetForegroundWindow", "Ptr")
     Critical, On
     StopAutoFix                 := True
     caretRectKeyBeforeMove      := ""
-    ; If there's no caret (e.g., not in a text field), pass through native Ctrl+D.
-    if (A_CaretX = "")
-    {
-        StopAutoFix                 := False
+    try {
+        ; If there's no caret (e.g., not in a text field), pass through native Ctrl+D.
+        if (A_CaretX = "")
+        {
+            StopAutoFix := False
+            Critical, Off
+            Send ^d
+            Return
+        }
+        ; Let the trigger key finish before entering blocked mode so held Ctrl can
+        ; remain down while repeated D taps still retrigger the hotkey cleanly.
+        KeyWait, d, T0.25
+        BeginBlockKeys()
+
+        didFastInsert                  := False
+        didRestoreCaretWithMessages    := False
+        fastInsertControlHwnd          := 0
+        fastInsertResult               := "target_gone"
+        fastInsertWindowId             := DllCall("user32\GetForegroundWindow", "Ptr")
+        originalFastInsertLineStartIdx := -1
+        if (_GetFastInsertWrappedTextTarget(fastInsertWindowId, fastInsertControlHwnd) = "classic_edit")
+            ; Save the exact original line-start index so the fast message-based
+            ; insert path can put the caret back on that same logical line later.
+            _GetCurrentLineStartIndexInClassicControl(fastInsertWindowId, fastInsertControlHwnd, originalFastInsertLineStartIdx)
+
+        ; 1) Go to absolute start of the line and select it with one plain-navigation
+        ; burst so held Ctrl cannot slip back in between the selection keys.
+        GetActiveCaretRectKey(caretRectKeyBeforeMove)
+        Send, {Ctrl Up}{Home}{Home}{Shift Down}{End}{Shift Up}
         EndBlockKeys()
-        Critical, Off
-        Send ^d
-        SyncModifierSidesToPhys("Shift Alt Ctrl")
-        ScheduleModifierSync("Shift Alt Ctrl")
-        Return
-    }
-    ; Let the trigger key finish before entering blocked mode so held Ctrl can
-    ; remain down while repeated D taps still retrigger the hotkey cleanly.
-    KeyWait, d, T0.25
-    BeginBlockKeys()
+        SyncModifierSidesToPhys("Ctrl", ctrlDModifierTargetHwnd)
+        WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
 
-    didFastInsert                  := False
-    didRestoreCaretWithMessages    := False
-    fastInsertControlHwnd          := 0
-    fastInsertResult               := "target_gone"
-    fastInsertWindowId             := DllCall("user32\GetForegroundWindow", "Ptr")
-    originalFastInsertLineStartIdx := -1
-    if (_GetFastInsertWrappedTextTarget(fastInsertWindowId, fastInsertControlHwnd) = "classic_edit")
-        ; Save the exact original line-start index so the fast message-based
-        ; insert path can put the caret back on that same logical line later.
-        _GetCurrentLineStartIndexInClassicControl(fastInsertWindowId, fastInsertControlHwnd, originalFastInsertLineStartIdx)
+        ; 2) Copy the line text via your clipboard-safe helper
+        lineText                    := Clip("", "", "", "Shift Alt Ctrl Win", fastInsertWindowId)   ; returns the copied text, clipboard will auto-restore later
+        if (lineText = "")
+        {
+            ; Abort before the Enter step if selection/copy failed so this hotkey
+            ; does not degrade into inserting blank lines on repeated presses.
+            Clip("", "", "RESTORE")
+            Hotstring("Reset")
+            Return
+        }
 
-    ; 1) Go to absolute start of the line and select it with one plain-navigation
-    ; burst so held Ctrl cannot slip back in between the selection keys.
-    GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    Send, {Ctrl Up}{Home}{Home}{Shift Down}{End}{Shift Up}
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Ctrl")
-    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
-
-    ; 2) Copy the line text via your clipboard-safe helper
-    lineText                    := Clip("", "", "", "Shift Alt Ctrl Win", fastInsertWindowId)   ; returns the copied text, clipboard will auto-restore later
-    if (lineText = "")
-    {
-        ; Abort before the Enter step if selection/copy failed so this hotkey
-        ; does not degrade into inserting blank lines on repeated presses.
-        Clip("", "", "RESTORE")
-        Hotstring("Reset")
-        StopAutoFix             := False
-        Critical, Off
-        SyncModifierSidesToPhys("Shift Alt Ctrl")
-        ScheduleModifierSync("Shift Alt Ctrl")
-        Return
-    }
-
-    ; 3) Insert a newline and paste the duplicate line BELOW
-    BeginBlockKeys()
-    GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    Send, {Ctrl Up}{End}{Enter}{Shift Down}{Home}{Shift Up}
-    EndBlockKeys()
-    SyncModifierSidesToPhys("Ctrl")
-    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
-    GetActiveCaretRectKey(caretRectKeyBeforeMove)
-    if (fastInsertControlHwnd)
-        fastInsertResult := _FastInsertWrappedTextIntoClassicControl(fastInsertWindowId, fastInsertControlHwnd, lineText)
-
-    didFastInsert := (fastInsertResult = "inserted")
-    if (!didFastInsert && fastInsertResult != "message_uncertain" && _IsForegroundWindow(fastInsertWindowId))
-    {
-        ; Some editors are picky about paste timing/chords here, so force the
-        ; clipboard helper onto the stricter explicit Ctrl+V path for this step.
-        ; A timed-out EM_REPLACESEL is deliberately excluded: it might have
-        ; completed just before SendMessageTimeoutW returned, so Ctrl+V could
-        ; duplicate the line.
-        clipPreferExplicitCtrlV := True
-        Clip(lineText, "", "", "Shift Alt Ctrl Win", fastInsertWindowId)
-        clipPreferExplicitCtrlV := False
-    }
-    WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 30)
-    if (didFastInsert && originalFastInsertLineStartIdx >= 0)
-        ; After a fast EM_REPLACESEL insert, restore directly to the saved line
-        ; start instead of trying to infer the original position by keystrokes.
-        didRestoreCaretWithMessages := _MoveCaretToIndexInClassicControl(fastInsertWindowId, fastInsertControlHwnd, originalFastInsertLineStartIdx)
-
-    ; 4) Return caret to the original line at column 1 (reliably cross-editor)
-    if !didRestoreCaretWithMessages
-    {
+        ; 3) Insert a newline and paste the duplicate line BELOW
         BeginBlockKeys()
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
-        Send, {Ctrl Up}{Up} ; {Home}{Home}
+        Send, {Ctrl Up}{End}{Enter}{Shift Down}{Home}{Shift Up}
         EndBlockKeys()
-        SyncModifierSidesToPhys("Ctrl")
-        WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 60, 2, 100)
-    }
-    ; Optional                  : if you prefer immediate clipboard restore instead of the ~700ms timer, uncomment:
-    ; Clip("", "", "RESTORE")
+        SyncModifierSidesToPhys("Ctrl", ctrlDModifierTargetHwnd)
+        WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
+        GetActiveCaretRectKey(caretRectKeyBeforeMove)
+        if (fastInsertControlHwnd)
+            fastInsertResult := _FastInsertWrappedTextIntoClassicControl(fastInsertWindowId, fastInsertControlHwnd, lineText)
 
-    ; Your environment reset
-    Hotstring("Reset")
-    StopAutoFix                 := False
-    SyncModifierSidesToPhys("Shift Alt Ctrl")
-    ScheduleModifierSync("Shift Alt Ctrl")
-    Critical, Off
+        didFastInsert := (fastInsertResult = "inserted")
+        if (!didFastInsert && fastInsertResult != "message_uncertain" && _IsForegroundWindow(fastInsertWindowId))
+        {
+            ; Some editors are picky about paste timing/chords here, so force the
+            ; clipboard helper onto the stricter explicit Ctrl+V path for this step.
+            ; A timed-out EM_REPLACESEL is deliberately excluded: it might have
+            ; completed just before SendMessageTimeoutW returned, so Ctrl+V could
+            ; duplicate the line.
+            clipPreferExplicitCtrlV := True
+            try {
+                Clip(lineText, "", "", "Shift Alt Ctrl Win", fastInsertWindowId)
+            } finally {
+                clipPreferExplicitCtrlV := False
+            }
+        }
+        WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 30)
+        if (didFastInsert && originalFastInsertLineStartIdx >= 0)
+            ; After a fast EM_REPLACESEL insert, restore directly to the saved line
+            ; start instead of trying to infer the original position by keystrokes.
+            didRestoreCaretWithMessages := _MoveCaretToIndexInClassicControl(fastInsertWindowId, fastInsertControlHwnd, originalFastInsertLineStartIdx)
+
+        ; 4) Return caret to the original line at column 1 (reliably cross-editor)
+        if !didRestoreCaretWithMessages
+        {
+            BeginBlockKeys()
+            GetActiveCaretRectKey(caretRectKeyBeforeMove)
+            Send, {Ctrl Up}{Up} ; {Home}{Home}
+            EndBlockKeys()
+            SyncModifierSidesToPhys("Ctrl", ctrlDModifierTargetHwnd)
+            WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 60, 2, 100)
+        }
+        ; Optional                  : if you prefer immediate clipboard restore instead of the ~700ms timer, uncomment:
+        ; Clip("", "", "RESTORE")
+
+        ; Your environment reset
+        Hotstring("Reset")
+    } finally {
+        ; This finalizer covers every early return and any unexpected failure in
+        ; focus, clipboard, caret, or direct-control work.
+        EndBlockKeys()
+        StopAutoFix := False
+        try {
+            SyncModifierSidesToPhys("Shift Alt Ctrl", ctrlDModifierTargetHwnd)
+            ScheduleModifierSync("Shift Alt Ctrl", 6, ctrlDModifierTargetHwnd)
+        } finally {
+            Critical, Off
+        }
+    }
 Return
 
 #If
@@ -4766,15 +4786,19 @@ Return
     ; Let the trigger key finish before the explicit paste/send path runs so
     ; Alt+S is less likely to leave a stale modifier state behind.
     KeyWait, s, T0.25
-    BeginBlockKeys()
+    try {
+        BeginBlockKeys()
+        if !_SwapSelectedBooleanLiteral()
+            Clip("", "", "RESTORE")
 
-    if !_SwapSelectedBooleanLiteral()
-        Clip("", "", "RESTORE")
-
-    Hotstring("Reset")
-    StopAutoFix := False
-    EndBlockKeys()
-    Critical, Off
+        Hotstring("Reset")
+    } finally {
+        ; Keep Alt logically up as required by _SwapSelectedBooleanLiteral(), but
+        ; never leave the shared input or auto-fix guards enabled after a failure.
+        EndBlockKeys()
+        StopAutoFix := False
+        Critical, Off
+    }
 Return
 
 !;::
@@ -7465,7 +7489,7 @@ ExplorerHitTestType() {
             "blank"         - blank space in file list
             "item"          - file/folder item
             "columnHeader"  - column header in Details view
-            "navTreeItem"   - left navigation tree item
+            "navTreeItem"   - probable left navigation tree item (heuristic)
             "breadcrumb"    - breadcrumb / address bar segment (heuristic)
             "other"         - anything else, or not Explorer
     */
@@ -10433,8 +10457,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
                 ; Always release blocking and synchronize Ctrl, including when
                 ; focus restoration exits early after the synthetic chord.
                 EndBlockKeys()
-                SyncModifierSidesToPhys("Ctrl")
-                ScheduleModifierSync("Ctrl")
+                SyncModifierSidesToPhys("Ctrl", initTargetHwnd)
+                ScheduleModifierSync("Ctrl", 6, initTargetHwnd)
             }
         }
     }
@@ -11499,14 +11523,18 @@ SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, gu
             return false
     }
 
+    targetWindowId := DllCall("user32\GetForegroundWindow", "Ptr")
+    if (!targetWindowId)
+        return false
+
     BeginBlockKeys()
     try {
         _SendCtrlNumpadAddChord()
     } finally {
         EndBlockKeys()
     }
-    SyncModifierSidesToPhys("Ctrl")
-    ScheduleModifierSync("Ctrl", syncPassCount)
+    SyncModifierSidesToPhys("Ctrl", targetWindowId)
+    ScheduleModifierSync("Ctrl", syncPassCount, targetWindowId)
     return true
 }
 
@@ -11523,9 +11551,11 @@ SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, gu
 ; sequence. The immediate and deferred sync passes make the target
 ; application's modifier state match the physical keyboard state again.
 _SendManagedCtrlChord(chordKey, syncPassCount := 6, explicitCtrlPath := False, modifiersToSync := "Shift Alt Ctrl Win", expectedWindowId := 0) {
+    targetWindowId := expectedWindowId ? expectedWindowId : DllCall("user32\GetForegroundWindow", "Ptr")
+
     ; Recheck immediately before injection. Clipboard preparation can take long
     ; enough for a different application to become foreground in the meantime.
-    if (expectedWindowId && !_IsForegroundWindow(expectedWindowId))
+    if (!_IsForegroundWindow(targetWindowId))
         return false
 
     SendInput, {Blind}{sc02A up}{sc036 up}{sc01D up}{sc11D up}{sc038 up}{sc138 up}{sc15B up}{sc15C up}
@@ -11542,8 +11572,8 @@ _SendManagedCtrlChord(chordKey, syncPassCount := 6, explicitCtrlPath := False, m
     ; Callers whose hotkey itself holds Alt or Shift can pass an empty set so
     ; those modifiers stay logically up instead of activating app menu shortcuts.
     if (modifiersToSync != "") {
-        SyncModifierSidesToPhys(modifiersToSync)
-        ScheduleModifierSync(modifiersToSync, syncPassCount)
+        SyncModifierSidesToPhys(modifiersToSync, targetWindowId)
+        ScheduleModifierSync(modifiersToSync, syncPassCount, targetWindowId)
     }
     return true
 }
@@ -11551,64 +11581,107 @@ _SendManagedCtrlChord(chordKey, syncPassCount := 6, explicitCtrlPath := False, m
 ; Synchronize named modifier sides with the physical keyboard state. Every
 ; requested side is sent down if physically held, otherwise up. This repairs
 ; modifiers synthetically released by navigation and modifiers left logically
-; down after the user has physically released them.
-SyncModifierSidesToPhys(modifiers := "Shift Alt Ctrl Win") {
+; down after the user has physically released them. When expectedWindowId is
+; supplied, cancel if that window is no longer foreground so cleanup intended
+; for one application cannot inject modifier events into another application.
+SyncModifierSidesToPhys(modifiers := "Shift Alt Ctrl Win", expectedWindowId := 0) {
+    if (expectedWindowId && !_IsForegroundWindow(expectedWindowId))
+        return false
+
+    sendSequence := "{Blind}"
     if (InStr(modifiers, "Shift")) {
         isPhysicallyHeld := GetKeyState("LShift", "P")
         keyState := isPhysicallyHeld ? "down" : "up"
-        SendInput, {Blind}{sc02A %keyState%}
+        sendSequence .= "{sc02A " . keyState . "}"
 
         isPhysicallyHeld := GetKeyState("RShift", "P")
         keyState := isPhysicallyHeld ? "down" : "up"
-        SendInput, {Blind}{sc036 %keyState%}
+        sendSequence .= "{sc036 " . keyState . "}"
     }
 
     if (InStr(modifiers, "Ctrl")) {
         isPhysicallyHeld := GetKeyState("LCtrl", "P")
         keyState := isPhysicallyHeld ? "down" : "up"
-        SendInput, {Blind}{sc01D %keyState%}
+        sendSequence .= "{sc01D " . keyState . "}"
 
         isPhysicallyHeld := GetKeyState("RCtrl", "P")
         keyState := isPhysicallyHeld ? "down" : "up"
-        SendInput, {Blind}{sc11D %keyState%}
+        sendSequence .= "{sc11D " . keyState . "}"
     }
 
     if (InStr(modifiers, "Alt")) {
         isPhysicallyHeld := GetKeyState("LAlt", "P")
         keyState := isPhysicallyHeld ? "down" : "up"
-        SendInput, {Blind}{sc038 %keyState%}
+        sendSequence .= "{sc038 " . keyState . "}"
 
         isPhysicallyHeld := GetKeyState("RAlt", "P")
         keyState := isPhysicallyHeld ? "down" : "up"
-        SendInput, {Blind}{sc138 %keyState%}
+        sendSequence .= "{sc138 " . keyState . "}"
     }
 
     if (InStr(modifiers, "Win")) {
         isPhysicallyHeld := GetKeyState("LWin", "P")
         keyState := isPhysicallyHeld ? "down" : "up"
-        SendInput, {Blind}{sc15B %keyState%}
+        sendSequence .= "{sc15B " . keyState . "}"
 
         isPhysicallyHeld := GetKeyState("RWin", "P")
         keyState := isPhysicallyHeld ? "down" : "up"
-        SendInput, {Blind}{sc15C %keyState%}
+        sendSequence .= "{sc15C " . keyState . "}"
     }
+
+    if (sendSequence = "{Blind}")
+        return true
+
+    ; Build one sequence, then perform the final foreground check immediately
+    ; before one SendInput call. This minimizes the remaining check-to-send race.
+    if (expectedWindowId && !_IsForegroundWindow(expectedWindowId))
+        return false
+
+    SendInput, %sendSequence%
+    return true
+}
+
+; Clear every field associated with the current target-bound deferred sync and
+; cancel its pending timer.
+_ClearDeferredModifierSync() {
+    Global deferredModifierFamilies
+    Global deferredModifierSyncRemaining
+    Global deferredModifierTargetHwnd
+
+    SetTimer, RunDeferredModifierSync, Off
+    deferredModifierFamilies      := ""
+    deferredModifierSyncRemaining := 0
+    deferredModifierTargetHwnd    := 0
 }
 
 ; Re-check modifier state shortly after a hotkey returns so a physical key-up
-; that happens just after the immediate sync still gets applied.
+; that happens just after the immediate sync still gets applied. Cancel the
+; cleanup window if its original target is no longer the foreground window.
 RunDeferredModifierSync() {
     Global deferredModifierFamilies
     Global deferredModifierSyncRemaining
+    Global deferredModifierTargetHwnd
 
-    if (deferredModifierFamilies = "" || deferredModifierSyncRemaining <= 0)
+    if (deferredModifierFamilies = "" || deferredModifierSyncRemaining <= 0 || !deferredModifierTargetHwnd) {
+        _ClearDeferredModifierSync()
         return
+    }
 
-    SyncModifierSidesToPhys(deferredModifierFamilies)
+    if (!_IsForegroundWindow(deferredModifierTargetHwnd)) {
+        _ClearDeferredModifierSync()
+        return
+    }
+
+    if (!SyncModifierSidesToPhys(deferredModifierFamilies, deferredModifierTargetHwnd)) {
+        _ClearDeferredModifierSync()
+        return
+    }
+
     deferredModifierSyncRemaining -= 1
     if (deferredModifierSyncRemaining > 0)
         SetTimer, RunDeferredModifierSync, -75
     else
-        deferredModifierFamilies := ""
+        _ClearDeferredModifierSync()
 }
 
 ; Queue one or more delayed modifier sync passes after the immediate
@@ -11626,23 +11699,37 @@ RunDeferredModifierSync() {
 ;     before Windows/AutoHotkey reports the user's real modifier release, so a
 ;     single delayed check can still be too early. More passes extend the
 ;     sync window without blocking the caller.
-ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6) {
+;
+; targetWindowId:
+;     Foreground window that received the synthetic chord. The timer cancels
+;     instead of injecting if another application becomes foreground.
+ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6, targetWindowId := 0) {
     Global deferredModifierFamilies
     Global deferredModifierSyncRemaining
+    Global deferredModifierTargetHwnd
+
+    if (!targetWindowId)
+        targetWindowId := DllCall("user32\GetForegroundWindow", "Ptr")
+    if (!_IsForegroundWindow(targetWindowId)) {
+        _ClearDeferredModifierSync()
+        return false
+    }
 
     ; Always use the latest requested modifier set so the timer re-checks the
     ; modifiers most relevant to the newest send/hotkey sequence.
     deferredModifierFamilies := modifiers
-    ; Only grow the remaining pass budget. This prevents a later caller with a
-    ; smaller deferredRuns from shortening a longer sync window that is
-    ; already in progress and may still be needed to catch a late physical
-    ; modifier release.
-    if (deferredModifierSyncRemaining < deferredRuns)
+    ; A different target starts a new cleanup window. For the same target, only
+    ; grow the remaining pass budget so a later request cannot shorten it.
+    if (deferredModifierTargetHwnd != targetWindowId)
         deferredModifierSyncRemaining := deferredRuns
+    else if (deferredModifierSyncRemaining < deferredRuns)
+        deferredModifierSyncRemaining := deferredRuns
+    deferredModifierTargetHwnd := targetWindowId
 
     ; Start the first delayed pass soon after the caller returns. Follow-up
     ; passes are scheduled by RunDeferredModifierSync().
     SetTimer, RunDeferredModifierSync, -40
+    return true
 }
 
 ; Clears the queued Everything Edit1 auto-fit state so context changes or a
@@ -16445,15 +16532,15 @@ ReleaseHotstringAutoFixBoundary:
 Return
 
 FlushTypingAutoFixRefresh:
-    tbcRefreshCtrlClass         := typingAutoFixRefreshCtrlClass
-    tbcRefreshCtrlHwnd          := typingAutoFixRefreshCtrlHwnd
-    tbcRefreshCtrlNN            := typingAutoFixRefreshCtrlNN
-    tbcRefreshHwnd              := typingAutoFixRefreshHwnd
-    tbcRefreshId                := typingAutoFixRefreshId
+    tbcRefreshCtrlClass          := typingAutoFixRefreshCtrlClass
+    tbcRefreshCtrlHwnd           := typingAutoFixRefreshCtrlHwnd
+    tbcRefreshCtrlNN             := typingAutoFixRefreshCtrlNN
+    tbcRefreshHwnd               := typingAutoFixRefreshHwnd
+    tbcRefreshId                 := typingAutoFixRefreshId
     tbcRefreshProtectPartialWord := typingAutoFixRefreshProtectPartialWord
-    tbcRefreshQueuedTick        := typingAutoFixRefreshQueuedTick
-    tbcRefreshStartBoundarySeq  := typingAutoFixRefreshStartBoundarySeq
-    tbcRefreshStartTypingSeq    := typingAutoFixRefreshStartTypingSeq
+    tbcRefreshQueuedTick         := typingAutoFixRefreshQueuedTick
+    tbcRefreshStartBoundarySeq   := typingAutoFixRefreshStartBoundarySeq
+    tbcRefreshStartTypingSeq     := typingAutoFixRefreshStartTypingSeq
 
     if (!tbcRefreshHwnd)
         Return
@@ -16607,7 +16694,8 @@ startup / window activation / pointer-focus change
             |
             +--> GetTypingAutoFixEligibilityFastOrQ
                     |
-                    +--> use a cheap known result, or
+                    +--> use a cheap known result, or cache the new target
+                    |    as unconfirmed while queueing its refresh
                     +--> QueueTypingAutoFixRefresh
                             |
                             +--> FlushTypingAutoFixRefresh
@@ -16626,12 +16714,14 @@ hotstring trigger
             +--> GetHotstringEligibilityFastOrQueue
                     |
                     +--> confirmed exact-target cache --> return cached result
-                    +--> unknown custom control -------> queue the same refresh
-                                                         and return true
+                    +--> unconfirmed custom control ---> queue/reuse the refresh
+                                                         and return true (fail open)
 
 The live #If path never runs UIA/MSAA. Unknown custom controls fail open while
 their background probe is pending, preventing a slow accessibility call from
-blocking keyboard input or temporarily disabling every hotstring.
+blocking keyboard input or disabling the hotstring table globally. The prewarm
+cache may temporarily contain false for that target, but the live predicate
+does not use that unconfirmed value until the probe produces a confirmed result.
 */
 
 ; Returns a confirmed cached editability answer for the exact focused target
@@ -16785,8 +16875,15 @@ ClearTbcTypingAutoFixRefresh() {
     typingAutoFixRefreshStartTypingSeq     := 0
 }
 
-; Returns quickly on the live key path by using cheap exclusions and the cached
-; result first, then queueing any slower UIA/MSAA refresh onto a short timer.
+; Returns quickly on the prewarm/focus-change path by using cheap exclusions and
+; the cached result first, then queueing any slower UIA/MSAA refresh onto a short
+; timer. The live #If predicate uses GetHotstringEligibilityFastOrQueue().
+; Eligibility bridge:
+; A new control is temporarily cached as false while deferred UIA/MSAA
+; editability is checked. The queued refresh compares its captured physical
+; typing/boundary counters with the counters maintained by LL_KeyboardHook().
+; If typing began during the probe, the next EndChar must pass before the
+; deferred ReleaseHotstringAutoFixBoundary timer resets the hotstring buffer.
 GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     , nowTick := "", protectStartTypingSeq := ""
     , protectStartBoundarySeq := "") {
@@ -17122,14 +17219,34 @@ MouseIsOverTaskbarBlank() {
     if (controlClass = "TrayNotifyWnd")
         return False
 
-    return AreaLooksUniformFast(mousePosX, mousePosY, , 3, 10)
+    return AreaLooksUniformFast(mousePosX, mousePosY, , 6, 10)
 }
-; Use AreaLooksUniformFast() when:
-; more thorough
-; false positives are costly,
-; you need confidence the whole region is really flat,
-; the sample region is small enough that scanning all pixels is cheap.
-; TOLERANCE GUIDELINES -------------------
+; Use AreaLooksUniformFast() when false positives are costly and every pixel in
+; a small region must be checked to confirm that the region is visually flat.
+;
+; RADIUS GUIDELINES -----------------------------------------------------------
+; sampleRadius selects a (2 * sampleRadius + 1)-pixel square. The function
+; checks every pixel, so scan cost grows with the square of the region width.
+; A larger radius examines farther from the click point, reducing false reports
+; of uniformity over text, icons, or edges, but increasing failures near real
+; borders, gradients, shadows, and mica blur.
+;
+; 1       3x3,   9 pixels: very local and cheap; easiest to falsely call flat
+; 2       5x5,  25 pixels: conservative default for small UI targets
+; 3       7x7,  49 pixels: stronger surrounding-area check at about 2x radius 2
+; 4       9x9,  81 pixels: broad check; more sensitive to nearby visual detail
+; 5      11x11, 121 pixels: use only when the expected flat area is comfortably large
+;
+; Increasing sampleRadius does not change the allowed color difference. It adds
+; more pixels, and every added pixel must pass the same tolerance test. A larger
+; radius may therefore need a slightly higher tolerance on blurred or textured
+; surfaces; otherwise one distant pixel can make the entire check return False.
+;
+; TOLERANCE GUIDELINES --------------------------------------------------------
+; tolerance is the maximum allowed difference in each RGB channel between every
+; sampled pixel and targetColor, or the requested centerPosX/centerPosY pixel
+; when targetColor is blank. Near a monitor edge, the capture square shifts
+; inward while that requested pixel remains the color reference.
 ; 6-8    very strict, may fail on mica blur
 ; 10     lowest practical starting point
 ; 12     safer low value for mica
@@ -17143,6 +17260,26 @@ AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 
     ; Top-left corner of the sampled square in screen coordinates.
     startPosX := centerPosX - sampleRadius
     startPosY := centerPosY - sampleRadius
+
+    ; Keep the complete capture inside the monitor containing the requested
+    ; point. This avoids reading invalid pixels or an adjacent monitor when the
+    ; mouse is near an edge, while preserving the requested sample size.
+    GetMonitorRectForMouse(centerPosX, centerPosY, False
+        , monitorLeft, monitorTop, monitorRight, monitorBottom)
+    monitorWidth  := monitorRight - monitorLeft
+    monitorHeight := monitorBottom - monitorTop
+    if (sampleSize > monitorWidth || sampleSize > monitorHeight)
+        return False
+
+    if (startPosX < monitorLeft)
+        startPosX := monitorLeft
+    else if ((startPosX + sampleSize) > monitorRight)
+        startPosX := monitorRight - sampleSize
+
+    if (startPosY < monitorTop)
+        startPosY := monitorTop
+    else if ((startPosY + sampleSize) > monitorBottom)
+        startPosY := monitorBottom - sampleSize
 
     ; Get a DC for the full screen.
     screenDc := DllCall("user32\GetDC", "Ptr", 0, "Ptr")
@@ -17185,7 +17322,7 @@ AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 
     oldBitmap := DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", dibBitmap, "Ptr")
 
     ; Copy the sample square from the screen into the memory bitmap.
-    DllCall("gdi32\BitBlt"
+    copySucceeded := DllCall("gdi32\BitBlt"
         , "Ptr", memoryDc
         , "Int", 0
         , "Int", 0
@@ -17196,12 +17333,23 @@ AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 
         , "Int", startPosY
         , "UInt", 0x00CC0020) ; SRCCOPY
 
+    if (!copySucceeded) {
+        DllCall("gdi32\SelectObject", "Ptr", memoryDc, "Ptr", oldBitmap)
+        DllCall("gdi32\DeleteObject", "Ptr", dibBitmap)
+        DllCall("gdi32\DeleteDC", "Ptr", memoryDc)
+        DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
+        return False
+    }
+
     ; Each pixel is 4 bytes (BGRA).
     rowStride := sampleSize * 4
 
-    ; If no target color was provided, use the center pixel as the reference.
+    ; If no target color was provided, use the requested point as the reference.
+    ; Its offset changes when the capture square is shifted away from an edge.
     if (targetColor = "") {
-        centerOffset := (sampleRadius * rowStride) + (sampleRadius * 4)
+        referenceCol := centerPosX - startPosX
+        referenceRow := centerPosY - startPosY
+        centerOffset := (referenceRow * rowStride) + (referenceCol * 4)
         targetBlue   := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
         targetGreen  := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
         targetRed    := NumGet(pixelBuffer + 0, centerOffset + 2, "UChar")
@@ -18799,7 +18947,7 @@ SafeUIA_GetClassName(el, default := "") {
     Parameters:
     el                  = UIA element to read from.
     default := 0        = fallback orientation value if the property cannot be read.
-                          Common values are 0 = none/unspecified, 1 = horizontal, 2 = vertical.
+                          Common values are 0 = NotApplicable, 1 = horizontal, 2 = vertical.
 */
 SafeUIA_GetOrientation(el, default := 0) {
     if !IsObject(el)
@@ -19618,7 +19766,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::requiremts::requirement
 ::requireement::requirement
 ::termainl::terminal
-::SO::So
 ::onesself::oneself
 ::violance::violence
 ::stuats::status
