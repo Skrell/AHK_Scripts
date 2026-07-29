@@ -23,20 +23,20 @@
 ; | Holds the DLL name/path, module handle, and exported function pointers     |
 ; | used by the virtual-desktop helpers.                                       |
 ; +----------------------------------------------------------------------------+
-Global k_VDA_DllName                               := "VirtualDesktopAccessor_Win11.dll"
-Global k_dllPath                                   := A_ScriptDir . "\" . k_VDA_DllName  ; destination: next to EXE/script
-Global hVirtualDesktopAccessor                     := 0
-Global GetDesktopCountProc                         := 0
-Global GoToDesktopNumberProc                       := 0
-Global GetCurrentDesktopNumberProc                 := 0
-Global IsWindowOnCurrentVirtualDesktopProc         := 0
-Global IsWindowOnDesktopNumberProc                 := 0
-Global MoveWindowToDesktopNumberProc               := 0
-Global IsPinnedWindowProc                          := 0
-Global GetDesktopNameProc                          := 0
-Global SetDesktopNameProc                          := 0
-Global CreateDesktopProc                           := 0
-Global RemoveDesktopProc                           := 0
+Global k_VDA_DllName                                 := "VirtualDesktopAccessor_Win11.dll"
+Global k_dllPath                                     := A_ScriptDir . "\" . k_VDA_DllName  ; destination: next to EXE/script
+Global hVirtualDesktopAccessor                       := 0
+Global GetDesktopCountProc                           := 0
+Global GoToDesktopNumberProc                         := 0
+Global GetCurrentDesktopNumberProc                   := 0
+Global IsWindowOnCurrentVirtualDesktopProc           := 0
+Global IsWindowOnDesktopNumberProc                   := 0
+Global MoveWindowToDesktopNumberProc                 := 0
+Global IsPinnedWindowProc                            := 0
+Global GetDesktopNameProc                            := 0
+Global SetDesktopNameProc                            := 0
+Global CreateDesktopProc                             := 0
+Global RemoveDesktopProc                             := 0
 
 SendMode, Input ; It injects the whole keystroke atomically, reducing the window where logical/physical can disagree
 
@@ -53,138 +53,138 @@ SetControlDelay,  1 ;
 ; | Tracks the live window lists, Alt+Tab-style cycling, popup-selection UI,   |
 ; | and other top-level state shared by the window-management hotkeys.          |
 ; +----------------------------------------------------------------------------+
-Global CurrentDesktop                              := 1
-Global mouseMoving                                 := False
-Global CanceledWinSwap                             := False
-Global ValidWindows                                := []
-Global GroupedWindows                              := []
-Global MinimizedWindows                            := []
-Global PrevActiveWindows                           := []
-Global allWinArray                                 := []
-Global cycleCount                                  := 1
+Global CurrentDesktop                                := 1
+Global mouseMoving                                   := False
+Global CanceledWinSwap                               := False
+Global ValidWindows                                  := []
+Global GroupedWindows                                := []
+Global MinimizedWindows                              := []
+Global PrevActiveWindows                             := []
+Global allWinArray                                   := []
+Global cycleCount                                    := 1
 ; Alt+Tab/Alt+` can receive the next cycle key while DrawWindowTitlePopup() is still
 ; building the GUI. Buffer that press here so the loop consumes it instead of losing it.
-Global bufferedCycleAdvance                        := False
-Global startHighlight                              := False
-Global k_border_thickness                          := 4
-Global k_border_color                              := 0xFF00FF
-Global hitTAB                                      := False
-Global hitTilde                                    := False
-Global SearchingWindows                            := False
-Global UserInputTrimmed                            := ""
-Global memotext                                    := ""
-Global totalMenuItemCount                          := 0
-Global onlyTitleFound                              := ""
-Global CancelClose                                 := False
-Global DrawingRect                                 := False
-Global LclickSelected                              := False
+Global bufferedCycleAdvance                          := False
+Global startHighlight                                := False
+Global k_border_thickness                            := 4
+Global k_border_color                                := 0xFF00FF
+Global hitTAB                                        := False
+Global hitTilde                                      := False
+Global SearchingWindows                              := False
+Global UserInputTrimmed                              := ""
+Global memotext                                      := ""
+Global totalMenuItemCount                            := 0
+Global onlyTitleFound                                := ""
+Global CancelClose                                   := False
+Global DrawingRect                                   := False
+Global LclickSelected                                := False
 ; +----------------------------------------------------------------------------+
 ; | Measurement Overlay State                                                  |
 ; | Backs the temporary pixel-measure tool so one drag can reuse lightweight    |
 ; | GUI overlays instead of rebuilding them on every mouse move.               |
 ; +----------------------------------------------------------------------------+
 ; True while the pixel-measure drag tool owns the current LButton hold.
-Global measureActive                               := False
+Global measureActive                                 := False
 ; Tracks whether the three lightweight measurement GUIs have already been created.
-Global measureGuiReady                             := False
+Global measureGuiReady                               := False
 ; GUI control variable backing the live X/Y pixel readout.
-Global MeasureText                                 := ""
+Global MeasureText                                   := ""
 ; Screen-space mouse-down origin for the current measurement drag.
-Global measureStartX                               := 0
+Global measureStartX                                 := 0
 ; Screen-space mouse-down origin for the current measurement drag.
-Global measureStartY                               := 0
+Global measureStartY                                 := 0
 ; Thickness in pixels for the horizontal and vertical measurement guides.
-Global k_measureThickness                          := 3
-Global currMonHeight                               := 0
-Global currMonWidth                                := 0
-Global LbuttonEnabled                              := True
+Global k_measureThickness                            := 3
+Global currMonHeight                                 := 0
+Global currMonWidth                                  := 0
+Global LbuttonEnabled                                := True
 ; +----------------------------------------------------------------------------+
 ; | Typing Auto-Fix, Deferred Rewrite, And Activation State                    |
 ; | Caches whether typing fixes are allowed, queues short-lived deferred text   |
 ; | rewrites, and keeps focus/activation bookkeeping cheap while typing or      |
 ; | clicking into another window.                                               |
 ; +----------------------------------------------------------------------------+
-Global X_PriorPriorHotKey                          :=
-Global StopAutoFix                                 := False
+Global X_PriorPriorHotKey                            :=
+Global StopAutoFix                                   := False
 ; Cache the typing-auto-fix eligibility decision so most keystrokes avoid the
 ; slower UIA/MSAA focus probes.
 ; Last allow/deny result returned by the typing-auto-fix gate.
-Global c_typingAutoFixAllowed                      := False
+Global c_typingAutoFixAllowed                        := False
 ; Exact focused control handle associated with the cached decision. ClassNN can
 ; be reused after a custom control is recreated, so it is not a sufficient key.
-Global c_typingAutoFixCtrlHwnd                     := 0
+Global c_typingAutoFixCtrlHwnd                       := 0
 ; Focused control name used to decide whether the cached result still applies.
-Global c_typingAutoFixCtrlNN                       := ""
+Global c_typingAutoFixCtrlNN                         := ""
 ; Active window handle associated with the cached focus/editability decision.
-Global c_typingAutoFixHwnd                         := 0
+Global c_typingAutoFixHwnd                           := 0
 ; Short reason string describing why the current cache entry passed or failed.
-Global c_typingAutoFixReason                       := ""
+Global c_typingAutoFixReason                         := ""
 ; Tick count when the cache entry was last refreshed.
-Global c_typingAutoFixTick                         := 0
-; True while the first qualifying separator is waiting for its deferred reset.
-Global hotstringAutoFixBoundaryReleasePending     := False
-; First physical separator sequence that must finish before hotstrings become
-; active after an async custom-editor probe. This prevents mid-word activation.
-Global hotstringAutoFixRequiredBoundarySeq         := 0
+Global c_typingAutoFixTick                           := 0
+; True while the post-boundary hotstring-buffer reset timer is pending.
+Global hotstringResetTimerPending                    := False
+; Target hotstringBoundarySeq that schedules a post-boundary Hotstring("Reset").
+; Zero means no deferred buffer reset is pending.
+Global hotstringResetAtBoundarySeq                   := 0
 ; Maximum age for a same-window/same-control fast cache hit.
-Global k_typingAutoFixFastTtlMs                    := 125
+Global k_typingAutoFixFastTtlMs                      := 125
 ; Minimum gap before repeating slower UIA/MSAA probes for unchanged focus.
-Global k_typingAutoFixSlowPathMs                   := 400
+Global k_typingAutoFixSlowPathMs                     := 400
 ; Tick count of the last slow UIA/MSAA probe attempt.
-Global typingAutoFixSlowProbeTick                  := 0
+Global typingAutoFixSlowProbeTick                    := 0
 ; Monotonic count of physical text-input key-downs. Async editability probes
 ; compare this with their queued snapshot to detect typing during the probe.
-Global physicalTypingSeq                           := 0
+Global physicalTypingSeq                             := 0
 ; Monotonic count of physical keys that exactly match #HotString EndChars.
-Global physicalWordBoundarySeq                     := 0
+Global hotstringBoundarySeq                          := 0
 ; Focused control class captured with an async editability-refresh request.
-Global typingAutoFixRefreshCtrlClass               := ""
+Global typingAutoFixRefreshCtrlClass                 := ""
 ; Exact focused control handle captured with an async refresh request.
-Global typingAutoFixRefreshCtrlHwnd                := 0
+Global typingAutoFixRefreshCtrlHwnd                  := 0
 ; Focused control name captured when an async editability refresh is queued so
 ; the timer can confirm the same target still owns focus before probing.
-Global typingAutoFixRefreshCtrlNN                  := ""
+Global typingAutoFixRefreshCtrlNN                    := ""
 ; Physical typing sequence captured when an async editability probe is queued.
-Global typingAutoFixRefreshStartTypingSeq           := 0
-; Separator sequence captured with the async editability probe.
-Global typingAutoFixRefreshStartBoundarySeq         := 0
+Global typingAutoFixRefreshStartTypingSeq            := 0
+; Hotstring boundary sequence captured with the async editability probe.
+Global typingAutoFixRefreshStartHotstringBoundarySeq := 0
 ; True when a positive async result must protect against activation mid-word.
-Global typingAutoFixRefreshProtectPartialWord       := False
+Global typingAutoFixRefreshProtectPartialWord        := False
 ; Short one-shot delay before the async editability refresh runs. This keeps the
 ; first keypath cheap and spaces the slow probe slightly away from the triggering
 ; keystroke, while the later A_TimeIdlePhysical retry is what usually keeps the
 ; refresh from competing with nearby deferred text-rewrite timers.
-Global k_typingAutoFixRefreshDelayMs               := 25
+Global k_typingAutoFixRefreshDelayMs                 := 25
 ; Active window captured when the async editability refresh is queued.
-Global typingAutoFixRefreshHwnd                    := 0
+Global typingAutoFixRefreshHwnd                      := 0
 ; Monotonic token incremented whenever a newer async editability refresh
 ; replaces an older queued request.
-Global typingAutoFixRefreshId                      := 0
+Global typingAutoFixRefreshId                        := 0
 ; Tick count recorded when the async editability refresh is queued so the flow
 ; can be reasoned about against nearby deferred typing timers.
-Global typingAutoFixRefreshQueuedTick              := 0
-; Separator sequence captured when the current startup/focus/click prewarm was
+Global typingAutoFixRefreshQueuedTick                := 0
+; Hotstring boundary sequence captured when the current startup/focus/click prewarm was
 ; scheduled, before a user can begin typing into the newly focused target.
-Global typingAutoFixPrewarmStartBoundarySeq         := 0
+Global typingAutoFixPrewarmStartHotstringBoundarySeq := 0
 ; Physical typing sequence captured with the current prewarm request.
-Global typingAutoFixPrewarmStartTypingSeq           := 0
+Global typingAutoFixPrewarmStartTypingSeq            := 0
 ; Short delay that lets a click or activation finish assigning keyboard focus.
-Global k_typingAutoFixPrewarmDelayMs                := 25
+Global k_typingAutoFixPrewarmDelayMs                 := 25
 ; Shared sequence token for deferred typing rewrites so older timer callbacks can
 ; detect that a newer key event already replaced their context and should win.
-Global typingFixSeq                                := 0
+Global typingFixSeq                                  := 0
 ; Maximum lifetime for a deferred typing rewrite before it is discarded. Once a
 ; queued fix has been tbc longer than this limit, it is assumed the user may
 ; already be typing in a newer text context, so the delayed Send is skipped.
-Global k_tbcTypingFixMaxAgeMs                      := 250
+Global k_tbcTypingFixMaxAgeMs                        := 250
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
-Global clipPreferExplicitCtrlV                     := False
+Global clipPreferExplicitCtrlV                       := False
 ; Temporary slash-fix Enter interception flag. After a qualifying letter + "/",
 ; this diverts the next Enter into the custom $Enter handler so slash+Enter can
 ; either commit "{BS}{?}{ENTER}" inline or fall back to one normal Enter, but
 ; never let both the raw key and the rewrite path fire.
-Global disableEnter                                := False
+Global disableEnter                                  := False
 ; +----------------------------------------------------------------------------+
 ; | Everything Edit1 Deferred Column Auto-Fit State                            |
 ; | Queues Ctrl+NumpadAdd for Everything's search box so the send runs only    |
@@ -192,32 +192,32 @@ Global disableEnter                                := False
 ; +----------------------------------------------------------------------------+
 ; Focused control name captured when Everything Edit1 auto-fit is queued so
 ; the deferred send can require the same search field before firing.
-Global tbcEverythingAdjustCtrl                     := ""
+Global tbcEverythingAdjustCtrl                       := ""
 ; Focused control class captured with the queued Everything auto-fit so the
 ; flush step can require the same concrete control identity when available.
-Global tbcEverythingAdjustCtrlClass                := ""
+Global tbcEverythingAdjustCtrlClass                  := ""
 ; Focused control HWND captured when Everything auto-fit is queued so the flush
 ; step can reject a later Edit1 from a different control instance.
-Global tbcEverythingAdjustCtrlHwnd                 := 0
+Global tbcEverythingAdjustCtrlHwnd                   := 0
 ; Active Everything window captured for the deferred search-box auto-fit send.
-Global tbcEverythingAdjustHwnd                     := 0
+Global tbcEverythingAdjustHwnd                       := 0
 ; Monotonic token incremented for each newer Everything Edit1 auto-fit request
 ; so older timer callbacks can detect that typing already superseded them.
-Global tbcEverythingAdjustId                       := 0
+Global tbcEverythingAdjustId                         := 0
 ; Tick count recorded when the Everything Edit1 auto-fit request was queued.
-Global tbcEverythingAdjustQueuedTick               := 0
+Global tbcEverythingAdjustQueuedTick                 := 0
 ; Source typing tick associated with the current Everything auto-fit request so
 ; KeyTrack queues at most one deferred send per physical keypress burst update.
-Global tbcEverythingAdjustSourceTick               := 0
+Global tbcEverythingAdjustSourceTick                 := 0
 ; Maximum lifetime for a deferred Everything Edit1 auto-fit request before it
 ; is dropped as stale rather than sent into a newer typing context.
-Global k_tbcEverythingAdjustMaxAgeMs               := 750
+Global k_tbcEverythingAdjustMaxAgeMs                 := 750
 ; Short retry delay for the queued Everything Edit1 auto-fit timer while
 ; waiting for the stronger typing-quiet gate to become true.
-Global k_tbcEverythingAdjustRetryMs                := 40
+Global k_tbcEverythingAdjustRetryMs                  := 40
 ; Minimum physical-idle gap required before Everything Edit1 is allowed to
 ; receive the deferred Ctrl+NumpadAdd column auto-fit chord.
-Global k_tbcEverythingAdjustTypingQuietMs          := 110
+Global k_tbcEverythingAdjustTypingQuietMs            := 110
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -225,95 +225,95 @@ Global k_tbcEverythingAdjustTypingQuietMs          := 110
 ; +----------------------------------------------------------------------------+
 ; Window class for the most recent Explorer/file-dialog wheel target so the
 ; deferred adjust step can confirm the queued request still points at the same shell UI.
-Global tbcAdjustColumnsClass                       := ""
+Global tbcAdjustColumnsClass                         := ""
 ; Control under the mouse when the wheel event was queued; used as a hint before
 ; resolving the final DirectUI/ListView target at send time.
-Global tbcAdjustColumnsCtrl                        := ""
+Global tbcAdjustColumnsCtrl                          := ""
 ; Top-level Explorer or #32770 dialog HWND that should receive the deferred
 ; Ctrl+NumpadAdd once scrolling has gone quiet.
-Global tbcAdjustColumnsHwnd                        := 0
+Global tbcAdjustColumnsHwnd                          := 0
 ; Tick count of the most recent qualifying wheel event so AdjustColumns can defer
 ; work until the user pauses scrolling and cancel if wheel activity resumes.
-Global tbcAdjustColumnsLastWheelTick               := 0
+Global tbcAdjustColumnsLastWheelTick                 := 0
 ; Minimum quiet period after the last wheel event before attempting Explorer
 ; column auto-fit; this avoids interrupting fast continuous scrolling.
-Global k_tbcAdjustColumnsQuietMs                   := 110
+Global k_tbcAdjustColumnsQuietMs                     := 110
 ; Stronger quiet period for #32770 file dialogs, where DirectUI scroll activity and
 ; deferred Ctrl+NumpadAdd sends are more likely to overlap visibly.
-Global k_tbcAdjustColumnsDialogQuietMs             := 180
+Global k_tbcAdjustColumnsDialogQuietMs               := 180
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
-Global tbcAdjustColumnsRequestId                   := 0
+Global tbcAdjustColumnsRequestId                     := 0
 ; Short retry delay used when the timer wakes up before scrolling is truly quiet,
 ; allowing fast re-checks without doing focus/send work on every wheel tick.
-Global k_tbcAdjustColumnsRetryMs                   := 35
+Global k_tbcAdjustColumnsRetryMs                     := 35
 ; Brief final hold just before injecting Ctrl+NumpadAdd so a last-moment wheel event
 ; can update the tbc request state and cause the send to abort cleanly.
-Global k_tbcAdjustColumnsSendGuardMs               := 20
+Global k_tbcAdjustColumnsSendGuardMs                 := 20
 ; Cached final Explorer target ClassNN for the most recent wheel-adjust window so
 ; repeated pause/resume cycles can skip DirectUI/ListView rediscovery work.
-Global c_tbcAdjustColumnsTargetCtrl                := ""
+Global c_tbcAdjustColumnsTargetCtrl                  := ""
 ; Top-level window HWND that owns the cached Explorer target ClassNN; the cache is
 ; only valid when a later wheel-adjust request points at this same shell window.
-Global c_tbcAdjustColumnsTargetHwnd                := 0
+Global c_tbcAdjustColumnsTargetHwnd                  := 0
 ; Tick count when the cached Explorer target was last confirmed, limiting reuse to
 ; a short burst where the folder view structure is unlikely to have changed.
-Global c_tbcAdjustColumnsTargetTick                := 0
+Global c_tbcAdjustColumnsTargetTick                  := 0
 ; Maximum age for the cached Explorer target before AdjustColumns falls back to
 ; full target resolution to avoid using a stale DirectUI/ListView guess.
-Global k_tbcAdjustColumnsTargetTtlMs               := 350
+Global k_tbcAdjustColumnsTargetTtlMs                 := 350
 ; Deferred typing correction state so punctuation and capitalization rewrites can
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
 ; Slash uses this slot for deferred "/ " rewrites and for slash+Enter in
 ; non-classic editors. Classic Edit/RichEdit slash+Enter is handled inline by
 ; the custom $Enter hotkey instead of through this timer.
-Global tbcFixSlashAction                           := ""
+Global tbcFixSlashAction                             := ""
 ; Focused control name captured when the "/ " fix is queued so the timer can
 ; cancel instead of rewriting text after focus moves to another control.
-Global tbcFixSlashCtrl                             := ""
+Global tbcFixSlashCtrl                               := ""
 ; Focused control class captured with the deferred slash-space fix so classic
 ; Edit/RichEdit targets can use the same safer message-based phase-2 rewrite
 ; path that Hoty now uses.
-Global tbcFixSlashCtrlClass                        := ""
+Global tbcFixSlashCtrlClass                          := ""
 ; Focused control HWND captured when the slash-space fix is queued so the flush
 ; step can require the exact same control instance instead of trusting only the
 ; ClassNN string.
-Global tbcFixSlashCtrlHwnd                         := 0
+Global tbcFixSlashCtrlHwnd                           := 0
 ; Active top-level window captured when the deferred slash-space rewrite is armed;
 ; the flush step requires this same window to still be active before sending.
-Global tbcFixSlashHwnd                             := 0
+Global tbcFixSlashHwnd                               := 0
 ; Sequence token assigned when the slash-space rewrite is queued so older timer
 ; callbacks can detect that a newer typing event already superseded the work.
-Global tbcFixSlashId                               := 0
+Global tbcFixSlashId                                 := 0
 ; Tick count recorded when the slash-space rewrite is queued, used to drop the
 ; request once it has been tbc longer than k_tbcTypingFixMaxAgeMs.
-Global tbcFixSlashQueuedTick                       := 0
+Global tbcFixSlashQueuedTick                         := 0
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
-Global tbcHotyCtrl                                 := ""
+Global tbcHotyCtrl                                   := ""
 ; Focused control class captured with the deferred Hoty fix so the flush step can
 ; choose the safer message-based rewrite path for classic Edit/RichEdit targets.
-Global tbcHotyCtrlClass                            := ""
+Global tbcHotyCtrlClass                              := ""
 ; Focused control HWND captured when the Hoty fix is queued so the flush step can
 ; require the exact same control instance, not just the same ClassNN string.
-Global tbcHotyCtrlHwnd                             := 0
+Global tbcHotyCtrlHwnd                               := 0
 ; Active top-level window captured for the deferred Hoty fix, preventing the timer
 ; from replaying a capitalization rewrite into whichever window became active later.
-Global tbcHotyHwnd                                 := 0
+Global tbcHotyHwnd                                   := 0
 ; Sequence token assigned to the deferred Hoty fix so only the newest queued
 ; typing rewrite can fire and any older timer callbacks self-cancel.
-Global tbcHotyId                                   := 0
+Global tbcHotyId                                     := 0
 ; Tick count captured when the Hoty fix is queued, allowing old capitalization fixes
 ; to expire quickly instead of landing after the surrounding typing context changed.
-Global tbcHotyQueuedTick                           := 0
+Global tbcHotyQueuedTick                             := 0
 ; Replacement character captured from the prior capital hotkey so the deferred Hoty
 ; flush can send the intended rewrite only after the live key cycle has settled.
-Global tbcHotyReplacement                          := ""
+Global tbcHotyReplacement                            := ""
 ; Current lowercase trigger character captured when the Hoty fix is queued so a
 ; later classic-control flush can confirm the exact prior-capital + current-letter
 ; text context before replacing anything.
-Global tbcHotyTriggerChar                          := ""
+Global tbcHotyTriggerChar                            := ""
 ; +----------------------------------------------------------------------------+
 ; | Post-Activation Explorer Click Recovery                                    |
 ; | Captures the first click into an inactive Explorer/file-dialog window so a |
@@ -322,231 +322,232 @@ Global tbcHotyTriggerChar                          := ""
 ; +----------------------------------------------------------------------------+
 ; Top-level window HWND that received the activation click. The timer requires
 ; this same window to become active before attempting any delayed shell action.
-Global postActivationLButtonHwnd                   := 0
+Global postActivationLButtonHwnd                     := 0
 ; Header action identified at mouse-down, before Refresh can rename itself to
 ; Stop/Cancel while the native reload is running.
-Global postActivationLButtonHeaderKind             := ""
+Global postActivationLButtonHeaderKind               := ""
 ; Directory reported when the activation click began. Deferred tree/header
 ; navigation must advance beyond this value before columns are adjusted.
-Global postActivationLButtonInitialPath            := ""
+Global postActivationLButtonInitialPath              := ""
 ; ClassNN under the pointer when the activation click happened, used to limit
 ; the recovery path to shell headers and shell-view controls only.
-Global postActivationLButtonCtrl                   := ""
+Global postActivationLButtonCtrl                     := ""
 ; Screen X coordinate of the activation click so the timer can re-run title-bar
 ; and blank-space checks against the original click location.
-Global postActivationLButtonX                      := 0
+Global postActivationLButtonX                        := 0
 ; Screen Y coordinate of the activation click so the deferred recovery inspects
 ; the same area the user originally clicked.
-Global postActivationLButtonY                      := 0
+Global postActivationLButtonY                        := 0
 ; Monotonic token incremented for each queued activation click so an older timer
 ; can detect it was superseded by a newer click and exit safely.
-Global postActivationLButtonId                     := 0
+Global postActivationLButtonId                       := 0
 ; Short one-shot delay that gives Windows time to finish activation/focus
 ; transfer before the deferred shell-view re-check runs.
-Global k_postActivationLButtonDelayMs              := 35
+Global k_postActivationLButtonDelayMs                := 35
 ; +----------------------------------------------------------------------------+
 ; | Explorer Details Column Auto-Fit State                                      |
 ; | Confirms startup or navigation readiness, then samples the Details layout  |
 ; | on a timer before Ctrl+NumpadAdd is sent.                                   |
 ; +----------------------------------------------------------------------------+
 ; Class of the Explorer or file-dialog window that owns the queued adjustment.
-Global explorerDetailsCtrlAddClass                  := ""
+Global explorerDetailsCtrlAddClass                   := ""
 ; Latest tick at which the queued adjustment may send Ctrl+NumpadAdd.
-Global explorerDetailsCtrlAddDeadlineTick           := 0
+Global explorerDetailsCtrlAddDeadlineTick            := 0
 ; Earliest tick at which UIA may sample a startup or path-neutral Refresh result.
 ; This prevents an incomplete or unchanged Items View from satisfying readiness.
-Global explorerDetailsCtrlAddEarliestLayoutTick     := 0
+Global explorerDetailsCtrlAddEarliestLayoutTick      := 0
 ; Top-level Explorer or file-dialog HWND that owns the queued adjustment.
-Global explorerDetailsCtrlAddHwnd                   := 0
+Global explorerDetailsCtrlAddHwnd                    := 0
 ; Monotonic token incremented for every queued adjustment so an earlier timer
 ; callback exits when a newer navigation request supersedes it.
-Global explorerDetailsCtrlAddId                     := 0
+Global explorerDetailsCtrlAddId                      := 0
 ; Directory reported before a path-changing navigation click. The timer requires
 ; GetExplorerPath() to return a different nonempty directory before sampling UIA.
-Global explorerDetailsCtrlAddInitialPath            := ""
+Global explorerDetailsCtrlAddInitialPath             := ""
 ; True after GetExplorerPath() confirms that a queued path-changing navigation
 ; reached a different directory from explorerDetailsCtrlAddInitialPath.
-Global explorerDetailsCtrlAddPathChangeConfirmed    := False
+Global explorerDetailsCtrlAddPathChangeConfirmed     := False
 ; Details layout signature observed on the prior timer sample.
 Global explorerDetailsCtrlAddPreviousLayoutSignature := ""
 ; Directory returned by the preceding startup-path sample.
 Global explorerDetailsCtrlAddPreviousPath            := ""
 ; Mouse location of a Refresh button. While it remains Stop/Cancel, the timer
 ; does not sample or adjust the Items View.
-Global explorerDetailsCtrlAddRefreshPoint          := ""
+Global explorerDetailsCtrlAddRefreshPoint            := ""
 ; True after the Refresh button returns to Refresh, or after the bounded reload
 ; fallback expires and the timer proceeds to fresh Details samples.
-Global explorerDetailsCtrlAddRefreshReady          := False
+Global explorerDetailsCtrlAddRefreshReady            := False
 ; Whether this request must prove a directory change before adjusting columns.
 ; Refresh requests leave this false because Refresh keeps the same directory.
-Global explorerDetailsCtrlAddRequirePathChange      := False
+Global explorerDetailsCtrlAddRequirePathChange       := False
 ; Whether this request must observe the same nonempty directory twice before
 ; sampling the Details layout. New Explorer windows use this startup condition.
-Global explorerDetailsCtrlAddRequireStablePath      := False
+Global explorerDetailsCtrlAddRequireStablePath       := False
 ; Current Items View UIA element reused across timer samples and cleared when
 ; that element no longer exposes a Details layout after navigation.
-Global explorerDetailsCtrlAddShellEl                := ""
+Global explorerDetailsCtrlAddShellEl                 := ""
 ; Focused source control captured for a tree click; SendCtrlAdd restores it
 ; after adjusting the Details columns when it is still appropriate.
-Global explorerDetailsCtrlAddSourceCtrl             := ""
+Global explorerDetailsCtrlAddSourceCtrl              := ""
 ; Number of consecutive timer samples with the same Details layout signature.
-Global explorerDetailsCtrlAddStableHitCount         := 0
+Global explorerDetailsCtrlAddStableHitCount          := 0
 ; True after a startup request observes the same nonempty directory twice.
-Global explorerDetailsCtrlAddStablePathConfirmed    := False
+Global explorerDetailsCtrlAddStablePathConfirmed     := False
 ; Number of consecutive startup samples returning the same nonempty directory.
-Global explorerDetailsCtrlAddStablePathHitCount     := 0
+Global explorerDetailsCtrlAddStablePathHitCount      := 0
 ; Short one-shot delay that lets Refresh, Back, Forward, Up, and breadcrumb
 ; clicks start native navigation before Details sampling begins.
-Global k_headerNavigationCtrlAddDelayMs             := 125
+Global k_headerNavigationCtrlAddDelayMs              := 125
 ; Minimum non-blocking startup settle before a newly created Explorer window
 ; may begin sampling its destination path and grouped Details layout.
-Global k_newExplorerDetailsCtrlAddMinimumWaitMs     := 300
+Global k_newExplorerDetailsCtrlAddMinimumWaitMs      := 300
 ; Maximum non-blocking wait for a new Explorer window to expose a stable path.
-Global k_newExplorerDetailsCtrlAddTimeoutMs         := 5000
+Global k_newExplorerDetailsCtrlAddTimeoutMs          := 5000
 ; Maximum wait for a stable Details layout after path/button readiness.
-Global k_explorerDetailsCtrlAddTimeoutMs            := 1200
+Global k_explorerDetailsCtrlAddTimeoutMs             := 1200
 ; Timer interval for non-blocking Details layout samples.
-Global k_explorerDetailsCtrlAddPollMs               := 50
+Global k_explorerDetailsCtrlAddPollMs                := 50
 ; Minimum non-blocking reload window before Refresh samples the Items View.
-Global k_refreshDetailsCtrlAddMinimumWaitMs         := 300
+Global k_refreshDetailsCtrlAddMinimumWaitMs          := 300
 ; Maximum non-blocking wait for the Refresh button to return from Stop/Cancel.
-Global k_refreshDetailsCtrlAddTimeoutMs             := 5000
+Global k_refreshDetailsCtrlAddTimeoutMs              := 5000
 ; +----------------------------------------------------------------------------+
 ; | Runtime Context And Click/Drag Scratch State                               |
 ; | Stores the current desktop, monitor, Explorer path, click target, and      |
 ; | in-progress drag metadata shared across mouse and window-management flows. |
 ; +----------------------------------------------------------------------------+
 ; Platform/runtime flags cached once for OS-specific behavior.
-Global k_isWin11                                   := DetectWin11()
+Global k_isWin11                                     := DetectWin11()
 ; True when Explorer is using the modern Windows 11 implementation.
-Global k_isModernExplorerInReg                     := IsExplorerModern()
+Global k_isModernExplorerInReg                       := IsExplorerModern()
 ; System double-click interval cached once for click timing logic.
-Global k_DoubleClickTime                           := DllCall("GetDoubleClickTime")
+Global k_DoubleClickTime                             := DllCall("GetDoubleClickTime")
 ; Half-double-click interval used as the script's single-click timing threshold.
-Global k_SingleClickTime                           := floor(DllCall("GetDoubleClickTime") * 0.5)
+Global k_SingleClickTime                             := floor(DllCall("GetDoubleClickTime") * 0.5)
 ; Lowercase alphabet characters used by text and hotstring helpers.
-Global k_keys                                      := "abcdefghijklmnopqrstuvwxyz"
+Global k_keys                                        := "abcdefghijklmnopqrstuvwxyz"
 ; Decimal digit characters used by text and hotstring helpers.
-Global k_numbers                                   := "0123456789"
+Global k_numbers                                     := "0123456789"
 ; +----------------------------------------------------------------------------+
 ; | Monitor/Desktop/Context State                                              |
 ; | Shared monitor, desktop, Explorer-path, and click-position context reused  |
 ; | across window activation, taskbar, and shell-navigation flows.             |
 ; +----------------------------------------------------------------------------+
 ; Monitor index currently targeted by monitor-aware window flows.
-Global currentMon                                  := 0
+Global currentMon                                    := 0
 ; Previously targeted monitor index for cross-monitor transitions.
-Global previousMon                                 := 0
+Global previousMon                                   := 0
 ; Virtual desktop index being targeted by desktop-switching logic.
-Global targetDesktop                               := 0
+Global targetDesktop                                 := 0
 ; Current Explorer path snapshot used by folder-aware actions.
-Global currentPath                                 := ""
+Global currentPath                                   := ""
 ; Previous Explorer path snapshot used for path-change comparisons.
-Global prevPath                                    := ""
+Global prevPath                                      := ""
 ; Cached taskbar height used by taskbar-aware positioning logic.
-Global TaskBarHeight                               := 0
+Global TaskBarHeight                                 := 0
 ; Screen X coordinate of the last taskbar/tray click.
-Global trayClickPosX                               := 0
+Global trayClickPosX                                 := 0
 ; Screen Y coordinate of the last taskbar/tray click.
-Global trayClickPosY                               := 0
+Global trayClickPosY                                 := 0
 ; Cached Win+Ctrl+D helper state used by desktop creation logic.
-Global _winCtrlD                                   := ""
+Global _winCtrlD                                     := ""
 ; +----------------------------------------------------------------------------+
 ; | Window/UI State                                                            |
 ; | Shared HWNDs and retained popup content reused across activation and cycle |
 ; | UI updates.                                                                |
 ; +----------------------------------------------------------------------------+
 ; HWND of the last active window tracked by activation logic.
-Global lastActWinID                                :=
-; HWND whose Ctrl sends should be temporarily blocked from synthetic input.
-Global disableSendCtrlHwnd                         := ""
+Global lastActWinID                                  :=
+; HWND whose LButton-driven column alignment is blocked after a SysHeader drag.
+; A qualifying double-click in that window's SysListView clears the block.
+Global disableSendCtrlHwnd                           := ""
 ; HWND of the retained WindowTitle popup GUI.
-Global WindowTitleID                               :=
+Global WindowTitleID                                 :=
 ; Current icon source spec shown in the WindowTitle popup.
-Global WindowTitleIcon                             := ""
+Global WindowTitleIcon                               := ""
 ; Current text shown in the WindowTitle popup.
-Global WindowTitleText                             := ""
+Global WindowTitleText                               := ""
 ; True once the retained WindowTitle popup GUI has been created.
-Global WindowTitleGuiReady                         := False
+Global WindowTitleGuiReady                           := False
 ; +----------------------------------------------------------------------------+
 ; | Input/Gesture State                                                        |
 ; | Shared typing, click, and drag flags that let separate hotkeys and mouse   |
 ; | handlers coordinate one in-progress gesture.                               |
 ; +----------------------------------------------------------------------------+
 ; Master toggle that lets custom click logic emit double-clicks.
-Global allowDoubleClicks                           := True
+Global allowDoubleClicks                             := True
 ; True while the custom live window-drag flow is in progress.
-Global DraggingWindow                              := False
+Global DraggingWindow                                := False
 ; Name of the most recently triggered hotkey for repeat-sensitive logic.
-Global lastHotkeyTyped                             := ""
+Global lastHotkeyTyped                               := ""
 ; True when MButton should behave like Enter for the current gesture.
-Global MbuttonIsEnter                              := False
+Global MbuttonIsEnter                                := False
 ; Temporarily suppresses native RButton handling during MButton drag flows.
-Global suspendRightButtonForMButtonDrag            := False
+Global suspendRightButtonForMButtonDrag              := False
 ; Tick count of the most recent hotkey-triggered send used by typing heuristics.
-Global TimeOfLastHotkeyTyped                       := A_TickCount
+Global TimeOfLastHotkeyTyped                         := A_TickCount
 ; +----------------------------------------------------------------------------+
 ; | Live-Resize Session State                                                  |
 ; | Shared per-drag session state for synced left-button resize, including the |
 ; | dragged window, follower windows, and resize-ghost bookkeeping.            |
 ; +----------------------------------------------------------------------------+
 ; True while the synced left-button resize workflow is armed and running.
-Global lButtonResizeSyncActive                     := False
+Global lButtonResizeSyncActive                       := False
 ; HWND of the actively dragged window in the synced resize workflow.
-Global lButtonResizeSyncDraggedHwnd                := 0
+Global lButtonResizeSyncDraggedHwnd                  := 0
 ; Whether the dragged window started the resize already topmost.
-Global lButtonResizeSyncDraggedStartedAlwaysOnTop  := False
+Global lButtonResizeSyncDraggedStartedAlwaysOnTop    := False
 ; Whether the dragged window has been made transparent during synced resize.
-Global lButtonResizeSyncDraggedTransparent         := False
+Global lButtonResizeSyncDraggedTransparent           := False
 ; Monotonic suffix used to generate unique resize-ghost GUI names.
-Global lButtonResizeGhostSeq                       := 0
+Global lButtonResizeGhostSeq                         := 0
 ; Hit-test code for the edge or corner currently being dragged.
-Global lButtonResizeSyncHit                        := 0
+Global lButtonResizeSyncHit                          := 0
 ; Last tracked dragged-window height during synced resize.
-Global lButtonResizeSyncLastDraggedH               := ""
+Global lButtonResizeSyncLastDraggedH                 := ""
 ; Last tracked dragged-window width during synced resize.
-Global lButtonResizeSyncLastDraggedW               := ""
+Global lButtonResizeSyncLastDraggedW                 := ""
 ; Last tracked dragged-window X position during synced resize.
-Global lButtonResizeSyncLastDraggedX               := ""
+Global lButtonResizeSyncLastDraggedX                 := ""
 ; Last tracked dragged-window Y position during synced resize.
-Global lButtonResizeSyncLastDraggedY               := ""
+Global lButtonResizeSyncLastDraggedY                 := ""
 ; Active follower-window records participating in synced resize.
-Global lButtonResizeSyncPartners                   := []
+Global lButtonResizeSyncPartners                     := []
 ; Original AlwaysOnTop states captured for synced-resize cleanup.
-Global lButtonResizeSyncTopmostStates              := {}
+Global lButtonResizeSyncTopmostStates                := {}
 
 ; +----------------------------------------------------------------------------+
 ; | Hook, UIA, And Input-Guard State                                           |
 ; | Owns the foreground-window hook, UIA interface, low-level hook handles,    |
 ; | and key/mouse blocking state used to keep synthetic input predictable.      |
 ; +----------------------------------------------------------------------------+
-Global hActWin                                     := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
-Global UIA                                         := UIA_Interface() ; Initialize UIA interface
+Global hActWin                                       := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+Global UIA                                           := UIA_Interface() ; Initialize UIA interface
 ; Turn key blocking ON/OFF
-Global StopRecursion                               := False
-Global blockKeys                                   := False
-Global blockMouse                                  := False
-Global blockWheel                                  := False
-Global gExiting                                    := False
+Global StopRecursion                                 := False
+Global blockKeys                                     := False
+Global blockMouse                                    := False
+Global blockWheel                                    := False
+Global gExiting                                      := False
 Global hHookKbd
 Global hHookMouse
-Global deferredModifierFamilies                    := ""
-Global deferredModifierSyncRemaining               := 0
-Global deferredModifierTargetHwnd                  := 0
+Global deferredModifierFamilies                      := ""
+Global deferredModifierSyncRemaining                 := 0
+Global deferredModifierTargetHwnd                    := 0
 ; +----------------------------------------------------------------------------+
 ; | Window Snap And Drag Configuration                                         |
 ; | These are the coarse behavior knobs for snapping, monitor work-area rules, |
 ; | classes that should never be drag-managed, and overlay dimming strength.   |
 ; +----------------------------------------------------------------------------+
-Global k_UseWorkArea                               := true   ; true = monitor work area (ignores taskbar). false = full monitor.
-Global k_SnapRange                                 := 20     ; px: distance from edge to begin snapping
-Global k_BreakAway                                 := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
-Global k_ReleaseAway                               := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
+Global k_UseWorkArea                                 := true   ; true = monitor work area (ignores taskbar). false = full monitor.
+Global k_SnapRange                                   := 20     ; px: distance from edge to begin snapping
+Global k_BreakAway                                   := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
+Global k_ReleaseAway                                 := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
 ; Skip dragging these classes (taskbar/desktop)
-Global k_skipClasses                               := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
+Global k_skipClasses                                 := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
-Global k_Opacity                                   := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
+Global k_Opacity                                     := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 
 ; +----------------------------------------------------------------------------+
 ; | Right-Button State Machine                                                 |
@@ -559,16 +560,16 @@ Global k_Opacity                                   := 220     ; 255=opaque black
 ; - suppressMenuOnUp dismisses the shell context menu after a successful RButton+wheel action.
 ; - taskbarPassthrough keeps the entire custom RButton state machine out of taskbar
 ;   and desktop-shell clicks so those surfaces stay fully native.
-Global rightButtonHeld                             := false
-Global rightButtonComboUsed                        := false
-Global rightButtonNativeDown                       := false
-Global rightButtonSuppressMenuOnUp                 := false
-Global rightButtonTaskbarPassthrough               := false
-Global swallowNextRButtonUpFromMButtonDrag         := false
+Global rightButtonHeld                               := false
+Global rightButtonComboUsed                          := false
+Global rightButtonNativeDown                         := false
+Global rightButtonSuppressMenuOnUp                   := false
+Global rightButtonTaskbarPassthrough                 := false
+Global swallowNextRButtonUpFromMButtonDrag           := false
 
 ; Used by explicit LButton+RButton chords that should consume the normal
 ; right-click flow, such as the title-bar toggle and clear-edit gesture.
-Global suppressRightButtonLogic                    := false
+Global suppressRightButtonLogic                      := false
 
 Process, Priority,, High
 
@@ -953,7 +954,7 @@ Return
 
 HandleTrayIconMessage(wParam, lParam, msg, hwnd) {
     static WM_RBUTTONDOWN := 0x204
-    static WM_RBUTTONUP := 0x205
+    static WM_RBUTTONUP   := 0x205
 
     ; 0x404 is the script's tray-icon callback message. Windows calls us here
     ; whenever the user interacts with the tray icon, and lParam tells us which
@@ -978,28 +979,71 @@ HandleTrayIconMessage(wParam, lParam, msg, hwnd) {
 __DeferredShowTrayMenuAtTaskbar:
     ; Queue the popup outside the tray callback itself so the shell can finish
     ; delivering the click message before TrackPopupMenuEx starts its modal loop.
-    ShowTrayMenuAtTaskbar()
+    ShowTrayMenuAtTaskbar("TrayPopup", trayClickPosX, trayClickPosY)
 Return
 
-ShowTrayMenuAtTaskbar() {
-    global trayClickPosX
-    global trayClickPosY
+; Return the primary or secondary taskbar containing the original click point.
+; WindowFromPoint preserves the correct taskbar even if the mouse moves before
+; the deferred popup runs; the primary taskbar is the safe fallback.
+FindTaskbarAtPoint(clickX, clickY) {
+    pointValue  := (clickX & 0xFFFFFFFF) | ((clickY & 0xFFFFFFFF) << 32)
+    pointHwnd   := DllCall("user32\WindowFromPoint", "Int64", pointValue, "Ptr")
+    taskbarHwnd := DllCall("user32\GetAncestor", "Ptr", pointHwnd, "UInt", 2, "Ptr")
 
-    clickPosX := trayClickPosX
-    clickPosY := trayClickPosY
-
-    ; The taskbar is always assumed to be bottom-docked, so show a normal popup
-    ; menu with TPM_BOTTOMALIGN at the taskbar's top edge.
-    WinGetPos, trayPosX, trayPosY, trayWidth, trayHeight, ahk_class Shell_TrayWnd
-    if (ErrorLevel) {
-        ShowMenuX("TrayPopup", clickPosX, clickPosY, 0x20)
-        return
+    if (taskbarHwnd) {
+        WinGetClass, taskbarClass, ahk_id %taskbarHwnd%
+        if (taskbarClass = "Shell_TrayWnd" || taskbarClass = "Shell_SecondaryTrayWnd")
+            return taskbarHwnd
     }
 
-    trayIconLeftOffset := 12
-    menuPosX := clickPosX - trayIconLeftOffset
-    menuPosY := trayPosY
-    ShowMenuX("TrayPopup", menuPosX, menuPosY, 0x20)
+    return WinExist("ahk_class Shell_TrayWnd")
+}
+
+; Show any named AHK popup menu against the inward-facing edge of the taskbar
+; containing the click. Horizontal taskbars use xOffset to align the popup with
+; the tray icon; vertical taskbars anchor the popup at the click's Y coordinate.
+ShowTrayMenuAtTaskbar(menuName, clickX, clickY, xOffset := 12) {
+    static TPM_BOTTOMALIGN := 0x20
+    static TPM_RIGHTALIGN  := 0x08
+
+    taskbarHwnd := FindTaskbarAtPoint(clickX, clickY)
+    if (!taskbarHwnd) {
+        return ShowMenuX(menuName, clickX, clickY, TPM_BOTTOMALIGN)
+    }
+
+    WinGetPos, taskbarX, taskbarY, taskbarWidth, taskbarHeight, ahk_id %taskbarHwnd%
+    if (taskbarWidth <= 0 || taskbarHeight <= 0) {
+        return ShowMenuX(menuName, clickX, clickY, TPM_BOTTOMALIGN)
+    }
+
+    GetMonitorRectForMouse(clickX, clickY, False
+        , monitorLeft, monitorTop, monitorRight, monitorBottom)
+
+    if (taskbarWidth >= taskbarHeight) {
+        menuX := clickX - xOffset
+        if ((taskbarY + taskbarHeight / 2) < (monitorTop + monitorBottom) / 2) {
+            ; Top taskbar: align the menu's top with the taskbar's bottom.
+            menuY := taskbarY + taskbarHeight
+            menuFlags := 0
+        } else {
+            ; Bottom taskbar: align the menu's bottom with the taskbar's top.
+            menuY := taskbarY
+            menuFlags := TPM_BOTTOMALIGN
+        }
+    } else {
+        menuY := clickY
+        if ((taskbarX + taskbarWidth / 2) < (monitorLeft + monitorRight) / 2) {
+            ; Left taskbar: align the menu's left with the taskbar's right.
+            menuX := taskbarX + taskbarWidth
+            menuFlags := 0
+        } else {
+            ; Right taskbar: align the menu's right with the taskbar's left.
+            menuX := taskbarX
+            menuFlags := TPM_RIGHTALIGN
+        }
+    }
+
+    return ShowMenuX(menuName, menuX, menuY, menuFlags)
 }
 
 ; Helper to resolve exports
@@ -1103,6 +1147,37 @@ InitVDA()
 ; Once a low-level hook violates that assumption, behavior becomes framework-specific
 ; and can show up as duplicate first letters instead of a clean infinite repeat.
 ; --------------------------------------------------
+/*
+LL_KeyboardHook hexadecimal lookup (Windows constants)
+
+Used as          Hex             Windows name / concrete meaning
+---------------  --------------  ----------------------------------------------
+wParam message   0x0100          WM_KEYDOWN
+wParam message   0x0101          WM_KEYUP
+wParam message   0x0104          WM_SYSKEYDOWN (commonly Alt or F10 processing)
+wParam message   0x0105          WM_SYSKEYUP   (commonly Alt or F10 processing)
+Hook flag mask   0x10            LLKHF_INJECTED: event was synthetically injected
+Key-state mask   0x8000          GetAsyncKeyState high bit: key is currently down
+
+Virtual key      0x08            VK_BACK: Backspace
+Virtual key      0x09            VK_TAB: Tab; also a #HotString EndChar
+Virtual key      0x0D            VK_RETURN: Enter; also a #HotString EndChar
+Virtual key      0x10            VK_SHIFT: used only with GetAsyncKeyState here
+Virtual key      0x20            VK_SPACE: Space; also a #HotString EndChar
+Virtual-key span 0x30-0x5A       0-9 and A-Z (intervening values are unused)
+Virtual-key span 0x60-0x6F       Numpad 0-9 and numpad operators
+Virtual-key span 0xBA-0xE2       OEM/layout-dependent range; includes reserved values
+
+Boundary keys below assume a US keyboard layout for the displayed characters:
+0xBA = ; or :    0xDB = [ or {    0xDD = ] or }
+0x31 = 1 or !    0x30 = 0 or )    0x39 = 9 or (
+0xBC = , or <    0xBE = . or >    0xBF = / or ?
+
+The first boundary row is accepted with or without Shift. The second row is
+accepted only with Shift. In the third row, comma and period are accepted only
+without Shift, while slash is accepted only with Shift. Those choices exactly
+match the #HotString EndChars directive near the top of this file.
+*/
 LL_KeyboardHook(nCode, wParam, lParam)
 {
     ; While blockKeys := true, swallow only physical KEYDOWN / SYSKEYDOWN events.
@@ -1111,9 +1186,9 @@ LL_KeyboardHook(nCode, wParam, lParam)
     ; The warning below describes the old failure mode that happened when
     ; blockKeys swallowed physical KEYUP. The current hook allows KEYUP through.
     global blockKeys, hHookKbd
-    global hotstringAutoFixBoundaryReleasePending
-    global hotstringAutoFixRequiredBoundarySeq, physicalTypingSeq
-    global physicalWordBoundarySeq
+    global hotstringResetTimerPending
+    global hotstringBoundarySeq, hotstringResetAtBoundarySeq
+    global physicalTypingSeq
     static blockedPressCount = 0
 
     ; do not process / do not block / do not modify this event
@@ -1165,16 +1240,16 @@ LL_KeyboardHook(nCode, wParam, lParam)
             }
 
             if (isBoundary) {
-                physicalWordBoundarySeq += 1
-                ; Keep this separator ineligible, then clear the one-shot gate
-                ; after its key event has finished. Clearing inside this hook
-                ; would let the same separator trigger a partial-word hotstring.
-                if (hotstringAutoFixRequiredBoundarySeq
-                    && physicalWordBoundarySeq >= hotstringAutoFixRequiredBoundarySeq
-                    && !hotstringAutoFixBoundaryReleasePending)
+                hotstringBoundarySeq += 1
+                ; When the requested boundary arrives, defer the buffer reset until
+                ; this separator key event has finished. Resetting inside the hook
+                ; would modify AutoHotkey's buffer while the event is still processing.
+                if (hotstringResetAtBoundarySeq
+                    && hotstringBoundarySeq >= hotstringResetAtBoundarySeq
+                    && !hotstringResetTimerPending)
                 {
-                    hotstringAutoFixBoundaryReleasePending := True
-                    SetTimer, ReleaseHotstringAutoFixBoundary, -1
+                    hotstringResetTimerPending := True
+                    SetTimer, ResetHotstringBufferAfterBoundary, -1
                 }
             }
         }
@@ -1359,7 +1434,7 @@ Hoty:
     If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
         CancelTbcTypingFixes(False, False)
         typingFixSeq += 1
-        _CaptureDeferredFocusContext(tbcHotyHwnd, tbcHotyCtrl, tbcHotyCtrlHwnd, tbcHotyCtrlClass)
+        CaptureActiveFocusSnapshot(tbcHotyHwnd, tbcHotyCtrl, tbcHotyCtrlHwnd, tbcHotyCtrlClass)
         tbcHotyId          := typingFixSeq
         tbcHotyQueuedTick  := A_TickCount
         tbcHotyReplacement := SubStr(A_PriorHotKey,3,1)
@@ -1427,7 +1502,7 @@ FlushTbcHotyReplacement:
     ; text immediately before the caret is still "Capital + current lowercase"
     ; and replace only that prior capital. If that context drifted, cancel
     ; instead of guessing with a blind caret-relative Send.
-    if (_TypingAutoFixIsClassicEditClass(tbcHotyCtrlClass))
+    if (IsClassicEditControlClass(tbcHotyCtrlClass))
     {
         StopAutoFix := True
         _TryApplyTbcHotyClassicRewrite()
@@ -1462,7 +1537,7 @@ _QueueTbcFixSlash(action) {
     CancelTbcTypingFixes(False, False)
     typingFixSeq += 1
     tbcFixSlashAction     := action
-    _CaptureDeferredFocusContext(tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashCtrlHwnd, tbcFixSlashCtrlClass)
+    CaptureActiveFocusSnapshot(tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashCtrlHwnd, tbcFixSlashCtrlClass)
     tbcFixSlashId         := typingFixSeq
     tbcFixSlashQueuedTick := A_TickCount
     SetTimer, FlushTbcFixSlash, -40
@@ -1608,7 +1683,7 @@ FlushTbcFixSlash:
         ; Hoty: prove the live caret/text still show the exact queued "/ "
         ; pattern, then replace only the slash via EM_SETSEL/EM_REPLACESEL. If
         ; proof fails, cancel instead of guessing with a blind caret-relative Send.
-        if (_TypingAutoFixIsClassicEditClass(tbcFixSlashCtrlClass))
+        if (IsClassicEditControlClass(tbcFixSlashCtrlClass))
         {
             StopAutoFix := True
             _TryApplyTbcFixSlashClassicRewrite()
@@ -1632,7 +1707,7 @@ FlushTbcFixSlash:
         ; slash+Space, except the boundary key itself is withheld until the
         ; queued slash rewrite has either landed or been explicitly abandoned.
         StopAutoFix := True
-        if (_TypingAutoFixIsClassicEditClass(tbcFixSlashCtrlClass))
+        if (IsClassicEditControlClass(tbcFixSlashCtrlClass))
             _TryApplyTbcFixSlashClassicRewrite()
         else
         {
@@ -1718,8 +1793,8 @@ _ClearTypingAutoFixEligibilityCache() {
     global c_typingAutoFixHwnd
     global c_typingAutoFixReason
     global c_typingAutoFixTick
-    global hotstringAutoFixBoundaryReleasePending
-    global hotstringAutoFixRequiredBoundarySeq
+    global hotstringResetTimerPending
+    global hotstringResetAtBoundarySeq
 
     c_typingAutoFixAllowed                 := false
     c_typingAutoFixCtrlHwnd                := 0
@@ -1727,9 +1802,9 @@ _ClearTypingAutoFixEligibilityCache() {
     c_typingAutoFixHwnd                    := 0
     c_typingAutoFixReason                  := "pointer_context_changed"
     c_typingAutoFixTick                    := 0
-    hotstringAutoFixBoundaryReleasePending := False
-    hotstringAutoFixRequiredBoundarySeq    := 0
-    SetTimer, ReleaseHotstringAutoFixBoundary, Off
+    hotstringResetTimerPending             := False
+    hotstringResetAtBoundarySeq            := 0
+    SetTimer, ResetHotstringBufferAfterBoundary, Off
     Hotstring("Reset")
 }
 
@@ -1739,7 +1814,7 @@ CancelTbcTypingWorkForPointerAction() {
     CancelTbcTypingFixes(True, True)
     _ClearTbcEverythingEditAdjustState()
     _ClearTypingAutoFixEligibilityCache()
-    ClearTbcTypingAutoFixRefresh()
+    _ClearTbcTypingAutoFixRefresh()
     ScheduleTypingAutoFixPrewarm()
 }
 
@@ -1754,15 +1829,15 @@ CancelTbcTypingWorkForFocusChange() {
 ; focus lookup, so the async probe can distinguish no typing from a partial word.
 ScheduleTypingAutoFixPrewarm(delayMs := "") {
     global k_typingAutoFixPrewarmDelayMs
-    global physicalTypingSeq, physicalWordBoundarySeq
-    global typingAutoFixPrewarmStartBoundarySeq
+    global hotstringBoundarySeq, physicalTypingSeq
+    global typingAutoFixPrewarmStartHotstringBoundarySeq
     global typingAutoFixPrewarmStartTypingSeq
 
     if (delayMs = "")
         delayMs := k_typingAutoFixPrewarmDelayMs
 
-    typingAutoFixPrewarmStartBoundarySeq := physicalWordBoundarySeq
-    typingAutoFixPrewarmStartTypingSeq   := physicalTypingSeq
+    typingAutoFixPrewarmStartHotstringBoundarySeq := hotstringBoundarySeq
+    typingAutoFixPrewarmStartTypingSeq             := physicalTypingSeq
     SetTimer, PrewarmTypingAutoFixContext, Off
     SetTimer, PrewarmTypingAutoFixContext, % -Max(1, delayMs)
 }
@@ -1771,10 +1846,10 @@ ScheduleTypingAutoFixPrewarm(delayMs := "") {
 ; capture the active top-level HWND plus the currently focused control identity
 ; so later timers can cheaply revalidate that they still own the same target
 ; before attempting any delayed rewrite or synthetic send.
-_CaptureDeferredFocusContext(ByRef targetHwnd, ByRef targetCtrlNN, ByRef targetCtrlHwnd, ByRef targetCtrlClass, activeHwnd := 0) {
-    targetHwnd     := 0
-    targetCtrlNN   := ""
-    targetCtrlHwnd := 0
+CaptureActiveFocusSnapshot(ByRef targetHwnd, ByRef targetCtrlNN, ByRef targetCtrlHwnd, ByRef targetCtrlClass, activeHwnd := 0) {
+    targetHwnd      := 0
+    targetCtrlNN    := ""
+    targetCtrlHwnd  := 0
     targetCtrlClass := ""
 
     if (!activeHwnd)
@@ -1834,8 +1909,8 @@ _IsDeferredWorkStillValid(expectedHwnd, expectedCtrlNN := "", expectedId := 0, c
 
 ; Captures the currently focused control identity so deferred typing rewrites can
 ; require the exact same edit target before they mutate caret-relative text.
-_TryGetFocusedControlSnapshot(activeHwnd, ByRef ctrlNN, ByRef ctrlHwnd, ByRef ctrlClass) {
-    if !_CaptureDeferredFocusContext(snapshotHwnd, ctrlNN, ctrlHwnd, ctrlClass, activeHwnd)
+TryCaptureCompleteFocusSnapshot(activeHwnd, ByRef ctrlNN, ByRef ctrlHwnd, ByRef ctrlClass) {
+    if !CaptureActiveFocusSnapshot(snapshotHwnd, ctrlNN, ctrlHwnd, ctrlClass, activeHwnd)
         return false
 
     return (snapshotHwnd && ctrlNN != "" && ctrlHwnd && ctrlClass != "")
@@ -1867,7 +1942,7 @@ _GetClassicControlSelectionRange(controlHwnd, ByRef selStart, ByRef selEnd) {
 ; window, and still points at the same focused control name when one was captured.
 ; It is intentionally conservative: if that coarse context no longer matches, the
 ; delayed rewrite is canceled rather than sent into a newer typing state.
-IsTbcTypingFixStillValid(tbcId, tbcHwnd, tbcCtrl, tbcQueuedTick) {
+_IsTbcTypingFixStillValid(tbcId, tbcHwnd, tbcCtrl, tbcQueuedTick) {
     global k_tbcTypingFixMaxAgeMs
     global typingFixSeq
 
@@ -1889,13 +1964,13 @@ _IsTbcFixSlashStillValid() {
     global tbcFixSlashId
     global tbcFixSlashQueuedTick
 
-    if !IsTbcTypingFixStillValid(tbcFixSlashId, tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashQueuedTick)
+    if !_IsTbcTypingFixStillValid(tbcFixSlashId, tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashQueuedTick)
         return False
 
     if (!tbcFixSlashCtrlHwnd && tbcFixSlashCtrlClass = "")
         return True
 
-    if !_TryGetFocusedControlSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureCompleteFocusSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return False
 
     if (tbcFixSlashCtrl != "" && currentCtrlNN != tbcFixSlashCtrl)
@@ -1949,13 +2024,13 @@ _IsTbcHotyStillValid() {
     global tbcHotyId
     global tbcHotyQueuedTick
 
-    if !IsTbcTypingFixStillValid(tbcHotyId, tbcHotyHwnd, tbcHotyCtrl, tbcHotyQueuedTick)
+    if !_IsTbcTypingFixStillValid(tbcHotyId, tbcHotyHwnd, tbcHotyCtrl, tbcHotyQueuedTick)
         return false
 
     if (!tbcHotyCtrlHwnd && tbcHotyCtrlClass = "")
         return true
 
-    if !_TryGetFocusedControlSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureCompleteFocusSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
     if (tbcHotyCtrl != "" && currentCtrlNN != tbcHotyCtrl)
@@ -1988,10 +2063,10 @@ _TryApplyTbcFixSlashClassicRewrite() {
     if (!tbcFixSlashHwnd || !tbcFixSlashCtrlHwnd || tbcFixSlashCtrlClass = "")
         return False
 
-    if !_TypingAutoFixIsClassicEditClass(tbcFixSlashCtrlClass)
+    if !IsClassicEditControlClass(tbcFixSlashCtrlClass)
         return False
 
-    if !_TryGetFocusedControlSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureCompleteFocusSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return False
 
     if (currentCtrlNN != tbcFixSlashCtrl || currentCtrlHwnd != tbcFixSlashCtrlHwnd || currentCtrlClass != tbcFixSlashCtrlClass)
@@ -2064,10 +2139,10 @@ _TryApplyTbcHotyClassicRewrite() {
     if (!tbcHotyHwnd || !tbcHotyCtrlHwnd || tbcHotyCtrlClass = "")
         return false
 
-    if !_TypingAutoFixIsClassicEditClass(tbcHotyCtrlClass)
+    if !IsClassicEditControlClass(tbcHotyCtrlClass)
         return false
 
-    if !_TryGetFocusedControlSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureCompleteFocusSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
     if (currentCtrlNN != tbcHotyCtrl || currentCtrlHwnd != tbcHotyCtrlHwnd || currentCtrlClass != tbcHotyCtrlClass)
@@ -2333,37 +2408,42 @@ GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) 
 ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
-IsPlainDialog32770(hWnd) {
-    WinGetClass, cls, ahk_id %hWnd%
-    if (cls != "#32770")
-        return False
+; Classify a Win32 dialog for the activation path. "unknown" prevents an
+; incomplete child scan from being treated as "plain".
+ClassifyDialog32770(hWnd, windowClass := "", windowStyle := "") {
+    if (!hWnd || !WinExist("ahk_id " . hWnd))
+        return "unknown"
 
-    WinGet, style, Style, ahk_id %hWnd%
+    if (windowClass = "")
+        WinGetClass, windowClass, ahk_id %hWnd%
 
-    ; Optional: reject dialogs with min/max buttons (usually "big" windows)
-    if (style & 0x00010000)  ; WS_MAXIMIZEBOX
-        return False
-    if (style & 0x00020000)  ; WS_MINIMIZEBOX
-        return False
-    if (style & 0x96000001)
-        return False
+    if (windowClass = "")
+        return "unknown"
+    if (windowClass != "#32770")
+        return "not_dialog"
+
+    if (windowStyle = "")
+        WinGet, windowStyle, Style, ahk_id %hWnd%
+
+    if (windowStyle = "")
+        return "unknown"
+
+    ; Keep dialogs with min/max buttons out of the "plain" classification.
+    ; Preserve the former non-plain result for these windows until the style
+    ; heuristic is replaced by stronger positive file-dialog evidence.
+    if (windowStyle & 0x00010000)  ; WS_MAXIMIZEBOX
+        return "file_dialog"
+    if (windowStyle & 0x00020000)  ; WS_MINIMIZEBOX
+        return "file_dialog"
 
     ; Do NOT reject WS_THICKFRAME / WS_SIZEBOX here,
     ; so Notepad++ Find (0x94CC004C) will pass.
 
-    ; Core requirement: must NOT look like a file container
-    return !HasFileViewChild(hWnd)
-}
-
-; Returns true when the window contains a child control that strongly suggests a
-; shell/file-view surface such as Explorer items, a namespace tree, or a details
-; list. This lets the surrounding dialog/window filters distinguish plain utility
-; dialogs from shell-style containers that need Explorer-specific handling.
-HasFileViewChild(hParent) {
-    ; Get list of all controls (ClassNNs) in the window.
-    WinGet, ctrlList, ControlList, ahk_id %hParent%
-    if (ErrorLevel)
-        return False
+    ; A complete child-control scan distinguishes plain utility dialogs from
+    ; shell-style dialogs containing a file or namespace view.
+    WinGet, ctrlList, ControlList, ahk_id %hWnd%
+    if (ErrorLevel || ctrlList = "")
+        return "unknown"
 
     ; Classes that are strong indicators of a file view or shell namespace view.
     static suspectPattern := "i)^(SysListView32|SHELLDLL_DefView|DirectUIHWND|NamespaceTreeControl|SysTreeView32|CabinetWClass)"
@@ -2371,14 +2451,12 @@ HasFileViewChild(hParent) {
     Loop, Parse, ctrlList, `n
     {
         ctrlNN := A_LoopField
-        ; Extract the class part from ClassNN (e.g. "SysListView32" from "SysListView321")
-        if RegExMatch(ctrlNN, "^[^0-9]+", className)
-        {
-            if RegExMatch(className, suspectPattern)
-                return true
-        }
+        ; Match the complete ClassNN prefix. Stripping at the first digit would
+        ; turn SysListView321 into SysListView and miss the SysListView32 class.
+        if RegExMatch(ctrlNN, suspectPattern)
+            return "file_dialog"
     }
-    return False
+    return "plain"
 }
 
 ; Returns true when the window appears to host the kind of DirectUI/ListView
@@ -2414,7 +2492,7 @@ NeedsSendCtrlAddFadeWait(hParent, focusedCtrlNN := "") {
 ; controls even though the actual file view still needs to finish loading. The
 ; decision therefore uses shell-host identity plus a previously captured target
 ; scan, instead of trusting transient initial focus alone.
-ShouldForceExplorerLoadOnActivate(topClass, targetScan := "", topProc := "", topTitle := "") {
+_ShouldForceExplorerLoadOnActivate(topClass, targetScan := "", topProc := "", topTitle := "") {
     if (topClass != "CabinetWClass" && topClass != "#32770")
         return False
 
@@ -2480,14 +2558,23 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     If !(vWinClass == "#32770" && vWinTitle == "Run") {
         WinGet, vWinStyle, Style, % "ahk_id " hWnd
+        dialogKind := ClassifyDialog32770(hWnd, vWinClass, vWinStyle)
+
+        ; A missing or empty child snapshot is inconclusive. Abandon this
+        ; activation attempt rather than incorrectly treating it as "plain".
+        if (dialogKind == "unknown") {
+            Thread, NoTimers, False
+            Return
+        }
+
         If (   IsOverException(hWnd)
-            || IsPlainDialog32770(hWnd)
+            || dialogKind == "plain"
             || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
             || !WinExist("ahk_id " hWnd)) {
             If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
             }
-            If IsPlainDialog32770(hWnd) {
+            If (dialogKind == "plain") {
                 ; WinActivate, ahk_id %hWnd%
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
@@ -2498,14 +2585,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     }
 
     Thread, NoTimers, False
-
-    If (vWinClass == "#32770" && vWinTitle == "Run") {
-        WinGetPos, rx, ry, rw, rh, ahk_id %hWnd%
-        If UIA_GetStartButtonCenter(sx, sy, bw) {
-            x := sx - (rw/2) ; 44 is the width of a single taskbar button
-            WinMove, ahk_id %hWnd%,, x,
-        }
-    }
 
     initFocusedCtrlForWait := ""
     ControlGetFocus, initFocusedCtrlForWait, ahk_id %hWnd%
@@ -2575,13 +2654,13 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ; both the destination path and the Details layout are stable. Existing
         ; windows and file dialogs retain their established activation path.
         if (vWinClass == "CabinetWClass" && isFirstTrackedActivation) {
-            _QueueExplorerDetailsCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
+            _RequestExplorerDetailsColumnAutoFit(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
                 , k_newExplorerDetailsCtrlAddMinimumWaitMs)
         }
         else {
             ; tooltip, sent to %initFocusedCtrl%
             SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl
-                , ShouldForceExplorerLoadOnActivate(vWinClass, sendCtrlAddTargetScan, vWinProc, vWinTitle)
+                , _ShouldForceExplorerLoadOnActivate(vWinClass, sendCtrlAddTargetScan, vWinProc, vWinTitle)
                 , sendCtrlAddTargetScan)
         }
 
@@ -2606,83 +2685,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     LbuttonEnabled := True
 }
 
-; Waits until the shell view's item list has finished populating.
-; Works for both:
-;   - Explorer windows (ahk_class CabinetWClass)
-;   - Common file dialogs (ahk_class #32770)
-; Returns an object { hwnd: <hwnd>, itemsView: <UIA element>, count: <int> }
-; or 0 on timeout.
-WaitForShellViewReady_UIA(hwnd := "", timeout := 10000, stableChecks := 5, poll := 100) {
-    global UIA
-
-    if !hwnd {
-        ; If no hwnd provided, use the active window (either class will work)
-        WinGet, hwnd, ID, A
-        if !hwnd
-            return 0
-    }
-
-    if !IsObject(UIA)
-        UIA := UIA_Interface()
-
-    root  := UIA.ElementFromHandle(hwnd)
-    if !IsObject(root)
-        return 0
-
-    start := A_TickCount
-    items := ""
-
-    ; -------- 1) Find the shell view's item list (works across Explorer + dialogs)
-    ; Try List first (Explorer "Items View"), then DataGrid/Table (some dialogs), then Tree (rare)
-    ; UIA_Interface's FindFirstBy("ControlType=...") parser accepts symbolic
-    ; names like UIA_ListControlTypeId here and resolves them the same as the
-    ; raw numeric UIA control type IDs (for example List -> 50008).
-    for controlTypeIndex, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId", "UIA_TreeControlTypeId"] {
-        items := root.FindFirstBy("ControlType=" . ctlType)
-        if (items)
-            break
-    }
-    if !items
-        return 0
-
-    ; -------- 2) If there's an active "Working on it" progress bar, wait for it to go away
-    ; Not all windows show one; that's fine we'll proceed either way.
-    while (A_TickCount - start < timeout) {
-        prog := root.FindFirstBy("ControlType=UIA_ProgressBarControlTypeId")
-        if !prog
-            break
-        ; Heuristic: if the progress bar is offscreen/hidden, treat as gone
-        off := prog.GetCurrentPropertyValue(UIA_IsOffscreenPropertyId)
-        if (off = 1)
-            break
-        Sleep, %poll%
-    }
-
-    ; -------- 3) Wait for the item count to stabilize
-    last := -1, stable := 0
-    while (A_TickCount - start < timeout) {
-        ; Children() is inexpensive here and works for both Explorer + dialogs.
-        cnt := items.Children().Length()
-
-        if (cnt = last) {
-            stable++
-            if (stable >= stableChecks)
-                return { hwnd: hwnd, itemsView: items, count: cnt }
-        } else {
-            last := cnt
-            stable := 0
-        }
-        Sleep, %poll%
-    }
-    return 0
-}
-
 WaitForFadeInStop(hwnd) {
-    HexColorLast1 :=
-    HexColorLast2 :=
-    HexColorLast3 :=
-    HexColorLast4 :=
-    HexColorLast5 :=
+    previousColor     := ""
+    stableSampleCount := 0
 
     WinGetPos, sx, sy, sw, sh, ahk_id %hwnd%
     sampleX := (sx + sw)/2
@@ -2690,16 +2695,21 @@ WaitForFadeInStop(hwnd) {
     CoordMode, Pixel, Screen
     Loop, 500
     {
-        PixelGetColor, HexColor%A_Index%, %sampleX%, %sampleY%, RGB
-        If (A_Index >= 5) {
-            If (HexColor%A_Index% == HexColorLast1 && HexColorLast1 == HexColorLast2 && HexColorLast2 == HexColorLast3 && HexColorLast3 == HexColorLast4 && HexColorLast4 == HexColorLast5)
-                break
-            HexColorLast1 := HexColor%A_Index%
-            HexColorLast2 := HexColorLast1
-            HexColorLast3 := HexColorLast2
-            HexColorLast4 := HexColorLast3
-            HexColorLast5 := HexColorLast4
-        }
+        PixelGetColor, currentColor, %sampleX%, %sampleY%, RGB
+
+        ; Count consecutive identical samples instead of copying one new color
+        ; into several "history" variables. Any color change resets the run to
+        ; one, so this wait can finish only after five uninterrupted samples of
+        ; the same pixel color rather than after merely one repeated sample.
+        if (currentColor == previousColor)
+            stableSampleCount += 1
+        else
+            stableSampleCount := 1
+
+        previousColor := currentColor
+        if (stableSampleCount >= 5)
+            break
+
         sleep, 1
     }
     CoordMode, Mouse, screen
@@ -3014,7 +3024,7 @@ $*RButton Up::
         |
         +--> else special LButton+RButton chord claimed the hold?
         |        |
-        |        +--> YES -> ResetRightButtonState(false)
+        |        +--> YES -> _ResetRightButtonState(false)
         |
         +--> else normal RButton release path:
                  |
@@ -3028,7 +3038,7 @@ $*RButton Up::
                  |               if hold was not consumed
                  |                   Click, Right
                  |
-                 +--> ResetRightButtonState(false)
+                 +--> _ResetRightButtonState(false)
 
 
 Watchdogs
@@ -3037,7 +3047,7 @@ WatchRightButtonState
         |
         +--> protects custom RButton state
         +--> if physical RButton is up but state is still latched
-        +--> ResetRightButtonState(true)
+        +--> _ResetRightButtonState(true)
 
 WatchMButtonOverrideState
         |
@@ -3109,7 +3119,7 @@ $*RButton::
 
     ; Heal any stale state before starting a fresh hold.
     if (rightButtonHeld || rightButtonComboUsed || rightButtonNativeDown)
-        ResetRightButtonState(true)
+        _ResetRightButtonState(true)
 
     ; Special LButton+RButton chords consume the hold, so keep the watchdog
     ; running but skip normal right-click behavior.
@@ -3165,7 +3175,7 @@ $*RButton Up::
     }
 
     if (suppressRightButtonLogic) {
-        ResetRightButtonState(false)
+        _ResetRightButtonState(false)
         return
     }
 
@@ -3182,7 +3192,7 @@ $*RButton Up::
     else if (!rightButtonComboUsed)
         Click, Right
 
-    ResetRightButtonState(false)
+    _ResetRightButtonState(false)
 return
 
 #If MouseIsOverTitleBar()
@@ -3481,7 +3491,7 @@ return
 #If
 
 ; Reset right-button script state if an up transition is missed.
-ResetRightButtonState(sendNativeUp := false) {
+_ResetRightButtonState(sendNativeUp := false) {
     global rightButtonHeld, rightButtonComboUsed, rightButtonNativeDown, rightButtonSuppressMenuOnUp, rightButtonTaskbarPassthrough, suppressRightButtonLogic, swallowNextRButtonUpFromMButtonDrag
 
     SetTimer, WatchRightButtonState, Off
@@ -3509,7 +3519,7 @@ WatchRightButtonState:
         return
 
     if (rightButtonHeld || rightButtonComboUsed || rightButtonNativeDown || suppressRightButtonLogic)
-        ResetRightButtonState(true)
+        _ResetRightButtonState(true)
 return
 
 ; Wheel-driven column auto-fit is deferred onto this timer instead of sending
@@ -4460,7 +4470,7 @@ Return
             fastInsertResult := _FastInsertWrappedTextIntoClassicControl(fastInsertWindowId, fastInsertControlHwnd, lineText)
 
         didFastInsert := (fastInsertResult = "inserted")
-        if (!didFastInsert && fastInsertResult != "message_uncertain" && _IsForegroundWindow(fastInsertWindowId))
+        if (!didFastInsert && fastInsertResult != "message_uncertain" && IsForegroundWindow(fastInsertWindowId))
         {
             ; Some editors are picky about paste timing/chords here, so force the
             ; clipboard helper onto the stricter explicit Ctrl+V path for this step.
@@ -4553,7 +4563,7 @@ _FastInsertWrappedTextIntoClassicControl(windowId, controlHwnd, text) {
 ; as not_classic and use the managed clipboard path instead of EM_REPLACESEL.
 _GetFastInsertWrappedTextTarget(windowId, ByRef controlHwnd) {
     controlHwnd := 0
-    if !_IsForegroundWindow(windowId)
+    if !IsForegroundWindow(windowId)
         return "target_gone"
 
     windowTid := DllCall("user32\GetWindowThreadProcessId", "Ptr", windowId, "UInt*", 0, "UInt")
@@ -4570,15 +4580,15 @@ _GetFastInsertWrappedTextTarget(windowId, ByRef controlHwnd) {
     if (focusedHwnd != windowId && !DllCall("user32\IsChild", "Ptr", windowId, "Ptr", focusedHwnd, "Int"))
         return "target_gone"
 
-    if !_IsForegroundWindow(windowId)
+    if !IsForegroundWindow(windowId)
         return "target_gone"
 
     controlHwnd := focusedHwnd
-    controlClassName := _GetWindowClassName(controlHwnd)
+    controlClassName := GetWindowClassName(controlHwnd)
     if !_IsExpectedFocusedControl(windowId, controlHwnd)
         return "target_gone"
 
-    return _IsClassicEditControlClass(controlClassName) ? "classic_edit" : "not_classic"
+    return IsClassicEditControlClass(controlClassName) ? "classic_edit" : "not_classic"
 }
 
 ; Captures the exact logical line-start caret index in a classic Edit/RichEdit
@@ -4628,7 +4638,7 @@ _MoveCaretToIndexInClassicControl(windowId, controlHwnd, caretIndex) {
 
 ; Reads a Win32 window class without a ClassNN lookup, which can become stale
 ; while a custom control is rebuilding its child-window hierarchy.
-_GetWindowClassName(windowHwnd) {
+GetWindowClassName(windowHwnd) {
     if (!windowHwnd || !DllCall("user32\IsWindow", "Ptr", windowHwnd, "Int"))
         return ""
 
@@ -4642,7 +4652,7 @@ _GetWindowClassName(windowHwnd) {
 ; Verifies that the captured top-level target is still foreground and that the
 ; same child HWND still owns keyboard focus before a direct edit message runs.
 _IsExpectedFocusedControl(windowId, controlHwnd) {
-    if (!_IsForegroundWindow(windowId) || !controlHwnd)
+    if (!IsForegroundWindow(windowId) || !controlHwnd)
         return false
 
     if !DllCall("user32\IsWindow", "Ptr", controlHwnd, "Int")
@@ -4655,15 +4665,16 @@ _IsExpectedFocusedControl(windowId, controlHwnd) {
     return (windowTid && GetThreadFocusHwnd(windowTid) = controlHwnd)
 }
 
-; Returns true only for the native Edit and RichEdit window classes that accept
-; the EM_REPLACESEL message used by the fast insertion path.
-_IsClassicEditControlClass(controlClassName) {
+; Returns true for standard Win32 Edit and RichEdit window classes that support
+; the EM_GETSEL, EM_SETSEL, and EM_REPLACESEL operations used by direct classic-
+; control rewrites and fast insertion.
+IsClassicEditControlClass(controlClassName) {
     return (controlClassName = "Edit" || RegExMatch(controlClassName, "i)^RICHEDIT\w*$"))
 }
 
 ; Confirms that a clipboard chord will still go to the captured foreground
 ; window. A different foreground HWND means the operation must be cancelled.
-_IsForegroundWindow(windowId) {
+IsForegroundWindow(windowId) {
     return (windowId && DllCall("user32\IsWindow", "Ptr", windowId, "Int")
         && DllCall("user32\GetForegroundWindow", "Ptr") = windowId)
 }
@@ -4671,7 +4682,7 @@ _IsForegroundWindow(windowId) {
 ; Attempts a fast classic-control replacement. "not_classic" and "target_gone"
 ; leave Clip() to make the foreground-guarded clipboard-paste decision. A
 ; "message_uncertain" result does not: the direct message may already have run.
-TryFastInsertWrappedText(windowId, text) {
+_TryFastInsertWrappedText(windowId, text) {
     targetState := _GetFastInsertWrappedTextTarget(windowId, controlHwnd)
     if (targetState != "classic_edit")
         return targetState
@@ -4697,8 +4708,9 @@ WrapClipboardText(leftText, rightText) {
     if (hasTrailingSpace)
         wrappedText .= " "
 
-    insertResult := TryFastInsertWrappedText(targetWindowId, wrappedText)
-    ; "not_classic" means the focused control does not accept EM_REPLACESEL.
+    insertResult := _TryFastInsertWrappedText(targetWindowId, wrappedText)
+    ; "not_classic" means the focused control is not a recognized Win32
+    ; Edit/RichEdit class, so the direct EM_REPLACESEL path is not attempted.
     ; "target_gone" means the direct HWND path cannot identify the focused child.
     ; Clip() rechecks targetWindowId immediately before Ctrl+V, so either state
     ; can use the managed clipboard path without pasting into another app.
@@ -4758,7 +4770,7 @@ _SwapSelectedBooleanLiteral() {
     else
         return false
 
-    insertResult := TryFastInsertWrappedText(targetWindowId, replacementText)
+    insertResult := _TryFastInsertWrappedText(targetWindowId, replacementText)
     if (insertResult = "not_classic") {
         clipPreferExplicitCtrlV := True
         try {
@@ -4920,13 +4932,13 @@ Return
 #If disableEnter
 $Enter::
     if (_ShouldHandleFixSlashEnter()) {
-        currentFixSlashEnterHwnd := WinExist("A")
-        currentFixSlashEnterCtrlNN := ""
-        currentFixSlashEnterCtrlHwnd := 0
+        currentFixSlashEnterHwnd      := WinExist("A")
+        currentFixSlashEnterCtrlNN    := ""
+        currentFixSlashEnterCtrlHwnd  := 0
         currentFixSlashEnterCtrlClass := ""
 
-        if (_TryGetFocusedControlSnapshot(currentFixSlashEnterHwnd, currentFixSlashEnterCtrlNN, currentFixSlashEnterCtrlHwnd, currentFixSlashEnterCtrlClass)
-            && _TypingAutoFixIsClassicEditClass(currentFixSlashEnterCtrlClass)) {
+        if (TryCaptureCompleteFocusSnapshot(currentFixSlashEnterHwnd, currentFixSlashEnterCtrlNN, currentFixSlashEnterCtrlHwnd, currentFixSlashEnterCtrlClass)
+            && IsClassicEditControlClass(currentFixSlashEnterCtrlClass)) {
             ; Classic Edit/RichEdit keeps the older immediate Enter-thread path.
             ; Non-classic editors cannot prove the rewrite inline as reliably, so
             ; those fall through to the deferred barrier below.
@@ -7639,6 +7651,7 @@ Explorer__GetRoleNum(ByRef accObj := "") {
     ; Role Constant             Hex     Meaning
     ; ROLE_SYSTEM_LIST          0x21    The container list
     ; ROLE_SYSTEM_LISTITEM      0x22    A file/folder in Explorer
+    ; ROLE_SYSTEM_OUTLINE       0x23    The outline/tree container
     ; ROLE_SYSTEM_OUTLINEITEM   0x24    Tree-view style item
     ; ROLE_SYSTEM_COLUMNHEADER  0x19    Column header: Name, Date Modified, Type, etc.
     ; ROLE_SYSTEM_PUSHBUTTON    0x2B    Buttons
@@ -7648,7 +7661,7 @@ Explorer__GetRoleNum(ByRef accObj := "") {
     if (r == "list item" || r == "listitem")
         return 0x22
     if (r == "outline")
-        return 0x3E
+        return 0x23
     if (r == "outline item" || r == "outlineitem")
         return 0x24
     if (r == "columnheader" || r == "column header")
@@ -7667,7 +7680,7 @@ Explorer__GetRoleNum(ByRef accObj := "") {
     ; ColumnHeader (0x19) ← click on a sort header
 
     ; Explorer's modern implementation sometimes reports:
-        ; ROLE_SYSTEM_OUTLINE (0x3E) for the whole file-view region
+        ; ROLE_SYSTEM_OUTLINE (0x23) for the whole file-view region
         ; ROLE_SYSTEM_OUTLINEITEM (0x24) for individual files/folders
         ; Instead of using classic LIST (0x21) / LISTITEM (0x22)
     ; This happens frequently in:
@@ -7679,34 +7692,28 @@ Explorer__GetRoleNum(ByRef accObj := "") {
 
 ; ------------------------------------------------------------------
 
-IsExplorerBlankSpaceClick() {
+; Classify a point inside a SysListView32 using MSAA roles. Returning "unknown"
+; lets the public blank-space check use its theme-independent pixel fallback
+; without mistaking a positively identified item or header for blank space.
+_GetSysListViewClickType(xPos, yPos) {
     static ROLE_SYSTEM_LIST         := 0x21
     static ROLE_SYSTEM_LISTITEM     := 0x22
     static ROLE_SYSTEM_OUTLINEITEM  := 0x24
     static ROLE_SYSTEM_COLUMNHEADER := 0x19
-    static ROLE_SYSTEM_OUTLINE      := 0x3E
-
-    CoordMode, Mouse, Screen
-    MouseGetPos, xPos, yPos, winHwnd
-    if (!winHwnd)
-        return False
-
-    WinGetClass, cls, ahk_id %winHwnd%
-    if (cls != "CabinetWClass" && cls != "ExplorerWClass" && cls != "#32770")
-        return False
+    static ROLE_SYSTEM_OUTLINE      := 0x23
 
     childId := 0
     acc := Acc_ObjectFromPoint(childId, xPos, yPos)
     if !IsObject(acc)
-        return False
+        return "unknown"
 
     role := Explorer__RoleValueToNum(Explorer__AccRoleSafe(acc, childId))
     if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
-        return False
+        return "content"
     if (role = ROLE_SYSTEM_COLUMNHEADER)
-        return False
+        return "content"
     if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE)
-        return True
+        return "blank"
 
     cur := acc
     Loop, 15
@@ -7716,11 +7723,11 @@ IsExplorerBlankSpaceClick() {
 
         role := Explorer__GetRoleNum(cur)
         if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
-            return False
+            return "content"
         if (role = ROLE_SYSTEM_COLUMNHEADER)
-            return False
+            return "content"
         if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE)
-            return True
+            return "blank"
 
         parent := ""
         try
@@ -7731,7 +7738,20 @@ IsExplorerBlankSpaceClick() {
         cur := parent
     }
 
-    return False
+    return "unknown"
+}
+
+; Return true only when the supplied SysListView32 point appears to be blank.
+; Prefer MSAA's item/header/list roles; if MSAA cannot classify the point, compare
+; the surrounding pixels with the clicked pixel instead of assuming a white theme.
+IsSysListViewBlankSpaceClick(xPos, yPos) {
+    clickType := _GetSysListViewClickType(xPos, yPos)
+    if (clickType == "blank")
+        return True
+    if (clickType == "content")
+        return False
+
+    return AreaLooksUniformFast(xPos, yPos)
 }
 
 Explorer__AccRoleSafe(ByRef accObj, childId := 0) {
@@ -7753,7 +7773,7 @@ Explorer__RoleValueToNum(role) {
     if (r == "list item" || r == "listitem")
         return 0x22
     if (r == "outline")
-        return 0x3E
+        return 0x23
     if (r == "outline item" || r == "outlineitem")
         return 0x24
     if (r == "columnheader" || r == "column header")
@@ -8826,7 +8846,7 @@ _QueuePostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := ""
 ; requires the same nonempty path twice because it has no prior directory to
 ; compare. Refresh callers wait until Stop/Cancel returns to Refresh. Every path
 ; then requires a stable Details layout before Ctrl+NumpadAdd is sent.
-_QueueExplorerDetailsCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
+_RequestExplorerDetailsColumnAutoFit(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
     global explorerDetailsCtrlAddClass
     global explorerDetailsCtrlAddDeadlineTick
     global explorerDetailsCtrlAddEarliestLayoutTick
@@ -8870,6 +8890,7 @@ _QueueExplorerDetailsCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0
         readinessTimeoutMs := k_newExplorerDetailsCtrlAddTimeoutMs
     else
         readinessTimeoutMs := k_explorerDetailsCtrlAddTimeoutMs
+
     explorerDetailsCtrlAddClass                   := windowClass
     explorerDetailsCtrlAddDeadlineTick            := A_TickCount + readinessTimeoutMs
     explorerDetailsCtrlAddEarliestLayoutTick      := A_TickCount + Max(0, minimumLayoutDelayMs)
@@ -8883,7 +8904,7 @@ _QueueExplorerDetailsCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0
     explorerDetailsCtrlAddRefreshReady            := !isRefreshRequest
     explorerDetailsCtrlAddRequirePathChange       := requirePathChange
     explorerDetailsCtrlAddRequireStablePath       := requireStablePath
-    explorerDetailsCtrlAddShellEl                := ""
+    explorerDetailsCtrlAddShellEl                 := ""
     explorerDetailsCtrlAddSourceCtrl              := sourceCtrlNN
     explorerDetailsCtrlAddStableHitCount          := 0
     explorerDetailsCtrlAddStablePathConfirmed     := !requireStablePath
@@ -8896,16 +8917,17 @@ _QueueExplorerDetailsCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0
 ; dialog header. Directory-changing commands must first advance beyond the path
 ; captured before the click. Refresh instead waits for its button to return from
 ; Stop/Cancel, then samples the unchanged directory's newly loaded Items View.
-_ScheduleHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePathChange := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
+_RequestHeaderNavigationColumnAutoFit(hwnd, windowClass, initialPath := "", requirePathChange := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
     global k_headerNavigationCtrlAddDelayMs
 
-    _QueueExplorerDetailsCtrlAdd(hwnd, windowClass, "", k_headerNavigationCtrlAddDelayMs, initialPath, requirePathChange, False, minimumLayoutDelayMs, refreshPoint)
+    _RequestExplorerDetailsColumnAutoFit(hwnd, windowClass, "", k_headerNavigationCtrlAddDelayMs, initialPath, requirePathChange, False, minimumLayoutDelayMs, refreshPoint)
 }
 
-; Focus the resolved target control, then send the shared immediate
+; Focus and verify the supplied ClassNN, then use the shared immediate
 ; Ctrl+NumpadAdd path so click handlers reuse the same modifier cleanup.
 _SendFocusedCtrlAdd(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, syncPassCount := 6) {
-    EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
+    if !EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
+        return False
     return SendCtrlNumpadAdd(syncPassCount)
 }
 
@@ -8993,9 +9015,9 @@ ExplorerDetailsCtrlAdd:
 
         ; Start a fresh bounded layout window after the destination path is
         ; stable, so startup time does not consume the Details sampling budget.
-        explorerDetailsCtrlAddDeadlineTick            := A_TickCount + k_explorerDetailsCtrlAddTimeoutMs
+        explorerDetailsCtrlAddDeadlineTick             := A_TickCount + k_explorerDetailsCtrlAddTimeoutMs
         queuedDeadline                                 := explorerDetailsCtrlAddDeadlineTick
-        explorerDetailsCtrlAddPreviousLayoutSignature := ""
+        explorerDetailsCtrlAddPreviousLayoutSignature  := ""
         explorerDetailsCtrlAddShellEl                  := ""
         explorerDetailsCtrlAddStableHitCount           := 0
         explorerDetailsCtrlAddStablePathConfirmed      := True
@@ -9009,10 +9031,10 @@ ExplorerDetailsCtrlAdd:
             Return
 
         if (currentPath = "" || currentPath != explorerDetailsCtrlAddPreviousPath) {
-            explorerDetailsCtrlAddDeadlineTick            := A_TickCount + k_newExplorerDetailsCtrlAddTimeoutMs
-            explorerDetailsCtrlAddEarliestLayoutTick      := A_TickCount + k_newExplorerDetailsCtrlAddMinimumWaitMs
-            explorerDetailsCtrlAddPreviousLayoutSignature := ""
-            explorerDetailsCtrlAddPreviousPath            := currentPath
+            explorerDetailsCtrlAddDeadlineTick             := A_TickCount + k_newExplorerDetailsCtrlAddTimeoutMs
+            explorerDetailsCtrlAddEarliestLayoutTick       := A_TickCount + k_newExplorerDetailsCtrlAddMinimumWaitMs
+            explorerDetailsCtrlAddPreviousLayoutSignature  := ""
+            explorerDetailsCtrlAddPreviousPath             := currentPath
             explorerDetailsCtrlAddShellEl                  := ""
             explorerDetailsCtrlAddStableHitCount           := 0
             explorerDetailsCtrlAddStablePathConfirmed      := False
@@ -9040,10 +9062,10 @@ ExplorerDetailsCtrlAdd:
         ; Give the replacement Items View its own bounded stabilization window.
         ; Otherwise a slow path change could consume the original deadline and
         ; authorize a send after only one Details-layout sample.
-        explorerDetailsCtrlAddDeadlineTick := A_TickCount + k_explorerDetailsCtrlAddTimeoutMs
-        queuedDeadline                      := explorerDetailsCtrlAddDeadlineTick
-        explorerDetailsCtrlAddPathChangeConfirmed     := True
-        explorerDetailsCtrlAddPreviousLayoutSignature := ""
+        explorerDetailsCtrlAddDeadlineTick             := A_TickCount + k_explorerDetailsCtrlAddTimeoutMs
+        queuedDeadline                                 := explorerDetailsCtrlAddDeadlineTick
+        explorerDetailsCtrlAddPathChangeConfirmed      := True
+        explorerDetailsCtrlAddPreviousLayoutSignature  := ""
         explorerDetailsCtrlAddShellEl                  := ""
         explorerDetailsCtrlAddStableHitCount           := 0
     }
@@ -9074,9 +9096,9 @@ ExplorerDetailsCtrlAdd:
         ; Start a fresh Details-layout window only after Refresh is ready (or the
         ; bounded button-state wait expired), so old pre-refresh samples cannot
         ; authorize Ctrl+NumpadAdd.
-        explorerDetailsCtrlAddDeadlineTick            := A_TickCount + k_explorerDetailsCtrlAddTimeoutMs
+        explorerDetailsCtrlAddDeadlineTick             := A_TickCount + k_explorerDetailsCtrlAddTimeoutMs
         queuedDeadline                                 := explorerDetailsCtrlAddDeadlineTick
-        explorerDetailsCtrlAddPreviousLayoutSignature := ""
+        explorerDetailsCtrlAddPreviousLayoutSignature  := ""
         explorerDetailsCtrlAddRefreshReady             := True
         explorerDetailsCtrlAddShellEl                  := ""
         explorerDetailsCtrlAddStableHitCount           := 0
@@ -9130,13 +9152,13 @@ Return
 PostActivationLButtonCheck:
     ; Copy the queued snapshot first; every later guard validates that it still
     ; describes the current foreground target.
-    queuedId          := postActivationLButtonId
-    targetCtrl        := postActivationLButtonCtrl
+    queuedId           := postActivationLButtonId
+    targetCtrl         := postActivationLButtonCtrl
     capturedHeaderKind := postActivationLButtonHeaderKind
-    targetHwnd        := postActivationLButtonHwnd
-    initialPath       := postActivationLButtonInitialPath
-    clickX            := postActivationLButtonX
-    clickY            := postActivationLButtonY
+    targetHwnd         := postActivationLButtonHwnd
+    initialPath        := postActivationLButtonInitialPath
+    clickX             := postActivationLButtonX
+    clickY             := postActivationLButtonY
 
     ; If activation did not land on the originally clicked window, do nothing.
     ; This prevents any delayed send from targeting a stale or unrelated window.
@@ -9161,7 +9183,7 @@ PostActivationLButtonCheck:
 
     ; Ignore unrelated controls in those windows. The deferred path must stay
     ; narrower than the normal click handler because it runs after activation.
-    if !(InStr(targetCtrl, "DirectUIHWND", True)
+    if  !(InStr(targetCtrl, "DirectUIHWND", True)
        || InStr(targetCtrl, "SysListView32", True)
        || InStr(targetCtrl, "SysHeader32", True)
        || _IsExplorerNavigationSurfaceCtrl(targetCtrl))
@@ -9186,7 +9208,7 @@ PostActivationLButtonCheck:
             Return
 
         if (treeClickSelectsFolder)
-            _QueueExplorerDetailsCtrlAdd(targetHwnd, targetClass, targetCtrl, 0, initialPath, True)
+            _RequestExplorerDetailsColumnAutoFit(targetHwnd, targetClass, targetCtrl, 0, initialPath, True)
         Return
     }
 
@@ -9202,10 +9224,10 @@ PostActivationLButtonCheck:
 
         if (headerKind = "refresh") {
             refreshPoint := {x: clickX, y: clickY}
-            _ScheduleHeaderNavigationCtrlAdd(targetHwnd, targetClass, initialPath, False, k_refreshDetailsCtrlAddMinimumWaitMs, refreshPoint)
+            _RequestHeaderNavigationColumnAutoFit(targetHwnd, targetClass, initialPath, False, k_refreshDetailsCtrlAddMinimumWaitMs, refreshPoint)
         }
         else if (headerKind = "path_change")
-            _ScheduleHeaderNavigationCtrlAdd(targetHwnd, targetClass, initialPath, True)
+            _RequestHeaderNavigationColumnAutoFit(targetHwnd, targetClass, initialPath, True)
         Return
     }
 
@@ -9236,14 +9258,9 @@ PostActivationLButtonCheck:
             postActivationBlankClick := AreaLooksUniformFast(clickX, clickY)
     }
     else if (InStr(targetCtrl, "SysListView32", True)) {
-        CoordMode, Mouse, Screen
-        MouseGetPos, currentX, currentY
-        ; SysListView blank-space detection is pointer-position based, so only
-        ; trust it if the pointer is still essentially where the click landed.
-        if (Abs(currentX - clickX) <= 3 && Abs(currentY - clickY) <= 3)
-            postActivationBlankClick := IsExplorerBlankSpaceClick()
-        if (!postActivationBlankClick && targetClass == "#32770")
-            postActivationBlankClick := AreaLooksUniformFast(clickX, clickY)
+        ; Classify the captured click point, so moving the pointer while the
+        ; activation timer is pending cannot change which pixels are inspected.
+        postActivationBlankClick := IsSysListViewBlankSpaceClick(clickX, clickY)
     }
 
     ; Force the shell-view wait path because this recovery runs immediately after
@@ -9251,6 +9268,56 @@ PostActivationLButtonCheck:
     if (postActivationBlankClick)
         SendCtrlAdd(targetHwnd, , , targetClass, targetCtrl, True)
 Return
+
+; Recognize a same-control double-click using Windows' configured time and
+; distance limits, then clear the window's manual-column-resize block. The first
+; click is retained briefly; other clicks reset that candidate without clearing
+; the block. Return true so the caller can request alignment after mouse-up.
+_TryClearSendCtrlBlockOnListViewDoubleClick(windowHwnd, ctrlNN, clickX, clickY) {
+    global disableSendCtrlHwnd
+
+    static firstClickCtrlNN := ""
+    static firstClickHwnd   := 0
+    static firstClickTick   := 0
+    static firstClickX      := 0
+    static firstClickY      := 0
+
+    if (disableSendCtrlHwnd != windowHwnd || !InStr(ctrlNN, "SysListView32", True)) {
+        firstClickCtrlNN := ""
+        firstClickHwnd   := 0
+        firstClickTick   := 0
+        firstClickX      := 0
+        firstClickY      := 0
+        return False
+    }
+
+    doubleClickHeight := DllCall("user32\GetSystemMetrics", "Int", 37, "Int")
+    doubleClickTime   := DllCall("user32\GetDoubleClickTime", "UInt")
+    doubleClickWidth  := DllCall("user32\GetSystemMetrics", "Int", 36, "Int")
+    elapsedMs         := A_TickCount - firstClickTick
+
+    if (firstClickHwnd == windowHwnd
+     && firstClickCtrlNN == ctrlNN
+     && elapsedMs >= 0
+     && elapsedMs <= doubleClickTime
+     && Abs(clickX - firstClickX) <= Floor(doubleClickWidth / 2)
+     && Abs(clickY - firstClickY) <= Floor(doubleClickHeight / 2)) {
+        disableSendCtrlHwnd := ""
+        firstClickCtrlNN    := ""
+        firstClickHwnd      := 0
+        firstClickTick      := 0
+        firstClickX         := 0
+        firstClickY         := 0
+        return True
+    }
+
+    firstClickCtrlNN := ctrlNN
+    firstClickHwnd   := windowHwnd
+    firstClickTick   := A_TickCount
+    firstClickX      := clickX
+    firstClickY      := clickY
+    return False
+}
 
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBarFast(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
@@ -9303,6 +9370,32 @@ $~LButton::
     ; partner window with a short timer until LButton is released.
     if (TryStartLButtonResizeSync(lbX1, lbY1, _winIdD))
         return
+
+    clearedSendCtrlBlock := False
+    If (disableSendCtrlHwnd != "")
+        clearedSendCtrlBlock := _TryClearSendCtrlBlockOnListViewDoubleClick(_winIdD, _winCtrlD, lbX1, lbY1)
+
+    ; A qualifying double-click inside the blocked SysListView re-enables
+    ; automatic alignment and requests it if the captured ListView remains eligible.
+    ; Wait for mouse-up because SendCtrlAdd() rejects sends while LButton is down;
+    ; the native clicks still reach the target through the `~` hotkey prefix.
+    If clearedSendCtrlBlock {
+        KeyWait, LButton, U T3
+
+        If !GetKeyState("LButton", "P") {
+            If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
+                SendCtrlAdd(_winIdD, , , _winClassD, _winCtrlD)
+            }
+            Else {
+                ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
+                If IsSysListViewReportView(controlHwnd)
+                    SendCtrlAdd(_winIdD, , , _winClassD, _winCtrlD)
+            }
+        }
+
+        GoSub, EnableTimers
+        Return
+    }
 
     If (disableSendCtrlHwnd == _winIdD) {
         GoSub, EnableTimers
@@ -9371,9 +9464,7 @@ $~LButton::
         Else {
             If InStr(_winCtrlD, "SysListView32", True) {
                 ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
-                listViewKind := GetListViewFlavor(controlHwnd)
-
-                If (listViewKind != "classic_report")
+                If IsSysListViewReportView(controlHwnd)
                     SendCtrlAdd(_winIdD, , , _winClassD)
             }
             Else
@@ -9428,9 +9519,7 @@ $~LButton::
                 ; tooltip, %result%
             }
             Else If (InStr(_winCtrlD, "SysListView32", True)) {
-                isBlankSpaceExplorer := IsExplorerBlankSpaceClick()
-                if (!isBlankSpaceExplorer && _winClassD == "#32770")
-                    isBlankSpaceExplorer := AreaLooksUniformFast(lbX1, lbY1)
+                isBlankSpaceExplorer := IsSysListViewBlankSpaceClick(lbX1, lbY1)
             }
 
             If (!isColumnHeader && (isBlankSpaceExplorer || isItemClick)) {
@@ -9455,7 +9544,10 @@ $~LButton::
         If (InStr(_winCtrlD,"SysHeader32", True)) {
             isColumnHeader := True
         }
-        isBlankSpaceNonExplorer := AreaLooksUniformFast(lbX1, lbY1, 0xFFFFFF)
+        if (InStr(_winCtrlD, "SysListView32", True))
+            isBlankSpaceNonExplorer := IsSysListViewBlankSpaceClick(lbX1, lbY1)
+        else
+            isBlankSpaceNonExplorer := AreaLooksUniformFast(lbX1, lbY1, 0xFFFFFF)
     }
 
     MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU
@@ -9467,7 +9559,6 @@ $~LButton::
     ; traceText .= "TOTAL dt=" (tickTotalEnd - tickTotalStart) "ms`n"
     ; ToolTip, %traceText%
     ; tooltip, %isColumnHeader%
-    ; tooltip, % k_isWin11 "-" IsExplorerModern() "-" IsExplorerHeaderClick()
     ; tooltip, %timeDiff% ms-allowDoubleclick:%allowDoubleClicks%-isBlankSpaceExplorer:%isBlankSpaceExplorer%-isItemClick:%isItemClick% - isColumnHeader:%isColumnHeader% ; - %_winClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
 
     If (timeDiff < floor(k_DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
@@ -9482,8 +9573,7 @@ $~LButton::
                 }
                 Else {
                     ControlGet, controlHwnd, Hwnd,, %_winCtrlU%, ahk_id %_winIdU%
-                    listViewKind := GetListViewFlavor(controlHwnd)
-                    If (listViewKind != "classic_report")
+                    If IsSysListViewReportView(controlHwnd)
                         SetTimer, SendCtrlAddLabel, -125
                 }
             }
@@ -9556,10 +9646,10 @@ $~LButton::
 
             if (headerKind = "refresh") {
                 refreshPoint := {x: lbX1, y: lbY1}
-                _ScheduleHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, False, k_refreshDetailsCtrlAddMinimumWaitMs, refreshPoint)
+                _RequestHeaderNavigationColumnAutoFit(_winIdU, _winClassD, navigationStartPath, False, k_refreshDetailsCtrlAddMinimumWaitMs, refreshPoint)
             }
             else if (headerKind = "path_change")
-                _ScheduleHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, True)
+                _RequestHeaderNavigationColumnAutoFit(_winIdU, _winClassD, navigationStartPath, True)
         }
         Else If (   treeClickSelectsFolder
                 && (_winClassD == "CabinetWClass" || _winClassD == "#32770")
@@ -9569,10 +9659,12 @@ $~LButton::
             ; queued request still requires GetExplorerPath() to advance beyond
             ; navigationStartPath before the replacement Items View may authorize
             ; Ctrl+NumpadAdd.
-            _QueueExplorerDetailsCtrlAdd(_winIdD, _winClassD, _winCtrlD, 0, navigationStartPath, True)
+            _RequestExplorerDetailsColumnAutoFit(_winIdD, _winClassD, _winCtrlD, 0, navigationStartPath, True)
         }
     }
-    Else If (InStr(_winCtrlU, "SysHeader", True) && (abs(lbX1-lbX2) >= 15 || abs(lbY1-lbY2) >= 15)) { ; dragged to size one of the header columns
+    ; A SysHeader drag of at least 15 pixels blocks this window's LButton-driven
+    ; alignment until a qualifying double-click in its SysListView clears it.
+    Else If (InStr(_winCtrlU, "SysHeader", True) && (abs(lbX1-lbX2) >= 15 || abs(lbY1-lbY2) >= 15)) {
         disableSendCtrlHwnd := _winIdU
     }
 
@@ -10383,7 +10475,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
             If (TargetControl != initFocusedCtrlNN) {
 
-                EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
+                if !EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
+                    Return
             }
         }
         Else If (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
@@ -10392,7 +10485,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
             If (TargetControl != initFocusedCtrlNN) {
 
-                EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
+                if !EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
+                    Return
             }
         }
         Else If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
@@ -10404,13 +10498,21 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
             if (TargetControl != initFocusedCtrlNN) {
 
-                EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
+                if !EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
+                    Return
             }
         }
         Else {
             If (TargetControl != initFocusedCtrlNN) {
 
-                EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck)
+                if !EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck) {
+                    ; Everything handles Ctrl+NumpadAdd at the top-window level
+                    ; while its search Edit1 deliberately retains keyboard focus.
+                    ; Other non-shell windows still require verified list focus.
+                    WinGet, focusFailureProcess, ProcessName, ahk_id %initTargetHwnd%
+                    if (focusFailureProcess != "Everything.exe")
+                        Return
+                }
             }
         }
 
@@ -10497,29 +10599,29 @@ IsCustomPopupAppWindow(windowHandle) {
     WinGet, windowExStyle, ExStyle, ahk_id %windowHandle%
 
     ; Standard window style bits
-    WS_POPUP := 0x80000000
-    WS_CHILD := 0x40000000
-    WS_VISIBLE := 0x10000000
-    WS_DISABLED := 0x08000000
-    WS_THICKFRAME := 0x00040000
-    WS_MAXIMIZEBOX := 0x00010000
+    WS_POPUP            := 0x80000000
+    WS_CHILD            := 0x40000000
+    WS_VISIBLE          := 0x10000000
+    WS_DISABLED         := 0x08000000
+    WS_THICKFRAME       := 0x00040000
+    WS_MAXIMIZEBOX      := 0x00010000
 
     ; Extended window style bits
-    WS_EX_TOPMOST := 0x00000008
-    WS_EX_TOOLWINDOW := 0x00000080
-    WS_EX_APPWINDOW := 0x00040000
+    WS_EX_TOPMOST       := 0x00000008
+    WS_EX_TOOLWINDOW    := 0x00000080
+    WS_EX_APPWINDOW     := 0x00040000
 
-    requiredStyleBits := WS_POPUP | WS_VISIBLE
-    rejectedStyleBits := WS_CHILD | WS_DISABLED | WS_THICKFRAME | WS_MAXIMIZEBOX
+    requiredStyleBits   := WS_POPUP | WS_VISIBLE
+    rejectedStyleBits   := WS_CHILD | WS_DISABLED | WS_THICKFRAME | WS_MAXIMIZEBOX
 
     requiredExStyleBits := WS_EX_TOPMOST | WS_EX_APPWINDOW
     rejectedExStyleBits := WS_EX_TOOLWINDOW
 
-    hasRequiredStyle := ((windowStyle & requiredStyleBits) = requiredStyleBits)
-    hasRejectedStyle := ((windowStyle & rejectedStyleBits) != 0)
+    hasRequiredStyle    := ((windowStyle & requiredStyleBits) = requiredStyleBits)
+    hasRejectedStyle    := ((windowStyle & rejectedStyleBits) != 0)
 
-    hasRequiredExStyle := ((windowExStyle & requiredExStyleBits) = requiredExStyleBits)
-    hasRejectedExStyle := ((windowExStyle & rejectedExStyleBits) != 0)
+    hasRequiredExStyle  := ((windowExStyle & requiredExStyleBits) = requiredExStyleBits)
+    hasRejectedExStyle  := ((windowExStyle & rejectedExStyleBits) != 0)
 
     return (hasRequiredStyle
         && !hasRejectedStyle
@@ -10595,34 +10697,18 @@ IsChromiumContentClick(windowHwnd, windowClass := "", ctrlNN := "") {
             || InStr(ctrlNN, "Intermediate D3D Window", True))
 }
 
-GetListViewFlavor(controlHwnd)
-{
+; Return true when the native SysListView32 type bits select Details/Report view.
+; Only LVS_TYPEMASK belongs in this decision; normal window ExStyle bits are not
+; interchangeable with the separate ListView extended-style bitfield.
+IsSysListViewReportView(controlHwnd) {
+    static LVS_TYPEMASK := 0x0003
+    static LVS_REPORT   := 0x0001
+
+    if (!controlHwnd || !DllCall("user32\IsWindow", "Ptr", controlHwnd, "Int"))
+        return False
+
     WinGet, controlStyle, Style, ahk_id %controlHwnd%
-    WinGet, controlExStyle, ExStyle, ahk_id %controlHwnd%
-
-    isReport := (controlStyle & 0x0003) = 0x0001
-    hasShowSelAlways := (controlStyle & 0x0008) != 0
-    hasNoSortHeader := (controlStyle & 0x0200) != 0
-    hasBorder := (controlStyle & 0x00800000) != 0
-    hasHorizontalScroll := (controlStyle & 0x00100000) != 0
-    hasFlatScrollBars := (controlExStyle & 0x00000200) != 0
-
-    if (isReport && hasNoSortHeader && hasFlatScrollBars)
-    {
-        return "managed_report"
-    }
-
-    if (isReport && hasShowSelAlways && hasBorder && !hasFlatScrollBars)
-    {
-        return "classic_report"
-    }
-
-    if (isReport)
-    {
-        return "other_report"
-    }
-
-    return "not_report"
+    return ((controlStyle & LVS_TYPEMASK) = LVS_REPORT)
 }
 ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=81064#p533551
 ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ; Show popup menu by handle or by AHK menu name.
@@ -11555,7 +11641,7 @@ _SendManagedCtrlChord(chordKey, syncPassCount := 6, explicitCtrlPath := False, m
 
     ; Recheck immediately before injection. Clipboard preparation can take long
     ; enough for a different application to become foreground in the meantime.
-    if (!_IsForegroundWindow(targetWindowId))
+    if (!IsForegroundWindow(targetWindowId))
         return false
 
     SendInput, {Blind}{sc02A up}{sc036 up}{sc01D up}{sc11D up}{sc038 up}{sc138 up}{sc15B up}{sc15C up}
@@ -11585,7 +11671,7 @@ _SendManagedCtrlChord(chordKey, syncPassCount := 6, explicitCtrlPath := False, m
 ; supplied, cancel if that window is no longer foreground so cleanup intended
 ; for one application cannot inject modifier events into another application.
 SyncModifierSidesToPhys(modifiers := "Shift Alt Ctrl Win", expectedWindowId := 0) {
-    if (expectedWindowId && !_IsForegroundWindow(expectedWindowId))
+    if (expectedWindowId && !IsForegroundWindow(expectedWindowId))
         return false
 
     sendSequence := "{Blind}"
@@ -11634,7 +11720,7 @@ SyncModifierSidesToPhys(modifiers := "Shift Alt Ctrl Win", expectedWindowId := 0
 
     ; Build one sequence, then perform the final foreground check immediately
     ; before one SendInput call. This minimizes the remaining check-to-send race.
-    if (expectedWindowId && !_IsForegroundWindow(expectedWindowId))
+    if (expectedWindowId && !IsForegroundWindow(expectedWindowId))
         return false
 
     SendInput, %sendSequence%
@@ -11667,7 +11753,7 @@ RunDeferredModifierSync() {
         return
     }
 
-    if (!_IsForegroundWindow(deferredModifierTargetHwnd)) {
+    if (!IsForegroundWindow(deferredModifierTargetHwnd)) {
         _ClearDeferredModifierSync()
         return
     }
@@ -11710,7 +11796,7 @@ ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6, targetWin
 
     if (!targetWindowId)
         targetWindowId := DllCall("user32\GetForegroundWindow", "Ptr")
-    if (!_IsForegroundWindow(targetWindowId)) {
+    if (!IsForegroundWindow(targetWindowId)) {
         _ClearDeferredModifierSync()
         return false
     }
@@ -11775,7 +11861,7 @@ _QueueTbcEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "
     targetCtrlClass := capturedCtrlClass
 
     if (!targetHwnd) {
-        if !_CaptureDeferredFocusContext(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
+        if !CaptureActiveFocusSnapshot(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
             return false
     }
 
@@ -11826,7 +11912,7 @@ _TryQueueEverythingEditAdjustFromKeyTrack(sourceTick, hotkey, activeHwnd := 0) {
     if (!_IsEverythingEditAdjustTrigger(hotkey))
         return false
 
-    if !_CaptureDeferredFocusContext(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass, activeHwnd)
+    if !CaptureActiveFocusSnapshot(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass, activeHwnd)
         return false
 
     if (targetCtrlNN != "Edit1")
@@ -11857,7 +11943,7 @@ _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
     if (!tbcEverythingAdjustCtrlHwnd && tbcEverythingAdjustCtrlClass = "")
         return true
 
-    if !_TryGetFocusedControlSnapshot(tbcEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureCompleteFocusSnapshot(tbcEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
     if (tbcEverythingAdjustCtrl != "" && currentCtrlNN != tbcEverythingAdjustCtrl)
@@ -14031,7 +14117,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
         clipResult := ""
         isReadCall := (Text = "")
 
-        if (expectedWindowId && !_IsForegroundWindow(expectedWindowId))
+        if (expectedWindowId && !IsForegroundWindow(expectedWindowId))
             return ""
 
         if !Stored {
@@ -14053,7 +14139,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
 
             ; A copy chord after a focus change would read from an unrelated
             ; application, so restore the saved clipboard and stop instead.
-            if (expectedWindowId && !_IsForegroundWindow(expectedWindowId)) {
+            if (expectedWindowId && !IsForegroundWindow(expectedWindowId)) {
                 Clip("", "", "RESTORE")
                 return ""
             }
@@ -14077,7 +14163,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
 
             ; Clipboard writes can take long enough for the user to change
             ; windows. Never send Ctrl+V to that newly foreground target.
-            if (expectedWindowId && !_IsForegroundWindow(expectedWindowId)) {
+            if (expectedWindowId && !IsForegroundWindow(expectedWindowId)) {
                 Clip("", "", "RESTORE")
                 return ""
             }
@@ -16503,8 +16589,8 @@ IsGoogleDocWindow() {
 ; Prewarm the eligibility cache before a hotstring needs to evaluate it. Startup,
 ; activation, and pointer-focus changes all schedule this label after focus settles.
 PrewarmTypingAutoFixContext:
-    prewarmStartBoundarySeq := typingAutoFixPrewarmStartBoundarySeq
-    prewarmStartTypingSeq   := typingAutoFixPrewarmStartTypingSeq
+    prewarmStartHotstringBoundarySeq  := typingAutoFixPrewarmStartHotstringBoundarySeq
+    prewarmStartTypingSeq             := typingAutoFixPrewarmStartTypingSeq
     WinGet, prewarmHwnd, ID, A
     if (!prewarmHwnd)
         Return
@@ -16515,32 +16601,31 @@ PrewarmTypingAutoFixContext:
 
     GetTypingAutoFixEligibilityFastOrQ(prewarmHwnd, prewarmCtrlNN
         , prewarmCtrlHwnd, prewarmCtrlClass, A_TickCount
-        , prewarmStartTypingSeq, prewarmStartBoundarySeq)
+        , prewarmStartTypingSeq, prewarmStartHotstringBoundarySeq)
 Return
 
-; Runs only after the qualifying separator's key event has completed. The
-; separator remains ineligible, the old partial-word buffer is discarded, and
-; the following word can use the hotstring table normally.
-ReleaseHotstringAutoFixBoundary:
-    hotstringAutoFixBoundaryReleasePending := False
-    if (hotstringAutoFixRequiredBoundarySeq
-        && physicalWordBoundarySeq >= hotstringAutoFixRequiredBoundarySeq)
+; Runs after the requested separator key event completes, then discards the
+; hotstring recognition buffer so the following word starts with a clean buffer.
+ResetHotstringBufferAfterBoundary:
+    hotstringResetTimerPending := False
+    if (hotstringResetAtBoundarySeq
+        && hotstringBoundarySeq >= hotstringResetAtBoundarySeq)
     {
-        hotstringAutoFixRequiredBoundarySeq := 0
+        hotstringResetAtBoundarySeq := 0
         Hotstring("Reset")
     }
 Return
 
 FlushTypingAutoFixRefresh:
-    tbcRefreshCtrlClass          := typingAutoFixRefreshCtrlClass
-    tbcRefreshCtrlHwnd           := typingAutoFixRefreshCtrlHwnd
-    tbcRefreshCtrlNN             := typingAutoFixRefreshCtrlNN
-    tbcRefreshHwnd               := typingAutoFixRefreshHwnd
-    tbcRefreshId                 := typingAutoFixRefreshId
-    tbcRefreshProtectPartialWord := typingAutoFixRefreshProtectPartialWord
-    tbcRefreshQueuedTick         := typingAutoFixRefreshQueuedTick
-    tbcRefreshStartBoundarySeq   := typingAutoFixRefreshStartBoundarySeq
-    tbcRefreshStartTypingSeq     := typingAutoFixRefreshStartTypingSeq
+    tbcRefreshCtrlClass                  := typingAutoFixRefreshCtrlClass
+    tbcRefreshCtrlHwnd                   := typingAutoFixRefreshCtrlHwnd
+    tbcRefreshCtrlNN                     := typingAutoFixRefreshCtrlNN
+    tbcRefreshHwnd                       := typingAutoFixRefreshHwnd
+    tbcRefreshId                         := typingAutoFixRefreshId
+    tbcRefreshProtectPartialWord         := typingAutoFixRefreshProtectPartialWord
+    tbcRefreshQueuedTick                 := typingAutoFixRefreshQueuedTick
+    tbcRefreshStartHotstringBoundarySeq  := typingAutoFixRefreshStartHotstringBoundarySeq
+    tbcRefreshStartTypingSeq             := typingAutoFixRefreshStartTypingSeq
 
     if (!tbcRefreshHwnd)
         Return
@@ -16559,30 +16644,30 @@ FlushTypingAutoFixRefresh:
         , tbcRefreshCtrlHwnd, tbcRefreshCtrlClass)
     {
         if (tbcRefreshId = typingAutoFixRefreshId)
-            ClearTbcTypingAutoFixRefresh()
+            _ClearTbcTypingAutoFixRefresh()
         Return
     }
 
     ; If a newer async refresh request replaced this one, exit without touching
     ; the cache so only the newest focus context can update it.
-    if (tbcRefreshCtrlClass          != typingAutoFixRefreshCtrlClass
-     || tbcRefreshCtrlHwnd           != typingAutoFixRefreshCtrlHwnd
-     || tbcRefreshCtrlNN             != typingAutoFixRefreshCtrlNN
-     || tbcRefreshHwnd               != typingAutoFixRefreshHwnd
-     || tbcRefreshId                 != typingAutoFixRefreshId
-     || tbcRefreshProtectPartialWord != typingAutoFixRefreshProtectPartialWord
-     || tbcRefreshQueuedTick         != typingAutoFixRefreshQueuedTick
-     || tbcRefreshStartBoundarySeq   != typingAutoFixRefreshStartBoundarySeq
-     || tbcRefreshStartTypingSeq     != typingAutoFixRefreshStartTypingSeq)
+    if (tbcRefreshCtrlClass                  != typingAutoFixRefreshCtrlClass
+     || tbcRefreshCtrlHwnd                   != typingAutoFixRefreshCtrlHwnd
+     || tbcRefreshCtrlNN                     != typingAutoFixRefreshCtrlNN
+     || tbcRefreshHwnd                       != typingAutoFixRefreshHwnd
+     || tbcRefreshId                         != typingAutoFixRefreshId
+     || tbcRefreshProtectPartialWord         != typingAutoFixRefreshProtectPartialWord
+     || tbcRefreshQueuedTick                 != typingAutoFixRefreshQueuedTick
+     || tbcRefreshStartHotstringBoundarySeq  != typingAutoFixRefreshStartHotstringBoundarySeq
+     || tbcRefreshStartTypingSeq             != typingAutoFixRefreshStartTypingSeq)
         Return
 
     RefreshTypingAutoFixContext(tbcRefreshHwnd, tbcRefreshCtrlNN
         , tbcRefreshCtrlHwnd, tbcRefreshCtrlClass
         , tbcRefreshProtectPartialWord, tbcRefreshStartTypingSeq
-        , tbcRefreshStartBoundarySeq)
+        , tbcRefreshStartHotstringBoundarySeq)
 
     if (tbcRefreshId = typingAutoFixRefreshId)
-        ClearTbcTypingAutoFixRefresh()
+        _ClearTbcTypingAutoFixRefresh()
 Return
 
 ; Recompute the cached typing-auto-fix eligibility decision for the current
@@ -16603,7 +16688,7 @@ Return
 ; same probes for unrelated caret/edit-detection logic.
 RefreshTypingAutoFixContext(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     , protectPartialWord := false, startTypingSeq := 0
-    , startBoundarySeq := 0, nowTick := "") {
+    , startHotstringBoundarySeq := 0, nowTick := "") {
     global c_typingAutoFixAllowed
     global c_typingAutoFixCtrlHwnd
     global c_typingAutoFixCtrlNN
@@ -16636,8 +16721,8 @@ RefreshTypingAutoFixContext(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, ctrlHwnd, false, "google_docs", nowTick)
 
     ; Classic Win32 edit controls are the cheapest positive match, so allow them immediately.
-    if (_TypingAutoFixIsClassicEditClass(ctrlClass)) {
-        hotstringAutoFixRequiredBoundarySeq := 0
+    if (IsClassicEditControlClass(ctrlClass)) {
+        hotstringResetAtBoundarySeq := 0
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, ctrlHwnd, true, "classic_edit", nowTick)
     }
 
@@ -16662,8 +16747,8 @@ RefreshTypingAutoFixContext(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
         return false
 
     if (uiaEditable) {
-        _SetHotstringBoundaryAfterAsyncProbe(protectPartialWord
-            , startTypingSeq, startBoundarySeq)
+        _SetHotstringResetTimingAfterAsyncProbe(protectPartialWord
+            , startTypingSeq, startHotstringBoundarySeq)
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, ctrlHwnd, true, "uia_editable", nowTick)
     }
 
@@ -16673,8 +16758,8 @@ RefreshTypingAutoFixContext(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
         return false
 
     if (msaaEditable) {
-        _SetHotstringBoundaryAfterAsyncProbe(protectPartialWord
-            , startTypingSeq, startBoundarySeq)
+        _SetHotstringResetTimingAfterAsyncProbe(protectPartialWord
+            , startTypingSeq, startHotstringBoundarySeq)
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, ctrlHwnd, true, "msaa_editable", nowTick)
     }
 
@@ -16820,7 +16905,7 @@ ShouldRunHotstringAutoCorrect() {
     if (InStr(ctrlNN, "Edit", True) && !InStr(ctrlNN, "Rich", True))
         return false
 
-    if (_TypingAutoFixIsClassicEditClass(ctrlClass))
+    if (IsClassicEditControlClass(ctrlClass))
         return true
 
     return GetHotstringEligibilityFastOrQueue(activeHwnd, ctrlNN, ctrlHwnd
@@ -16838,13 +16923,6 @@ _HotstringAutoCorrectIsExcludedProcess(processName) {
          || processName = "notepad++.exe")
 }
 
-_TypingAutoFixIsClassicEditClass(ctrlClass) {
-    return (ctrlClass = "Edit"
-         || ctrlClass = "RichEdit20A"
-         || ctrlClass = "RichEdit20W"
-         || ctrlClass = "RICHEDIT50W")
-}
-
 _TypingAutoFixIsExcludedProcess(processName) {
     return (processName = "Code.exe"
          || processName = "EXCEL.EXE"
@@ -16855,24 +16933,24 @@ _TypingAutoFixIsExcludedProcess(processName) {
 ; Clears the queued async editability refresh so an older focus context cannot
 ; continue to hold onto a probe request after the caller already resolved the
 ; current window/control state through a cheap live-key classification.
-ClearTbcTypingAutoFixRefresh() {
+_ClearTbcTypingAutoFixRefresh() {
     global typingAutoFixRefreshCtrlClass
     global typingAutoFixRefreshCtrlHwnd
     global typingAutoFixRefreshCtrlNN
     global typingAutoFixRefreshHwnd
     global typingAutoFixRefreshProtectPartialWord
     global typingAutoFixRefreshQueuedTick
-    global typingAutoFixRefreshStartBoundarySeq
+    global typingAutoFixRefreshStartHotstringBoundarySeq
     global typingAutoFixRefreshStartTypingSeq
 
-    typingAutoFixRefreshCtrlClass          := ""
-    typingAutoFixRefreshCtrlHwnd           := 0
-    typingAutoFixRefreshCtrlNN             := ""
-    typingAutoFixRefreshHwnd               := 0
-    typingAutoFixRefreshProtectPartialWord := False
-    typingAutoFixRefreshQueuedTick         := 0
-    typingAutoFixRefreshStartBoundarySeq   := 0
-    typingAutoFixRefreshStartTypingSeq     := 0
+    typingAutoFixRefreshCtrlClass                  := ""
+    typingAutoFixRefreshCtrlHwnd                   := 0
+    typingAutoFixRefreshCtrlNN                     := ""
+    typingAutoFixRefreshHwnd                       := 0
+    typingAutoFixRefreshProtectPartialWord         := False
+    typingAutoFixRefreshQueuedTick                 := 0
+    typingAutoFixRefreshStartHotstringBoundarySeq  := 0
+    typingAutoFixRefreshStartTypingSeq             := 0
 }
 
 ; Returns quickly on the prewarm/focus-change path by using cheap exclusions and
@@ -16882,17 +16960,17 @@ ClearTbcTypingAutoFixRefresh() {
 ; A new control is temporarily cached as false while deferred UIA/MSAA
 ; editability is checked. The queued refresh compares its captured physical
 ; typing/boundary counters with the counters maintained by LL_KeyboardHook().
-; If typing began during the probe, the next EndChar must pass before the
-; deferred ReleaseHotstringAutoFixBoundary timer resets the hotstring buffer.
+; If typing began during the probe, the next EndChar schedules a deferred buffer
+; reset after that key event finishes.
 GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     , nowTick := "", protectStartTypingSeq := ""
-    , protectStartBoundarySeq := "") {
+    , protectStartHotstringBoundarySeq := "") {
     global c_typingAutoFixAllowed
     global c_typingAutoFixCtrlHwnd
     global c_typingAutoFixCtrlNN
     global c_typingAutoFixHwnd
     global c_typingAutoFixTick
-    global hotstringAutoFixRequiredBoundarySeq
+    global hotstringResetAtBoundarySeq
     global k_typingAutoFixFastTtlMs
     global k_typingAutoFixSlowPathMs
     global typingAutoFixSlowProbeTick
@@ -16901,8 +16979,8 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
         nowTick := A_TickCount
 
     if !activeHwnd {
-        ClearTbcTypingAutoFixRefresh()
-        hotstringAutoFixRequiredBoundarySeq := 0
+        _ClearTbcTypingAutoFixRefresh()
+        hotstringResetAtBoundarySeq := 0
         return _TypingAutoFixSetCache(0, "", 0, false, "no_active_window", nowTick)
     }
 
@@ -16916,23 +16994,23 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     ; Cheap process exclusions resolve synchronously and do not need an async probe.
     WinGet, processName, ProcessName, ahk_id %activeHwnd%
     if (_TypingAutoFixIsExcludedProcess(processName)) {
-        ClearTbcTypingAutoFixRefresh()
-        hotstringAutoFixRequiredBoundarySeq := 0
+        _ClearTbcTypingAutoFixRefresh()
+        hotstringResetAtBoundarySeq := 0
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, ctrlHwnd, false, "excluded_process", nowTick)
     }
 
     ; Google Docs/Sheets keep their own editing model and are intentionally excluded.
     WinGetTitle, title, ahk_id %activeHwnd%
     if (InStr(title, "Google Sheets", False) || InStr(title, "Google Docs", False)) {
-        ClearTbcTypingAutoFixRefresh()
-        hotstringAutoFixRequiredBoundarySeq := 0
+        _ClearTbcTypingAutoFixRefresh()
+        hotstringResetAtBoundarySeq := 0
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, ctrlHwnd, false, "google_docs", nowTick)
     }
 
     ; Classic Win32 edit controls are still the cheapest positive match.
-    if (_TypingAutoFixIsClassicEditClass(ctrlClass)) {
-        ClearTbcTypingAutoFixRefresh()
-        hotstringAutoFixRequiredBoundarySeq := 0
+    if (IsClassicEditControlClass(ctrlClass)) {
+        _ClearTbcTypingAutoFixRefresh()
+        hotstringResetAtBoundarySeq := 0
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, ctrlHwnd, true, "classic_edit", nowTick)
     }
 
@@ -16941,7 +17019,8 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
         || ctrlHwnd != c_typingAutoFixCtrlHwnd)
     if (contextChanged) {
         QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
-            , nowTick, true, protectStartTypingSeq, protectStartBoundarySeq)
+            , nowTick, true, protectStartTypingSeq
+            , protectStartHotstringBoundarySeq)
         return _TypingAutoFixSetCache(activeHwnd, ctrlNN, ctrlHwnd, false, "tbc_refresh", nowTick)
     }
 
@@ -16957,7 +17036,7 @@ GetTypingAutoFixEligibilityFastOrQ(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
 ; return with a cheap same-window/same-control cache hit.
 ;
 ; `allowed` is decided by the caller before this helper runs. In the current flow,
-; it becomes true only when:
+; it becomes true when any one of the following applies:
 ; 1) the focused control is a classic Edit/RichEdit-style class
 ; 2) UIA reports a writable ValuePattern or a TextEditPattern on the same element
 ; 3) MSAA reports a non-read-only text/edit role on the same focused control
@@ -16975,44 +17054,43 @@ _TypingAutoFixSetCache(activeHwnd, ctrlNN, ctrlHwnd, allowed, reason
     if (nowTick = "")
         nowTick := A_TickCount
 
-    c_typingAutoFixAllowed := allowed
+    c_typingAutoFixAllowed  := allowed
     c_typingAutoFixCtrlHwnd := ctrlHwnd
-    c_typingAutoFixCtrlNN  := ctrlNN
-    c_typingAutoFixHwnd    := activeHwnd
-    c_typingAutoFixReason  := reason
-    c_typingAutoFixTick    := nowTick
+    c_typingAutoFixCtrlNN   := ctrlNN
+    c_typingAutoFixHwnd     := activeHwnd
+    c_typingAutoFixReason   := reason
+    c_typingAutoFixTick     := nowTick
 
     return allowed
 }
 
-; Apply the async probe result without enabling the hotstring table in the
-; middle of text entered while that probe was pending.
-_SetHotstringBoundaryAfterAsyncProbe(protectPartialWord, startTypingSeq
-    , startBoundarySeq) {
-    global hotstringAutoFixBoundaryReleasePending
-    global hotstringAutoFixRequiredBoundarySeq
+; After a protected async probe, arrange a clean hotstring buffer boundary if
+; physical typing began before the editor result was available.
+_SetHotstringResetTimingAfterAsyncProbe(protectPartialWord, startTypingSeq
+    , startHotstringBoundarySeq) {
+    global hotstringBoundarySeq, hotstringResetAtBoundarySeq
+    global hotstringResetTimerPending
     global physicalTypingSeq
-    global physicalWordBoundarySeq
 
     if (!protectPartialWord)
         return
 
-    SetTimer, ReleaseHotstringAutoFixBoundary, Off
-    hotstringAutoFixBoundaryReleasePending := False
+    SetTimer, ResetHotstringBufferAfterBoundary, Off
+    hotstringResetTimerPending := False
 
     ; No physical text arrived, or the user already completed a separator. The
     ; positive result can be used immediately without carrying a word fragment.
     if (physicalTypingSeq <= startTypingSeq
-        || physicalWordBoundarySeq > startBoundarySeq)
+        || hotstringBoundarySeq > startHotstringBoundarySeq)
     {
-        hotstringAutoFixRequiredBoundarySeq := 0
+        hotstringResetAtBoundarySeq := 0
         Hotstring("Reset")
         return
     }
 
-    ; Text arrived without a separator, so keep hotstrings disabled until the
-    ; current partial word has ended and its buffer has been discarded.
-    hotstringAutoFixRequiredBoundarySeq := physicalWordBoundarySeq + 1
+    ; Text arrived without a separator, so reset the recognition buffer after the
+    ; next physical EndChar finishes processing.
+    hotstringResetAtBoundarySeq := hotstringBoundarySeq + 1
 }
 
 ; Stores the latest async editability-refresh request and resets the one-shot
@@ -17020,10 +17098,10 @@ _SetHotstringBoundaryAfterAsyncProbe(protectPartialWord, startTypingSeq
 ; physical-input snapshots preserve whether typing began before focus settled.
 QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     , nowTick := "", protectPartialWord := false, startTypingSeq := ""
-    , startBoundarySeq := "") {
-    global hotstringAutoFixBoundaryReleasePending
-    global hotstringAutoFixRequiredBoundarySeq
-    global physicalTypingSeq, physicalWordBoundarySeq
+    , startHotstringBoundarySeq := "") {
+    global hotstringBoundarySeq, hotstringResetAtBoundarySeq
+    global hotstringResetTimerPending
+    global physicalTypingSeq
     global typingAutoFixRefreshCtrlClass
     global typingAutoFixRefreshCtrlHwnd
     global typingAutoFixRefreshCtrlNN
@@ -17032,7 +17110,7 @@ QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     global typingAutoFixRefreshId
     global typingAutoFixRefreshProtectPartialWord
     global typingAutoFixRefreshQueuedTick
-    global typingAutoFixRefreshStartBoundarySeq
+    global typingAutoFixRefreshStartHotstringBoundarySeq
     global typingAutoFixRefreshStartTypingSeq
 
     if (nowTick = "")
@@ -17040,15 +17118,15 @@ QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
 
     if (startTypingSeq = "")
         startTypingSeq := physicalTypingSeq
-    if (startBoundarySeq = "")
-        startBoundarySeq := physicalWordBoundarySeq
+    if (startHotstringBoundarySeq = "")
+        startHotstringBoundarySeq := hotstringBoundarySeq
 
     if (protectPartialWord) {
-        ; A newer focus context supersedes any deferred release belonging to the
-        ; prior control. The probe result will decide whether a new gate is needed.
-        SetTimer, ReleaseHotstringAutoFixBoundary, Off
-        hotstringAutoFixBoundaryReleasePending := False
-        hotstringAutoFixRequiredBoundarySeq := 0
+        ; A newer focus context supersedes any pending buffer reset belonging to
+        ; the prior control. The probe result will choose the new reset timing.
+        SetTimer, ResetHotstringBufferAfterBoundary, Off
+        hotstringResetTimerPending := False
+        hotstringResetAtBoundarySeq := 0
         Hotstring("Reset")
     }
 
@@ -17059,8 +17137,8 @@ QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     typingAutoFixRefreshHwnd               := activeHwnd
     typingAutoFixRefreshProtectPartialWord := protectPartialWord
     typingAutoFixRefreshQueuedTick         := nowTick
-    typingAutoFixRefreshStartBoundarySeq   := startBoundarySeq
-    typingAutoFixRefreshStartTypingSeq     := startTypingSeq
+    typingAutoFixRefreshStartHotstringBoundarySeq := startHotstringBoundarySeq
+    typingAutoFixRefreshStartTypingSeq             := startTypingSeq
     SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
 }
 
@@ -19205,6 +19283,7 @@ SafeUIA_GetIsControlElement(el, default := 0) {
 ::verisign::
 ::inlining::
 ::inlined::
+::peaks::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -21465,6 +21544,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its beautiful::it's beautiful
 ::its been::it's been
 ::its broken::it's broken
+::its called::it's called
 ::its changed::it's changed
 ::its clear::it's clear
 ::its cold::it's cold
