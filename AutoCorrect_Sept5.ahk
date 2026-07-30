@@ -217,7 +217,7 @@ Global k_tbcEverythingAdjustMaxAgeMs                 := 750
 Global k_tbcEverythingAdjustRetryMs                  := 40
 ; Minimum physical-idle gap required before Everything Edit1 is allowed to
 ; receive the deferred Ctrl+NumpadAdd column auto-fit chord.
-Global k_tbcEverythingAdjustTypingQuietMs            := 110
+Global k_tbcEverythingAdjustTypingQuietMs            := 180
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -237,19 +237,22 @@ Global tbcAdjustColumnsHwnd                          := 0
 Global tbcAdjustColumnsLastWheelTick                 := 0
 ; Minimum quiet period after the last wheel event before attempting Explorer
 ; column auto-fit; this avoids interrupting fast continuous scrolling.
-Global k_tbcAdjustColumnsQuietMs                     := 110
+Global k_tbcAdjustColumnsQuietMs                     := 240
 ; Stronger quiet period for #32770 file dialogs, where DirectUI scroll activity and
 ; deferred Ctrl+NumpadAdd sends are more likely to overlap visibly.
-Global k_tbcAdjustColumnsDialogQuietMs               := 180
+Global k_tbcAdjustColumnsDialogQuietMs               := 240
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
 Global tbcAdjustColumnsRequestId                     := 0
 ; Short retry delay used when the timer wakes up before scrolling is truly quiet,
 ; allowing fast re-checks without doing focus/send work on every wheel tick.
-Global k_tbcAdjustColumnsRetryMs                     := 35
+Global k_tbcAdjustColumnsRetryMs                     := 60
 ; Brief final hold just before injecting Ctrl+NumpadAdd so a last-moment wheel event
 ; can update the tbc request state and cause the send to abort cleanly.
 Global k_tbcAdjustColumnsSendGuardMs                 := 20
+; Keep wheel suppression active briefly after Ctrl+NumpadAdd and immediate Ctrl
+; synchronization so delayed physical wheel input cannot escape as Ctrl+Wheel.
+Global k_tbcAdjustColumnsPostSendWheelGuardMs        := 20
 ; Cached final Explorer target ClassNN for the most recent wheel-adjust window so
 ; repeated pause/resume cycles can skip DirectUI/ListView rediscovery work.
 Global c_tbcAdjustColumnsTargetCtrl                  := ""
@@ -262,12 +265,14 @@ Global c_tbcAdjustColumnsTargetTick                  := 0
 ; Maximum age for the cached Explorer target before AdjustColumns falls back to
 ; full target resolution to avoid using a stale DirectUI/ListView guess.
 Global k_tbcAdjustColumnsTargetTtlMs                 := 350
+; +----------------------------------------------------------------------------+
 ; Deferred typing correction state so punctuation and capitalization rewrites can
 ; happen just after the live keypress cycle settles instead of on the triggering
 ; key event itself.
 ; Slash uses this slot for deferred "/ " rewrites and for slash+Enter in
 ; non-classic editors. Classic Edit/RichEdit slash+Enter is handled inline by
 ; the custom $Enter hotkey instead of through this timer.
+; +----------------------------------------------------------------------------+
 Global tbcFixSlashAction                             := ""
 ; Focused control name captured when the "/ " fix is queued so the timer can
 ; cancel instead of rewriting text after focus moves to another control.
@@ -426,8 +431,14 @@ Global k_DoubleClickTime                             := DllCall("GetDoubleClickT
 Global k_SingleClickTime                             := floor(DllCall("GetDoubleClickTime") * 0.5)
 ; Lowercase alphabet characters used by text and hotstring helpers.
 Global k_keys                                        := "abcdefghijklmnopqrstuvwxyz"
+; Selects whether native SysListView32 columns fit their item content or header
+; text while the direct-message auto-fit experiment is enabled.
+Global k_nativeSysListViewColumnAutoFitMode          := "header_no_fill"
 ; Decimal digit characters used by text and hotstring helpers.
 Global k_numbers                                     := "0123456789"
+; Enables direct LVM_SETCOLUMNWIDTH auto-fit for native SysListView32 targets.
+; False restores the existing focus plus Ctrl+NumpadAdd behavior unchanged.
+Global k_useNativeSysListViewColumnAutoFit           := True
 ; +----------------------------------------------------------------------------+
 ; | Monitor/Desktop/Context State                                              |
 ; | Shared monitor, desktop, Explorer-path, and click-position context reused  |
@@ -526,7 +537,6 @@ Global UIA                                           := UIA_Interface() ; Initia
 ; Turn key blocking ON/OFF
 Global StopRecursion                                 := False
 Global blockKeys                                     := False
-Global blockMouse                                    := False
 Global blockWheel                                    := False
 Global gExiting                                      := False
 Global hHookKbd
@@ -897,9 +907,9 @@ hHookKbd   := DllCall("SetWindowsHookEx"
     ; , "UInt", 0
     ; , "Ptr")
 
-if (!hHookKbd || !hHookMouse)
+if (!hHookKbd)
 {
-    MsgBox, 16, Error, Failed to install low-level hooks.`nKeyboard: %hHookKbd%`nMouse: %hHookMouse%
+    MsgBox, 16, Error, Failed to install the low-level keyboard hook.`nKeyboard: %hHookKbd%
     GoSub, Exit_label
 }
 
@@ -1285,19 +1295,18 @@ LL_KeyboardHook(nCode, wParam, lParam)
 }
 
 ; --------------------------------------------------
-; Common filter logic for mouse-side blocking during drag / resize gestures.
+; Dormant low-level mouse-hook implementation retained for possible future use.
+; Its registration above is disabled; active wheel suppression uses the
+; context-sensitive #If blockWheel hotkeys instead.
 ; --------------------------------------------------
 LL_MouseHook(nCode, wParam, lParam)
 {
-    ; blockMouse swallows physical mouse messages for active drag/resize gestures.
-    ; blockWheel is the narrower guard used around SendCtrlNumpadAdd() so a live
-    ; wheel notch cannot be interpreted as Ctrl+Wheel during the synthetic chord.
-    global blockMouse, blockWheel, hHookMouse
+    global blockWheel, hHookMouse
 
     if (nCode < 0)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-    if (!blockMouse && !blockWheel)
+    if (!blockWheel)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
     else {
         ; MSLLHOOKSTRUCT:
@@ -1325,16 +1334,11 @@ LL_MouseHook(nCode, wParam, lParam)
         if (injected)
             return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-        ; blockWheel and blockMouse both suppress wheel input during their
-        ; respective critical sections.
+        ; Suppress wheel input if this dormant hook is explicitly re-enabled.
         if (wParam = 0x020A || wParam = 0x020E)  ; WM_MOUSEWHEEL / WM_MOUSEHWHEEL
             return 1
 
-        ; Only the broader blockMouse mode suppresses physical button presses.
-        if (blockMouse && wParam >= 0x0201 && wParam <= 0x0209)
-            return 1
-
-        ; Otherwise pass through (move, clicks while blockWheel-only, etc.)
+        ; Otherwise pass through mouse movement and button presses.
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
     }
 }
@@ -3362,6 +3366,15 @@ return
 
 #If
 
+#If blockWheel
+; Swallow plain and Ctrl-modified physical wheel events only while a synthetic
+; Ctrl+NumpadAdd sequence and its immediate Ctrl cleanup are active.
+$WheelUp::Return
+$WheelDown::Return
+$^WheelUp::Return
+$^WheelDown::Return
+#If
+
 #If !GetKeyState("RButton", "P")
 
 $^WheelUp::
@@ -3465,12 +3478,10 @@ $~WheelDown::
     }
     else if (isWheelOverTitleBar)
     {
-        blockMouse := true
         MouseGetPos,,, windowHwnd, controlHwnd, 2
         rootHwnd := DllCall("GetAncestor", "ptr", windowHwnd, "uint", 2, "ptr")
         WinMinimize, ahk_id %rootHwnd%
         Sleep, 500
-        blockMouse := false
         return
     }
     else if (MouseIsOverTaskbarBlank())
@@ -3558,7 +3569,7 @@ AdjustColumns:
     ; Stage 2: quiet-gap gating.
     ; Do not focus or send anything until wheel input has paused for the required
     ; quiet window. If scrolling resumes, retry later instead of interfering with it.
-    if ((A_TickCount - tbcAdjustColumnsLastWheelTick) < requiredQuietMs) {
+    if ((A_TickCount - tbcAdjustColumnsLastWheelTick) <= requiredQuietMs) {
         SetTimer, AdjustColumns, % -k_tbcAdjustColumnsRetryMs
         return
     }
@@ -4873,6 +4884,10 @@ Return
 
 !+)::
     _RunWrapClipboardText("(", ")")
+Return
+
+!+sc029::
+    _RunWrapClipboardText("``", "``")
 Return
 
 !+b::
@@ -8844,8 +8859,9 @@ _QueuePostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := ""
 ; provide the path captured before the click and require a different path before
 ; the timer reacquires the Items View. A newly created Explorer window instead
 ; requires the same nonempty path twice because it has no prior directory to
-; compare. Refresh callers wait until Stop/Cancel returns to Refresh. Every path
-; then requires a stable Details layout before Ctrl+NumpadAdd is sent.
+; compare. Refresh callers wait until Stop/Cancel returns to Refresh. Native tree
+; navigation in a #32770 file dialog hands the confirmed destination directly to
+; SendCtrlAdd(); other paths require a stable Details layout before alignment.
 _RequestExplorerDetailsColumnAutoFit(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
     global explorerDetailsCtrlAddClass
     global explorerDetailsCtrlAddDeadlineTick
@@ -8956,8 +8972,9 @@ _ShouldQueueHeaderNavigationCtrlAdd(controlType, controlName := "", localizedCon
 ; twice. For path-changing requests, require a different directory. For Refresh,
 ; wait until its button returns from Stop/Cancel. Then resolve the replacement
 ; Items View; two matching nonempty Details signatures confirm that its rows and
-; column/header geometry are available. This timer deliberately does no Sleep
-; loop, so other hotkeys remain responsive.
+; column/header geometry are available. A confirmed #32770 SysTreeView32 folder
+; selection instead uses SendCtrlAdd()'s normal file-view resolution/load path.
+; This timer deliberately does no Sleep loop, so other hotkeys remain responsive.
 ExplorerDetailsCtrlAdd:
     queuedClass             := explorerDetailsCtrlAddClass
     queuedDeadline          := explorerDetailsCtrlAddDeadlineTick
@@ -9045,9 +9062,9 @@ ExplorerDetailsCtrlAdd:
     }
 
     ; Back, Forward, Up, breadcrumb, and SysTreeView32 navigation must report a
-    ; different nonempty directory before any UIA layout from this request can
-    ; authorize Ctrl+NumpadAdd. If the path never changes, cancel at the deadline
-    ; instead of adjusting the old directory's columns.
+    ; different nonempty directory before this request can align the replacement
+    ; file view. If the path never changes, cancel at the deadline instead of
+    ; adjusting the old directory's columns.
     if (queuedRequirePathChange && !explorerDetailsCtrlAddPathChangeConfirmed) {
         currentPath := GetExplorerPath(queuedHwnd)
         if (queuedId != explorerDetailsCtrlAddId)
@@ -9068,6 +9085,15 @@ ExplorerDetailsCtrlAdd:
         explorerDetailsCtrlAddPreviousLayoutSignature  := ""
         explorerDetailsCtrlAddShellEl                  := ""
         explorerDetailsCtrlAddStableHitCount           := 0
+
+        ; Group By changes the presentation inside the destination file view; it
+        ; does not change the file-view CtrlNN that receives column alignment.
+        ; Once this native tree click has reached a different directory, let the
+        ; standard path resolve/focus that CtrlNN and wait for its content to load.
+        if (currentClass == "#32770" && InStr(queuedSourceCtrl, "SysTreeView32", True)) {
+            SendCtrlAdd(queuedHwnd, queuedInitialPath, currentPath, currentClass, queuedSourceCtrl, True)
+            Return
+        }
     }
 
     ; Refresh cannot prove completion with a directory change. Wait out its
@@ -10420,7 +10446,23 @@ GetSendCtrlAddTargetCtrl(hwndTop, initFocusedCtrlNN := "", topClass := "", targe
     return ChooseSendCtrlAddTarget(hwndTop, topClass, initFocusedCtrlNN, targetScan, allowFocusedDirect23)
 }
 
+; Resolve a native SysListView32 ClassNN and try the isolated direct-message
+; column auto-fit path. False means the caller must retain its existing focus
+; preparation and synthetic Ctrl+NumpadAdd fallback.
+_TryAutoFitResolvedSysListView(hwndTop, targetCtrlNN, mode := "header_no_fill") {
+    if (!hwndTop || !IsForegroundWindow(hwndTop) || !InStr(targetCtrlNN, "SysListView32", True))
+        return False
+
+    ControlGet, listViewHwnd, Hwnd,, %targetCtrlNN%, ahk_id %hwndTop%
+    if (!listViewHwnd || !DllCall("user32\IsChild", "Ptr", hwndTop, "Ptr", listViewHwnd, "Int"))
+        return False
+
+    return AutoFitSysListViewColumns(listViewHwnd, mode)
+}
+
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False, targetScan := "") {
+    global k_nativeSysListViewColumnAutoFitMode, k_useNativeSysListViewColumnAutoFit
+
     TargetControl := ""
     didNavigate   := forceExplorerWait || (prevPath != "" && currentPath != "" && prevPath != currentPath)
 
@@ -10469,6 +10511,19 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             Return
         }
 
+        ; Native report-view ListViews accept column-width messages directly,
+        ; so their columns can be adjusted without changing keyboard focus or
+        ; injecting Ctrl. Navigation still uses the existing shell-readiness
+        ; wait. Disabling the feature flag, or any direct-message failure,
+        ; falls through to the original focus-and-chord path below.
+        if (k_useNativeSysListViewColumnAutoFit && InStr(TargetControl, "SysListView32", True)) {
+            if (didNavigate && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770"))
+                WaitForExplorerLoad(initTargetHwnd, (TargetControl == initFocusedCtrlNN), False)
+
+            if _TryAutoFitResolvedSysListView(initTargetHwnd, TargetControl, k_nativeSysListViewColumnAutoFitMode)
+                Return
+        }
+
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (didNavigate) {
                 WaitForExplorerLoad(initTargetHwnd, False, True)
@@ -10504,11 +10559,8 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
         Else {
             If (TargetControl != initFocusedCtrlNN) {
-
                 if !EnsureFocusedCtrlTarget(initTargetHwnd, TargetControl, 60, 15, lClassCheck) {
-                    ; Everything handles Ctrl+NumpadAdd at the top-window level
-                    ; while its search Edit1 deliberately retains keyboard focus.
-                    ; Other non-shell windows still require verified list focus.
+                    ; Everything accepts Ctrl+NumpadAdd while Edit1 is focused whereas most other applications don't
                     WinGet, focusFailureProcess, ProcessName, ahk_id %initTargetHwnd%
                     if (focusFailureProcess != "Everything.exe")
                         Return
@@ -10695,6 +10747,71 @@ IsChromiumContentClick(windowHwnd, windowClass := "", ctrlNN := "") {
 
     return (   InStr(ctrlNN, "Chrome_RenderWidgetHostHWND", True)
             || InStr(ctrlNN, "Intermediate D3D Window", True))
+}
+
+; Auto-fit every column in a native SysListView32 report view without requiring
+; keyboard focus. Mode "content" uses LVSCW_AUTOSIZE; mode "header" uses
+; LVSCW_AUTOSIZE_USEHEADER, including its final-column fill behavior. Mode
+; "header_no_fill" uses header sizing except for the final column, where content
+; sizing prevents Windows from stretching that column across the remaining width.
+; Every cross-process message has a short timeout so an unresponsive target cannot
+; hang this script. True means all columns accepted the requested width; False lets
+; callers use their existing keyboard fallback.
+AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 75) {
+    static HDM_GETITEMCOUNT           := 0x1200
+    static LVM_GETHEADER              := 0x101F
+    static LVM_SETCOLUMNWIDTH         := 0x101E
+    ; Size a column to the widest text in its item contents.
+    static LVSCW_AUTOSIZE             := -1
+    ; Size a column to its header text; the final column may fill remaining space.
+    static LVSCW_AUTOSIZE_USEHEADER   := -2
+    static SMTO_ABORTIFHUNG_AND_BLOCK := 0x0003
+
+    if (!listViewHwnd || !DllCall("user32\IsWindow", "Ptr", listViewHwnd, "Int"))
+        return False
+    if (GetWindowClassName(listViewHwnd) != "SysListView32" || !IsSysListViewReportView(listViewHwnd))
+        return False
+
+    if (mode = "content")
+        requestedWidth := LVSCW_AUTOSIZE
+    else if (mode = "header")
+        requestedWidth := LVSCW_AUTOSIZE_USEHEADER
+    else if (mode = "header_no_fill")
+        requestedWidth := LVSCW_AUTOSIZE_USEHEADER
+    else
+        return False
+
+    headerHwnd := 0
+    if !DllCall("user32\SendMessageTimeoutW"
+        , "Ptr", listViewHwnd, "UInt", LVM_GETHEADER, "Ptr", 0, "Ptr", 0
+        , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", headerHwnd, "Ptr")
+        return False
+    if (!headerHwnd || !DllCall("user32\IsWindow", "Ptr", headerHwnd, "Int"))
+        return False
+
+    columnCount := 0
+    if !DllCall("user32\SendMessageTimeoutW"
+        , "Ptr", headerHwnd, "UInt", HDM_GETITEMCOUNT, "Ptr", 0, "Ptr", 0
+        , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", columnCount, "Ptr")
+        return False
+    if (columnCount < 1)
+        return False
+
+    Loop, %columnCount% {
+        columnIndex := A_Index - 1
+        columnWidth := (mode = "header_no_fill" && columnIndex = columnCount - 1)
+            ? LVSCW_AUTOSIZE : requestedWidth
+        messageResult := 0
+        if !DllCall("user32\SendMessageTimeoutW"
+            , "Ptr", listViewHwnd, "UInt", LVM_SETCOLUMNWIDTH
+            , "Ptr", columnIndex, "Ptr", columnWidth
+            , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", messageResult, "Ptr")
+            return False
+        if (!messageResult)
+            return False
+    }
+
+    return True
 }
 
 ; Return true when the native SysListView32 type bits select Details/Report view.
@@ -11558,8 +11675,8 @@ BeginBlockKeys() {
 BeginBlockWheel() {
     Global blockWheel
 
-    ; Start a wheel-only blocking session so physical wheel input cannot mix
-    ; with a synthetic Ctrl chord during a tiny critical section.
+    ; Start a wheel-only blocking session covering the synthetic Ctrl chord,
+    ; immediate Ctrl synchronization, and short post-send delivery guard.
     blockWheel := True
 }
 
@@ -11577,16 +11694,10 @@ EndBlockWheel() {
     blockWheel := False
 }
 
-; Inject Ctrl+NumpadAdd while suppressing physical wheel input so Explorer cannot
-; interpret a coincident wheel notch as Ctrl+Wheel. The caller owns key blocking
-; and modifier synchronization because some paths must restore focus first.
+; Inject only the Ctrl+NumpadAdd chord. SendCtrlNumpadAdd() owns the surrounding
+; wheel suppression, key blocking, and immediate Ctrl synchronization.
 _SendCtrlNumpadAddChord() {
-    BeginBlockWheel()
-    try {
-        Send, ^{NumpadAdd}
-    } finally {
-        EndBlockWheel()
-    }
+    Send, ^{NumpadAdd}
 }
 
 ; When a guarded column-adjust send is requested, wait one last short moment and
@@ -11594,7 +11705,8 @@ _SendCtrlNumpadAddChord() {
 ; before injecting Ctrl+NumpadAdd. This lets a just-arrived WheelUp/WheelDown event
 ; abort the send instead of being interpreted alongside a synthetic Ctrl chord.
 SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0) {
-    global tbcAdjustColumnsLastWheelTick, tbcAdjustColumnsRequestId, k_tbcAdjustColumnsSendGuardMs
+    global tbcAdjustColumnsLastWheelTick, tbcAdjustColumnsRequestId
+    global k_tbcAdjustColumnsPostSendWheelGuardMs, k_tbcAdjustColumnsSendGuardMs
 
     if (guardRequestId || guardQuietMs || guardHwnd) {
         Sleep, %k_tbcAdjustColumnsSendGuardMs%
@@ -11613,13 +11725,23 @@ SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, gu
     if (!targetWindowId)
         return false
 
-    BeginBlockKeys()
+    BeginBlockWheel()
     try {
-        _SendCtrlNumpadAddChord()
+        BeginBlockKeys()
+        try {
+            _SendCtrlNumpadAddChord()
+        } finally {
+            EndBlockKeys()
+        }
+
+        ; Keep wheel events suppressed until the application's logical Ctrl state
+        ; matches the physical keyboard, then cover a short post-send delivery gap.
+        SyncModifierSidesToPhys("Ctrl", targetWindowId)
+        Sleep, %k_tbcAdjustColumnsPostSendWheelGuardMs%
     } finally {
-        EndBlockKeys()
+        EndBlockWheel()
     }
-    SyncModifierSidesToPhys("Ctrl", targetWindowId)
+
     ScheduleModifierSync("Ctrl", syncPassCount, targetWindowId)
     return true
 }
