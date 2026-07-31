@@ -162,7 +162,7 @@ Global typingAutoFixRefreshHwnd                      := 0
 Global typingAutoFixRefreshId                        := 0
 ; Tick count recorded when the async editability refresh is queued so the flow
 ; can be reasoned about against nearby deferred typing timers.
-Global typingAutoFixRefreshQueuedTick                := 0
+Global typingAutoFixRefreshRequestedTick                := 0
 ; Hotstring boundary sequence captured when the current startup/focus/click prewarm was
 ; scheduled, before a user can begin typing into the newly focused target.
 Global typingAutoFixPrewarmStartHotstringBoundarySeq := 0
@@ -205,15 +205,15 @@ Global tbcEverythingAdjustHwnd                       := 0
 ; so older timer callbacks can detect that typing already superseded them.
 Global tbcEverythingAdjustId                         := 0
 ; Tick count recorded when the Everything Edit1 auto-fit request was queued.
-Global tbcEverythingAdjustQueuedTick                 := 0
+Global tbcEverythingAdjustRequestedTick                 := 0
 ; Source typing tick associated with the current Everything auto-fit request so
 ; KeyTrack queues at most one deferred send per physical keypress burst update.
 Global tbcEverythingAdjustSourceTick                 := 0
 ; Maximum lifetime for a deferred Everything Edit1 auto-fit request before it
 ; is dropped as stale rather than sent into a newer typing context.
 Global k_tbcEverythingAdjustMaxAgeMs                 := 750
-; Short retry delay for the queued Everything Edit1 auto-fit timer while
-; waiting for the stronger typing-quiet gate to become true.
+; Fallback retry delay used only when StopAutoFix, rather than insufficient
+; physical idle time, temporarily prevents Everything's typing-quiet gate.
 Global k_tbcEverythingAdjustRetryMs                  := 40
 ; Minimum physical-idle gap required before Everything Edit1 is allowed to
 ; receive the deferred Ctrl+NumpadAdd column auto-fit chord.
@@ -244,9 +244,6 @@ Global k_tbcAdjustColumnsDialogQuietMs               := 240
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
 Global tbcAdjustColumnsRequestId                     := 0
-; Short retry delay used when the timer wakes up before scrolling is truly quiet,
-; allowing fast re-checks without doing focus/send work on every wheel tick.
-Global k_tbcAdjustColumnsRetryMs                     := 60
 ; Brief final hold just before injecting Ctrl+NumpadAdd so a last-moment wheel event
 ; can update the tbc request state and cause the send to abort cleanly.
 Global k_tbcAdjustColumnsSendGuardMs                 := 20
@@ -293,7 +290,7 @@ Global tbcFixSlashHwnd                               := 0
 Global tbcFixSlashId                                 := 0
 ; Tick count recorded when the slash-space rewrite is queued, used to drop the
 ; request once it has been tbc longer than k_tbcTypingFixMaxAgeMs.
-Global tbcFixSlashQueuedTick                         := 0
+Global tbcFixSlashRequestedTick                         := 0
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
 Global tbcHotyCtrl                                   := ""
@@ -311,7 +308,7 @@ Global tbcHotyHwnd                                   := 0
 Global tbcHotyId                                     := 0
 ; Tick count captured when the Hoty fix is queued, allowing old capitalization fixes
 ; to expire quickly instead of landing after the surrounding typing context changed.
-Global tbcHotyQueuedTick                             := 0
+Global tbcHotyRequestedTick                             := 0
 ; Replacement character captured from the prior capital hotkey so the deferred Hoty
 ; flush can send the intended rewrite only after the live key cycle has settled.
 Global tbcHotyReplacement                            := ""
@@ -355,63 +352,73 @@ Global k_postActivationLButtonDelayMs                := 35
 ; | on a timer before Ctrl+NumpadAdd is sent.                                   |
 ; +----------------------------------------------------------------------------+
 ; Class of the Explorer or file-dialog window that owns the queued adjustment.
-Global explorerDetailsCtrlAddClass                   := ""
+Global explorerColumnFitClass                   := ""
 ; Latest tick at which the queued adjustment may send Ctrl+NumpadAdd.
-Global explorerDetailsCtrlAddDeadlineTick            := 0
+Global explorerColumnFitDeadlineTick            := 0
 ; Earliest tick at which UIA may sample a startup or path-neutral Refresh result.
 ; This prevents an incomplete or unchanged Items View from satisfying readiness.
-Global explorerDetailsCtrlAddEarliestLayoutTick      := 0
+Global explorerColumnFitEarliestLayoutTick      := 0
+; Shorter directory-path polling interval used during every changed-path
+; request's bounded fast-start window.
+Global explorerColumnFitFastPathPollIntervalMs  := 0
+; Tick when the current changed-path request's fast polling window ends.
+Global explorerColumnFitFastPathPollUntilTick   := 0
 ; Top-level Explorer or file-dialog HWND that owns the queued adjustment.
-Global explorerDetailsCtrlAddHwnd                    := 0
+Global explorerColumnFitHwnd                    := 0
 ; Monotonic token incremented for every queued adjustment so an earlier timer
 ; callback exits when a newer navigation request supersedes it.
-Global explorerDetailsCtrlAddId                      := 0
+Global explorerColumnFitId                      := 0
 ; Directory reported before a path-changing navigation click. The timer requires
 ; GetExplorerPath() to return a different nonempty directory before sampling UIA.
-Global explorerDetailsCtrlAddInitialPath             := ""
+Global explorerColumnFitInitialPath             := ""
 ; True after GetExplorerPath() confirms that a queued path-changing navigation
-; reached a different directory from explorerDetailsCtrlAddInitialPath.
-Global explorerDetailsCtrlAddPathChangeConfirmed     := False
+; reached a different directory from explorerColumnFitInitialPath.
+Global explorerColumnFitPathChangeConfirmed     := False
 ; Details layout signature observed on the prior timer sample.
-Global explorerDetailsCtrlAddPreviousLayoutSignature := ""
+Global explorerColumnFitPreviousLayoutSignature := ""
 ; Directory returned by the preceding startup-path sample.
-Global explorerDetailsCtrlAddPreviousPath            := ""
+Global explorerColumnFitPreviousPath            := ""
 ; Mouse location of a Refresh button. While it remains Stop/Cancel, the timer
 ; does not sample or adjust the Items View.
-Global explorerDetailsCtrlAddRefreshPoint            := ""
+Global explorerColumnFitRefreshPoint            := ""
 ; True after the Refresh button returns to Refresh, or after the bounded reload
 ; fallback expires and the timer proceeds to fresh Details samples.
-Global explorerDetailsCtrlAddRefreshReady            := False
+Global explorerColumnFitRefreshReady            := False
 ; Whether this request must prove a directory change before adjusting columns.
 ; Refresh requests leave this false because Refresh keeps the same directory.
-Global explorerDetailsCtrlAddRequirePathChange       := False
+Global explorerColumnFitRequirePathChange       := False
 ; Whether this request must observe the same nonempty directory twice before
 ; sampling the Details layout. New Explorer windows use this startup condition.
-Global explorerDetailsCtrlAddRequireStablePath       := False
+Global explorerColumnFitRequireStablePath       := False
 ; Current Items View UIA element reused across timer samples and cleared when
 ; that element no longer exposes a Details layout after navigation.
-Global explorerDetailsCtrlAddShellEl                 := ""
+Global explorerColumnFitShellEl                 := ""
 ; Focused source control captured for a tree click; SendCtrlAdd restores it
 ; after adjusting the Details columns when it is still appropriate.
-Global explorerDetailsCtrlAddSourceCtrl              := ""
+Global explorerColumnFitSourceCtrl              := ""
 ; Number of consecutive timer samples with the same Details layout signature.
-Global explorerDetailsCtrlAddStableHitCount          := 0
+Global explorerColumnFitStableHitCount          := 0
 ; True after a startup request observes the same nonempty directory twice.
-Global explorerDetailsCtrlAddStablePathConfirmed     := False
+Global explorerColumnFitStablePathConfirmed     := False
 ; Number of consecutive startup samples returning the same nonempty directory.
-Global explorerDetailsCtrlAddStablePathHitCount      := 0
-; Short one-shot delay that lets Refresh, Back, Forward, Up, and breadcrumb
-; clicks start native navigation before Details sampling begins.
+Global explorerColumnFitStablePathHitCount      := 0
+; Fast directory-change polling used by every changed-path navigation request.
+Global k_pathChangeDetailsCtrlAddFastPollMs          := 15
+; After this bounded fast window, directory-change polling uses
+; k_explorerColumnFitPollMs.
+Global k_pathChangeDetailsCtrlAddFastWindowMs        := 300
+; Short one-shot delay that lets a path-neutral Refresh start before Details
+; sampling begins. Changed-path Header requests instead start after 1 ms.
 Global k_headerNavigationCtrlAddDelayMs              := 125
 ; Minimum non-blocking startup settle before a newly created Explorer window
 ; may begin sampling its destination path and grouped Details layout.
-Global k_newExplorerDetailsCtrlAddMinimumWaitMs      := 300
+Global k_newExplorerColumnFitMinimumWaitMs      := 300
 ; Maximum non-blocking wait for a new Explorer window to expose a stable path.
-Global k_newExplorerDetailsCtrlAddTimeoutMs          := 5000
+Global k_newExplorerColumnFitTimeoutMs          := 5000
 ; Maximum wait for a stable Details layout after path/button readiness.
-Global k_explorerDetailsCtrlAddTimeoutMs             := 1200
+Global k_explorerColumnFitTimeoutMs             := 1200
 ; Timer interval for non-blocking Details layout samples.
-Global k_explorerDetailsCtrlAddPollMs                := 50
+Global k_explorerColumnFitPollMs                := 50
 ; Minimum non-blocking reload window before Refresh samples the Items View.
 Global k_refreshDetailsCtrlAddMinimumWaitMs          := 300
 ; Maximum non-blocking wait for the Refresh button to return from Stop/Cancel.
@@ -436,6 +443,9 @@ Global k_keys                                        := "abcdefghijklmnopqrstuvw
 Global k_nativeSysListViewColumnAutoFitMode          := "header_no_fill"
 ; Decimal digit characters used by text and hotstring helpers.
 Global k_numbers                                     := "0123456789"
+; Maximum time SendCtrlAdd() waits for MouseGetPos to identify a specific child
+; when Explorer initially reports the generic ShellTabWindowClass1 host.
+Global k_sendCtrlAddShellTabProbeTimeoutMs           := 50
 ; Enables direct LVM_SETCOLUMNWIDTH auto-fit for native SysListView32 targets.
 ; False restores the existing focus plus Ctrl+NumpadAdd behavior unchanged.
 Global k_useNativeSysListViewColumnAutoFit           := True
@@ -923,7 +933,7 @@ accInitd := Acc_Init()
 SetTimer MouseTrack, 20
 SetTimer KeyTrack, 25
 SetTimer MasterTimer, %10_Minutes%
-ScheduleTypingAutoFixPrewarm()
+_RequestTypingAutoFixPrewarm()
 
 Return
 
@@ -1440,7 +1450,7 @@ Hoty:
         typingFixSeq += 1
         CaptureActiveFocusSnapshot(tbcHotyHwnd, tbcHotyCtrl, tbcHotyCtrlHwnd, tbcHotyCtrlClass)
         tbcHotyId          := typingFixSeq
-        tbcHotyQueuedTick  := A_TickCount
+        tbcHotyRequestedTick  := A_TickCount
         tbcHotyReplacement := SubStr(A_PriorHotKey,3,1)
         tbcHotyTriggerChar := SubStr(A_ThisHotKey,2,1)
         SetTimer, FlushTbcHotyReplacement, -40
@@ -1478,7 +1488,7 @@ FlushTbcHotyReplacement:
     ; Drop the queued rewrite if it has been tbc longer than
     ; k_tbcTypingFixMaxAgeMs. Once that short age budget is exceeded, the user
     ; may already be editing later text and this delayed Send is no longer safe.
-    if (tbcHotyQueuedTick && (A_TickCount - tbcHotyQueuedTick) > k_tbcTypingFixMaxAgeMs)
+    if (tbcHotyRequestedTick && (A_TickCount - tbcHotyRequestedTick) > k_tbcTypingFixMaxAgeMs)
     {
         _ClearTbcHotyState()
         Return
@@ -1528,14 +1538,14 @@ Return
 ; queue/idle/validate/apply pattern already used by tbcHoty. The difference
 ; is that slash+Space lets the real Space land immediately, while slash+Enter
 ; withholds Enter until the queued slash decision is resolved.
-_QueueTbcFixSlash(action) {
+_RequestFixSlash(action) {
     global tbcFixSlashAction
     global tbcFixSlashCtrl
     global tbcFixSlashCtrlClass
     global tbcFixSlashCtrlHwnd
     global tbcFixSlashHwnd
     global tbcFixSlashId
-    global tbcFixSlashQueuedTick
+    global tbcFixSlashRequestedTick
     global typingFixSeq
 
     CancelTbcTypingFixes(False, False)
@@ -1543,7 +1553,7 @@ _QueueTbcFixSlash(action) {
     tbcFixSlashAction     := action
     CaptureActiveFocusSnapshot(tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashCtrlHwnd, tbcFixSlashCtrlClass)
     tbcFixSlashId         := typingFixSeq
-    tbcFixSlashQueuedTick := A_TickCount
+    tbcFixSlashRequestedTick := A_TickCount
     SetTimer, FlushTbcFixSlash, -40
 }
 
@@ -1614,7 +1624,7 @@ FixSlash:
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
     If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
-        _QueueTbcFixSlash("space")
+        _RequestFixSlash("space")
         disableEnter              := False
     }
     If IsPriorHotKeyLowerCase()   ; as long as a letter key is pressed we record the priorprior hotkey
@@ -1656,7 +1666,7 @@ FlushTbcFixSlash:
     ; correction is safer than rewriting text in a newer typing context. For a
     ; queued Enter, release a plain Enter only if the same coarse target is
     ; still active; otherwise cancel it rather than sending Enter somewhere new.
-    if (tbcFixSlashQueuedTick && (A_TickCount - tbcFixSlashQueuedTick) > k_tbcTypingFixMaxAgeMs)
+    if (tbcFixSlashRequestedTick && (A_TickCount - tbcFixSlashRequestedTick) > k_tbcTypingFixMaxAgeMs)
     {
         if (tbcAction = "enter")
             _TryReleaseTbcFixSlashEnterFallback()
@@ -1737,7 +1747,7 @@ _ClearTbcFixSlashState() {
     global tbcFixSlashCtrlHwnd
     global tbcFixSlashHwnd
     global tbcFixSlashId
-    global tbcFixSlashQueuedTick
+    global tbcFixSlashRequestedTick
 
     tbcFixSlashAction     := ""
     tbcFixSlashCtrl       := ""
@@ -1745,7 +1755,7 @@ _ClearTbcFixSlashState() {
     tbcFixSlashCtrlHwnd   := 0
     tbcFixSlashHwnd       := 0
     tbcFixSlashId         := 0
-    tbcFixSlashQueuedTick := 0
+    tbcFixSlashRequestedTick := 0
 }
 
 ; Clears the deferred capitalization rewrite slot without invalidating the shared
@@ -1756,7 +1766,7 @@ _ClearTbcHotyState() {
     global tbcHotyCtrlHwnd
     global tbcHotyHwnd
     global tbcHotyId
-    global tbcHotyQueuedTick
+    global tbcHotyRequestedTick
     global tbcHotyReplacement
     global tbcHotyTriggerChar
 
@@ -1765,7 +1775,7 @@ _ClearTbcHotyState() {
     tbcHotyCtrlHwnd    := 0
     tbcHotyHwnd        := 0
     tbcHotyId          := 0
-    tbcHotyQueuedTick  := 0
+    tbcHotyRequestedTick  := 0
     tbcHotyReplacement := ""
     tbcHotyTriggerChar := ""
 }
@@ -1819,7 +1829,7 @@ CancelTbcTypingWorkForPointerAction() {
     _ClearTbcEverythingEditAdjustState()
     _ClearTypingAutoFixEligibilityCache()
     _ClearTbcTypingAutoFixRefresh()
-    ScheduleTypingAutoFixPrewarm()
+    _RequestTypingAutoFixPrewarm()
 }
 
 ; A focus change is also a pointer-like context break for deferred typing work,
@@ -1831,7 +1841,7 @@ CancelTbcTypingWorkForFocusChange() {
 ; Prewarm the focused-control eligibility cache after startup or a focus/caret
 ; change. The physical-input snapshots are captured now, before the delayed
 ; focus lookup, so the async probe can distinguish no typing from a partial word.
-ScheduleTypingAutoFixPrewarm(delayMs := "") {
+_RequestTypingAutoFixPrewarm(delayMs := "") {
     global k_typingAutoFixPrewarmDelayMs
     global hotstringBoundarySeq, physicalTypingSeq
     global typingAutoFixPrewarmStartHotstringBoundarySeq
@@ -1884,18 +1894,28 @@ _IsDeferredTypingQuiet(minIdleMs := 40) {
     return (!StopAutoFix && A_TimeIdlePhysical >= minIdleMs)
 }
 
+; Returns the exact one-shot timer delay needed to reach a quiet threshold.
+; Add one millisecond only when the caller requires elapsed time to be greater
+; than the threshold; otherwise equality is sufficient. SetTimer receives at
+; least one millisecond because zero has control semantics rather than meaning
+; "run immediately."
+GetRemainingQuietDelayMs(elapsedMs, requiredQuietMs, requireStrictlyGreater := True) {
+    boundaryOffsetMs := requireStrictlyGreater ? 1 : 0
+    return Max(1, requiredQuietMs - elapsedMs + boundaryOffsetMs)
+}
+
 ; Shared deferred-work coarse validator:
 ; require the same active window, optional same focused control name, optional
 ; same logical request token, and optional freshness window before a delayed
 ; action is allowed to proceed.
-_IsDeferredWorkStillValid(expectedHwnd, expectedCtrlNN := "", expectedId := 0, currentId := 0, queuedTick := 0, maxAgeMs := 0) {
+_IsDeferredWorkStillValid(expectedHwnd, expectedCtrlNN := "", expectedId := 0, currentId := 0, requestTick := 0, maxAgeMs := 0) {
     if (!expectedHwnd)
         return false
 
     if (expectedId && currentId && expectedId != currentId)
         return false
 
-    if (maxAgeMs && queuedTick && (A_TickCount - queuedTick) > maxAgeMs)
+    if (maxAgeMs && requestTick && (A_TickCount - requestTick) > maxAgeMs)
         return false
 
     if (!WinActive("ahk_id " . expectedHwnd))
@@ -1946,11 +1966,11 @@ _GetClassicControlSelectionRange(controlHwnd, ByRef selStart, ByRef selEnd) {
 ; window, and still points at the same focused control name when one was captured.
 ; It is intentionally conservative: if that coarse context no longer matches, the
 ; delayed rewrite is canceled rather than sent into a newer typing state.
-_IsTbcTypingFixStillValid(tbcId, tbcHwnd, tbcCtrl, tbcQueuedTick) {
+_IsTbcTypingFixStillValid(tbcId, tbcHwnd, tbcCtrl, tbcRequestedTick) {
     global k_tbcTypingFixMaxAgeMs
     global typingFixSeq
 
-    return _IsDeferredWorkStillValid(tbcHwnd, tbcCtrl, tbcId, typingFixSeq, tbcQueuedTick, k_tbcTypingFixMaxAgeMs)
+    return _IsDeferredWorkStillValid(tbcHwnd, tbcCtrl, tbcId, typingFixSeq, tbcRequestedTick, k_tbcTypingFixMaxAgeMs)
 }
 
 ; FixSlash tbc-work validator:
@@ -1966,9 +1986,9 @@ _IsTbcFixSlashStillValid() {
     global tbcFixSlashCtrlHwnd
     global tbcFixSlashHwnd
     global tbcFixSlashId
-    global tbcFixSlashQueuedTick
+    global tbcFixSlashRequestedTick
 
-    if !_IsTbcTypingFixStillValid(tbcFixSlashId, tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashQueuedTick)
+    if !_IsTbcTypingFixStillValid(tbcFixSlashId, tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashRequestedTick)
         return False
 
     if (!tbcFixSlashCtrlHwnd && tbcFixSlashCtrlClass = "")
@@ -2026,9 +2046,9 @@ _IsTbcHotyStillValid() {
     global tbcHotyCtrlHwnd
     global tbcHotyHwnd
     global tbcHotyId
-    global tbcHotyQueuedTick
+    global tbcHotyRequestedTick
 
-    if !_IsTbcTypingFixStillValid(tbcHotyId, tbcHotyHwnd, tbcHotyCtrl, tbcHotyQueuedTick)
+    if !_IsTbcTypingFixStillValid(tbcHotyId, tbcHotyHwnd, tbcHotyCtrl, tbcHotyRequestedTick)
         return false
 
     if (!tbcHotyCtrlHwnd && tbcHotyCtrlClass = "")
@@ -2658,8 +2678,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ; both the destination path and the Details layout are stable. Existing
         ; windows and file dialogs retain their established activation path.
         if (vWinClass == "CabinetWClass" && isFirstTrackedActivation) {
-            _RequestExplorerDetailsColumnAutoFit(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
-                , k_newExplorerDetailsCtrlAddMinimumWaitMs)
+            _RequestExplorerColumnFit(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
+                , k_newExplorerColumnFitMinimumWaitMs)
         }
         else {
             ; tooltip, sent to %initFocusedCtrl%
@@ -3539,10 +3559,11 @@ return
 ; High-level flow:
 ; 1) wait for wheel input to go quiet
 ; 2) confirm the same hovered window is still active
-; 3) reuse or resolve the target control that should receive Ctrl+NumpadAdd
-; 4) focus that target if needed
-; 5) re-check that the same wheel request is still current
-; 6) send Ctrl+NumpadAdd as late as possible
+; 3) reuse or resolve the column target
+; 4) auto-fit a native SysListView32 Details view directly when possible
+; 5) otherwise focus the target for the keyboard fallback
+; 6) re-check that the same wheel request is still current
+; 7) send Ctrl+NumpadAdd as late as possible
 ;
 ; This keeps rapid wheel bursts responsive while making the final column-fit send
 ; happen only after scrolling has settled and the target window/control still match.
@@ -3568,9 +3589,12 @@ AdjustColumns:
 
     ; Stage 2: quiet-gap gating.
     ; Do not focus or send anything until wheel input has paused for the required
-    ; quiet window. If scrolling resumes, retry later instead of interfering with it.
-    if ((A_TickCount - tbcAdjustColumnsLastWheelTick) <= requiredQuietMs) {
-        SetTimer, AdjustColumns, % -k_tbcAdjustColumnsRetryMs
+    ; quiet window. If scrolling resumes, schedule the next check for the exact
+    ; remaining quiet time instead of adding a fixed retry interval.
+    elapsedQuietMs := A_TickCount - tbcAdjustColumnsLastWheelTick
+    if (elapsedQuietMs <= requiredQuietMs) {
+        remainingQuietMs := GetRemainingQuietDelayMs(elapsedQuietMs, requiredQuietMs)
+        SetTimer, AdjustColumns, % -remainingQuietMs
         return
     }
 
@@ -3623,9 +3647,11 @@ AdjustColumns:
         }
     }
 
-    ; Stage 5: focus preparation.
-    ; If a target was resolved, focus it before sending so Ctrl+NumpadAdd lands on
-    ; the intended list/shell view instead of an adjacent toolbar or breadcrumb.
+    ; Stage 5: native auto-fit or keyboard-fallback preparation.
+    ; If a target was resolved, first try direct column sizing for a native
+    ; SysListView32 Details view. Direct sizing does not require focus, the 20 ms
+    ; synthetic-send guard, or injected Ctrl state. If it is unavailable or fails,
+    ; preserve the existing focus plus Ctrl+NumpadAdd fallback.
     ; If no target was resolved, do not hard-fail here: the older behavior of sending
     ; Ctrl+NumpadAdd to the active window still sometimes succeeds when the target
     ; view already has usable item focus and only the explicit control lookup missed it.
@@ -3646,6 +3672,26 @@ AdjustColumns:
             if (tbcAdjustColumnsRequestId != currentRequestId)
                 return
 
+            ; Re-check the quiet gap and foreground window immediately before direct
+            ; sizing. A wheel hotkey can update the timestamp just before it increments
+            ; the request token, so both checks are required to reject partial updates.
+            elapsedQuietMs := A_TickCount - tbcAdjustColumnsLastWheelTick
+            if (elapsedQuietMs < requiredQuietMs) {
+                remainingQuietMs := GetRemainingQuietDelayMs(elapsedQuietMs, requiredQuietMs, False)
+                SetTimer, AdjustColumns, % -remainingQuietMs
+                return
+            }
+
+            if (WinExist("A") != tbcAdjustColumnsHwnd)
+                return
+
+            if (k_useNativeSysListViewColumnAutoFit
+             && InStr(TargetControl, "SysListView32", True)
+             && DllCall("user32\IsChild", "Ptr", tbcAdjustColumnsHwnd, "Ptr", TargetControlHwnd, "Int")) {
+                if AutoFitSysListViewColumns(TargetControlHwnd, k_nativeSysListViewColumnAutoFitMode)
+                    return
+            }
+
             ; Use the same explicit ClassNN focus step as the known-good SendCtrlAdd()
             ; Explorer path. Modern Explorer may report focus inside DirectUI while still
             ; ignoring Ctrl+NumpadAdd unless the exact target control is actively focused.
@@ -3659,8 +3705,10 @@ AdjustColumns:
     if (tbcAdjustColumnsRequestId != currentRequestId)
         return
 
-    if ((A_TickCount - tbcAdjustColumnsLastWheelTick) < requiredQuietMs) {
-        SetTimer, AdjustColumns, % -k_tbcAdjustColumnsRetryMs
+    elapsedQuietMs := A_TickCount - tbcAdjustColumnsLastWheelTick
+    if (elapsedQuietMs < requiredQuietMs) {
+        remainingQuietMs := GetRemainingQuietDelayMs(elapsedQuietMs, requiredQuietMs, False)
+        SetTimer, AdjustColumns, % -remainingQuietMs
         return
     }
 
@@ -4966,7 +5014,7 @@ $Enter::
             ; wait for brief idle, revalidate the same target, then apply or
             ; cancel. The extra rule here is that Enter itself stays withheld
             ; until the queued slash rewrite has been resolved.
-            _QueueTbcFixSlash("enter")
+            _RequestFixSlash("enter")
         }
     }
     else
@@ -5533,7 +5581,7 @@ $!+Tab::
     }
 Return
 
-!`::
+!sc029::
     If !hitTilde {
         Thread, NoTimers, True
         StopRecursion  := True
@@ -8764,7 +8812,7 @@ _GetExplorerHeaderNavigationKind(screenX, screenY, timeoutMs := 250) {
 
     controlName          := SafeUIA_GetName(hitEl)
     localizedControlType := SafeUIA_GetLocalizedControlType(hitEl)
-    if !_ShouldQueueHeaderNavigationCtrlAdd(controlType, controlName, localizedControlType)
+    if !_IsHeaderNavigationCtrlAddCandidate(controlType, controlName, localizedControlType)
         return "none"
 
     if (controlType == 50000 && InStr(controlName, "Refresh", True))
@@ -8832,7 +8880,7 @@ _IsTreeViewFolderSelectionClick(hwndTop, ctrlNN, screenX, screenY) {
 ; then returns without running the heavier blank-space or SendCtrlAdd
 ; classification. This helper preserves that narrow snapshot so a short timer
 ; can re-check the shell target once the clicked window is actually active.
-_QueuePostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := "", headerKind := "") {
+_RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := "", headerKind := "") {
     global k_postActivationLButtonDelayMs
     global postActivationLButtonCtrl
     global postActivationLButtonHeaderKind
@@ -8855,35 +8903,49 @@ _QueuePostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := ""
     SetTimer, PostActivationLButtonCheck, % -k_postActivationLButtonDelayMs
 }
 
-; Queue a non-blocking Explorer Details adjustment. Directory-changing callers
-; provide the path captured before the click and require a different path before
-; the timer reacquires the Items View. A newly created Explorer window instead
-; requires the same nonempty path twice because it has no prior directory to
-; compare. Refresh callers wait until Stop/Cancel returns to Refresh. Native tree
-; navigation in a #32770 file dialog hands the confirmed destination directly to
-; SendCtrlAdd(); other paths require a stable Details layout before alignment.
-_RequestExplorerDetailsColumnAutoFit(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
-    global explorerDetailsCtrlAddClass
-    global explorerDetailsCtrlAddDeadlineTick
-    global explorerDetailsCtrlAddEarliestLayoutTick
-    global explorerDetailsCtrlAddHwnd
-    global explorerDetailsCtrlAddId
-    global explorerDetailsCtrlAddInitialPath
-    global explorerDetailsCtrlAddPathChangeConfirmed
-    global explorerDetailsCtrlAddPreviousLayoutSignature
-    global explorerDetailsCtrlAddPreviousPath
-    global explorerDetailsCtrlAddRefreshPoint
-    global explorerDetailsCtrlAddRefreshReady
-    global explorerDetailsCtrlAddRequirePathChange
-    global explorerDetailsCtrlAddRequireStablePath
-    global explorerDetailsCtrlAddShellEl
-    global explorerDetailsCtrlAddSourceCtrl
-    global explorerDetailsCtrlAddStableHitCount
-    global explorerDetailsCtrlAddStablePathConfirmed
-    global explorerDetailsCtrlAddStablePathHitCount
-    global k_explorerDetailsCtrlAddPollMs
-    global k_explorerDetailsCtrlAddTimeoutMs
-    global k_newExplorerDetailsCtrlAddTimeoutMs
+; Queue one non-blocking Details-column auto-fit request for CabinetWClass or
+; #32770. The request covers these scenarios:
+; 1. First activation of a new Explorer window: require the same nonempty path
+;    twice because there is no prior directory to compare.
+; 2. Other path-changing navigation--Back, Forward, Up, breadcrumb,
+;    Quick Access/SysTreeView32, and generic file-view double-clicks--requires a
+;    nonempty path different from initialPath before examining the destination.
+; 3. Refresh: keep the current path, honor its minimum reload delay, then wait
+;    until the header point reports Refresh or its bounded wait expires.
+; 4. #32770 SysTreeView32 folder navigation: use the same changed-path and stable
+;    Details-layout proof as the other path-changing navigation scenarios.
+;
+; All scenarios validate a Details layout before alignment. Every changed-path
+; request starts promptly and uses the shared bounded fast
+; path-poll profile; this does not weaken Details-layout confirmation. A newer
+; call replaces the single pending request, and its ID invalidates stale timer
+; callbacks.
+_RequestExplorerColumnFit(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
+    global explorerColumnFitClass
+    global explorerColumnFitDeadlineTick
+    global explorerColumnFitEarliestLayoutTick
+    global explorerColumnFitFastPathPollIntervalMs
+    global explorerColumnFitFastPathPollUntilTick
+    global explorerColumnFitHwnd
+    global explorerColumnFitId
+    global explorerColumnFitInitialPath
+    global explorerColumnFitPathChangeConfirmed
+    global explorerColumnFitPreviousLayoutSignature
+    global explorerColumnFitPreviousPath
+    global explorerColumnFitRefreshPoint
+    global explorerColumnFitRefreshReady
+    global explorerColumnFitRequirePathChange
+    global explorerColumnFitRequireStablePath
+    global explorerColumnFitShellEl
+    global explorerColumnFitSourceCtrl
+    global explorerColumnFitStableHitCount
+    global explorerColumnFitStablePathConfirmed
+    global explorerColumnFitStablePathHitCount
+    global k_explorerColumnFitPollMs
+    global k_explorerColumnFitTimeoutMs
+    global k_newExplorerColumnFitTimeoutMs
+    global k_pathChangeDetailsCtrlAddFastPollMs
+    global k_pathChangeDetailsCtrlAddFastWindowMs
     global k_refreshDetailsCtrlAddTimeoutMs
 
     if (!hwnd || !(windowClass == "CabinetWClass" || windowClass == "#32770"))
@@ -8903,40 +8965,48 @@ _RequestExplorerDetailsColumnAutoFit(hwnd, windowClass, sourceCtrlNN := "", dela
     if (isRefreshRequest)
         readinessTimeoutMs := k_refreshDetailsCtrlAddTimeoutMs
     else if (requireStablePath)
-        readinessTimeoutMs := k_newExplorerDetailsCtrlAddTimeoutMs
+        readinessTimeoutMs := k_newExplorerColumnFitTimeoutMs
     else
-        readinessTimeoutMs := k_explorerDetailsCtrlAddTimeoutMs
+        readinessTimeoutMs := k_explorerColumnFitTimeoutMs
 
-    explorerDetailsCtrlAddClass                   := windowClass
-    explorerDetailsCtrlAddDeadlineTick            := A_TickCount + readinessTimeoutMs
-    explorerDetailsCtrlAddEarliestLayoutTick      := A_TickCount + Max(0, minimumLayoutDelayMs)
-    explorerDetailsCtrlAddHwnd                    := hwnd
-    explorerDetailsCtrlAddId                      += 1
-    explorerDetailsCtrlAddInitialPath             := initialPath
-    explorerDetailsCtrlAddPathChangeConfirmed     := !requirePathChange
-    explorerDetailsCtrlAddPreviousLayoutSignature := ""
-    explorerDetailsCtrlAddPreviousPath            := ""
-    explorerDetailsCtrlAddRefreshPoint            := refreshPoint
-    explorerDetailsCtrlAddRefreshReady            := !isRefreshRequest
-    explorerDetailsCtrlAddRequirePathChange       := requirePathChange
-    explorerDetailsCtrlAddRequireStablePath       := requireStablePath
-    explorerDetailsCtrlAddShellEl                 := ""
-    explorerDetailsCtrlAddSourceCtrl              := sourceCtrlNN
-    explorerDetailsCtrlAddStableHitCount          := 0
-    explorerDetailsCtrlAddStablePathConfirmed     := !requireStablePath
-    explorerDetailsCtrlAddStablePathHitCount      := 0
-    timerDelay := (delayMs > 0) ? -delayMs : -k_explorerDetailsCtrlAddPollMs
-    SetTimer, ExplorerDetailsCtrlAdd, %timerDelay%
+    useFastPathPolling := requirePathChange
+
+    explorerColumnFitClass                   := windowClass
+    explorerColumnFitDeadlineTick            := A_TickCount + readinessTimeoutMs
+    explorerColumnFitEarliestLayoutTick      := A_TickCount + Max(0, minimumLayoutDelayMs)
+    explorerColumnFitFastPathPollIntervalMs  := useFastPathPolling ? k_pathChangeDetailsCtrlAddFastPollMs : 0
+    explorerColumnFitFastPathPollUntilTick   := useFastPathPolling ? A_TickCount + k_pathChangeDetailsCtrlAddFastWindowMs : 0
+    explorerColumnFitHwnd                    := hwnd
+    explorerColumnFitId                      += 1
+    explorerColumnFitInitialPath             := initialPath
+    explorerColumnFitPathChangeConfirmed     := !requirePathChange
+    explorerColumnFitPreviousLayoutSignature := ""
+    explorerColumnFitPreviousPath            := ""
+    explorerColumnFitRefreshPoint            := refreshPoint
+    explorerColumnFitRefreshReady            := !isRefreshRequest
+    explorerColumnFitRequirePathChange       := requirePathChange
+    explorerColumnFitRequireStablePath       := requireStablePath
+    explorerColumnFitShellEl                 := ""
+    explorerColumnFitSourceCtrl              := sourceCtrlNN
+    explorerColumnFitStableHitCount          := 0
+    explorerColumnFitStablePathConfirmed     := !requireStablePath
+    explorerColumnFitStablePathHitCount      := 0
+    ; A one-shot 1 ms period queues the first directory-path check at the next
+    ; timer opportunity. Later checks use the request's bounded poll interval.
+    initialPollMs := useFastPathPolling ? 1 : k_explorerColumnFitPollMs
+    timerDelay    := (delayMs > 0) ? -delayMs : -initialPollMs
+    SetTimer, ExplorerColumnFit, %timerDelay%
 }
 
 ; Queue the common follow-up for navigation commands in an Explorer or file
 ; dialog header. Directory-changing commands must first advance beyond the path
 ; captured before the click. Refresh instead waits for its button to return from
 ; Stop/Cancel, then samples the unchanged directory's newly loaded Items View.
-_RequestHeaderNavigationColumnAutoFit(hwnd, windowClass, initialPath := "", requirePathChange := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
+_RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePathChange := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
     global k_headerNavigationCtrlAddDelayMs
 
-    _RequestExplorerDetailsColumnAutoFit(hwnd, windowClass, "", k_headerNavigationCtrlAddDelayMs, initialPath, requirePathChange, False, minimumLayoutDelayMs, refreshPoint)
+    requestDelayMs := requirePathChange ? 0 : k_headerNavigationCtrlAddDelayMs
+    _RequestExplorerColumnFit(hwnd, windowClass, "", requestDelayMs, initialPath, requirePathChange, False, minimumLayoutDelayMs, refreshPoint)
 }
 
 ; Focus and verify the supplied ClassNN, then use the shared immediate
@@ -8950,7 +9020,7 @@ _SendFocusedCtrlAdd(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, syncPa
 ; Return true only for header-region UIA hits that match the known
 ; Explorer/file-dialog navigation controls which should queue a delayed
 ; Ctrl+NumpadAdd follow-up after native navigation starts.
-_ShouldQueueHeaderNavigationCtrlAdd(controlType, controlName := "", localizedControlType := "") {
+_IsHeaderNavigationCtrlAddCandidate(controlType, controlName := "", localizedControlType := "") {
     if (controlType == 50000)
         return (InStr(controlName, "Back", True)
              || InStr(controlName, "Forward", True)
@@ -8968,95 +9038,118 @@ _ShouldQueueHeaderNavigationCtrlAdd(controlType, controlName := "", localizedCon
     return False
 }
 
-; For a new Explorer window, require the same nonempty GetExplorerPath() result
-; twice. For path-changing requests, require a different directory. For Refresh,
-; wait until its button returns from Stop/Cancel. Then resolve the replacement
-; Items View; two matching nonempty Details signatures confirm that its rows and
-; column/header geometry are available. A confirmed #32770 SysTreeView32 folder
-; selection instead uses SendCtrlAdd()'s normal file-view resolution/load path.
-; This timer deliberately does no Sleep loop, so other hotkeys remain responsive.
-ExplorerDetailsCtrlAdd:
-    queuedClass             := explorerDetailsCtrlAddClass
-    queuedDeadline          := explorerDetailsCtrlAddDeadlineTick
-    queuedEarliestLayout    := explorerDetailsCtrlAddEarliestLayoutTick
-    queuedHwnd              := explorerDetailsCtrlAddHwnd
-    queuedId                := explorerDetailsCtrlAddId
-    queuedInitialPath       := explorerDetailsCtrlAddInitialPath
-    queuedRefreshPoint      := explorerDetailsCtrlAddRefreshPoint
-    queuedRequirePathChange := explorerDetailsCtrlAddRequirePathChange
-    queuedRequireStablePath := explorerDetailsCtrlAddRequireStablePath
-    queuedSourceCtrl        := explorerDetailsCtrlAddSourceCtrl
+; Process the pending Explorer column-fit request according to its source scenario:
+; 1. New Explorer activation: sample the nonempty GetExplorerPath() result and
+;    Details layout together. A path change discards prior layout state, and
+;    both signals must match across two samples before alignment.
+; 2. Other path-changing navigation: require a nonempty path different from the
+;    path captured before the click so the old directory cannot authorize it.
+; 3. Refresh: honor the minimum reload delay, then wait until the header point
+;    reports Refresh or the bounded button-state wait expires.
+; 4. #32770 SysTreeView32 navigation: use the same destination Items View and
+;    stable Details-layout proof as the other path-changing scenarios.
+;
+; For scenarios 1-4, resolve the destination Items View and normally require two
+; matching nonempty Details-layout signatures before SendCtrlAdd(). At the layout
+; deadline, one current nonempty signature is sufficient; no Details signature
+; means no alignment. Each retry uses a one-shot SetTimer rather than a Sleep
+; loop, so other hotkeys remain responsive and every wait remains bounded.
+ExplorerColumnFit:
+    requestWindowClass                := explorerColumnFitClass
+    requestDeadlineTick               := explorerColumnFitDeadlineTick
+    requestEarliestLayoutTick         := explorerColumnFitEarliestLayoutTick
+    requestFastPathPollMs             := explorerColumnFitFastPathPollIntervalMs
+    requestFastPathUntilTick          := explorerColumnFitFastPathPollUntilTick
+    requestTargetHwnd                 := explorerColumnFitHwnd
+    explorerDetailsRequestId          := explorerColumnFitId
+    requestInitialPath                := explorerColumnFitInitialPath
+    requestRefreshPoint               := explorerColumnFitRefreshPoint
+    requestRequiresPathChange         := explorerColumnFitRequirePathChange
+    requestRequiresStablePath         := explorerColumnFitRequireStablePath
+    requestSourceCtrl                 := explorerColumnFitSourceCtrl
+    ; Track the independent startup-path gate: even when the layout deadline
+    ; permits one current Details signature, alignment must wait for a second
+    ; timer sample proving that the same nonempty startup path still owns it.
+    waitingForSecondStartupPathSample := False
 
-    if (!queuedHwnd || !WinExist("ahk_id " . queuedHwnd) || WinExist("A") != queuedHwnd)
+    if (!requestTargetHwnd || !WinExist("ahk_id " . requestTargetHwnd) || WinExist("A") != requestTargetHwnd)
         Return
 
     ; A held button is a drag or another in-progress click, not a completed
     ; navigation command whose Details columns should be adjusted yet.
-    if (GetKeyState("LButton", "P") || queuedId != explorerDetailsCtrlAddId)
+    if (GetKeyState("LButton", "P") || explorerDetailsRequestId != explorerColumnFitId)
         Return
 
-    WinGetClass, currentClass, ahk_id %queuedHwnd%
-    if (currentClass != queuedClass || !(currentClass == "CabinetWClass" || currentClass == "#32770"))
+    WinGetClass, currentClass, ahk_id %requestTargetHwnd%
+    if (currentClass != requestWindowClass || !(currentClass == "CabinetWClass" || currentClass == "#32770"))
         Return
 
-    ; A newly created Explorer window has no previous directory to compare. Wait
-    ; through the startup settling period, then require two consecutive nonempty
-    ; GetExplorerPath() results for the same directory before inspecting UIA.
-    if (queuedRequireStablePath && !explorerDetailsCtrlAddStablePathConfirmed) {
-        if (A_TickCount < queuedEarliestLayout) {
-            SetTimer, ExplorerDetailsCtrlAdd, % -k_explorerDetailsCtrlAddPollMs
+    ; A newly created Explorer window has no previous directory to compare. After
+    ; the startup settling period, sample its path and Details layout together.
+    ; A different or empty path clears every layout sample associated with the
+    ; previous directory; alignment remains blocked until the same nonempty path
+    ; and the same Details-layout signature have each appeared twice.
+    if (requestRequiresStablePath && !explorerColumnFitStablePathConfirmed) {
+        if (A_TickCount < requestEarliestLayoutTick) {
+            remainingLayoutMs := Max(1, requestEarliestLayoutTick - A_TickCount)
+            SetTimer, ExplorerColumnFit, % -remainingLayoutMs
             Return
         }
 
-        currentPath := GetExplorerPath(queuedHwnd)
-        if (queuedId != explorerDetailsCtrlAddId)
+        currentPath := GetExplorerPath(requestTargetHwnd)
+        if (explorerDetailsRequestId != explorerColumnFitId)
             Return
 
         if (currentPath = "") {
-            explorerDetailsCtrlAddPreviousPath       := ""
-            explorerDetailsCtrlAddStablePathHitCount := 0
-        }
-        else if (currentPath = explorerDetailsCtrlAddPreviousPath) {
-            explorerDetailsCtrlAddStablePathHitCount += 1
-        }
-        else {
-            explorerDetailsCtrlAddPreviousPath       := currentPath
-            explorerDetailsCtrlAddStablePathHitCount := 1
-        }
-
-        if (explorerDetailsCtrlAddStablePathHitCount < 2) {
-            if (A_TickCount < queuedDeadline)
-                SetTimer, ExplorerDetailsCtrlAdd, % -k_explorerDetailsCtrlAddPollMs
+            explorerColumnFitPreviousLayoutSignature  := ""
+            explorerColumnFitPreviousPath             := ""
+            explorerColumnFitShellEl                  := ""
+            explorerColumnFitStableHitCount           := 0
+            explorerColumnFitStablePathHitCount       := 0
+            if (A_TickCount < requestDeadlineTick)
+                SetTimer, ExplorerColumnFit, % -k_explorerColumnFitPollMs
             Return
         }
+        else if (currentPath = explorerColumnFitPreviousPath) {
+            explorerColumnFitStablePathHitCount += 1
+        }
+        else {
+            explorerColumnFitPreviousLayoutSignature  := ""
+            explorerColumnFitPreviousPath             := currentPath
+            explorerColumnFitShellEl                  := ""
+            explorerColumnFitStableHitCount           := 0
+            explorerColumnFitStablePathHitCount       := 1
+        }
 
-        ; Start a fresh bounded layout window after the destination path is
-        ; stable, so startup time does not consume the Details sampling budget.
-        explorerDetailsCtrlAddDeadlineTick             := A_TickCount + k_explorerDetailsCtrlAddTimeoutMs
-        queuedDeadline                                 := explorerDetailsCtrlAddDeadlineTick
-        explorerDetailsCtrlAddPreviousLayoutSignature  := ""
-        explorerDetailsCtrlAddShellEl                  := ""
-        explorerDetailsCtrlAddStableHitCount           := 0
-        explorerDetailsCtrlAddStablePathConfirmed      := True
+        if (explorerColumnFitStablePathHitCount < 2) {
+            waitingForSecondStartupPathSample := True
+        }
+        else {
+            ; Extend the bounded layout window without clearing the first layout
+            ; sample already captured for this same directory.
+            explorerColumnFitDeadlineTick        := A_TickCount + k_explorerColumnFitTimeoutMs
+            requestDeadlineTick                  := explorerColumnFitDeadlineTick
+            explorerColumnFitStablePathConfirmed := True
+        }
     }
-    else if (queuedRequireStablePath) {
+    else if (requestRequiresStablePath) {
         ; Keep proving that the same startup destination owns the layout being
         ; sampled. If Explorer changes paths after the first confirmation, discard
         ; those UIA samples and restart the non-blocking startup readiness check.
-        currentPath := GetExplorerPath(queuedHwnd)
-        if (queuedId != explorerDetailsCtrlAddId)
+        currentPath := GetExplorerPath(requestTargetHwnd)
+        if (explorerDetailsRequestId != explorerColumnFitId)
             Return
 
-        if (currentPath = "" || currentPath != explorerDetailsCtrlAddPreviousPath) {
-            explorerDetailsCtrlAddDeadlineTick             := A_TickCount + k_newExplorerDetailsCtrlAddTimeoutMs
-            explorerDetailsCtrlAddEarliestLayoutTick       := A_TickCount + k_newExplorerDetailsCtrlAddMinimumWaitMs
-            explorerDetailsCtrlAddPreviousLayoutSignature  := ""
-            explorerDetailsCtrlAddPreviousPath             := currentPath
-            explorerDetailsCtrlAddShellEl                  := ""
-            explorerDetailsCtrlAddStableHitCount           := 0
-            explorerDetailsCtrlAddStablePathConfirmed      := False
-            explorerDetailsCtrlAddStablePathHitCount       := (currentPath = "") ? 0 : 1
-            SetTimer, ExplorerDetailsCtrlAdd, % -k_explorerDetailsCtrlAddPollMs
+        if (currentPath = "" || currentPath != explorerColumnFitPreviousPath) {
+            explorerColumnFitDeadlineTick             := A_TickCount + k_newExplorerColumnFitTimeoutMs
+            explorerColumnFitEarliestLayoutTick       := A_TickCount + k_newExplorerColumnFitMinimumWaitMs
+            explorerColumnFitPreviousLayoutSignature  := ""
+            explorerColumnFitPreviousPath             := currentPath
+            explorerColumnFitShellEl                  := ""
+            explorerColumnFitStableHitCount           := 0
+            explorerColumnFitStablePathConfirmed      := False
+            explorerColumnFitStablePathHitCount       := (currentPath = "") ? 0 : 1
+            SetTimer, ExplorerColumnFit, % -k_explorerColumnFitPollMs
             Return
         }
     }
@@ -9065,42 +9158,39 @@ ExplorerDetailsCtrlAdd:
     ; different nonempty directory before this request can align the replacement
     ; file view. If the path never changes, cancel at the deadline instead of
     ; adjusting the old directory's columns.
-    if (queuedRequirePathChange && !explorerDetailsCtrlAddPathChangeConfirmed) {
-        currentPath := GetExplorerPath(queuedHwnd)
-        if (queuedId != explorerDetailsCtrlAddId)
+    if (requestRequiresPathChange && !explorerColumnFitPathChangeConfirmed) {
+        currentPath := GetExplorerPath(requestTargetHwnd)
+        if (explorerDetailsRequestId != explorerColumnFitId)
             Return
 
-        if (currentPath = "" || currentPath = queuedInitialPath) {
-            if (A_TickCount < queuedDeadline)
-                SetTimer, ExplorerDetailsCtrlAdd, % -k_explorerDetailsCtrlAddPollMs
+        if (currentPath = "" || currentPath = requestInitialPath) {
+            if (A_TickCount < requestDeadlineTick) {
+                pathPollMs := (requestFastPathPollMs > 0 && A_TickCount < requestFastPathUntilTick)
+                    ? requestFastPathPollMs
+                    : k_explorerColumnFitPollMs
+                SetTimer, ExplorerColumnFit, % -pathPollMs
+            }
             Return
         }
 
         ; Give the replacement Items View its own bounded stabilization window.
         ; Otherwise a slow path change could consume the original deadline and
         ; authorize a send after only one Details-layout sample.
-        explorerDetailsCtrlAddDeadlineTick             := A_TickCount + k_explorerDetailsCtrlAddTimeoutMs
-        queuedDeadline                                 := explorerDetailsCtrlAddDeadlineTick
-        explorerDetailsCtrlAddPathChangeConfirmed      := True
-        explorerDetailsCtrlAddPreviousLayoutSignature  := ""
-        explorerDetailsCtrlAddShellEl                  := ""
-        explorerDetailsCtrlAddStableHitCount           := 0
+        explorerColumnFitDeadlineTick             := A_TickCount + k_explorerColumnFitTimeoutMs
+        requestDeadlineTick                       := explorerColumnFitDeadlineTick
+        explorerColumnFitPathChangeConfirmed      := True
+        explorerColumnFitPreviousLayoutSignature  := ""
+        explorerColumnFitShellEl                  := ""
+        explorerColumnFitStableHitCount           := 0
 
-        ; Group By changes the presentation inside the destination file view; it
-        ; does not change the file-view CtrlNN that receives column alignment.
-        ; Once this native tree click has reached a different directory, let the
-        ; standard path resolve/focus that CtrlNN and wait for its content to load.
-        if (currentClass == "#32770" && InStr(queuedSourceCtrl, "SysTreeView32", True)) {
-            SendCtrlAdd(queuedHwnd, queuedInitialPath, currentPath, currentClass, queuedSourceCtrl, True)
-            Return
-        }
     }
 
     ; Refresh cannot prove completion with a directory change. Wait out its
     ; short reload window before resolving the Items View, ensuring that the two
     ; accepted layout samples are taken after the native Refresh command began.
-    if (A_TickCount < queuedEarliestLayout) {
-        SetTimer, ExplorerDetailsCtrlAdd, % -k_explorerDetailsCtrlAddPollMs
+    if (A_TickCount < requestEarliestLayoutTick) {
+        remainingLayoutMs := Max(1, requestEarliestLayoutTick - A_TickCount)
+        SetTimer, ExplorerColumnFit, % -remainingLayoutMs
         Return
     }
 
@@ -9108,64 +9198,73 @@ ExplorerDetailsCtrlAdd:
     ; Explorer changes Refresh to Stop/Cancel while loading and restores Refresh
     ; when that reload completes. If UIA never exposes the transition, proceed at
     ; the bounded deadline rather than leaving this request alive indefinitely.
-    if (IsObject(queuedRefreshPoint) && !explorerDetailsCtrlAddRefreshReady) {
-        refreshKind := _GetExplorerHeaderNavigationKind(queuedRefreshPoint.x, queuedRefreshPoint.y, 100)
-        if (queuedId != explorerDetailsCtrlAddId)
+    if (IsObject(requestRefreshPoint) && !explorerColumnFitRefreshReady) {
+        refreshKind := _GetExplorerHeaderNavigationKind(requestRefreshPoint.x, requestRefreshPoint.y, 100)
+        if (explorerDetailsRequestId != explorerColumnFitId)
             Return
 
-        if (refreshKind != "refresh" && A_TickCount < queuedDeadline) {
-            refreshPollDelay := -Max(k_explorerDetailsCtrlAddPollMs, 100)
-            SetTimer, ExplorerDetailsCtrlAdd, %refreshPollDelay%
+        if (refreshKind != "refresh" && A_TickCount < requestDeadlineTick) {
+            refreshPollDelay := -Max(k_explorerColumnFitPollMs, 100)
+            SetTimer, ExplorerColumnFit, %refreshPollDelay%
             Return
         }
 
         ; Start a fresh Details-layout window only after Refresh is ready (or the
         ; bounded button-state wait expired), so old pre-refresh samples cannot
         ; authorize Ctrl+NumpadAdd.
-        explorerDetailsCtrlAddDeadlineTick             := A_TickCount + k_explorerDetailsCtrlAddTimeoutMs
-        queuedDeadline                                 := explorerDetailsCtrlAddDeadlineTick
-        explorerDetailsCtrlAddPreviousLayoutSignature  := ""
-        explorerDetailsCtrlAddRefreshReady             := True
-        explorerDetailsCtrlAddShellEl                  := ""
-        explorerDetailsCtrlAddStableHitCount           := 0
+        explorerColumnFitDeadlineTick             := A_TickCount + k_explorerColumnFitTimeoutMs
+        requestDeadlineTick                       := explorerColumnFitDeadlineTick
+        explorerColumnFitPreviousLayoutSignature  := ""
+        explorerColumnFitRefreshReady             := True
+        explorerColumnFitShellEl                  := ""
+        explorerColumnFitStableHitCount           := 0
     }
 
-    shellEl := explorerDetailsCtrlAddShellEl
+    shellEl := explorerColumnFitShellEl
     if !IsObject(shellEl) {
-        try shellEl := FindExplorerItemsViewElement(queuedHwnd)
+        try shellEl := FindExplorerItemsViewElement(requestTargetHwnd)
         catch e
             shellEl := ""
-        explorerDetailsCtrlAddShellEl := shellEl
+        explorerColumnFitShellEl := shellEl
     }
 
     layoutSignature := _GetExplorerDetailsLayoutSignature(shellEl)
     if (layoutSignature != "") {
-        if (layoutSignature = explorerDetailsCtrlAddPreviousLayoutSignature)
-            explorerDetailsCtrlAddStableHitCount += 1
+        if (layoutSignature = explorerColumnFitPreviousLayoutSignature)
+            explorerColumnFitStableHitCount += 1
         else
-            explorerDetailsCtrlAddStableHitCount := 1
+            explorerColumnFitStableHitCount := 1
 
-        explorerDetailsCtrlAddPreviousLayoutSignature := layoutSignature
+        explorerColumnFitPreviousLayoutSignature := layoutSignature
     } else {
-        explorerDetailsCtrlAddPreviousLayoutSignature := ""
+        explorerColumnFitPreviousLayoutSignature := ""
         ; The previous UIA element can belong to the view being replaced.
         ; Resolve it again on the next timer tick instead of probing it forever.
-        explorerDetailsCtrlAddShellEl := ""
-        explorerDetailsCtrlAddStableHitCount := 0
+        explorerColumnFitShellEl := ""
+        explorerColumnFitStableHitCount := 0
+    }
+
+    ; The first startup callback may record the first path and layout samples
+    ; together, but it cannot authorize alignment until the next callback proves
+    ; that the same nonempty path remains current.
+    if (waitingForSecondStartupPathSample) {
+        if (A_TickCount < requestDeadlineTick)
+            SetTimer, ExplorerColumnFit, % -k_explorerColumnFitPollMs
+        Return
     }
 
     ; Send after two stable samples, or at the deadline only when a Details
     ; layout exists. A missing Details view is cancelled rather than targeting
     ; another control with Ctrl+NumpadAdd.
-    if (explorerDetailsCtrlAddStableHitCount < 2 && A_TickCount < queuedDeadline) {
-        SetTimer, ExplorerDetailsCtrlAdd, % -k_explorerDetailsCtrlAddPollMs
+    if (explorerColumnFitStableHitCount < 2 && A_TickCount < requestDeadlineTick) {
+        SetTimer, ExplorerColumnFit, % -k_explorerColumnFitPollMs
         Return
     }
 
-    if (layoutSignature = "" || queuedId != explorerDetailsCtrlAddId)
+    if (layoutSignature = "" || explorerDetailsRequestId != explorerColumnFitId)
         Return
 
-    SendCtrlAdd(queuedHwnd, , , currentClass, queuedSourceCtrl)
+    SendCtrlAdd(requestTargetHwnd, , , currentClass, requestSourceCtrl)
 Return
 
 ; Deferred recovery for a first click into an inactive Explorer/file-dialog
@@ -9234,7 +9333,7 @@ PostActivationLButtonCheck:
             Return
 
         if (treeClickSelectsFolder)
-            _RequestExplorerDetailsColumnAutoFit(targetHwnd, targetClass, targetCtrl, 0, initialPath, True)
+            _RequestExplorerColumnFit(targetHwnd, targetClass, targetCtrl, 0, initialPath, True)
         Return
     }
 
@@ -9250,10 +9349,10 @@ PostActivationLButtonCheck:
 
         if (headerKind = "refresh") {
             refreshPoint := {x: clickX, y: clickY}
-            _RequestHeaderNavigationColumnAutoFit(targetHwnd, targetClass, initialPath, False, k_refreshDetailsCtrlAddMinimumWaitMs, refreshPoint)
+            _RequestHeaderNavigationCtrlAdd(targetHwnd, targetClass, initialPath, False, k_refreshDetailsCtrlAddMinimumWaitMs, refreshPoint)
         }
         else if (headerKind = "path_change")
-            _RequestHeaderNavigationColumnAutoFit(targetHwnd, targetClass, initialPath, True)
+            _RequestHeaderNavigationCtrlAdd(targetHwnd, targetClass, initialPath, True)
         Return
     }
 
@@ -9351,6 +9450,9 @@ $~LButton::
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
     activeBeforeLButton := WinExist("A")
+    ; The first blank click defers alignment for 125 ms so a second click can
+    ; cancel that pending single-click action before double-click navigation.
+    SetTimer, SendCtrlAddLabel, Off
     CancelTbcTypingWorkForPointerAction()
 
     WinGetClass, _winClassD, ahk_id %_winIdD%
@@ -9370,12 +9472,12 @@ $~LButton::
     ; If this press is aimed at a different top-level window, defer all UIA hit
     ; testing and column work until Windows completes the focus change.
     if (_winIdD && activeBeforeLButton && _winIdD != activeBeforeLButton) {
-        _QueuePostActivationLButtonCheck(_winIdD, _winCtrlD, lbX1, lbY1, navigationStartPath, navigationHeaderKind)
+        _RequestPostActivationLButtonCheck(_winIdD, _winCtrlD, lbX1, lbY1, navigationStartPath, navigationHeaderKind)
         Return
     }
 
     treeClickSelectsFolder := _IsTreeViewFolderSelectionClick(_winIdD, _winCtrlD, lbX1, lbY1)
-    titleBarState := _GetTitleBarProbeState(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)
+    titleBarState          := _GetTitleBarProbeState(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)
 
     if (titleBarState == "caption")
         Return
@@ -9468,24 +9570,11 @@ $~LButton::
                 ; shell-view load wait inside SendCtrlAdd() be the reliability gate.
                 SendCtrlAdd(_winIdD, prevPath, "", _winClassD, _winCtrlD, True)
             }
-            else {
-                ; tooltip, getting path
-                currentPath    := ""
-                Loop,20 {
-                    If (GetKeyState("LButton","P") || WinExist("A") != _winIdD) {
-                        GoSub, EnableTimers
-                        Return
-                    }
-                    currentPath := GetExplorerPath(_winIdD)
-                    If (currentPath != "" && prevPath != currentPath )
-                        break
-                    sleep, 15
-                }
-                ; tooltip, %A_TimeSincePriorHotkey% - %prevPath% - %currentPath%
-                If (prevPath != "" && currentPath != "" && prevPath != currentPath) {
-                    SendCtrlAdd(_winIdD, prevPath, currentPath, _winClassD)
-                }
-            }
+            ; Other shell-view double-clicks use the shared non-blocking timer.
+            ; Every changed-path request uses the shared bounded fast-poll
+            ; profile, then retains the normal Details-layout confirmation.
+            else if (prevPath != "")
+                _RequestExplorerColumnFit(_winIdD, _winClassD, _winCtrlD, 0, prevPath, True)
         }
         Else {
             If InStr(_winCtrlD, "SysListView32", True) {
@@ -9505,9 +9594,6 @@ $~LButton::
         Return
     }
 
-    LBD_HexColor1           := 0x000000
-    LBD_HexColor2           := 0x000000
-    LBD_HexColor3           := 0x000000
     isBlankSpaceExplorer    := False
     isBlankSpaceNonExplorer := False
     isColumnHeader          := False
@@ -9672,10 +9758,10 @@ $~LButton::
 
             if (headerKind = "refresh") {
                 refreshPoint := {x: lbX1, y: lbY1}
-                _RequestHeaderNavigationColumnAutoFit(_winIdU, _winClassD, navigationStartPath, False, k_refreshDetailsCtrlAddMinimumWaitMs, refreshPoint)
+                _RequestHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, False, k_refreshDetailsCtrlAddMinimumWaitMs, refreshPoint)
             }
             else if (headerKind = "path_change")
-                _RequestHeaderNavigationColumnAutoFit(_winIdU, _winClassD, navigationStartPath, True)
+                _RequestHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, True)
         }
         Else If (   treeClickSelectsFolder
                 && (_winClassD == "CabinetWClass" || _winClassD == "#32770")
@@ -9685,7 +9771,7 @@ $~LButton::
             ; queued request still requires GetExplorerPath() to advance beyond
             ; navigationStartPath before the replacement Items View may authorize
             ; Ctrl+NumpadAdd.
-            _RequestExplorerDetailsColumnAutoFit(_winIdD, _winClassD, _winCtrlD, 0, navigationStartPath, True)
+            _RequestExplorerColumnFit(_winIdD, _winClassD, _winCtrlD, 0, navigationStartPath, True)
         }
     }
     ; A SysHeader drag of at least 15 pixels blocks this window's LButton-driven
@@ -10461,7 +10547,7 @@ _TryAutoFitResolvedSysListView(hwndTop, targetCtrlNN, mode := "header_no_fill") 
 }
 
 SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False, targetScan := "") {
-    global k_nativeSysListViewColumnAutoFitMode, k_useNativeSysListViewColumnAutoFit
+    global k_nativeSysListViewColumnAutoFitMode, k_sendCtrlAddShellTabProbeTimeoutMs, k_useNativeSysListViewColumnAutoFit
 
     TargetControl := ""
     didNavigate   := forceExplorerWait || (prevPath != "" && currentPath != "" && prevPath != currentPath)
@@ -10483,14 +10569,29 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
     If (!GetKeyState("LShift","P" )) {
         If (initFocusedCtrlNN == "") {
             ; Prefer the focused child reported by the target window itself.
-            ; Fall back to the older mouse-based shell-tab workaround only when
-            ; focus is blank or still too generic to identify the real target.
+            ; Use one immediate mouse lookup when focus is blank or still too
+            ; generic because it may identify the exact file-view child.
             ControlGetFocus, initFocusedCtrlNN, ahk_id %initTargetHwnd%
             if (initFocusedCtrlNN == "" || initFocusedCtrlNN == "ShellTabWindowClass1") {
                 MouseGetPos, , , , initFocusedCtrlNN
-                while (initFocusedCtrlNN == "ShellTabWindowClass1") {
-                    MouseGetPos, , , , initFocusedCtrlNN
-                    sleep, 1
+
+                hasScannedTarget := IsObject(targetScan)
+                                 && (targetScan.hasSysList
+                                  || targetScan.hasDirect2
+                                  || targetScan.hasDirect3
+                                  || targetScan.hasDirect4
+                                  || targetScan.hasDirect6
+                                  || targetScan.hasDirect8)
+
+                ; Repeated mouse polling is needed only when no captured scan can
+                ; resolve a pointer that remains over ShellTabWindowClass1.
+                if (initFocusedCtrlNN == "ShellTabWindowClass1" && !hasScannedTarget) {
+                    shellTabProbeDeadline := A_TickCount + k_sendCtrlAddShellTabProbeTimeoutMs
+                    while (initFocusedCtrlNN == "ShellTabWindowClass1"
+                        && A_TickCount < shellTabProbeDeadline) {
+                        MouseGetPos, , , , initFocusedCtrlNN
+                        sleep, 1
+                    }
                 }
             }
         }
@@ -10576,7 +10677,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             BeginBlockKeys()
             try {
-                _SendCtrlNumpadAddChord()
+                Send, ^{NumpadAdd}
 
                 If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
                     ; Skip the heavier restore path when Ctrl+NumpadAdd already left
@@ -11694,12 +11795,6 @@ EndBlockWheel() {
     blockWheel := False
 }
 
-; Inject only the Ctrl+NumpadAdd chord. SendCtrlNumpadAdd() owns the surrounding
-; wheel suppression, key blocking, and immediate Ctrl synchronization.
-_SendCtrlNumpadAddChord() {
-    Send, ^{NumpadAdd}
-}
-
 ; When a guarded column-adjust send is requested, wait one last short moment and
 ; re-check the current request token, quiet window, and active window immediately
 ; before injecting Ctrl+NumpadAdd. This lets a just-arrived WheelUp/WheelDown event
@@ -11729,7 +11824,7 @@ SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, gu
     try {
         BeginBlockKeys()
         try {
-            _SendCtrlNumpadAddChord()
+            Send, ^{NumpadAdd}
         } finally {
             EndBlockKeys()
         }
@@ -11948,7 +12043,7 @@ _ClearTbcEverythingEditAdjustState() {
     global tbcEverythingAdjustCtrlHwnd
     global tbcEverythingAdjustHwnd
     global tbcEverythingAdjustId
-    global tbcEverythingAdjustQueuedTick
+    global tbcEverythingAdjustRequestedTick
     global tbcEverythingAdjustSourceTick
 
     tbcEverythingAdjustCtrl       := ""
@@ -11956,7 +12051,7 @@ _ClearTbcEverythingEditAdjustState() {
     tbcEverythingAdjustCtrlHwnd   := 0
     tbcEverythingAdjustHwnd       := 0
     tbcEverythingAdjustId         := 0
-    tbcEverythingAdjustQueuedTick := 0
+    tbcEverythingAdjustRequestedTick := 0
     tbcEverythingAdjustSourceTick := 0
 }
 
@@ -11964,14 +12059,14 @@ _ClearTbcEverythingEditAdjustState() {
 ; capture or accept the current search-box focus context, stamp the latest
 ; typing tick, and let a short timer enforce a stronger typing-quiet pause
 ; before sending.
-_QueueTbcEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
-    global k_tbcEverythingAdjustRetryMs
+_RequestEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
+    global k_tbcEverythingAdjustTypingQuietMs
     global tbcEverythingAdjustCtrl
     global tbcEverythingAdjustCtrlClass
     global tbcEverythingAdjustCtrlHwnd
     global tbcEverythingAdjustHwnd
     global tbcEverythingAdjustId
-    global tbcEverythingAdjustQueuedTick
+    global tbcEverythingAdjustRequestedTick
     global tbcEverythingAdjustSourceTick
 
     if (!sourceTick)
@@ -11995,9 +12090,10 @@ _QueueTbcEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "
     tbcEverythingAdjustCtrlHwnd   := targetCtrlHwnd
     tbcEverythingAdjustCtrlClass  := targetCtrlClass
     tbcEverythingAdjustId += 1
-    tbcEverythingAdjustQueuedTick := A_TickCount
+    tbcEverythingAdjustRequestedTick := A_TickCount
     tbcEverythingAdjustSourceTick := sourceTick
-    SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
+    remainingQuietMs := GetRemainingQuietDelayMs(A_TimeIdlePhysical, k_tbcEverythingAdjustTypingQuietMs, False)
+    SetTimer, FlushTbcEverythingEditAdjust, % -remainingQuietMs
     return true
 }
 
@@ -12025,7 +12121,7 @@ _IsEverythingEditAdjustTrigger(hotkey) {
 ; allow one deferred auto-fit request per typing tick, require a qualifying
 ; trigger hotkey, capture the exact current Edit1 identity once, and then hand
 ; that context to the shared deferred-send queue.
-_TryQueueEverythingEditAdjustFromKeyTrack(sourceTick, hotkey, activeHwnd := 0) {
+_TryRequestEverythingEditAdjust(sourceTick, hotkey, activeHwnd := 0) {
     global tbcEverythingAdjustSourceTick
 
     if (!sourceTick || tbcEverythingAdjustSourceTick = sourceTick)
@@ -12040,7 +12136,7 @@ _TryQueueEverythingEditAdjustFromKeyTrack(sourceTick, hotkey, activeHwnd := 0) {
     if (targetCtrlNN != "Edit1")
         return false
 
-    return _QueueTbcEverythingEditAdjust(sourceTick, targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
+    return _RequestEverythingEditAdjust(sourceTick, targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
 }
 
 ; Everything Edit1 tbc-work validator:
@@ -12053,13 +12149,13 @@ _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
     global tbcEverythingAdjustCtrlHwnd
     global tbcEverythingAdjustHwnd
     global tbcEverythingAdjustId
-    global tbcEverythingAdjustQueuedTick
+    global tbcEverythingAdjustRequestedTick
 
     currentId := tbcEverythingAdjustId
     if (!expectedId)
         expectedId := currentId
 
-    if !_IsDeferredWorkStillValid(tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrl, expectedId, currentId, tbcEverythingAdjustQueuedTick, k_tbcEverythingAdjustMaxAgeMs)
+    if !_IsDeferredWorkStillValid(tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrl, expectedId, currentId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs)
         return false
 
     if (!tbcEverythingAdjustCtrlHwnd && tbcEverythingAdjustCtrlClass = "")
@@ -12084,9 +12180,9 @@ _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
 ; re-check any queued work token, optional focused control, optional typing-quiet
 ; gate, and then delegate to the low-level send helper only if the action is
 ; still safe for the original deferred target.
-_SendCtrlNumpadAddIfStillValid(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0, guardCtrlNN := "", requiredTypingQuietMs := 0, expectedDeferredId := 0, currentDeferredId := 0, queuedTick := 0, maxAgeMs := 0) {
-    if ((guardHwnd || guardCtrlNN != "" || expectedDeferredId || queuedTick || maxAgeMs)
-     && !_IsDeferredWorkStillValid(guardHwnd, guardCtrlNN, expectedDeferredId, currentDeferredId, queuedTick, maxAgeMs))
+_SendCtrlNumpadAddIfStillValid(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0, guardCtrlNN := "", requiredTypingQuietMs := 0, expectedDeferredId := 0, currentDeferredId := 0, requestTick := 0, maxAgeMs := 0) {
+    if ((guardHwnd || guardCtrlNN != "" || expectedDeferredId || requestTick || maxAgeMs)
+     && !_IsDeferredWorkStillValid(guardHwnd, guardCtrlNN, expectedDeferredId, currentDeferredId, requestTick, maxAgeMs))
         return false
 
     if (requiredTypingQuietMs && !_IsDeferredTypingQuiet(requiredTypingQuietMs))
@@ -12112,11 +12208,16 @@ FlushTbcEverythingEditAdjust:
 
     if (!_IsDeferredTypingQuiet(k_tbcEverythingAdjustTypingQuietMs))
     {
-        SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
+        ; Physical idle time has an exact deadline. The fixed fallback remains
+        ; only for the separate StopAutoFix gate, which has no known end tick.
+        remainingQuietMs := (A_TimeIdlePhysical < k_tbcEverythingAdjustTypingQuietMs)
+                          ? GetRemainingQuietDelayMs(A_TimeIdlePhysical, k_tbcEverythingAdjustTypingQuietMs, False)
+                          : k_tbcEverythingAdjustRetryMs
+        SetTimer, FlushTbcEverythingEditAdjust, % -remainingQuietMs
         Return
     }
 
-    if (_SendCtrlNumpadAddIfStillValid(6, 0, 0, tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrl, k_tbcEverythingAdjustTypingQuietMs, currentRequestId, tbcEverythingAdjustId, tbcEverythingAdjustQueuedTick, k_tbcEverythingAdjustMaxAgeMs))
+    if (_SendCtrlNumpadAddIfStillValid(6, 0, 0, tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrl, k_tbcEverythingAdjustTypingQuietMs, currentRequestId, tbcEverythingAdjustId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs))
     {
         if (currentRequestId = tbcEverythingAdjustId)
             _ClearTbcEverythingEditAdjustState()
@@ -12132,8 +12233,12 @@ FlushTbcEverythingEditAdjust:
         Return
     }
 
-    if (!_IsDeferredTypingQuiet(k_tbcEverythingAdjustTypingQuietMs))
-        SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
+    if (!_IsDeferredTypingQuiet(k_tbcEverythingAdjustTypingQuietMs)) {
+        remainingQuietMs := (A_TimeIdlePhysical < k_tbcEverythingAdjustTypingQuietMs)
+                          ? GetRemainingQuietDelayMs(A_TimeIdlePhysical, k_tbcEverythingAdjustTypingQuietMs, False)
+                          : k_tbcEverythingAdjustRetryMs
+        SetTimer, FlushTbcEverythingEditAdjust, % -remainingQuietMs
+    }
 Return
 
 KeyTrack() {
@@ -12149,7 +12254,7 @@ KeyTrack() {
         ; the typing rewrite timers: qualify the key event, capture the exact
         ; current search-box identity once, queue the work, and let the timer
         ; handle the stronger quiet-gap revalidation before sending.
-        if (!_TryQueueEverythingEditAdjustFromKeyTrack(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd))
+        if (!_TryRequestEverythingEditAdjust(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd))
         {
             if (!_IsDeferredWorkStillValid(activeHwnd, "Edit1"))
                 _ClearTbcEverythingEditAdjustState()
@@ -16745,7 +16850,7 @@ FlushTypingAutoFixRefresh:
     tbcRefreshHwnd                       := typingAutoFixRefreshHwnd
     tbcRefreshId                         := typingAutoFixRefreshId
     tbcRefreshProtectPartialWord         := typingAutoFixRefreshProtectPartialWord
-    tbcRefreshQueuedTick                 := typingAutoFixRefreshQueuedTick
+    tbcRefreshRequestedTick                 := typingAutoFixRefreshRequestedTick
     tbcRefreshStartHotstringBoundarySeq  := typingAutoFixRefreshStartHotstringBoundarySeq
     tbcRefreshStartTypingSeq             := typingAutoFixRefreshStartTypingSeq
 
@@ -16778,7 +16883,7 @@ FlushTypingAutoFixRefresh:
      || tbcRefreshHwnd                       != typingAutoFixRefreshHwnd
      || tbcRefreshId                         != typingAutoFixRefreshId
      || tbcRefreshProtectPartialWord         != typingAutoFixRefreshProtectPartialWord
-     || tbcRefreshQueuedTick                 != typingAutoFixRefreshQueuedTick
+     || tbcRefreshRequestedTick              != typingAutoFixRefreshRequestedTick
      || tbcRefreshStartHotstringBoundarySeq  != typingAutoFixRefreshStartHotstringBoundarySeq
      || tbcRefreshStartTypingSeq             != typingAutoFixRefreshStartTypingSeq)
         Return
@@ -17061,7 +17166,7 @@ _ClearTbcTypingAutoFixRefresh() {
     global typingAutoFixRefreshCtrlNN
     global typingAutoFixRefreshHwnd
     global typingAutoFixRefreshProtectPartialWord
-    global typingAutoFixRefreshQueuedTick
+    global typingAutoFixRefreshRequestedTick
     global typingAutoFixRefreshStartHotstringBoundarySeq
     global typingAutoFixRefreshStartTypingSeq
 
@@ -17070,7 +17175,7 @@ _ClearTbcTypingAutoFixRefresh() {
     typingAutoFixRefreshCtrlNN                     := ""
     typingAutoFixRefreshHwnd                       := 0
     typingAutoFixRefreshProtectPartialWord         := False
-    typingAutoFixRefreshQueuedTick                 := 0
+    typingAutoFixRefreshRequestedTick              := 0
     typingAutoFixRefreshStartHotstringBoundarySeq  := 0
     typingAutoFixRefreshStartTypingSeq             := 0
 }
@@ -17231,7 +17336,7 @@ QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     global typingAutoFixRefreshHwnd
     global typingAutoFixRefreshId
     global typingAutoFixRefreshProtectPartialWord
-    global typingAutoFixRefreshQueuedTick
+    global typingAutoFixRefreshRequestedTick
     global typingAutoFixRefreshStartHotstringBoundarySeq
     global typingAutoFixRefreshStartTypingSeq
 
@@ -17258,7 +17363,7 @@ QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     typingAutoFixRefreshCtrlNN             := ctrlNN
     typingAutoFixRefreshHwnd               := activeHwnd
     typingAutoFixRefreshProtectPartialWord := protectPartialWord
-    typingAutoFixRefreshQueuedTick         := nowTick
+    typingAutoFixRefreshRequestedTick         := nowTick
     typingAutoFixRefreshStartHotstringBoundarySeq := startHotstringBoundarySeq
     typingAutoFixRefreshStartTypingSeq             := startTypingSeq
     SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
@@ -21698,6 +21803,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its important::it's important
 ::its improved::it's improved
 ::its in::it's in
+::its just::it's just
 ::its late::it's late
 ::its lacking::it's lacking
 ::its left::it's left
