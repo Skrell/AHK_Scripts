@@ -2678,7 +2678,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ; both the destination path and the Details layout are stable. Existing
         ; windows and file dialogs retain their established activation path.
         if (vWinClass == "CabinetWClass" && isFirstTrackedActivation) {
-            _RequestExplorerColumnFit(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
+            _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
                 , k_newExplorerColumnFitMinimumWaitMs)
         }
         else {
@@ -8920,7 +8920,7 @@ _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := 
 ; path-poll profile; this does not weaken Details-layout confirmation. A newer
 ; call replaces the single pending request, and its ID invalidates stale timer
 ; callbacks.
-_RequestExplorerColumnFit(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
+_RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
     global explorerColumnFitClass
     global explorerColumnFitDeadlineTick
     global explorerColumnFitEarliestLayoutTick
@@ -9006,7 +9006,7 @@ _RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePat
     global k_headerNavigationCtrlAddDelayMs
 
     requestDelayMs := requirePathChange ? 0 : k_headerNavigationCtrlAddDelayMs
-    _RequestExplorerColumnFit(hwnd, windowClass, "", requestDelayMs, initialPath, requirePathChange, False, minimumLayoutDelayMs, refreshPoint)
+    _RequestExplorerCtrlAdd(hwnd, windowClass, "", requestDelayMs, initialPath, requirePathChange, False, minimumLayoutDelayMs, refreshPoint)
 }
 
 ; Focus and verify the supplied ClassNN, then use the shared immediate
@@ -9333,7 +9333,7 @@ PostActivationLButtonCheck:
             Return
 
         if (treeClickSelectsFolder)
-            _RequestExplorerColumnFit(targetHwnd, targetClass, targetCtrl, 0, initialPath, True)
+            _RequestExplorerCtrlAdd(targetHwnd, targetClass, targetCtrl, 0, initialPath, True)
         Return
     }
 
@@ -9574,7 +9574,7 @@ $~LButton::
             ; Every changed-path request uses the shared bounded fast-poll
             ; profile, then retains the normal Details-layout confirmation.
             else if (prevPath != "")
-                _RequestExplorerColumnFit(_winIdD, _winClassD, _winCtrlD, 0, prevPath, True)
+                _RequestExplorerCtrlAdd(_winIdD, _winClassD, _winCtrlD, 0, prevPath, True)
         }
         Else {
             If InStr(_winCtrlD, "SysListView32", True) {
@@ -9771,7 +9771,7 @@ $~LButton::
             ; queued request still requires GetExplorerPath() to advance beyond
             ; navigationStartPath before the replacement Items View may authorize
             ; Ctrl+NumpadAdd.
-            _RequestExplorerColumnFit(_winIdD, _winClassD, _winCtrlD, 0, navigationStartPath, True)
+            _RequestExplorerCtrlAdd(_winIdD, _winClassD, _winCtrlD, 0, navigationStartPath, True)
         }
     }
     ; A SysHeader drag of at least 15 pixels blocks this window's LButton-driven
