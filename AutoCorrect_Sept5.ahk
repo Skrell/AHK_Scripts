@@ -343,82 +343,95 @@ Global postActivationLButtonY                        := 0
 ; Monotonic token incremented for each queued activation click so an older timer
 ; can detect it was superseded by a newer click and exit safely.
 Global postActivationLButtonId                       := 0
-; Short one-shot delay that gives Windows time to finish activation/focus
-; transfer before the deferred shell-view re-check runs.
+; Deadline for waiting non-blockingly until the clicked window is active and
+; LButton has been released.
+Global postActivationLButtonDeadlineTick             := 0
+; Initial delay that gives Windows time to begin activation/focus transfer.
 Global k_postActivationLButtonDelayMs                := 35
+; Retry interval while activation or physical mouse release is still pending.
+Global k_postActivationLButtonPollMs                 := 15
+; Maximum lifetime of one deferred inactive-window click snapshot.
+Global k_postActivationLButtonTimeoutMs              := 1000
 ; +----------------------------------------------------------------------------+
-; | Explorer Details Column Auto-Fit State                                      |
-; | Confirms startup or navigation readiness, then samples the Details layout  |
-; | on a timer before Ctrl+NumpadAdd is sent.                                   |
+; | Explorer CtrlAdd Request State                                              |
+; | Confirms startup or navigation readiness and a stable Details layout on a  |
+; | timer before delegating the adjustment to SendCtrlAdd().                    |
 ; +----------------------------------------------------------------------------+
-; Class of the Explorer or file-dialog window that owns the queued adjustment.
-Global explorerColumnFitClass                   := ""
-; Latest tick at which the queued adjustment may send Ctrl+NumpadAdd.
-Global explorerColumnFitDeadlineTick            := 0
+; Class of the Explorer or file-dialog window that owns the pending request.
+Global explorerCtrlAddRequestClass                   := ""
+; Latest tick at which the pending request may call SendCtrlAdd().
+Global explorerCtrlAddRequestDeadlineTick            := 0
 ; Earliest tick at which UIA may sample a startup or path-neutral Refresh result.
 ; This prevents an incomplete or unchanged Items View from satisfying readiness.
-Global explorerColumnFitEarliestLayoutTick      := 0
+Global explorerCtrlAddRequestEarliestLayoutTick      := 0
 ; Shorter directory-path polling interval used during every changed-path
 ; request's bounded fast-start window.
-Global explorerColumnFitFastPathPollIntervalMs  := 0
+Global explorerCtrlAddRequestFastPathPollIntervalMs  := 0
 ; Tick when the current changed-path request's fast polling window ends.
-Global explorerColumnFitFastPathPollUntilTick   := 0
-; Top-level Explorer or file-dialog HWND that owns the queued adjustment.
-Global explorerColumnFitHwnd                    := 0
-; Monotonic token incremented for every queued adjustment so an earlier timer
+Global explorerCtrlAddRequestFastPathPollUntilTick   := 0
+; Top-level Explorer or file-dialog HWND that owns the pending request.
+Global explorerCtrlAddRequestHwnd                    := 0
+; Monotonic token incremented for every request so an earlier timer
 ; callback exits when a newer navigation request supersedes it.
-Global explorerColumnFitId                      := 0
+Global explorerCtrlAddRequestId                      := 0
 ; Directory reported before a path-changing navigation click. The timer requires
 ; GetExplorerPath() to return a different nonempty directory before sampling UIA.
-Global explorerColumnFitInitialPath             := ""
-; True after GetExplorerPath() confirms that a queued path-changing navigation
-; reached a different directory from explorerColumnFitInitialPath.
-Global explorerColumnFitPathChangeConfirmed     := False
+Global explorerCtrlAddRequestInitialPath             := ""
+; True after GetExplorerPath() confirms that the pending path-changing request
+; reached a different directory from explorerCtrlAddRequestInitialPath.
+Global explorerCtrlAddRequestPathChangeConfirmed     := False
 ; Details layout signature observed on the prior timer sample.
-Global explorerColumnFitPreviousLayoutSignature := ""
+Global explorerCtrlAddRequestPreviousLayoutSignature := ""
 ; Directory returned by the preceding startup-path sample.
-Global explorerColumnFitPreviousPath            := ""
+Global explorerCtrlAddRequestPreviousPath            := ""
 ; Mouse location of a Refresh button. While it remains Stop/Cancel, the timer
 ; does not sample or adjust the Items View.
-Global explorerColumnFitRefreshPoint            := ""
+Global explorerCtrlAddRequestRefreshPoint            := ""
 ; True after the Refresh button returns to Refresh, or after the bounded reload
 ; fallback expires and the timer proceeds to fresh Details samples.
-Global explorerColumnFitRefreshReady            := False
+Global explorerCtrlAddRequestRefreshReady            := False
 ; Whether this request must prove a directory change before adjusting columns.
 ; Refresh requests leave this false because Refresh keeps the same directory.
-Global explorerColumnFitRequirePathChange       := False
+Global explorerCtrlAddRequestRequirePathChange       := False
 ; Whether this request must observe the same nonempty directory twice before
 ; sampling the Details layout. New Explorer windows use this startup condition.
-Global explorerColumnFitRequireStablePath       := False
-; Current Items View UIA element reused across timer samples and cleared when
-; that element no longer exposes a Details layout after navigation.
-Global explorerColumnFitShellEl                 := ""
+Global explorerCtrlAddRequestRequireStablePath       := False
+; False only for header-navigation requests, whose completed column adjustment
+; must not restore a previously focused SysTreeView32 control.
+Global explorerCtrlAddRequestRestoreTreeFocus        := True
+; Current Items View UIA element reused while Details controls are still loading.
+; It is cleared only when UIA can no longer access it or the request path resets.
+Global explorerCtrlAddRequestShellEl                 := ""
 ; Focused source control captured for a tree click; SendCtrlAdd restores it
 ; after adjusting the Details columns when it is still appropriate.
-Global explorerColumnFitSourceCtrl              := ""
+Global explorerCtrlAddRequestSourceCtrl              := ""
 ; Number of consecutive timer samples with the same Details layout signature.
-Global explorerColumnFitStableHitCount          := 0
+Global explorerCtrlAddRequestStableHitCount          := 0
 ; True after a startup request observes the same nonempty directory twice.
-Global explorerColumnFitStablePathConfirmed     := False
+Global explorerCtrlAddRequestStablePathConfirmed     := False
 ; Number of consecutive startup samples returning the same nonempty directory.
-Global explorerColumnFitStablePathHitCount      := 0
+Global explorerCtrlAddRequestStablePathHitCount      := 0
 ; Fast directory-change polling used by every changed-path navigation request.
 Global k_pathChangeDetailsCtrlAddFastPollMs          := 15
 ; After this bounded fast window, directory-change polling uses
-; k_explorerColumnFitPollMs.
+; k_explorerCtrlAddPollMs.
 Global k_pathChangeDetailsCtrlAddFastWindowMs        := 300
 ; Short one-shot delay that lets a path-neutral Refresh start before Details
 ; sampling begins. Changed-path Header requests instead start after 1 ms.
 Global k_headerNavigationCtrlAddDelayMs              := 125
 ; Minimum non-blocking startup settle before a newly created Explorer window
 ; may begin sampling its destination path and grouped Details layout.
-Global k_newExplorerColumnFitMinimumWaitMs      := 300
+Global k_newExplorerCtrlAddMinimumWaitMs             := 300
 ; Maximum non-blocking wait for a new Explorer window to expose a stable path.
-Global k_newExplorerColumnFitTimeoutMs          := 5000
-; Maximum wait for a stable Details layout after path/button readiness.
-Global k_explorerColumnFitTimeoutMs             := 1200
+Global k_newExplorerCtrlAddTimeoutMs                 := 5000
+; Full UIA transaction timeout for the one fresh Items View probe at the deadline.
+Global k_explorerCtrlAddFinalUIATimeoutMs            := 2000
 ; Timer interval for non-blocking Details layout samples.
-Global k_explorerColumnFitPollMs                := 50
+Global k_explorerCtrlAddPollMs                       := 50
+; Short UIA transaction timeout used by ordinary timer probes before the deadline.
+Global k_explorerCtrlAddPollUIATimeoutMs             := 150
+; Maximum wait for a stable Details layout after path/button readiness.
+Global k_explorerCtrlAddTimeoutMs                    := 1200
 ; Minimum non-blocking reload window before Refresh samples the Items View.
 Global k_refreshDetailsCtrlAddMinimumWaitMs          := 300
 ; Maximum non-blocking wait for the Refresh button to return from Stop/Cancel.
@@ -2510,7 +2523,7 @@ NeedsSendCtrlAddFadeWait(hParent, focusedCtrlNN := "") {
     return False
 }
 
-; Returns true when activation-time SendCtrlAdd() should force the heavier
+; Returns true when activation-time SendCtrlAdd() should use the heavier
 ; WaitForExplorerLoad() path before sending Ctrl+NumpadAdd. This exists because
 ; real Explorer/open/save hosts can start with focus on breadcrumb/address/toolbar
 ; controls even though the actual file view still needs to finish loading. The
@@ -2679,11 +2692,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ; windows and file dialogs retain their established activation path.
         if (vWinClass == "CabinetWClass" && isFirstTrackedActivation) {
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
-                , k_newExplorerColumnFitMinimumWaitMs)
+                , k_newExplorerCtrlAddMinimumWaitMs)
         }
         else {
             ; tooltip, sent to %initFocusedCtrl%
-            SendCtrlAdd(hWnd,,,vWinClass, initFocusedCtrl
+            SendCtrlAdd(hWnd, vWinClass, initFocusedCtrl
                 , _ShouldForceExplorerLoadOnActivate(vWinClass, sendCtrlAddTargetScan, vWinProc, vWinTitle)
                 , sendCtrlAddTargetScan)
         }
@@ -5038,7 +5051,7 @@ $~Enter::
 
         WinGet, checkID, ID, A
         If (checkID == entID)
-            SendCtrlAdd(entID, , , entCl)
+            SendCtrlAdd(entID, entCl)
         }
 Return
 
@@ -8059,7 +8072,8 @@ UIA_TryGetGridColumnCountAny_(el) {
 }
 
 ; Return the GridPattern row count, or -1 when the provider exposes no compatible
-; GridPattern entry point. Refresh readiness uses this as a content-shape sample.
+; GridPattern entry point. Refresh readiness uses this as a content-shape sample
+; because the directory path remains unchanged.
 UIA_TryGetGridRowCountAny_(el) {
     return _UIA_TryGetGridCountAny_(el, "row")
 }
@@ -8290,7 +8304,10 @@ ExplorerClickClassify(xPos, yPos, winCtrlNN) {
     if !InStr(winCtrlNN, "DirectUIHWND", True)
         return "other"
 
-    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "", 2000)
+    ; This classification supplements click gestures; path change remains the
+    ; authoritative proof of DirectUI folder navigation. Use one short lookup so
+    ; an unresponsive UIA provider cannot hold up the second physical click.
+    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "", 250, 250, False)
     if !IsObject(hitEl)
         return "other"
 
@@ -8388,7 +8405,10 @@ DialogClickClassify(xPos, yPos, winCtrlNN) {
     if !InStr(winCtrlNN, "DirectUIHWND", True)
         return "other"
 
-    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "", 2000)
+    ; This classification supplements click gestures; path change remains the
+    ; authoritative proof of DirectUI folder navigation. Use one short lookup so
+    ; an unresponsive UIA provider cannot hold up the second physical click.
+    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "", 250, 250, False)
     if !IsObject(hitEl)
         return "other"
 
@@ -8801,6 +8821,52 @@ EnsureFocusedCtrlTarget(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, to
     return EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
 }
 
+; Capture the first click on an Explorer/file-dialog DirectUI Items View and
+; return that immutable snapshot only when the next physical click matches the
+; same HWND and CtrlNN within Windows' double-click time and distance limits.
+; Because initialPath is captured before UIA classification, a slow or unknown
+; UIA result cannot prevent the later before/after path proof.
+_CaptureExplorerDirectUIDoubleClick(hwnd, windowClass, ctrlNN, x, y, initialPath) {
+    global k_DoubleClickTime
+    static firstClick := ""
+
+    isEligible := (windowClass == "CabinetWClass" || windowClass == "#32770")
+               && InStr(ctrlNN, "DirectUIHWND", True)
+    if (!isEligible) {
+        firstClick := ""
+        return ""
+    }
+
+    currentTick := A_TickCount
+    if IsObject(firstClick) {
+        elapsedMs := currentTick - firstClick.tick
+        if (elapsedMs < 0)
+            elapsedMs += 0x100000000
+
+        maxDeltaX := Max(1, Floor(DllCall("user32\GetSystemMetrics", "Int", 36, "Int") / 2))
+        maxDeltaY := Max(1, Floor(DllCall("user32\GetSystemMetrics", "Int", 37, "Int") / 2))
+        if (firstClick.hwnd == hwnd
+         && firstClick.ctrlNN == ctrlNN
+         && firstClick.windowClass == windowClass
+         && elapsedMs <= k_DoubleClickTime
+         && Abs(x - firstClick.x) <= maxDeltaX
+         && Abs(y - firstClick.y) <= maxDeltaY) {
+            matchedClick := firstClick
+            firstClick   := ""
+            return matchedClick
+        }
+    }
+
+    firstClick := { ctrlNN: ctrlNN
+                  , hwnd: hwnd
+                  , initialPath: initialPath
+                  , tick: currentTick
+                  , windowClass: windowClass
+                  , x: x
+                  , y: y }
+    return ""
+}
+
 ; Classify a UIA hit in an Explorer/file-dialog navigation header. The literal
 ; return value tells callers whether the hit keeps the same directory (Refresh),
 ; changes directory, is unrelated, or could not be read safely.
@@ -8838,51 +8904,19 @@ _IsExplorerNavigationSurfaceCtrl(ctrlNN) {
     return InStr(ctrlNN, "SysTreeView32", True) || _IsExplorerNavigationHeaderCtrl(ctrlNN)
 }
 
-; Return true only when a native SysTreeView32 click targets an item that can
-; select a folder. UI Automation crosses the application boundary safely; a
-; Button below the TreeItem is the expand/collapse glyph, not a folder click.
-_IsTreeViewFolderSelectionClick(hwndTop, ctrlNN, screenX, screenY) {
-    static UIA_ButtonTypeId   := 50000
-    static UIA_TreeItemTypeId := 50024
-
-    if (!hwndTop || !WinExist("ahk_id " . hwndTop) || !InStr(ctrlNN, "SysTreeView32", True))
-        return false
-
-    hitEl := SafeUIA_ElementFromPoint(screenX, screenY, "", 250)
-    if !IsObject(hitEl)
-        return false
-
-    depth  := 0
-    walkEl := hitEl
-    while (IsObject(walkEl) && depth < 12) {
-        info := SafeUIA_GetElementSnapshot(walkEl, "controlType")
-
-        ; The native TreeView exposes its expand/collapse glyph as a Button
-        ; below the TreeItem. Stop before the TreeItem so glyph clicks never
-        ; invoke SendCtrlAdd().
-        if (info.controlType = UIA_ButtonTypeId)
-            return false
-        if (info.controlType = UIA_TreeItemTypeId)
-            return true
-
-        walkEl := ExplorerClickClassify_GetParentTW(walkEl)
-        depth++
-    }
-
-    return false
-}
-
 #MaxThreadsPerHotkey 2
 #If
 ; Queue a conservative post-activation recovery for the first click into an
 ; inactive Explorer/file-dialog window. The live $~LButton path captures the
 ; directory baseline and header action when the ClassNN is a tree/header surface,
 ; then returns without running the heavier blank-space or SendCtrlAdd
-; classification. This helper preserves that narrow snapshot so a short timer
-; can re-check the shell target once the clicked window is actually active.
+; classification. This helper preserves that narrow snapshot so bounded timer
+; retries can wait for both window activation and physical mouse release.
 _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := "", headerKind := "") {
     global k_postActivationLButtonDelayMs
+    global k_postActivationLButtonTimeoutMs
     global postActivationLButtonCtrl
+    global postActivationLButtonDeadlineTick
     global postActivationLButtonHeaderKind
     global postActivationLButtonHwnd
     global postActivationLButtonId
@@ -8895,6 +8929,7 @@ _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := 
     ; decision state.
     postActivationLButtonId          += 1
     postActivationLButtonCtrl        := ctrlNN
+    postActivationLButtonDeadlineTick := A_TickCount + k_postActivationLButtonTimeoutMs
     postActivationLButtonHeaderKind  := headerKind
     postActivationLButtonHwnd        := hwnd
     postActivationLButtonInitialPath := initialPath
@@ -8903,8 +8938,8 @@ _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := 
     SetTimer, PostActivationLButtonCheck, % -k_postActivationLButtonDelayMs
 }
 
-; Queue one non-blocking Details-column auto-fit request for CabinetWClass or
-; #32770. The request covers these scenarios:
+; Start or replace one non-blocking Explorer CtrlAdd request for CabinetWClass
+; or #32770. The request covers these scenarios:
 ; 1. First activation of a new Explorer window: require the same nonempty path
 ;    twice because there is no prior directory to compare.
 ; 2. Other path-changing navigation--Back, Forward, Up, breadcrumb,
@@ -8920,30 +8955,31 @@ _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := 
 ; path-poll profile; this does not weaken Details-layout confirmation. A newer
 ; call replaces the single pending request, and its ID invalidates stale timer
 ; callbacks.
-_RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
-    global explorerColumnFitClass
-    global explorerColumnFitDeadlineTick
-    global explorerColumnFitEarliestLayoutTick
-    global explorerColumnFitFastPathPollIntervalMs
-    global explorerColumnFitFastPathPollUntilTick
-    global explorerColumnFitHwnd
-    global explorerColumnFitId
-    global explorerColumnFitInitialPath
-    global explorerColumnFitPathChangeConfirmed
-    global explorerColumnFitPreviousLayoutSignature
-    global explorerColumnFitPreviousPath
-    global explorerColumnFitRefreshPoint
-    global explorerColumnFitRefreshReady
-    global explorerColumnFitRequirePathChange
-    global explorerColumnFitRequireStablePath
-    global explorerColumnFitShellEl
-    global explorerColumnFitSourceCtrl
-    global explorerColumnFitStableHitCount
-    global explorerColumnFitStablePathConfirmed
-    global explorerColumnFitStablePathHitCount
-    global k_explorerColumnFitPollMs
-    global k_explorerColumnFitTimeoutMs
-    global k_newExplorerColumnFitTimeoutMs
+_RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumLayoutDelayMs := 0, refreshPoint := "", restoreTreeFocus := True) {
+    global explorerCtrlAddRequestClass
+    global explorerCtrlAddRequestDeadlineTick
+    global explorerCtrlAddRequestEarliestLayoutTick
+    global explorerCtrlAddRequestFastPathPollIntervalMs
+    global explorerCtrlAddRequestFastPathPollUntilTick
+    global explorerCtrlAddRequestHwnd
+    global explorerCtrlAddRequestId
+    global explorerCtrlAddRequestInitialPath
+    global explorerCtrlAddRequestPathChangeConfirmed
+    global explorerCtrlAddRequestPreviousLayoutSignature
+    global explorerCtrlAddRequestPreviousPath
+    global explorerCtrlAddRequestRefreshPoint
+    global explorerCtrlAddRequestRefreshReady
+    global explorerCtrlAddRequestRequirePathChange
+    global explorerCtrlAddRequestRequireStablePath
+    global explorerCtrlAddRequestRestoreTreeFocus
+    global explorerCtrlAddRequestShellEl
+    global explorerCtrlAddRequestSourceCtrl
+    global explorerCtrlAddRequestStableHitCount
+    global explorerCtrlAddRequestStablePathConfirmed
+    global explorerCtrlAddRequestStablePathHitCount
+    global k_explorerCtrlAddPollMs
+    global k_explorerCtrlAddTimeoutMs
+    global k_newExplorerCtrlAddTimeoutMs
     global k_pathChangeDetailsCtrlAddFastPollMs
     global k_pathChangeDetailsCtrlAddFastWindowMs
     global k_refreshDetailsCtrlAddTimeoutMs
@@ -8965,48 +9001,50 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     if (isRefreshRequest)
         readinessTimeoutMs := k_refreshDetailsCtrlAddTimeoutMs
     else if (requireStablePath)
-        readinessTimeoutMs := k_newExplorerColumnFitTimeoutMs
+        readinessTimeoutMs := k_newExplorerCtrlAddTimeoutMs
     else
-        readinessTimeoutMs := k_explorerColumnFitTimeoutMs
+        readinessTimeoutMs := k_explorerCtrlAddTimeoutMs
 
     useFastPathPolling := requirePathChange
 
-    explorerColumnFitClass                   := windowClass
-    explorerColumnFitDeadlineTick            := A_TickCount + readinessTimeoutMs
-    explorerColumnFitEarliestLayoutTick      := A_TickCount + Max(0, minimumLayoutDelayMs)
-    explorerColumnFitFastPathPollIntervalMs  := useFastPathPolling ? k_pathChangeDetailsCtrlAddFastPollMs : 0
-    explorerColumnFitFastPathPollUntilTick   := useFastPathPolling ? A_TickCount + k_pathChangeDetailsCtrlAddFastWindowMs : 0
-    explorerColumnFitHwnd                    := hwnd
-    explorerColumnFitId                      += 1
-    explorerColumnFitInitialPath             := initialPath
-    explorerColumnFitPathChangeConfirmed     := !requirePathChange
-    explorerColumnFitPreviousLayoutSignature := ""
-    explorerColumnFitPreviousPath            := ""
-    explorerColumnFitRefreshPoint            := refreshPoint
-    explorerColumnFitRefreshReady            := !isRefreshRequest
-    explorerColumnFitRequirePathChange       := requirePathChange
-    explorerColumnFitRequireStablePath       := requireStablePath
-    explorerColumnFitShellEl                 := ""
-    explorerColumnFitSourceCtrl              := sourceCtrlNN
-    explorerColumnFitStableHitCount          := 0
-    explorerColumnFitStablePathConfirmed     := !requireStablePath
-    explorerColumnFitStablePathHitCount      := 0
-    ; A one-shot 1 ms period queues the first directory-path check at the next
+    explorerCtrlAddRequestClass                   := windowClass
+    explorerCtrlAddRequestDeadlineTick            := A_TickCount + readinessTimeoutMs
+    explorerCtrlAddRequestEarliestLayoutTick      := A_TickCount + Max(0, minimumLayoutDelayMs)
+    explorerCtrlAddRequestFastPathPollIntervalMs  := useFastPathPolling ? k_pathChangeDetailsCtrlAddFastPollMs : 0
+    explorerCtrlAddRequestFastPathPollUntilTick   := useFastPathPolling ? A_TickCount + k_pathChangeDetailsCtrlAddFastWindowMs : 0
+    explorerCtrlAddRequestHwnd                    := hwnd
+    explorerCtrlAddRequestId                      += 1
+    explorerCtrlAddRequestInitialPath             := initialPath
+    explorerCtrlAddRequestPathChangeConfirmed     := !requirePathChange
+    explorerCtrlAddRequestPreviousLayoutSignature := ""
+    explorerCtrlAddRequestPreviousPath            := ""
+    explorerCtrlAddRequestRefreshPoint            := refreshPoint
+    explorerCtrlAddRequestRefreshReady            := !isRefreshRequest
+    explorerCtrlAddRequestRequirePathChange       := requirePathChange
+    explorerCtrlAddRequestRequireStablePath       := requireStablePath
+    explorerCtrlAddRequestRestoreTreeFocus        := restoreTreeFocus
+    explorerCtrlAddRequestShellEl                 := ""
+    explorerCtrlAddRequestSourceCtrl              := sourceCtrlNN
+    explorerCtrlAddRequestStableHitCount          := 0
+    explorerCtrlAddRequestStablePathConfirmed     := !requireStablePath
+    explorerCtrlAddRequestStablePathHitCount      := 0
+    ; A one-shot 1 ms period schedules the first directory-path check at the next
     ; timer opportunity. Later checks use the request's bounded poll interval.
-    initialPollMs := useFastPathPolling ? 1 : k_explorerColumnFitPollMs
+    initialPollMs := useFastPathPolling ? 1 : k_explorerCtrlAddPollMs
     timerDelay    := (delayMs > 0) ? -delayMs : -initialPollMs
-    SetTimer, ExplorerColumnFit, %timerDelay%
+    SetTimer, RunExplorerCtrlAddWhenReady, %timerDelay%
 }
 
-; Queue the common follow-up for navigation commands in an Explorer or file
-; dialog header. Directory-changing commands must first advance beyond the path
-; captured before the click. Refresh instead waits for its button to return from
-; Stop/Cancel, then samples the unchanged directory's newly loaded Items View.
+; Request the common non-blocking follow-up for navigation commands in an
+; Explorer or file dialog header. Directory-changing commands must first
+; advance beyond the path captured before the click. Refresh instead waits for
+; its button to return from Stop/Cancel, then samples the unchanged directory's
+; newly loaded Items View.
 _RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePathChange := False, minimumLayoutDelayMs := 0, refreshPoint := "") {
     global k_headerNavigationCtrlAddDelayMs
 
     requestDelayMs := requirePathChange ? 0 : k_headerNavigationCtrlAddDelayMs
-    _RequestExplorerCtrlAdd(hwnd, windowClass, "", requestDelayMs, initialPath, requirePathChange, False, minimumLayoutDelayMs, refreshPoint)
+    _RequestExplorerCtrlAdd(hwnd, windowClass, "", requestDelayMs, initialPath, requirePathChange, False, minimumLayoutDelayMs, refreshPoint, False)
 }
 
 ; Focus and verify the supplied ClassNN, then use the shared immediate
@@ -9038,7 +9076,9 @@ _IsHeaderNavigationCtrlAddCandidate(controlType, controlName := "", localizedCon
     return False
 }
 
-; Process the pending Explorer column-fit request according to its source scenario:
+; Recheck the pending Explorer CtrlAdd request until its required path, Refresh,
+; and stable Details-layout conditions are satisfied, then call SendCtrlAdd().
+; The request is processed according to its source scenario:
 ; 1. New Explorer activation: sample the nonempty GetExplorerPath() result and
 ;    Details layout together. A path change discards prior layout state, and
 ;    both signals must match across two samples before alignment.
@@ -9054,19 +9094,20 @@ _IsHeaderNavigationCtrlAddCandidate(controlType, controlName := "", localizedCon
 ; deadline, one current nonempty signature is sufficient; no Details signature
 ; means no alignment. Each retry uses a one-shot SetTimer rather than a Sleep
 ; loop, so other hotkeys remain responsive and every wait remains bounded.
-ExplorerColumnFit:
-    requestWindowClass                := explorerColumnFitClass
-    requestDeadlineTick               := explorerColumnFitDeadlineTick
-    requestEarliestLayoutTick         := explorerColumnFitEarliestLayoutTick
-    requestFastPathPollMs             := explorerColumnFitFastPathPollIntervalMs
-    requestFastPathUntilTick          := explorerColumnFitFastPathPollUntilTick
-    requestTargetHwnd                 := explorerColumnFitHwnd
-    explorerDetailsRequestId          := explorerColumnFitId
-    requestInitialPath                := explorerColumnFitInitialPath
-    requestRefreshPoint               := explorerColumnFitRefreshPoint
-    requestRequiresPathChange         := explorerColumnFitRequirePathChange
-    requestRequiresStablePath         := explorerColumnFitRequireStablePath
-    requestSourceCtrl                 := explorerColumnFitSourceCtrl
+RunExplorerCtrlAddWhenReady:
+    requestWindowClass                := explorerCtrlAddRequestClass
+    requestDeadlineTick               := explorerCtrlAddRequestDeadlineTick
+    requestEarliestLayoutTick         := explorerCtrlAddRequestEarliestLayoutTick
+    requestFastPathPollMs             := explorerCtrlAddRequestFastPathPollIntervalMs
+    requestFastPathUntilTick          := explorerCtrlAddRequestFastPathPollUntilTick
+    requestTargetHwnd                 := explorerCtrlAddRequestHwnd
+    requestId                         := explorerCtrlAddRequestId
+    requestInitialPath                := explorerCtrlAddRequestInitialPath
+    requestRefreshPoint               := explorerCtrlAddRequestRefreshPoint
+    requestRequiresPathChange         := explorerCtrlAddRequestRequirePathChange
+    requestRequiresStablePath         := explorerCtrlAddRequestRequireStablePath
+    requestRestoreTreeFocus           := explorerCtrlAddRequestRestoreTreeFocus
+    requestSourceCtrl                 := explorerCtrlAddRequestSourceCtrl
     ; Track the independent startup-path gate: even when the layout deadline
     ; permits one current Details signature, alignment must wait for a second
     ; timer sample proving that the same nonempty startup path still owns it.
@@ -9075,10 +9116,21 @@ ExplorerColumnFit:
     if (!requestTargetHwnd || !WinExist("ahk_id " . requestTargetHwnd) || WinExist("A") != requestTargetHwnd)
         Return
 
-    ; A held button is a drag or another in-progress click, not a completed
-    ; navigation command whose Details columns should be adjusted yet.
-    if (GetKeyState("LButton", "P") || explorerDetailsRequestId != explorerColumnFitId)
+    if (requestId != explorerCtrlAddRequestId)
         Return
+
+    ; A held button is a drag or another click still in progress. Defer this
+    ; same request instead of cancelling it; stop retrying at its existing
+    ; deadline so a stuck or prolonged press cannot keep the timer alive.
+    if GetKeyState("LButton", "P") {
+        if (A_TickCount < requestDeadlineTick) {
+            lButtonPollMs := (requestFastPathPollMs > 0 && A_TickCount < requestFastPathUntilTick)
+                ? requestFastPathPollMs
+                : k_explorerCtrlAddPollMs
+            SetTimer, RunExplorerCtrlAddWhenReady, % -lButtonPollMs
+        }
+        Return
+    }
 
     WinGetClass, currentClass, ahk_id %requestTargetHwnd%
     if (currentClass != requestWindowClass || !(currentClass == "CabinetWClass" || currentClass == "#32770"))
@@ -9089,47 +9141,47 @@ ExplorerColumnFit:
     ; A different or empty path clears every layout sample associated with the
     ; previous directory; alignment remains blocked until the same nonempty path
     ; and the same Details-layout signature have each appeared twice.
-    if (requestRequiresStablePath && !explorerColumnFitStablePathConfirmed) {
+    if (requestRequiresStablePath && !explorerCtrlAddRequestStablePathConfirmed) {
         if (A_TickCount < requestEarliestLayoutTick) {
             remainingLayoutMs := Max(1, requestEarliestLayoutTick - A_TickCount)
-            SetTimer, ExplorerColumnFit, % -remainingLayoutMs
+            SetTimer, RunExplorerCtrlAddWhenReady, % -remainingLayoutMs
             Return
         }
 
         currentPath := GetExplorerPath(requestTargetHwnd)
-        if (explorerDetailsRequestId != explorerColumnFitId)
+        if (requestId != explorerCtrlAddRequestId)
             Return
 
         if (currentPath = "") {
-            explorerColumnFitPreviousLayoutSignature  := ""
-            explorerColumnFitPreviousPath             := ""
-            explorerColumnFitShellEl                  := ""
-            explorerColumnFitStableHitCount           := 0
-            explorerColumnFitStablePathHitCount       := 0
+            explorerCtrlAddRequestPreviousLayoutSignature  := ""
+            explorerCtrlAddRequestPreviousPath             := ""
+            explorerCtrlAddRequestShellEl                  := ""
+            explorerCtrlAddRequestStableHitCount           := 0
+            explorerCtrlAddRequestStablePathHitCount       := 0
             if (A_TickCount < requestDeadlineTick)
-                SetTimer, ExplorerColumnFit, % -k_explorerColumnFitPollMs
+                SetTimer, RunExplorerCtrlAddWhenReady, % -k_explorerCtrlAddPollMs
             Return
         }
-        else if (currentPath = explorerColumnFitPreviousPath) {
-            explorerColumnFitStablePathHitCount += 1
+        else if (currentPath = explorerCtrlAddRequestPreviousPath) {
+            explorerCtrlAddRequestStablePathHitCount += 1
         }
         else {
-            explorerColumnFitPreviousLayoutSignature  := ""
-            explorerColumnFitPreviousPath             := currentPath
-            explorerColumnFitShellEl                  := ""
-            explorerColumnFitStableHitCount           := 0
-            explorerColumnFitStablePathHitCount       := 1
+            explorerCtrlAddRequestPreviousLayoutSignature  := ""
+            explorerCtrlAddRequestPreviousPath             := currentPath
+            explorerCtrlAddRequestShellEl                  := ""
+            explorerCtrlAddRequestStableHitCount           := 0
+            explorerCtrlAddRequestStablePathHitCount       := 1
         }
 
-        if (explorerColumnFitStablePathHitCount < 2) {
+        if (explorerCtrlAddRequestStablePathHitCount < 2) {
             waitingForSecondStartupPathSample := True
         }
         else {
             ; Extend the bounded layout window without clearing the first layout
             ; sample already captured for this same directory.
-            explorerColumnFitDeadlineTick        := A_TickCount + k_explorerColumnFitTimeoutMs
-            requestDeadlineTick                  := explorerColumnFitDeadlineTick
-            explorerColumnFitStablePathConfirmed := True
+            explorerCtrlAddRequestDeadlineTick        := A_TickCount + k_explorerCtrlAddTimeoutMs
+            requestDeadlineTick                       := explorerCtrlAddRequestDeadlineTick
+            explorerCtrlAddRequestStablePathConfirmed := True
         }
     }
     else if (requestRequiresStablePath) {
@@ -9137,19 +9189,19 @@ ExplorerColumnFit:
         ; sampled. If Explorer changes paths after the first confirmation, discard
         ; those UIA samples and restart the non-blocking startup readiness check.
         currentPath := GetExplorerPath(requestTargetHwnd)
-        if (explorerDetailsRequestId != explorerColumnFitId)
+        if (requestId != explorerCtrlAddRequestId)
             Return
 
-        if (currentPath = "" || currentPath != explorerColumnFitPreviousPath) {
-            explorerColumnFitDeadlineTick             := A_TickCount + k_newExplorerColumnFitTimeoutMs
-            explorerColumnFitEarliestLayoutTick       := A_TickCount + k_newExplorerColumnFitMinimumWaitMs
-            explorerColumnFitPreviousLayoutSignature  := ""
-            explorerColumnFitPreviousPath             := currentPath
-            explorerColumnFitShellEl                  := ""
-            explorerColumnFitStableHitCount           := 0
-            explorerColumnFitStablePathConfirmed      := False
-            explorerColumnFitStablePathHitCount       := (currentPath = "") ? 0 : 1
-            SetTimer, ExplorerColumnFit, % -k_explorerColumnFitPollMs
+        if (currentPath = "" || currentPath != explorerCtrlAddRequestPreviousPath) {
+            explorerCtrlAddRequestDeadlineTick             := A_TickCount + k_newExplorerCtrlAddTimeoutMs
+            explorerCtrlAddRequestEarliestLayoutTick       := A_TickCount + k_newExplorerCtrlAddMinimumWaitMs
+            explorerCtrlAddRequestPreviousLayoutSignature  := ""
+            explorerCtrlAddRequestPreviousPath             := currentPath
+            explorerCtrlAddRequestShellEl                  := ""
+            explorerCtrlAddRequestStableHitCount           := 0
+            explorerCtrlAddRequestStablePathConfirmed      := False
+            explorerCtrlAddRequestStablePathHitCount       := (currentPath = "") ? 0 : 1
+            SetTimer, RunExplorerCtrlAddWhenReady, % -k_explorerCtrlAddPollMs
             Return
         }
     }
@@ -9158,17 +9210,17 @@ ExplorerColumnFit:
     ; different nonempty directory before this request can align the replacement
     ; file view. If the path never changes, cancel at the deadline instead of
     ; adjusting the old directory's columns.
-    if (requestRequiresPathChange && !explorerColumnFitPathChangeConfirmed) {
+    if (requestRequiresPathChange && !explorerCtrlAddRequestPathChangeConfirmed) {
         currentPath := GetExplorerPath(requestTargetHwnd)
-        if (explorerDetailsRequestId != explorerColumnFitId)
+        if (requestId != explorerCtrlAddRequestId)
             Return
 
         if (currentPath = "" || currentPath = requestInitialPath) {
             if (A_TickCount < requestDeadlineTick) {
                 pathPollMs := (requestFastPathPollMs > 0 && A_TickCount < requestFastPathUntilTick)
                     ? requestFastPathPollMs
-                    : k_explorerColumnFitPollMs
-                SetTimer, ExplorerColumnFit, % -pathPollMs
+                    : k_explorerCtrlAddPollMs
+                SetTimer, RunExplorerCtrlAddWhenReady, % -pathPollMs
             }
             Return
         }
@@ -9176,12 +9228,12 @@ ExplorerColumnFit:
         ; Give the replacement Items View its own bounded stabilization window.
         ; Otherwise a slow path change could consume the original deadline and
         ; authorize a send after only one Details-layout sample.
-        explorerColumnFitDeadlineTick             := A_TickCount + k_explorerColumnFitTimeoutMs
-        requestDeadlineTick                       := explorerColumnFitDeadlineTick
-        explorerColumnFitPathChangeConfirmed      := True
-        explorerColumnFitPreviousLayoutSignature  := ""
-        explorerColumnFitShellEl                  := ""
-        explorerColumnFitStableHitCount           := 0
+        explorerCtrlAddRequestDeadlineTick             := A_TickCount + k_explorerCtrlAddTimeoutMs
+        requestDeadlineTick                            := explorerCtrlAddRequestDeadlineTick
+        explorerCtrlAddRequestPathChangeConfirmed      := True
+        explorerCtrlAddRequestPreviousLayoutSignature  := ""
+        explorerCtrlAddRequestShellEl                  := ""
+        explorerCtrlAddRequestStableHitCount           := 0
 
     }
 
@@ -9190,7 +9242,7 @@ ExplorerColumnFit:
     ; accepted layout samples are taken after the native Refresh command began.
     if (A_TickCount < requestEarliestLayoutTick) {
         remainingLayoutMs := Max(1, requestEarliestLayoutTick - A_TickCount)
-        SetTimer, ExplorerColumnFit, % -remainingLayoutMs
+        SetTimer, RunExplorerCtrlAddWhenReady, % -remainingLayoutMs
         Return
     }
 
@@ -9198,50 +9250,71 @@ ExplorerColumnFit:
     ; Explorer changes Refresh to Stop/Cancel while loading and restores Refresh
     ; when that reload completes. If UIA never exposes the transition, proceed at
     ; the bounded deadline rather than leaving this request alive indefinitely.
-    if (IsObject(requestRefreshPoint) && !explorerColumnFitRefreshReady) {
+    if (IsObject(requestRefreshPoint) && !explorerCtrlAddRequestRefreshReady) {
         refreshKind := _GetExplorerHeaderNavigationKind(requestRefreshPoint.x, requestRefreshPoint.y, 100)
-        if (explorerDetailsRequestId != explorerColumnFitId)
+        if (requestId != explorerCtrlAddRequestId)
             Return
 
         if (refreshKind != "refresh" && A_TickCount < requestDeadlineTick) {
-            refreshPollDelay := -Max(k_explorerColumnFitPollMs, 100)
-            SetTimer, ExplorerColumnFit, %refreshPollDelay%
+            refreshPollDelay := -Max(k_explorerCtrlAddPollMs, 100)
+            SetTimer, RunExplorerCtrlAddWhenReady, %refreshPollDelay%
             Return
         }
 
         ; Start a fresh Details-layout window only after Refresh is ready (or the
         ; bounded button-state wait expired), so old pre-refresh samples cannot
         ; authorize Ctrl+NumpadAdd.
-        explorerColumnFitDeadlineTick             := A_TickCount + k_explorerColumnFitTimeoutMs
-        requestDeadlineTick                       := explorerColumnFitDeadlineTick
-        explorerColumnFitPreviousLayoutSignature  := ""
-        explorerColumnFitRefreshReady             := True
-        explorerColumnFitShellEl                  := ""
-        explorerColumnFitStableHitCount           := 0
+        explorerCtrlAddRequestDeadlineTick             := A_TickCount + k_explorerCtrlAddTimeoutMs
+        requestDeadlineTick                            := explorerCtrlAddRequestDeadlineTick
+        explorerCtrlAddRequestPreviousLayoutSignature  := ""
+        explorerCtrlAddRequestRefreshReady             := True
+        explorerCtrlAddRequestShellEl                  := ""
+        explorerCtrlAddRequestStableHitCount           := 0
     }
 
-    shellEl := explorerColumnFitShellEl
-    if !IsObject(shellEl) {
-        try shellEl := FindExplorerItemsViewElement(requestTargetHwnd)
-        catch e
-            shellEl := ""
-        explorerColumnFitShellEl := shellEl
+    ; Resolve the current Items View for every probe whose prior candidate did not
+    ; expose Details controls. At the deadline, use the longer transaction timeout
+    ; so a slow replacement view gets a final chance.
+    atLayoutDeadline := (A_TickCount >= requestDeadlineTick)
+    includeRowCount  := IsObject(requestRefreshPoint)
+    probeTimeoutMs   := atLayoutDeadline
+        ? k_explorerCtrlAddFinalUIATimeoutMs
+        : k_explorerCtrlAddPollUIATimeoutMs
+    layoutProbe      := _ProbeExplorerDetailsLayout(requestTargetHwnd
+        , explorerCtrlAddRequestShellEl
+        , includeRowCount
+        , atLayoutDeadline
+        , probeTimeoutMs)
+
+    ; A short probe may itself consume the remaining deadline. If it did not find
+    ; a ready layout, perform the promised fresh full-timeout attempt immediately.
+    if (!atLayoutDeadline && layoutProbe.state != "ready" && A_TickCount >= requestDeadlineTick) {
+        atLayoutDeadline := True
+        layoutProbe      := _ProbeExplorerDetailsLayout(requestTargetHwnd
+            , explorerCtrlAddRequestShellEl
+            , includeRowCount
+            , True
+            , k_explorerCtrlAddFinalUIATimeoutMs)
     }
 
-    layoutSignature := _GetExplorerDetailsLayoutSignature(shellEl)
-    if (layoutSignature != "") {
-        if (layoutSignature = explorerColumnFitPreviousLayoutSignature)
-            explorerColumnFitStableHitCount += 1
+    layoutSignature := layoutProbe.signature
+
+    ; Retain only a proven Details view. A not-ready candidate may represent the
+    ; outgoing or transitional view, so clear it and rediscover on the next probe.
+    explorerCtrlAddRequestShellEl := (layoutProbe.state = "ready")
+        ? layoutProbe.shellEl
+        : ""
+
+    if (layoutProbe.state = "ready") {
+        if (layoutSignature = explorerCtrlAddRequestPreviousLayoutSignature)
+            explorerCtrlAddRequestStableHitCount += 1
         else
-            explorerColumnFitStableHitCount := 1
+            explorerCtrlAddRequestStableHitCount := 1
 
-        explorerColumnFitPreviousLayoutSignature := layoutSignature
+        explorerCtrlAddRequestPreviousLayoutSignature := layoutSignature
     } else {
-        explorerColumnFitPreviousLayoutSignature := ""
-        ; The previous UIA element can belong to the view being replaced.
-        ; Resolve it again on the next timer tick instead of probing it forever.
-        explorerColumnFitShellEl := ""
-        explorerColumnFitStableHitCount := 0
+        explorerCtrlAddRequestPreviousLayoutSignature := ""
+        explorerCtrlAddRequestStableHitCount := 0
     }
 
     ; The first startup callback may record the first path and layout samples
@@ -9249,22 +9322,22 @@ ExplorerColumnFit:
     ; that the same nonempty path remains current.
     if (waitingForSecondStartupPathSample) {
         if (A_TickCount < requestDeadlineTick)
-            SetTimer, ExplorerColumnFit, % -k_explorerColumnFitPollMs
+            SetTimer, RunExplorerCtrlAddWhenReady, % -k_explorerCtrlAddPollMs
         Return
     }
 
     ; Send after two stable samples, or at the deadline only when a Details
     ; layout exists. A missing Details view is cancelled rather than targeting
     ; another control with Ctrl+NumpadAdd.
-    if (explorerColumnFitStableHitCount < 2 && A_TickCount < requestDeadlineTick) {
-        SetTimer, ExplorerColumnFit, % -k_explorerColumnFitPollMs
+    if (explorerCtrlAddRequestStableHitCount < 2 && A_TickCount < requestDeadlineTick) {
+        SetTimer, RunExplorerCtrlAddWhenReady, % -k_explorerCtrlAddPollMs
         Return
     }
 
-    if (layoutSignature = "" || explorerDetailsRequestId != explorerColumnFitId)
+    if (layoutProbe.state != "ready" || requestId != explorerCtrlAddRequestId)
         Return
 
-    SendCtrlAdd(requestTargetHwnd, , , currentClass, requestSourceCtrl)
+    SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrl, False, "", requestRestoreTreeFocus)
 Return
 
 ; Deferred recovery for a first click into an inactive Explorer/file-dialog
@@ -9278,6 +9351,7 @@ PostActivationLButtonCheck:
     ; Copy the queued snapshot first; every later guard validates that it still
     ; describes the current foreground target.
     queuedId           := postActivationLButtonId
+    deadlineTick       := postActivationLButtonDeadlineTick
     targetCtrl         := postActivationLButtonCtrl
     capturedHeaderKind := postActivationLButtonHeaderKind
     targetHwnd         := postActivationLButtonHwnd
@@ -9285,20 +9359,22 @@ PostActivationLButtonCheck:
     clickX             := postActivationLButtonX
     clickY             := postActivationLButtonY
 
-    ; If activation did not land on the originally clicked window, do nothing.
-    ; This prevents any delayed send from targeting a stale or unrelated window.
-    if (!targetHwnd || !WinExist("ahk_id " . targetHwnd) || WinExist("A") != targetHwnd)
-        Return
-
-    ; While the button is still down this may be a drag or selection gesture.
-    ; Only recover completed simple clicks.
-    if (GetKeyState("LButton", "P"))
-        Return
-
     ; A newer inactive-window click replaced this snapshot, so let the newer
     ; timer instance make the decision.
     if (queuedId != postActivationLButtonId)
         Return
+
+    if (!targetHwnd || !WinExist("ahk_id " . targetHwnd))
+        Return
+
+    ; Activation and mouse release do not have deterministic timing. Retry this
+    ; one-shot timer until both are complete, but abandon the stale snapshot at
+    ; its deadline so no delayed send can reach a later foreground window.
+    if (WinExist("A") != targetHwnd || GetKeyState("LButton", "P")) {
+        if (A_TickCount < deadlineTick)
+            SetTimer, PostActivationLButtonCheck, % -k_postActivationLButtonPollMs
+        Return
+    }
 
     ; Keep the delayed recovery scoped to Explorer and common file dialogs, the
     ; only windows where this first-click Ctrl+NumpadAdd behavior is intended.
@@ -9325,15 +9401,11 @@ PostActivationLButtonCheck:
      && MouseIsOverTitleBarDeferred(clickX, clickY, False, targetHwnd, targetCtrl, targetClass))
         Return
 
-    ; The initial activation click can also select a Quick Access tree folder.
-    ; Require the path captured at mouse-down to change before touching columns.
+    ; Any completed SysTreeView32 click may select a Quick Access folder. Avoid
+    ; UIA hit classification: only a changed path can authorize column alignment,
+    ; so expand/collapse and same-folder clicks expire without calling SendCtrlAdd().
     if (InStr(targetCtrl, "SysTreeView32", True)) {
-        treeClickSelectsFolder := _IsTreeViewFolderSelectionClick(targetHwnd, targetCtrl, clickX, clickY)
-        if (queuedId != postActivationLButtonId)
-            Return
-
-        if (treeClickSelectsFolder)
-            _RequestExplorerCtrlAdd(targetHwnd, targetClass, targetCtrl, 0, initialPath, True)
+        _RequestExplorerCtrlAdd(targetHwnd, targetClass, targetCtrl, 0, initialPath, True)
         Return
     }
 
@@ -9391,7 +9463,7 @@ PostActivationLButtonCheck:
     ; Force the shell-view wait path because this recovery runs immediately after
     ; activation and may need the target to settle before Ctrl+NumpadAdd is useful.
     if (postActivationBlankClick)
-        SendCtrlAdd(targetHwnd, , , targetClass, targetCtrl, True)
+        SendCtrlAdd(targetHwnd, targetClass, targetCtrl, True)
 Return
 
 ; Recognize a same-control double-click using Windows' configured time and
@@ -9456,10 +9528,17 @@ $~LButton::
     CancelTbcTypingWorkForPointerAction()
 
     WinGetClass, _winClassD, ahk_id %_winIdD%
+    isExplorerDirectUIClick := (_winClassD == "CabinetWClass" || _winClassD == "#32770")
+                            && InStr(_winCtrlD, "DirectUIHWND", True)
     navigationStartPath := ""
     if ((_winClassD == "CabinetWClass" || _winClassD == "#32770")
-     && _IsExplorerNavigationSurfaceCtrl(_winCtrlD))
+     && (_IsExplorerNavigationSurfaceCtrl(_winCtrlD) || isExplorerDirectUIClick))
         navigationStartPath := GetExplorerPath(_winIdD)
+
+    ; Match DirectUI double-clicks from immutable first-click identity and path
+    ; data. UIA below may refine blank/item/header behavior, but it no longer
+    ; decides whether a native folder navigation receives a path-change watcher.
+    explorerDirectUIDoubleClick := _CaptureExplorerDirectUIDoubleClick(_winIdD, _winClassD, _winCtrlD, lbX1, lbY1, navigationStartPath)
 
     ; Capture the header action before the native click can change Refresh to
     ; Stop/Cancel. This narrow UIA probe runs only on Explorer/file-dialog header
@@ -9476,8 +9555,7 @@ $~LButton::
         Return
     }
 
-    treeClickSelectsFolder := _IsTreeViewFolderSelectionClick(_winIdD, _winCtrlD, lbX1, lbY1)
-    titleBarState          := _GetTitleBarProbeState(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)
+    titleBarState := _GetTitleBarProbeState(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)
 
     if (titleBarState == "caption")
         Return
@@ -9512,12 +9590,12 @@ $~LButton::
 
         If !GetKeyState("LButton", "P") {
             If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
-                SendCtrlAdd(_winIdD, , , _winClassD, _winCtrlD)
+                SendCtrlAdd(_winIdD, _winClassD, _winCtrlD)
             }
             Else {
                 ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
                 If IsSysListViewReportView(controlHwnd)
-                    SendCtrlAdd(_winIdD, , , _winClassD, _winCtrlD)
+                    SendCtrlAdd(_winIdD, _winClassD, _winCtrlD)
             }
         }
 
@@ -9542,11 +9620,12 @@ $~LButton::
 
     initTime := A_TickCount
 
-    If (   allowDoubleClicks
-        && (A_PriorHotkey == A_ThisHotkey)
-        && (A_TimeSincePriorHotkey <= k_DoubleClickTime)
-        && (abs(lbX1-lbX2) < 25 && abs(lbY1-lbY2) < 25)
-        && (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))) {
+    isLegacyDoubleClick := !isExplorerDirectUIClick
+                        && (A_PriorHotkey == A_ThisHotkey)
+                        && (A_TimeSincePriorHotkey <= k_DoubleClickTime)
+                        && (Abs(lbX1-lbX2) < 25 && Abs(lbY1-lbY2) < 25)
+                        && (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))
+    If (allowDoubleClicks && (IsObject(explorerDirectUIDoubleClick) || isLegacyDoubleClick)) {
 
         allowDoubleClicks := False
         ; tooltip, %isBlankSpaceExplorer% - %isBlankSpaceNonExplorer%
@@ -9564,26 +9643,23 @@ $~LButton::
         KeyWait, Lbutton, U T3
 
         If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
-            if (_winClassD == "#32770" && _winCtrlD == "DirectUIHWND2" && isItemClick && prevPath != "") {
-                ; Win11 file dialogs can navigate before the breadcrumb/path text
-                ; updates, so skip the extra path polling and let the existing
-                ; shell-view load wait inside SendCtrlAdd() be the reliability gate.
-                SendCtrlAdd(_winIdD, prevPath, "", _winClassD, _winCtrlD, True)
-            }
-            ; Other shell-view double-clicks use the shared non-blocking timer.
-            ; Every changed-path request uses the shared bounded fast-poll
-            ; profile, then retains the normal Details-layout confirmation.
-            else if (prevPath != "")
-                _RequestExplorerCtrlAdd(_winIdD, _winClassD, _winCtrlD, 0, prevPath, True)
+            ; Every DirectUI shell double-click now uses its captured mouse-down
+            ; path and the shared changed-path/stable-Details confirmation. Keep
+            ; prevPath only as the legacy fallback for other shell controls.
+            doubleClickStartPath := IsObject(explorerDirectUIDoubleClick)
+                ? explorerDirectUIDoubleClick.initialPath
+                : prevPath
+            if (doubleClickStartPath != "")
+                _RequestExplorerCtrlAdd(_winIdD, _winClassD, _winCtrlD, 0, doubleClickStartPath, True)
         }
         Else {
             If InStr(_winCtrlD, "SysListView32", True) {
                 ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
                 If IsSysListViewReportView(controlHwnd)
-                    SendCtrlAdd(_winIdD, , , _winClassD)
+                    SendCtrlAdd(_winIdD, _winClassD)
             }
             Else
-                SendCtrlAdd(_winIdD, , , _winClassD)
+                SendCtrlAdd(_winIdD, _winClassD)
         }
 
         GoSub, EnableTimers
@@ -9666,6 +9742,18 @@ $~LButton::
 
     rlsTime  := A_TickCount
     timeDiff := rlsTime - initTime
+
+    ; Quick Access needs no UIA hit lookup. Every completed SysTreeView32 click
+    ; starts the changed-path watcher; only a current path different from the
+    ; mouse-down path can ultimately authorize SendCtrlAdd().
+    if ((_winClassD == "CabinetWClass" || _winClassD == "#32770")
+     && InStr(_winCtrlD, "SysTreeView32", True)) {
+        if (!GetKeyState("LButton", "P") && _winIdU = _winIdD)
+            _RequestExplorerCtrlAdd(_winIdD, _winClassD, _winCtrlD, 0, navigationStartPath, True)
+
+        GoSub, EnableTimers
+        Return
+    }
 
     ; tickTotalEnd := A_TickCount
     ; traceText .= "TOTAL dt=" (tickTotalEnd - tickTotalStart) "ms`n"
@@ -9763,16 +9851,6 @@ $~LButton::
             else if (headerKind = "path_change")
                 _RequestHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, True)
         }
-        Else If (   treeClickSelectsFolder
-                && (_winClassD == "CabinetWClass" || _winClassD == "#32770")
-                && (!isBlankSpaceExplorer && !isBlankSpaceNonExplorer)) {
-
-            ; The UIA TreeItem check identifies a folder-selection click. The
-            ; queued request still requires GetExplorerPath() to advance beyond
-            ; navigationStartPath before the replacement Items View may authorize
-            ; Ctrl+NumpadAdd.
-            _RequestExplorerCtrlAdd(_winIdD, _winClassD, _winCtrlD, 0, navigationStartPath, True)
-        }
     }
     ; A SysHeader drag of at least 15 pixels blocks this window's LButton-driven
     ; alignment until a qualifying double-click in its SysListView clears it.
@@ -9860,9 +9938,11 @@ GetItemsViewHwndFromUIA(shellEl)
 ; Resolve Explorer's main item container with a two-stage lookup:
 ; 1) cheap/more direct UIA control-type checks for the common shell view hosts
 ; 2) broader legacy "Items View" name lookup as the slower fallback
-FindExplorerItemsViewElement(targetHwndID)
+; transactionTimeout bounds the root handle lookup. A caller that also scopes
+; UIA.TransactionTimeout applies the same limit to the descendant searches.
+FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000)
 {
-    exEl := SafeUIA_ElementFromHandle(targetHwndID, "", False)
+    exEl := SafeUIA_ElementFromHandle(targetHwndID, "", False, transactionTimeout)
     if !IsObject(exEl)
         return ""
 
@@ -9903,19 +9983,100 @@ ExplorerItemsViewHasDetailsSignals(shellEl) {
 }
 
 ; Return one comparison value for the current Details view, or an empty value
-; until UIA exposes a Details header, grid, or Name split button. Row count adds
-; the visible content shape to the column/header geometry, so Refresh does not
-; rely only on an unchanged outer rectangle.
-_GetExplorerDetailsLayoutSignature(shellEl) {
+; until UIA exposes a Details header, grid, or Name split button. Navigation and
+; startup compare the column count and Items View rectangle. Refresh also includes
+; row count because its unchanged directory path cannot prove content replacement.
+_GetExplorerDetailsLayoutSignature(shellEl, includeRowCount := False) {
     if !IsObject(shellEl)
         return ""
 
     if !ExplorerItemsViewHasDetailsSignals(shellEl)
         return ""
 
-    columnCount := UIA_TryGetGridColumnCountAny_(shellEl)
-    rowCount    := UIA_TryGetGridRowCountAny_(shellEl)
-    return rowCount . "|" . columnCount . "|" . SafeUIA_GetElementRectangleSignature(shellEl)
+    columnCount        := UIA_TryGetGridColumnCountAny_(shellEl)
+    rectangleSignature := SafeUIA_GetElementRectangleSignature(shellEl)
+    if (includeRowCount) {
+        rowCount := UIA_TryGetGridRowCountAny_(shellEl)
+        return rowCount . "|" . columnCount . "|" . rectangleSignature
+    }
+
+    return columnCount . "|" . rectangleSignature
+}
+
+; Probe one Explorer Items View without conflating two different failures:
+; - ready: Details controls exist and signature contains the current layout.
+; - not_ready: the Items View is accessible, but Details controls are still loading.
+; - unavailable: no Items View was resolved, or the retained UIA element is stale.
+; The caller discards both non-ready results so the next probe resolves the current
+; Items View, and can force a longer transaction timeout at its bounded deadline.
+_ProbeExplorerDetailsLayout(targetHwndID, shellEl := "", includeRowCount := False, forceResolve := False, transactionTimeout := 150) {
+    global UIA
+
+    priorConnectionTimeout  := ""
+    priorTransactionTimeout := ""
+
+    if (transactionTimeout <= 0)
+        transactionTimeout := 150
+
+    if !IsObject(UIA) {
+        try
+            UIA := UIA_Interface()
+        catch e
+            UIA := ""
+    }
+
+    try {
+        if IsObject(UIA) {
+            try
+                priorConnectionTimeout := UIA.ConnectionTimeout
+            catch e
+                priorConnectionTimeout := ""
+            try
+                priorTransactionTimeout := UIA.TransactionTimeout
+            catch e
+                priorTransactionTimeout := ""
+
+            UIA.TransactionTimeout := transactionTimeout
+        }
+
+        if (forceResolve)
+            shellEl := ""
+
+        if !IsObject(shellEl)
+            shellEl := FindExplorerItemsViewElement(targetHwndID, transactionTimeout)
+
+        if !IsObject(shellEl)
+            return { state: "unavailable", signature: "", shellEl: "" }
+
+        ; A retained COM wrapper can remain an object after Explorer destroys its
+        ; underlying element. A failed property read proves it must be rediscovered.
+        if (SafeUIA_GetControlType(shellEl, "") = "")
+            return { state: "unavailable", signature: "", shellEl: "" }
+
+        signature := _GetExplorerDetailsLayoutSignature(shellEl, includeRowCount)
+        if (signature != "")
+            return { state: "ready", signature: signature, shellEl: shellEl }
+
+        ; If the element disappeared during the Details search, classify it as
+        ; unavailable rather than retaining the stale wrapper as merely not ready.
+        if (SafeUIA_GetControlType(shellEl, "") = "")
+            return { state: "unavailable", signature: "", shellEl: "" }
+
+        return { state: "not_ready", signature: "", shellEl: shellEl }
+    } catch e {
+        return { state: "unavailable", signature: "", shellEl: "" }
+    } finally {
+        try {
+            if (priorTransactionTimeout != "" && IsObject(UIA))
+                UIA.TransactionTimeout := priorTransactionTimeout
+        } catch e {
+        }
+        try {
+            if (priorConnectionTimeout != "" && IsObject(UIA))
+                UIA.ConnectionTimeout := priorConnectionTimeout
+        } catch e {
+        }
+    }
 }
 
 ; Resolve the real Explorer Items View HWND with a cheap-first split:
@@ -10057,7 +10218,7 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
 }
 
 SendCtrlAddLabel:
-    SendCtrlAdd(_winIdU, , , _winClassD, _winCtrlU)
+    SendCtrlAdd(_winIdU, _winClassD, _winCtrlU)
 Return
 
 #MaxThreadsPerHotkey 1
@@ -10546,11 +10707,10 @@ _TryAutoFitResolvedSysListView(hwndTop, targetCtrlNN, mode := "header_no_fill") 
     return AutoFitSysListViewColumns(listViewHwnd, mode)
 }
 
-SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetClass := "", initFocusedCtrlNN := "", forceExplorerWait := False, targetScan := "") {
+SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := "", waitForExplorerLoad := False, targetScan := "", restoreTreeFocus := True) {
     global k_nativeSysListViewColumnAutoFitMode, k_sendCtrlAddShellTabProbeTimeoutMs, k_useNativeSysListViewColumnAutoFit
 
     TargetControl := ""
-    didNavigate   := forceExplorerWait || (prevPath != "" && currentPath != "" && prevPath != currentPath)
 
     If (initTargetClass == "")
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
@@ -10618,7 +10778,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         ; wait. Disabling the feature flag, or any direct-message failure,
         ; falls through to the original focus-and-chord path below.
         if (k_useNativeSysListViewColumnAutoFit && InStr(TargetControl, "SysListView32", True)) {
-            if (didNavigate && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770"))
+            if (waitForExplorerLoad && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770"))
                 WaitForExplorerLoad(initTargetHwnd, (TargetControl == initFocusedCtrlNN), False)
 
             if _TryAutoFitResolvedSysListView(initTargetHwnd, TargetControl, k_nativeSysListViewColumnAutoFitMode)
@@ -10626,7 +10786,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
         }
 
         If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
-            if (didNavigate) {
+            if (waitForExplorerLoad) {
                 WaitForExplorerLoad(initTargetHwnd, False, True)
             }
             If (TargetControl != initFocusedCtrlNN) {
@@ -10636,7 +10796,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         Else If (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
-            if (didNavigate) {
+            if (waitForExplorerLoad) {
                 WaitForExplorerLoad(initTargetHwnd, True, False)
             }
             If (TargetControl != initFocusedCtrlNN) {
@@ -10646,7 +10806,7 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             }
         }
         Else If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
-            if (didNavigate) {
+            if (waitForExplorerLoad) {
                 ; This fallback shell branch already resolved a real content target.
                 ; Skip the slower UIA focus-confirmation part when focus is already
                 ; on that target and only the content-readiness wait still matters.
@@ -10679,7 +10839,9 @@ SendCtrlAdd(initTargetHwnd := "", prevPath := "", currentPath := "", initTargetC
             try {
                 Send, ^{NumpadAdd}
 
-                If ((InStr(initFocusedCtrlNN,"Edit",True) || InStr(initFocusedCtrlNN,"Tree",True)) && initFocusedCtrlNN != TargetControl) {
+                If ((InStr(initFocusedCtrlNN,"Edit",True)
+                  || (restoreTreeFocus && InStr(initFocusedCtrlNN,"Tree",True)))
+                 && initFocusedCtrlNN != TargetControl) {
                     ; Skip the heavier restore path when Ctrl+NumpadAdd already left
                     ; focus on the original control/window.
                     restoreNeeded := True
@@ -12745,51 +12907,6 @@ _IsLiveResizeThreeEdgeDockedOnSide(hwndID, monitorNum, dockSide, refX := "", ref
     return false
 }
 
-; Return true when the dragged window's far horizontal edge is already anchored
-; at live-resize start, either by the monitor work-area boundary or by a visible
-; window whose facing edge is already flush to it. This is evaluated once up
-; front so the live drag does not switch modes mid-resize.
-_IsLiveResizeFarEdgeDocked(hwndID, monitorNum, edgeHit, refX := "", refY := "", refW := "", refH := "") {
-    static HTLEFT  := 10  ; Non-client left resize border.
-    static HTRIGHT := 11  ; Non-client right resize border.
-
-    liveResizeFarEdgeGapTolerance     := 10
-    ; Live-resize arm time needs a looser work-area edge check than the strict
-    ; 3px "looks docked" helpers elsewhere. Snapped panes on Windows 11 can sit
-    ; a few pixels off the reported work-area boundary while still behaving as a
-    ; true anchored far edge during native resize.
-    liveResizeFarEdgeMonitorTolerance := 10
-    liveResizeFarEdgeTouchTolerance   := 10
-    liveResizeFarEdgeVerticalOverlap  := 100
-
-    if (!hwndID || monitorNum < 1)
-        return false
-
-    if (refX = "" || refY = "" || refW = "" || refH = "") {
-        if !WinGetPosEx(hwndID, refX, refY, refW, refH, null, null)
-            return false
-    }
-
-    SysGet, monInfo, MonitorWorkArea, %monitorNum%
-    refRightEdge := refX + refW
-
-    if (edgeHit = HTRIGHT) {
-        if (Abs(refX - monInfoLeft) <= liveResizeFarEdgeMonitorTolerance)
-            return true
-        candidateTargetEdge := "right"
-    }
-    else if (edgeHit = HTLEFT) {
-        if (Abs(refRightEdge - monInfoRight) <= liveResizeFarEdgeMonitorTolerance)
-            return true
-        candidateTargetEdge := "left"
-    }
-    else
-        return false
-
-    dockPartnerHwndIDs := Find2DEdgePartnerWindows(hwndID, monitorNum, liveResizeFarEdgeTouchTolerance, 0, 0, liveResizeFarEdgeVerticalOverlap, candidateTargetEdge, liveResizeFarEdgeGapTolerance, refX, refY, refW, refH)
-    return (IsObject(dockPartnerHwndIDs) && dockPartnerHwndIDs.MaxIndex())
-}
-
 ; Decide whether two windows belong to the same live-resize peer group for the
 ; dragged edge. Horizontal drags group vertically contiguous windows whose left
 ; and right edges already match closely; vertical drags do the mirror image for
@@ -14704,10 +14821,9 @@ FindSecondMostWindow(ref_hwndID := "", monitorNum := 0) {
     Return targetID
 }
 
-; Count how many work-area edges of the target monitor a window is touching within
-; a strict 3px monitor-edge dock tolerance. This is used to identify windows
-; that already look docked to the desktop layout before we consider them as fit
-; candidates below the moved window in z-order.
+; Count how many work-area edges of the target monitor a window touches within a
+; strict 3px tolerance. Edge-partner searches use this to distinguish docked
+; windows from arbitrary floating candidates.
 _GetWindowMonitorEdgeTouchCount(windowHwnd, monitorNum := 0) {
     strictDockEdgeTolerance := 3
 
@@ -14868,11 +14984,10 @@ _HasVisibleExposedAreaWindow(candidateHwndID, candidateX := "", candidateY := ""
     return (visiblePercent >= requiredVisiblePercent)
 }
 
-; Shared worker for both edge-touching finders. It performs the common z-order
-; scan, candidate filtering, overlap/gap validation, and exposed-area checks.
-; The wrappers below decide whether to keep only the first match or every match,
-; whether to retain the short debug trace used by post-release fitting.
-_FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", keepAllMatches := false, collectDebugTrace := false, restrictToBelowRefHwndID := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
+; Scan every visible window except the reference window, applying the shared
+; monitor, docking, overlap/gap, and exposed-area filters. Callers either rank
+; the returned candidates or use the complete geometric set.
+_FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", collectDebugTrace := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
 
@@ -14896,29 +15011,19 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
 
     debugLineCount := 0
     debugMaxLines  := 6
-    firstFound     := false
     refBottomEdge  := refY + refH
     refRightEdge   := refX + refW
 
-    ; WinGet List returns windows in z-order. We intentionally walk toward the
-    ; windows below the dragged/reference window in z-order. The wrappers decide
-    ; whether that means "first passing candidate wins" or "collect every
-    ; passing candidate".
+    ; WinGet List supplies deterministic z-order. This core retains every
+    ; passing candidate; release fitting ranks them afterward, while live resize
+    ; uses the complete geometric set.
     WinGet, winList, List,
     Loop, %winList%
     {
         hwndID := winList%A_Index%
 
-        ; The release-time fit helpers intentionally only consider windows below
-        ; the reference window in z-order. Live resize can opt into scanning all
-        ; visible docked windows instead so partner discovery is purely geometric.
-        if (!restrictToBelowRefHwndID) {
-            if (!firstFound) {
-                if (hwndID == refHwndID)
-                    firstFound := true
-                continue
-            }
-        }
+        if (hwndID == refHwndID)
+            continue
 
         edgeTouchCount    := "-"
         edgeGap           := "-"
@@ -14971,10 +15076,9 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
             horizontalOverlap   := Min(refRightEdge,   candidateRightEdge) - Max(refX, candidateX)
             verticalOverlap     := Min(refBottomEdge, candidateBottomEdge) - Max(refY, candidateY)
 
-            ; candidateTargetEdge narrows the generic overlap check into the exact geometric
-            ; relationship needed for that resize direction. A candidate is not
-            ; scored or ranked here: it simply passes or fails, and the first
-            ; passing candidate below the reference window wins.
+            ; candidateTargetEdge narrows the generic overlap check into the
+            ; exact relationship needed for that resize direction. This core
+            ; only accepts or rejects candidates; callers perform any ranking.
             if (candidateTargetEdge = "top") {
                 ; Top-fit candidates must share enough left-to-right span with
                 ; the dragged window to count as the window on its bottom side
@@ -15052,26 +15156,23 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
             continue
 
         result.matches.Push(hwndID)
-        if (!keepAllMatches)
-            break
     }
 
     return result
 }
 
-; Scan every visible candidate window on the monitor and return the best
-; geometry match for the requested edge relationship. For moved-window release
-; fitting, prefer the nearest eligible window below the reference window in
-; z-order before considering deeper matches, then break ties by the smallest
-; absolute gap and the largest overlap in that active dimension.
+; Return the best visible geometry match for the requested edge relationship.
+; Prefer the nearest eligible lower-z-order window; if none qualifies, use the
+; best higher-z-order match. Break equal z-order preference by the smallest
+; absolute gap and then the largest overlap in the active dimension.
 _FindBestVisibleEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 0, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", collectDebugTrace := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
-    global lastBelowZOrderWindowDebug
+    global lastDockPartnerSearchDebug
 
-    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, collectDebugTrace, true, requiredVisiblePercent, visibilityGridSize)
+    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, collectDebugTrace, requiredVisiblePercent, visibilityGridSize)
     if (collectDebugTrace)
-        lastBelowZOrderWindowDebug := scanResult.debugText
+        lastDockPartnerSearchDebug := scanResult.debugText
     else
-        lastBelowZOrderWindowDebug := ""
+        lastDockPartnerSearchDebug := ""
 
     if (!scanResult.matches.MaxIndex())
         return 0
@@ -15192,8 +15293,8 @@ _GetEdgeTouchingWindowScore(refX, refY, refW, refH, candidateHwndID, candidateTa
 ; Unlike the edge-touching finders, this fallback helper does not require any
 ; directional edge-gap relationship or exposed visible area up front.
 ; The caller applies the per-axis edge-pair tolerance checks afterward.
-_FindFirstDockedWindowBelowInZOrder(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, collectDebugTrace := false) {
-    global lastBelowZOrderWindowDebug
+_FindFirstDockedWindowBelowInZOrder(refHwndID, monitorNum := 0, minEdgesTouched := 2, collectDebugTrace := false) {
+    global lastDockPartnerSearchDebug
     SysGet, MonCount, MonitorCount
     DetectHiddenWindows, Off
 
@@ -15287,26 +15388,18 @@ _FindFirstDockedWindowBelowInZOrder(refHwndID, monitorNum := 0, edgeTouchToleran
         if (rejectReason != "")
             continue
 
-        lastBelowZOrderWindowDebug := collectDebugTrace ? debugText : ""
+        lastDockPartnerSearchDebug := collectDebugTrace ? debugText : ""
         return hwndID
     }
 
-    lastBelowZOrderWindowDebug := collectDebugTrace ? debugText : ""
+    lastDockPartnerSearchDebug := collectDebugTrace ? debugText : ""
     return 0
-}
-
-; Collect every visible 2D edge-partner candidate that passes the same geometry
-; and visibility checks as the single-candidate finder, but only from windows
-; below the reference window in z-order.
-Find2DEdgePartnerWindowsBelowReferenceInZOrder(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
-    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, false, false, requiredVisiblePercent, visibilityGridSize)
-    return scanResult.matches
 }
 
 ; Collect every visible 2D edge-partner candidate that passes the same geometry
 ; and visibility checks, without restricting the candidate pool by z-order.
 Find2DEdgePartnerWindows(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
-    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, true, false, true, requiredVisiblePercent, visibilityGridSize)
+    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, false, requiredVisiblePercent, visibilityGridSize)
     return scanResult.matches
 }
 
@@ -15561,7 +15654,7 @@ return
 ; 4. If those edge pairs are already close enough, copy that size
 ; ```
 FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50, collectDebugTrace := false) {
-    global lastBelowZOrderWindowDebug
+    global lastDockPartnerSearchDebug
     if (!movedHwndID)
         return false
 
@@ -15695,22 +15788,22 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         adjacentVerticalHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, verticalPartnerEdgeToMatch, edgeGapTolerance, movedX, movedY, movedW, movedH, collectDebugTrace)
         if (collectDebugTrace) {
             if (verticalPartnerEdgeToMatch = "top")
-                verticalDebugText := "Top-edge adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+                verticalDebugText := "Top-edge adjacent fit candidate:`n" lastDockPartnerSearchDebug
             else
-                verticalDebugText := "Bottom-edge adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+                verticalDebugText := "Bottom-edge adjacent fit candidate:`n" lastDockPartnerSearchDebug
             fitDebugText := verticalDebugText
         }
     }
     else if ((movedDocksToLeft || movedDocksToRight) && !fullHeightSideFitMode) {
         topSideCandidateHwndID    := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "bottom", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
-            topSideDebugText := "Top-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+            topSideDebugText := "Top-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
             topSideDebugText := ""
 
         bottomSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "top", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
-            bottomSideDebugText := "Bottom-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+            bottomSideDebugText := "Bottom-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
             bottomSideDebugText := ""
 
@@ -15765,7 +15858,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     if (horizontalPartnerEdgeToMatch != "") {
         adjacentSideHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 100, 100, horizontalPartnerEdgeToMatch, edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace) {
-            sideDebugText := sideFitLabel " adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+            sideDebugText := sideFitLabel " adjacent fit candidate:`n" lastDockPartnerSearchDebug
             if (fitDebugText = "")
                 fitDebugText := sideDebugText
             else
@@ -15783,13 +15876,13 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
 
         leftSideCandidateHwndID  := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, l_edgeTouchTolerance, 1, minHorizontalOverlap, minVerticalOverlap, "right", l_edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
-            leftSideDebugText := "Full-height left-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+            leftSideDebugText := "Full-height left-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
             leftSideDebugText := ""
 
         rightSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, l_edgeTouchTolerance, 1, minHorizontalOverlap, minVerticalOverlap,  "left", l_edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
-            rightSideDebugText := "Full-height right-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+            rightSideDebugText := "Full-height right-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
             rightSideDebugText := ""
 
@@ -15841,13 +15934,13 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     else if (movedDocksToTop || movedDocksToBottom) {
         leftSideCandidateHwndID  := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "right", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
-            leftSideDebugText := "Left-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+            leftSideDebugText := "Left-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
             leftSideDebugText := ""
 
         rightSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "left", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
-            rightSideDebugText := "Right-side adjacent fit candidate:`n" lastBelowZOrderWindowDebug
+            rightSideDebugText := "Right-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
             rightSideDebugText := ""
 
@@ -15912,9 +16005,9 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; if no adjacent partner matched, inspect the first docked lower-z-order
     ; template window and only borrow width/height when edge pairs already align.
     if (!didFindAdjacentPartner) {
-        fallbackTemplateHwndID := _FindFirstDockedWindowBelowInZOrder(movedHwndID, monitorNum, edgeTouchTolerance, 2, collectDebugTrace)
+        fallbackTemplateHwndID := _FindFirstDockedWindowBelowInZOrder(movedHwndID, monitorNum, 2, collectDebugTrace)
         if (collectDebugTrace) {
-            fallbackDebugText := "Lower-z-order docked fallback candidate:`n" lastBelowZOrderWindowDebug
+            fallbackDebugText := "Lower-z-order docked fallback candidate:`n" lastDockPartnerSearchDebug
             if (fitDebugText = "")
                 fitDebugText := fallbackDebugText
             else
@@ -16143,8 +16236,8 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     }
 
     if (fitDebugText != "") {
-        lastBelowZOrderWindowDebug := fitDebugText
-        ToolTip, % lastBelowZOrderWindowDebug
+        lastDockPartnerSearchDebug := fitDebugText
+        ToolTip, % lastDockPartnerSearchDebug
         SetTimer, RemoveToolTip, -5000
     }
 
@@ -18838,8 +18931,9 @@ Acc_ParentSafe(accObj) {
     default = value returned if UIA lookup fails.
     transactionTimeout := 250 = per-call UIA transaction timeout in ms.
     connectionTimeout := 20000 = per-call UIA connection timeout in ms.
+    retryAfterFailure := True = rebuild UIA and make one additional lookup attempt.
 */
-SafeUIA_ElementFromPoint(x, y, default := "", transactionTimeout := 250, connectionTimeout := 20000) {
+SafeUIA_ElementFromPoint(x, y, default := "", transactionTimeout := 250, connectionTimeout := 20000, retryAfterFailure := True) {
     global UIA
     priorConnectionTimeout  := ""
     priorTransactionTimeout := ""
@@ -18870,20 +18964,28 @@ SafeUIA_ElementFromPoint(x, y, default := "", transactionTimeout := 250, connect
         result := UIA.ElementFromPoint(x, y, False)
     } catch {
         UIA := ""
-        UIA := UIA_Interface()
-        try
-            UIA.TransactionTimeout := transactionTimeout
-        catch e {
-        }
-        try
-            UIA.ConnectionTimeout  := connectionTimeout
-        catch e {
-        }
+        if (retryAfterFailure) {
+            try
+                UIA := UIA_Interface()
+            catch e
+                UIA := ""
 
-        try
-            result := UIA.ElementFromPoint(x, y, False)
-        catch
-            result := default
+            if IsObject(UIA) {
+                try
+                    UIA.TransactionTimeout := transactionTimeout
+                catch e {
+                }
+                try
+                    UIA.ConnectionTimeout  := connectionTimeout
+                catch e {
+                }
+
+                try
+                    result := UIA.ElementFromPoint(x, y, False)
+                catch
+                    result := default
+            }
+        }
     }
 
     try {
