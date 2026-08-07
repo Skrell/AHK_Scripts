@@ -238,8 +238,8 @@ Global tbcAdjustColumnsLastWheelTick                       := 0
 ; Minimum quiet period after the last wheel event before attempting Explorer
 ; column auto-fit; this avoids interrupting fast continuous scrolling.
 Global k_tbcAdjustColumnsQuietMs                           := 240
-; Stronger quiet period for #32770 file dialogs, where DirectUI scroll activity and
-; deferred Ctrl+NumpadAdd sends are more likely to overlap visibly.
+; Dialog-specific quiet period for #32770 file dialogs; it remains independently
+; configurable if their DirectUI scroll activity later requires a longer delay.
 Global k_tbcAdjustColumnsDialogQuietMs                     := 240
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
@@ -400,7 +400,8 @@ Global explorerCtrlAddRequestPathlessContentFallbackActive := False
 ; True until a path-changing header request makes its one pre-UIA alignment.
 ; UIA still runs afterward so a verified send can correct a rebuilt file view.
 Global explorerCtrlAddRequestPreProbeSendPending           := False
-; Directory returned by the preceding startup-path sample.
+; Latest startup directory sample, retained after confirmation across UIA retries
+; for final pre-send validation.
 Global explorerCtrlAddRequestPreviousPath                  := ""
 ; Whether this request must prove a directory change before adjusting columns.
 ; Refresh requests leave this false because Refresh keeps the same directory.
@@ -625,6 +626,8 @@ Global swallowNextRButtonUpFromMButtonDrag                 := false
 ; Used by explicit LButton+RButton chords that should consume the normal
 ; right-click flow, such as the title-bar toggle and clear-edit gesture.
 Global suppressRightButtonLogic                            := false
+; True while the title-bar LButton+RButton chord owns the current left-click.
+Global titleBarChordOwnsLButton                            := false
 
 Process, Priority,, High
 
@@ -2397,7 +2400,6 @@ KillOtherAutoHotkeyU64_NotThisScript(terminateUnknownTitle := false) {
                 continue
             }
         }
-
         Process, Close, %pid%
         if (!ErrorLevel) {
             killed++
@@ -2468,9 +2470,9 @@ GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) 
 ;------------------------------------------------------------------------------
 ;https://www.autohotkey.com/boards/viewtopic.php?t=51265
 ;------------------------------------------------------------------------------
-; Classify a Win32 dialog for the activation path. "unknown" prevents an
-; incomplete child scan from being treated as "plain".
-ClassifyDialog32770(hWnd, windowClass := "", windowStyle := "") {
+; Classify a Win32 dialog using positive evidence of a file or namespace view.
+; "unknown" prevents an incomplete child scan from being treated as "plain".
+ClassifyDialog32770(hWnd, windowClass := "") {
     if (!hWnd || !WinExist("ahk_id " . hWnd))
         return "unknown"
 
@@ -2482,38 +2484,22 @@ ClassifyDialog32770(hWnd, windowClass := "", windowStyle := "") {
     if (windowClass != "#32770")
         return "not_dialog"
 
-    if (windowStyle = "")
-        WinGet, windowStyle, Style, ahk_id %hWnd%
-
-    if (windowStyle = "")
-        return "unknown"
-
-    ; Keep dialogs with min/max buttons out of the "plain" classification.
-    ; Preserve the former non-plain result for these windows until the style
-    ; heuristic is replaced by stronger positive file-dialog evidence.
-    if (windowStyle & 0x00010000)  ; WS_MAXIMIZEBOX
-        return "file_dialog"
-    if (windowStyle & 0x00020000)  ; WS_MINIMIZEBOX
-        return "file_dialog"
-
-    ; Do NOT reject WS_THICKFRAME / WS_SIZEBOX here,
-    ; so Notepad++ Find (0x94CC004C) will pass.
-
     ; A complete child-control scan distinguishes plain utility dialogs from
     ; shell-style dialogs containing a file or namespace view.
     WinGet, ctrlList, ControlList, ahk_id %hWnd%
     if (ErrorLevel || ctrlList = "")
         return "unknown"
 
-    ; Classes that are strong indicators of a file view or shell namespace view.
-    static suspectPattern := "i)^(SysListView32|SHELLDLL_DefView|DirectUIHWND|NamespaceTreeControl|SysTreeView32|CabinetWClass)"
+    ; Generic DirectUI and tree controls are intentionally excluded because
+    ; ordinary confirmation dialogs can contain them too.
+    static fileViewPattern := "i)^(SysListView32|SHELLDLL_DefView|NamespaceTreeControl)"
 
     Loop, Parse, ctrlList, `n
     {
         ctrlNN := A_LoopField
         ; Match the complete ClassNN prefix. Stripping at the first digit would
         ; turn SysListView321 into SysListView and miss the SysListView32 class.
-        if RegExMatch(ctrlNN, suspectPattern)
+        if RegExMatch(ctrlNN, fileViewPattern)
             return "file_dialog"
     }
     return "plain"
@@ -2618,7 +2604,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     If !(vWinClass == "#32770" && vWinTitle == "Run") {
         WinGet, vWinStyle, Style, % "ahk_id " hWnd
-        dialogKind := ClassifyDialog32770(hWnd, vWinClass, vWinStyle)
+        dialogKind := ClassifyDialog32770(hWnd, vWinClass)
 
         ; A missing or empty child snapshot is inconclusive. Abandon this
         ; activation attempt rather than incorrectly treating it as "plain".
@@ -3255,8 +3241,9 @@ $*RButton Up::
     ; Successful wheel combos then dismiss the menu with Esc so mouse movement does not matter.
     if (rightButtonNativeDown) {
         SendInput, {RButton Up}
-        if (rightButtonSuppressMenuOnUp)
+        if (rightButtonSuppressMenuOnUp) {
             SendInput, {Esc}
+        }
     }
     else if (!rightButtonComboUsed)
         Click, Right
@@ -3267,6 +3254,7 @@ return
 #If MouseIsOverTitleBar()
 ~LButton & RButton::
     suppressRightButtonLogic := true
+    titleBarChordOwnsLButton := true
     rightButtonComboUsed     := true
 
     MouseGetPos,,, hwndId
@@ -3576,8 +3564,9 @@ _ResetRightButtonState(sendNativeUp := false) {
     ; RButton is still physically held.
     if (sendNativeUp && rightButtonNativeDown) {
         SendInput, {RButton Up}
-        if (rightButtonSuppressMenuOnUp)
+        if (rightButtonSuppressMenuOnUp) {
             SendInput, {Esc}
+        }
     }
 
     rightButtonHeld                     := false
@@ -4024,8 +4013,10 @@ $*MButton::
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
         }
 
-        If WinExist("ahk_class tooltips_class32")
+        tooltipHwnd := WinExist("ahk_class tooltips_class32")
+        If tooltipHwnd {
             WinClose, ahk_class tooltips_class32
+        }
 
         If dragHorz
             dragHorz_prev := dragHorz
@@ -4461,8 +4452,9 @@ Return
 
 #If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE") && !IsEditFieldActive())
 ^+d::
-    if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
+    if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32")) {
         Send, {Esc}
+    }
 
     ctrlShiftDModifierTargetHwnd := DllCall("user32\GetForegroundWindow", "Ptr")
     Critical, On
@@ -4511,8 +4503,9 @@ Return
 Return
 
 ^d::
-    if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32"))
+    if (WinExist("ahk_class rctrl_renwnd32") && ControlExist("OOCWindow1", "ahk_class rctrl_renwnd32")) {
         Send, {Esc}
+    }
 
     ctrlDModifierTargetHwnd     := DllCall("user32\GetForegroundWindow", "Ptr")
     Critical, On
@@ -5051,8 +5044,9 @@ $Enter::
             ; Non-classic editors cannot prove the rewrite inline as reliably, so
             ; those fall through to the deferred barrier below.
             CancelTbcTypingFixes(True, False)
-            if (!_CommitFixSlashEnterInline())
+            if (!_CommitFixSlashEnterInline()) {
                 Send, {Enter}
+            }
         }
         else {
             ; This mirrors tbcHoty and deferred slash+Space: queue intent,
@@ -5062,8 +5056,9 @@ $Enter::
             _RequestFixSlash("enter")
         }
     }
-    else
+    else {
         Send, {Enter}
+    }
     disableEnter := False
 Return
 #If
@@ -5178,8 +5173,9 @@ prevChromeTab()
     ; ControlFocus, Chrome_RenderWidgetHostHWND1, ahk_id %this_id%
     Send, {Enter}
     sleep, 150
-    If WinExist("ahk_id " . this_id) && WinActive("ahk_id " . this_id)
+    If WinExist("ahk_id " . this_id) && WinActive("ahk_id " . this_id) {
         Send, {tab}{tab}{Enter}
+    }
     tooltip, switched!
     sleep, 1000
     tooltip,
@@ -5217,6 +5213,7 @@ GetVisibleHwndByPartialClass(classPart) {
     }
     return
 }
+
 #If !SearchingWindows && !hitTAB
 ; A second Esc press on the same foremost window opens close confirmation.
 ; Pressing x while that second Esc remains held cancels the close.
@@ -7293,7 +7290,11 @@ Min(a,b) {
 }
 ; -------------------------------------------------------------------------------------------
 #If MouseIsOverCaptionButtons()
-^Lbutton Up::
+; Ctrl+click is script-owned, so suppress its native down as well as the
+; existing non-tilde up event before running the custom caption action.
+$^Lbutton::Return
+
+$^Lbutton Up::
     StopRecursion := True
     DetectHiddenWindows, Off
     CoordMode, Mouse, Screen
@@ -7353,40 +7354,30 @@ Min(a,b) {
     tooltip,
 Return
 
-Lbutton Up::
+; Ordinary caption clicks are also script-owned: block the physical down/up,
+; identify the button on release, then forward one complete click underneath.
+$Lbutton::
+    titleBarChordOwnsLButton := false
+Return
+
+$Lbutton Up::
+    ; The title-bar LButton+RButton chord already consumed this left-click, even
+    ; if RButton was released first and its separate state has been reset.
+    if (titleBarChordOwnsLButton) {
+        titleBarChordOwnsLButton := false
+        Return
+    }
+
     CoordMode, Mouse, Screen
     MouseGetPos, vPosX, vPosY, hWnd
-
-    KeyWait, LButton, U T1
     vName := WhichButton(vPosX, vPosY, hWnd)
 
-    If (InStr(vName,"minimize",false)) {
-        WinMinimize, ahk_id %hWnd%
-        ; Send, {Click, left}
-    }
-    Else If (InStr(vName,"maximize",false)) {
-        WinGet, state, MinMax, ahk_id %hWnd%
-        If (state == 0)
-            WinMaximize, ahk_id %hWnd%
-        Else
-            WinRestore, ahk_id %hWnd%
-        ; Send, {Click, left}
-    }
-    Else If (InStr(vName,"close",false)) {
-        WinClose, ahk_id %hWnd%
-        ; Send, {Click, left}
-    }
-    Else If (InStr(vName,"restore",false)) {
-        WinRestore, ahk_id %hWnd%
-        ; Send, {Click, left}
-    }
-    ; Else If (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))
-    ; Send, {Click, left}
-
-    ; ToolTip, % vName
-    ; sleep, 1000
-    ; tooltip
-    Return
+    If (   InStr(vName, "minimize", false)
+        || InStr(vName, "maximize", false)
+        || InStr(vName, "restore",  false)
+        || InStr(vName, "close",    false))
+        Click, %vPosX%, %vPosY%
+Return
 #If
 
 #If MouseIsOverTaskbarWidgets()
@@ -9339,8 +9330,8 @@ _GetExplorerCtrlAddRequestPath(targetHwnd, windowClass, requestId, ByRef request
 ;    verified, and final attempts without a path comparison. Confirmed #32770
 ;    header navigation also uses those attempts if its post-click path is unavailable.
 ;    Refresh attempts immediately because its path does not change.
-; 4. #32770 SysTreeView32 folder navigation: use the same changed-path,
-;    Details-mode, and UIA item/empty-result proof as other navigation.
+; 4. Confirmed #32770 file-dialog SysTreeView32 folder navigation: use the same
+;    changed-path, Details-mode, and UIA item/empty-result proof as other navigation.
 ;
 ; Every verified alignment requires IsDetailsView() plus one UIA ListItem or a
 ; recognized empty-result message. Header requests additionally make guarded
@@ -9531,8 +9522,8 @@ _IsHeaderNavigationCtrlAddCandidate(controlType, controlName := "", localizedCon
 ;    #32770 header navigation may also continue when its post-click path is
 ;    unavailable. A nonempty unchanged path remains gated.
 ;    Refresh makes its first send immediately.
-; 4. #32770 SysTreeView32 navigation: use the same changed-path and file-view
-;    readiness proof as the other path-changing scenarios.
+; 4. Confirmed #32770 file-dialog SysTreeView32 navigation: use the same
+;    changed-path and file-view readiness proof as other path-changing scenarios.
 ;
 ; Every verified send requires IsDetailsView() to report Details mode and UIA to
 ; expose one ListItem or a recognized empty-result message. Header requests also
@@ -9727,39 +9718,6 @@ RunExplorerCtrlAddWhenReady:
             }
         }
     }
-    else if (requestRequiresStablePath
-     && !explorerCtrlAddRequestPathlessContentFallbackActive) {
-        ; Keep proving that the same startup destination remains current. If
-        ; Explorer changes paths, restart the non-blocking startup readiness check.
-        pathProbeStartTick := A_TickCount
-        pathProbeRequestIsCurrent := False
-        currentPath := _GetExplorerCtrlAddRequestPath(requestTargetHwnd
-            , requestWindowClass, requestId, pathProbeRequestIsCurrent)
-        pathProbeElapsedMs := A_TickCount - pathProbeStartTick
-        if !pathProbeRequestIsCurrent {
-            _TraceExplorerCtrlAdd("request_aborted"
-                , "reason=superseded_during_startup_revalidation currentRequestId="
-                . explorerCtrlAddRequestId, True, requestId)
-            Return
-        }
-        _TraceExplorerCtrlAdd("path_probe"
-            , "scenario=startup_revalidate elapsedMs=" . pathProbeElapsedMs
-            . " path=[" . currentPath . "]", False, requestId)
-
-        if (currentPath = "" || currentPath != explorerCtrlAddRequestPreviousPath) {
-            explorerCtrlAddRequestDeadlineTick             := A_TickCount + k_newExplorerCtrlAddTimeoutMs
-            explorerCtrlAddRequestEarliestContentProbeTick := A_TickCount + k_newExplorerCtrlAddMinimumWaitMs
-            explorerCtrlAddRequestPreviousPath             := currentPath
-            explorerCtrlAddRequestStablePathConfirmed      := False
-            explorerCtrlAddRequestStablePathHitCount       := (currentPath = "") ? 0 : 1
-            _TraceExplorerCtrlAdd("startup_path_reset"
-                , "path=[" . currentPath . "] nextTimerMs=" . k_explorerCtrlAddPollMs
-                , False, requestId)
-            _ScheduleExplorerCtrlAddRetry(requestId, k_explorerCtrlAddPollMs)
-            Return
-        }
-    }
-
     ; Back, Forward, Up, breadcrumb, and SysTreeView32 navigation normally must
     ; report a different nonempty directory before alignment. A confirmed #32770
     ; header request may bypass only an unavailable post-click path after the
@@ -9930,6 +9888,8 @@ RunExplorerCtrlAddWhenReady:
     contentProbe := _ProbeExplorerDetailsContentReady(requestTargetHwnd
         , k_explorerCtrlAddPollUIATimeoutMs, requestId)
     contentProbeElapsedMs := A_TickCount - contentProbeStartTick
+    contentProbeOverBudgetMs := Max(0
+        , contentProbeElapsedMs - k_explorerCtrlAddPollUIATimeoutMs)
     contentProbeDetailsReason := contentProbe.HasKey("detailsReason")
         ? contentProbe.detailsReason
         : ""
@@ -9956,6 +9916,7 @@ RunExplorerCtrlAddWhenReady:
     _TraceExplorerCtrlAdd("details_content_probe"
         , "elapsedMs=" . contentProbeElapsedMs
         . " timeoutMs=" . k_explorerCtrlAddPollUIATimeoutMs
+        . " overBudgetMs=" . contentProbeOverBudgetMs
         . " state=" . contentProbe.state
         . " reason=" . contentProbe.reason
         . " detailsReason=[" . contentProbeDetailsReason . "]"
@@ -10037,12 +9998,49 @@ RunExplorerCtrlAddWhenReady:
         Return
     }
 
+    verifiedResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
+        , currentClass, requestSourceCtrl, requestId, contentProbeResolvedTarget)
+
+    ; UIA retries deliberately reuse the confirmed startup path instead of
+    ; repeatedly invoking Explorer COM. Re-read it once immediately before the
+    ; verified send; if the destination changed, restart startup readiness so
+    ; Ctrl+NumpadAdd cannot be authorized by UIA evidence from the old folder.
+    if (requestRequiresStablePath
+     && !explorerCtrlAddRequestPathlessContentFallbackActive) {
+        pathProbeStartTick := A_TickCount
+        pathProbeRequestIsCurrent := False
+        currentPath := _GetExplorerCtrlAddRequestPath(requestTargetHwnd
+            , requestWindowClass, requestId, pathProbeRequestIsCurrent)
+        pathProbeElapsedMs := A_TickCount - pathProbeStartTick
+        if !pathProbeRequestIsCurrent {
+            _TraceExplorerCtrlAdd("request_aborted"
+                , "reason=superseded_during_startup_pre_send_revalidation currentRequestId="
+                . explorerCtrlAddRequestId, True, requestId)
+            Return
+        }
+        _TraceExplorerCtrlAdd("path_probe"
+            , "scenario=startup_pre_send_revalidate elapsedMs=" . pathProbeElapsedMs
+            . " confirmedPath=[" . explorerCtrlAddRequestPreviousPath . "]"
+            . " currentPath=[" . currentPath . "]", False, requestId)
+
+        if (currentPath = "" || currentPath != explorerCtrlAddRequestPreviousPath) {
+            explorerCtrlAddRequestDeadlineTick             := A_TickCount + k_newExplorerCtrlAddTimeoutMs
+            explorerCtrlAddRequestEarliestContentProbeTick := A_TickCount + k_newExplorerCtrlAddMinimumWaitMs
+            explorerCtrlAddRequestPreviousPath             := currentPath
+            explorerCtrlAddRequestStablePathConfirmed      := False
+            explorerCtrlAddRequestStablePathHitCount       := (currentPath = "") ? 0 : 1
+            _TraceExplorerCtrlAdd("startup_path_reset"
+                , "reason=pre_send_path_changed path=[" . currentPath . "] nextTimerMs="
+                . k_explorerCtrlAddPollMs, False, requestId)
+            _ScheduleExplorerCtrlAddRetry(requestId, k_explorerCtrlAddPollMs)
+            Return
+        }
+    }
+
     ; Issue the alignment before synchronously flushing its terminal trace, so
     ; disk or antivirus latency cannot delay the user-visible column adjustment.
     sendCtrlAddDispatchElapsedMs := A_TickCount - requestStartTick
     sendCtrlAddStartTick := A_TickCount
-    verifiedResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
-        , currentClass, requestSourceCtrl, requestId, contentProbeResolvedTarget)
     SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrl, False, ""
         , requestRestoreTreeFocus, verifiedResolvedTarget, requestId)
     _TraceExplorerCtrlAdd("sendctrladd_dispatch"
@@ -14361,6 +14359,7 @@ _ApplyLButtonResizeSyncPreviewMoves(tbcMoves) {
 ; both the timer-driven updates and the final LButton-up safety net can enforce
 ; the same shared-edge flush rules.
 _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
+    global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncHit
     global lButtonResizeSyncPartners
 
@@ -14372,13 +14371,24 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
     draggedRightEdge  := draggedX + draggedW
     draggedBottomEdge := draggedY + draggedH
     didResizeAny      := false
-    tbcMoves      := []
+    haveHorizontalMonitorWorkArea := false
+    liveResizeEdgeGapTolerance    := 10
+    liveResizeEdgeTouchTolerance  := 10
+    liveResizeMoveSupportTolerance := 10
+    tbcMoves          := []
     validPartners     := []
+
+    if (lButtonResizeSyncHit = HTRIGHT || lButtonResizeSyncHit = HTLEFT) {
+        monitorNum := GetWindowMonitorNumber(lButtonResizeSyncDraggedHwnd)
+        if (monitorNum >= 1) {
+            SysGet, monInfo, MonitorWorkArea, %monitorNum%
+            haveHorizontalMonitorWorkArea := true
+        }
+    }
 
     for partnerIndex, partnerInfo in lButtonResizeSyncPartners {
         partnerHwndID      := partnerInfo.hwnd
         partnerFixedEdge   := partnerInfo.fixedEdge
-        partnerMoveOnly    := partnerInfo.useMoveOnly
         partnerRole        := partnerInfo.role
         usedMoveOnlyPartnerHandling := false
         ; Only issue WinMove when the target rect actually changed. This avoids
@@ -14394,6 +14404,23 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
         if !WinGetPosEx(partnerHwndID, partnerX, partnerY, partnerW, partnerH, partnerOffsetX, partnerOffsetY)
             continue
 
+        currentPartnerX := partnerX - partnerOffsetX
+        currentPartnerY := partnerY
+        currentPartnerW := partnerW - 2*Abs(partnerOffsetX)
+        currentPartnerH := partnerH - 2*Abs(partnerOffsetY) - 1
+        if (currentPartnerW <= 0)
+            currentPartnerW := partnerW
+        if (currentPartnerH <= 0)
+            currentPartnerH := partnerH
+
+        ghostCardInfo := partnerInfo.ghostCardInfo
+        if IsObject(ghostCardInfo) {
+            currentPartnerX := ghostCardInfo.x
+            currentPartnerY := ghostCardInfo.y
+            currentPartnerW := ghostCardInfo.w
+            currentPartnerH := ghostCardInfo.h
+        }
+
         if (lButtonResizeSyncHit = HTRIGHT) {
             if (partnerRole = "peer") {
                 ; Same-side peers keep their far-left edge fixed and directly
@@ -14402,23 +14429,64 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 targetLeftEdge  := partnerFixedEdge
                 targetRightEdge := draggedRightEdge
             }
-            else if (partnerMoveOnly) {
-                ; Full-height horizontal drags that started without a docked far
-                ; edge only slide opposite-side followers whose own far edge is
-                ; still floating. Opposite-side panes that are actually
-                ; anchored on their far edge resize instead.
-                targetMoveX       := draggedRightEdge + partnerOffsetX
-                usedMoveOnlyPartnerHandling := true
-                shouldMovePartner := (partnerX != targetMoveX)
-                if (shouldMovePartner)
-                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
-            }
             else {
-                ; Opposite-side partners keep their far-right edge fixed and
-                ; slide only the shared left edge so it stays flush with the
-                ; dragged window's right edge.
-                targetLeftEdge  := draggedRightEdge
-                targetRightEdge := partnerFixedEdge
+                currentLeftEdge         := currentPartnerX
+                currentRightEdge        := currentPartnerX + currentPartnerW
+                partnerFarSideAnchored  := false
+                partnerTouchesTopOrBottom := false
+                seamMovesTowardFarSide  := false
+
+                if (haveHorizontalMonitorWorkArea) {
+                    currentBottomEdge := currentPartnerY + currentPartnerH
+                    partnerTouchesTopOrBottom := (   Abs(currentPartnerY - monInfoTop) <= liveResizeMoveSupportTolerance
+                                                 || Abs(currentBottomEdge - monInfoBottom) <= liveResizeMoveSupportTolerance)
+                    seamMovesTowardFarSide := (draggedRightEdge > currentLeftEdge)
+                    partnerFarSideAnchored := (Abs(currentRightEdge - monInfoRight) <= liveResizeEdgeTouchTolerance)
+
+                    if (!partnerFarSideAnchored) {
+                        farSidePartnerHwndIDs := Find2DEdgePartnerWindows(partnerHwndID, monitorNum, liveResizeEdgeTouchTolerance, 0, 0, 100, "left", liveResizeEdgeGapTolerance, currentPartnerX, currentPartnerY, currentPartnerW, currentPartnerH)
+                        if (IsObject(farSidePartnerHwndIDs) && farSidePartnerHwndIDs.MaxIndex()) {
+                            for farSidePartnerIndex, farSidePartnerHwndID in farSidePartnerHwndIDs {
+                                if (!farSidePartnerHwndID || farSidePartnerHwndID = partnerHwndID)
+                                    continue
+                                if !WinGetPosEx(farSidePartnerHwndID, farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH, null, null)
+                                    continue
+                                if (_IsLiveResizeThreeEdgeDockedOnSide(farSidePartnerHwndID, monitorNum, "right", farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH)) {
+                                    partnerFarSideAnchored := true
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (   haveHorizontalMonitorWorkArea
+                    && partnerTouchesTopOrBottom
+                    && seamMovesTowardFarSide
+                    && !partnerFarSideAnchored) {
+                    ; Preserve width only while the partner's far side is still
+                    ; floating. As soon as that projected far edge would reach
+                    ; the monitor boundary, switch to a resize against that edge.
+                    projectedRightEdge := draggedRightEdge + currentPartnerW
+                    if (projectedRightEdge >= monInfoRight - liveResizeEdgeTouchTolerance) {
+                        targetLeftEdge  := draggedRightEdge
+                        targetRightEdge := monInfoRight
+                    }
+                    else {
+                        targetMoveX       := draggedRightEdge + partnerOffsetX
+                        usedMoveOnlyPartnerHandling := true
+                        shouldMovePartner := (partnerX != targetMoveX)
+                        if (shouldMovePartner)
+                            tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
+                    }
+                }
+                else {
+                    ; When the seam moves away from the partner's far side, or
+                    ; that far side is already anchored directly or through the
+                    ; next flush pane, keep the far edge fixed and resize.
+                    targetLeftEdge  := draggedRightEdge
+                    targetRightEdge := currentRightEdge
+                }
             }
 
             if (!usedMoveOnlyPartnerHandling) {
@@ -14441,28 +14509,65 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 targetLeftEdge  := draggedX
                 targetRightEdge := partnerFixedEdge
             }
-            else if (partnerMoveOnly) {
-                ; Mirror the right-edge rule above for opposite-side followers
-                ; whose own far edge is floating: preserve width and shift the
-                ; whole window so its right edge stays flush to the dragged
-                ; left edge.
-                partnerOuterWidth := partnerW - 2*Abs(partnerOffsetX)
-                if (partnerOuterWidth <= 0)
-                    continue
-
-                targetLeftEdge    := draggedX - partnerOuterWidth
-                targetMoveX       := targetLeftEdge + partnerOffsetX
-                usedMoveOnlyPartnerHandling := true
-                shouldMovePartner := (partnerX != targetMoveX)
-                if (shouldMovePartner)
-                    tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
-            }
             else {
-                ; Opposite-side partners keep their far-left edge fixed and
-                ; slide only the shared right edge so it stays flush with the
-                ; dragged window's left edge.
-                targetLeftEdge  := partnerFixedEdge
-                targetRightEdge := draggedX
+                currentLeftEdge         := currentPartnerX
+                currentRightEdge        := currentPartnerX + currentPartnerW
+                partnerFarSideAnchored  := false
+                partnerTouchesTopOrBottom := false
+                seamMovesTowardFarSide  := false
+
+                if (haveHorizontalMonitorWorkArea) {
+                    currentBottomEdge := currentPartnerY + currentPartnerH
+                    partnerTouchesTopOrBottom := (   Abs(currentPartnerY - monInfoTop) <= liveResizeMoveSupportTolerance
+                                                 || Abs(currentBottomEdge - monInfoBottom) <= liveResizeMoveSupportTolerance)
+                    seamMovesTowardFarSide := (draggedX < currentRightEdge)
+                    partnerFarSideAnchored := (Abs(currentLeftEdge - monInfoLeft) <= liveResizeEdgeTouchTolerance)
+
+                    if (!partnerFarSideAnchored) {
+                        farSidePartnerHwndIDs := Find2DEdgePartnerWindows(partnerHwndID, monitorNum, liveResizeEdgeTouchTolerance, 0, 0, 100, "right", liveResizeEdgeGapTolerance, currentPartnerX, currentPartnerY, currentPartnerW, currentPartnerH)
+                        if (IsObject(farSidePartnerHwndIDs) && farSidePartnerHwndIDs.MaxIndex()) {
+                            for farSidePartnerIndex, farSidePartnerHwndID in farSidePartnerHwndIDs {
+                                if (!farSidePartnerHwndID || farSidePartnerHwndID = partnerHwndID)
+                                    continue
+                                if !WinGetPosEx(farSidePartnerHwndID, farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH, null, null)
+                                    continue
+                                if (_IsLiveResizeThreeEdgeDockedOnSide(farSidePartnerHwndID, monitorNum, "left", farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH)) {
+                                    partnerFarSideAnchored := true
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (   haveHorizontalMonitorWorkArea
+                    && partnerTouchesTopOrBottom
+                    && seamMovesTowardFarSide
+                    && !partnerFarSideAnchored) {
+                    ; Mirror the right-edge rule above: preserve width only
+                    ; while the partner's far-left edge is still floating, then
+                    ; switch to a resize once that edge reaches the monitor.
+                    projectedLeftEdge := draggedX - currentPartnerW
+                    if (projectedLeftEdge <= monInfoLeft + liveResizeEdgeTouchTolerance) {
+                        targetLeftEdge  := monInfoLeft
+                        targetRightEdge := draggedX
+                    }
+                    else {
+                        targetLeftEdge    := draggedX - currentPartnerW
+                        targetMoveX       := targetLeftEdge + partnerOffsetX
+                        usedMoveOnlyPartnerHandling := true
+                        shouldMovePartner := (partnerX != targetMoveX)
+                        if (shouldMovePartner)
+                            tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
+                    }
+                }
+                else {
+                    ; When the seam moves away from the partner's far side, or
+                    ; that far side is already anchored directly or through the
+                    ; next flush pane, keep the far edge fixed and resize.
+                    targetLeftEdge  := currentLeftEdge
+                    targetRightEdge := draggedX
+                }
             }
 
             if (!usedMoveOnlyPartnerHandling) {
@@ -14902,7 +15007,8 @@ _TrackLiveResizeSyncTopmostState(hwndID, ByRef topmostStates) {
 ; | - anchored far edge: resize      |
 ; |   against that fixed far edge    |
 ; | - floating far edge: keep width  |
-; |   and slide with the boundary    |
+; |   and slide until it reaches a   |
+; |   far-side anchor, then resize   |
 ; +----------------------------------+
         ; |
         ; v
@@ -15153,9 +15259,10 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
             if !WinGetPosEx(partnerHwndID, partnerX, partnerY, partnerW, partnerH, null, null)
                 continue
 
-            ; Cache the partner's current geometry traits at arm time. The
-            ; actual horizontal move-vs-resize choice is made below from this
-            ; partner's own far-edge anchor state, not from height alone.
+            ; Cache only the partner relationship and the seam-fixed edge at arm
+            ; time. Horizontal opposite-side followers re-evaluate move versus
+            ; resize later from the live preview rect so they can switch as soon
+            ; as their far side becomes anchored mid-drag.
             resizeTargetInfo := { hwnd: partnerHwndID, isFullHeight: partnerIsFullHeight, role: "opposite" }
             resizeTargetInfo.fixedEdge := _GetLiveResizeSyncFixedEdge(partnerX, partnerY, partnerW, partnerH, edgeHit, "opposite")
             lButtonResizeSyncPartners.Push(resizeTargetInfo)
@@ -15165,70 +15272,6 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
 
     if (!lButtonResizeSyncPartners.MaxIndex())
         return false
-
-    draggedOuterDockSide := ""
-    if (edgeHit = HTRIGHT)
-        draggedOuterDockSide := "left"
-    else if (edgeHit = HTLEFT)
-        draggedOuterDockSide := "right"
-
-    draggedStartsAsSideDock := (   draggedOuterDockSide != ""
-                                && _IsLiveResizeThreeEdgeDockedOnSide(draggedHwndID, monitorNum, draggedOuterDockSide, draggedX, draggedY, draggedW, draggedH))
-
-    liveResizeMoveSupportTolerance := 10
-    SysGet, monInfo, MonitorWorkArea, %monitorNum%
-
-    ; Horizontal opposite-side followers should move by default when the
-    ; dragged window is a true left/right 3-edge dock. Only keep them in the
-    ; resize path when their own far side is backed by a true 3-edge dock,
-    ; either directly or through the next flush pane on that far side.
-    for resizeTargetIndex, resizeTargetInfo in lButtonResizeSyncPartners {
-        if (resizeTargetInfo.role != "opposite") {
-            resizeTargetInfo.useMoveOnly := false
-            continue
-        }
-
-        if (!draggedStartsAsSideDock || (edgeHit != HTLEFT && edgeHit != HTRIGHT)) {
-            resizeTargetInfo.useMoveOnly := false
-            continue
-        }
-
-        if !WinGetPosEx(resizeTargetInfo.hwnd, partnerX, partnerY, partnerW, partnerH, null, null) {
-            resizeTargetInfo.useMoveOnly := false
-            continue
-        }
-
-        partnerBottomEdge       := partnerY + partnerH
-        partnerTouchesTopOrBottom := (   Abs(partnerY - monInfoTop) <= liveResizeMoveSupportTolerance
-                                      || Abs(partnerBottomEdge - monInfoBottom) <= liveResizeMoveSupportTolerance)
-
-        if (!partnerTouchesTopOrBottom) {
-            resizeTargetInfo.useMoveOnly := false
-            continue
-        }
-
-        partnerFarDockSide          := (edgeHit = HTRIGHT) ? "right" : "left"
-        partnerFarNeighborTargetEdge := (edgeHit = HTRIGHT) ? "left" : "right"
-        partnerBackedByThreeEdgeDock := _IsLiveResizeThreeEdgeDockedOnSide(resizeTargetInfo.hwnd, monitorNum, partnerFarDockSide, partnerX, partnerY, partnerW, partnerH)
-
-        if (!partnerBackedByThreeEdgeDock) {
-            farSidePartnerHwndIDs := Find2DEdgePartnerWindows(resizeTargetInfo.hwnd, monitorNum, liveResizeEdgeTouchTolerance, 0, 0, 100, partnerFarNeighborTargetEdge, liveResizeEdgeGapTolerance, partnerX, partnerY, partnerW, partnerH)
-            if (IsObject(farSidePartnerHwndIDs) && farSidePartnerHwndIDs.MaxIndex()) {
-                for farSidePartnerIndex, farSidePartnerHwndID in farSidePartnerHwndIDs {
-                    if (!farSidePartnerHwndID || farSidePartnerHwndID = resizeTargetInfo.hwnd)
-                        continue
-                    if !WinGetPosEx(farSidePartnerHwndID, farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH, null, null)
-                        continue
-                    if (_IsLiveResizeThreeEdgeDockedOnSide(farSidePartnerHwndID, monitorNum, partnerFarDockSide, farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH)) {
-                        partnerBackedByThreeEdgeDock := true
-                        break
-                    }
-                }
-            }
-        }
-
-        resizeTargetInfo.useMoveOnly := !partnerBackedByThreeEdgeDock
-    }
 
     lButtonResizeSyncActive                    := true
     lButtonResizeSyncDraggedHwnd               := draggedHwndID
@@ -15287,8 +15330,8 @@ EndLButtonResizeSync() {
 ; While a native edge resize is in progress, keep each matched same-side peer
 ; and opposite-side partner in sync with the dragged window. Peers mirror the
 ; dragged edge directly, while opposite-side partners either preserve their far
-; edge and resize, or preserve width and slide, based on the partner's cached
-; arm-time far-edge anchor state.
+; edge and resize, or preserve width and slide, based on the partner's current
+; preview rect and live far-side anchor state.
 UpdateLButtonResizeSync() {
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
@@ -18265,9 +18308,9 @@ _NormalizeDialogFolderPath(folderPath) {
     return _NormalizeExplorerFolderIdentity(folderPath)
 }
 
-; Read a #32770 file dialog's current filesystem folder through the bounded
-; CDM_GETFOLDERPATH common-dialog message. An empty result lets the caller try
-; another native source without blocking the navigation timer.
+; Read a confirmed #32770 file dialog's current filesystem folder through the
+; bounded CDM_GETFOLDERPATH message. _ResolveDialogFolderLocation() must verify
+; the dialog before calling this helper; an empty result selects another source.
 GetDialogFolderPath(hwndDlg, timeoutMs := 25) {
     static CDM_GETFOLDERPATH := 0x0466
     static maxPathChars      := 32768
@@ -18297,9 +18340,9 @@ GetDialogFolderPath(hwndDlg, timeoutMs := 25) {
     return _NormalizeDialogFolderPath(StrGet(&folderPathBuffer, "UTF-16"))
 }
 
-; Read a #32770 file dialog's current folder PIDL through the bounded
-; CDM_GETFOLDERIDLIST message, then convert it to the same parsing-name identity
-; used by Explorer. This also supports shell folders that have no filesystem path.
+; Read a confirmed #32770 file dialog's current folder PIDL through the bounded
+; CDM_GETFOLDERIDLIST message. _ResolveDialogFolderLocation() must verify the
+; dialog first; the PIDL also supports shell folders without filesystem paths.
 GetDialogFolderIdentityFromIdList(hwndDlg, timeoutMs := 25) {
     static CDM_GETFOLDERIDLIST          := 0x0467
     static maxPidlBytes                 := 65536
@@ -18344,6 +18387,11 @@ GetDialogFolderIdentityFromIdList(hwndDlg, timeoutMs := 25) {
 ; sources only. Reusing the last successful source first reduces repeated work;
 ; excluding MSAA prevents an accessibility provider from blocking this timer.
 _ResolveDialogFolderLocation(hwndDlg, preferredResolver := "", traceRequestId := "") {
+    ; CDM_GETFOLDERPATH and CDM_GETFOLDERIDLIST occupy the application-defined
+    ; message range, so send them only after confirming a genuine file view.
+    if (ClassifyDialog32770(hwndDlg) != "file_dialog")
+        return { path: "", resolver: "" }
+
     resolverOrder := []
     if (preferredResolver = "dialog_path"
      || preferredResolver = "dialog_idlist"
@@ -18405,7 +18453,7 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
     ; Read the target's native window class so the function can select the correct location-resolution method.
     WinGetClass, winClass, ahk_id %hwnd%
 
-    ; Delegate common file dialogs because #32770 locations require bounded native common-dialog resolution.
+    ; Delegate #32770 candidates to the resolver, which confirms a file view before sending common-dialog messages.
     if (winClass = "#32770")
         return _ResolveDialogFolderLocation(hwnd, "", traceRequestId).path
 
@@ -24900,6 +24948,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::tghe::the
 ::tghis::this
 ::tshi::this
+::thsi::this
 ::th::the
 ::thatt he::that the
 ::thatthe::that the
