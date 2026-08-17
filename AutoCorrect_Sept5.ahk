@@ -192,7 +192,7 @@ Global disableEnter                                        := False
 ; +----------------------------------------------------------------------------+
 ; Focused control name captured when Everything Edit1 auto-fit is queued so
 ; the deferred send can require the same search field before firing.
-Global tbcEverythingAdjustCtrl                             := ""
+Global tbcEverythingAdjustCtrlNN                           := ""
 ; Focused control class captured with the queued Everything auto-fit so the
 ; flush step can require the same concrete control identity when available.
 Global tbcEverythingAdjustCtrlClass                        := ""
@@ -228,7 +228,7 @@ Global k_tbcEverythingAdjustTypingQuietMs                  := 180
 Global tbcAdjustColumnsClass                               := ""
 ; Control under the mouse when the wheel event was queued; used as a hint before
 ; resolving the final DirectUI/ListView target at send time.
-Global tbcAdjustColumnsCtrl                                := ""
+Global tbcAdjustColumnsCtrlNN                              := ""
 ; Top-level Explorer or #32770 dialog HWND that should receive the deferred
 ; Ctrl+NumpadAdd once scrolling has gone quiet.
 Global tbcAdjustColumnsHwnd                                := 0
@@ -273,7 +273,7 @@ Global k_tbcAdjustColumnsTargetTtlMs                       := 350
 Global tbcFixSlashAction                                   := ""
 ; Focused control name captured when the "/ " fix is queued so the timer can
 ; cancel instead of rewriting text after focus moves to another control.
-Global tbcFixSlashCtrl                                     := ""
+Global tbcFixSlashCtrlNN                                   := ""
 ; Focused control class captured with the deferred slash-space fix so classic
 ; Edit/RichEdit targets can use the same safer message-based phase-2 rewrite
 ; path that Hoty now uses.
@@ -293,7 +293,7 @@ Global tbcFixSlashId                                       := 0
 Global tbcFixSlashRequestedTick                            := 0
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
-Global tbcHotyCtrl                                         := ""
+Global tbcHotyCtrlNN                                       := ""
 ; Focused control class captured with the deferred Hoty fix so the flush step can
 ; choose the safer message-based rewrite path for classic Edit/RichEdit targets.
 Global tbcHotyCtrlClass                                    := ""
@@ -333,7 +333,7 @@ Global postActivationLButtonHeaderKind                     := ""
 Global postActivationLButtonInitialPath                    := ""
 ; ClassNN under the pointer when the activation click happened, used to limit
 ; the recovery path to shell headers and shell-view controls only.
-Global postActivationLButtonCtrl                           := ""
+Global postActivationLButtonCtrlNN                         := ""
 ; Screen X coordinate of the activation click so the timer can re-run title-bar
 ; and blank-space checks against the original click location.
 Global postActivationLButtonX                              := 0
@@ -363,13 +363,15 @@ Global explorerCtrlAddRequestAllowBestEffortSend           := False
 ; True only for confirmed #32770 activation requests. If every folder-identity
 ; backend returns empty, Details mode plus visible UIA content may authorize alignment.
 Global explorerCtrlAddRequestAllowPathlessContentReady     := False
-; True only for confirmed #32770 header navigation. An unavailable post-click
-; path may use guarded early, verified, and final alignment attempts.
-Global explorerCtrlAddRequestAllowUnresolvedPathFallback   := False
 ; Class of the Explorer or file-dialog window that owns the pending request.
 Global explorerCtrlAddRequestClass                         := ""
 ; Latest tick at which the pending request may call SendCtrlAdd().
 Global explorerCtrlAddRequestDeadlineTick                  := 0
+; True after a #32770 startup/navigation request aligned a confirmed Details
+; view before UIA exposed a visible item or recognized empty-folder message.
+Global explorerCtrlAddRequestDetailsOnlySendMade           := False
+; True until that request claims its one early Details-confirmed alignment.
+Global explorerCtrlAddRequestDetailsOnlySendPending        := False
 ; Earliest tick when a startup or Refresh Details/content probe may begin.
 Global explorerCtrlAddRequestEarliestContentProbeTick      := 0
 ; Shorter directory-path polling interval used during every changed-path
@@ -379,9 +381,6 @@ Global explorerCtrlAddRequestFastPathPollIntervalMs        := 0
 Global explorerCtrlAddRequestFastPathPollUntilTick         := 0
 ; Top-level Explorer or file-dialog HWND that owns the pending request.
 Global explorerCtrlAddRequestHwnd                          := 0
-; True until a Refresh request makes its early best-effort alignment attempt.
-; The request remains active afterward for the verified Details/content attempt.
-Global explorerCtrlAddRequestImmediateSendPending          := False
 ; Monotonic token incremented for every request so an earlier timer
 ; callback exits when a newer navigation request supersedes it.
 Global explorerCtrlAddRequestId                            := 0
@@ -391,6 +390,12 @@ Global explorerCtrlAddRequestInitialPath                   := ""
 ; Directory source that most recently succeeded for this request. A #32770 timer
 ; retries that source first instead of repeating a known-failing native/message probe.
 Global explorerCtrlAddRequestLocationResolver              := ""
+; Last Explorer NavigateComplete2 generation consumed by this request's PIDL
+; read. A newer generation wakes changed-path checking without periodic COM reads.
+Global explorerCtrlAddRequestNavigationGeneration          := 0
+; Next watchdog tick when an event-backed Explorer request may re-read its PIDL
+; even if Explorer's navigation event was missed.
+Global explorerCtrlAddRequestNextNavigationFallbackTick    := 0
 ; True after GetExplorerPath() confirms that the pending path-changing request
 ; reached a different directory from explorerCtrlAddRequestInitialPath.
 Global explorerCtrlAddRequestPathChangeConfirmed           := False
@@ -418,15 +423,30 @@ Global explorerCtrlAddRequestRestoreTreeFocus              := True
 Global explorerCtrlAddRequestStartTick                     := 0
 ; Focused source control captured for a tree click; SendCtrlAdd restores it
 ; after adjusting the Details columns when it is still appropriate.
-Global explorerCtrlAddRequestSourceCtrl                    := ""
+Global explorerCtrlAddRequestSourceCtrlNN                  := ""
 ; True after a startup request observes the same nonempty directory twice.
 Global explorerCtrlAddRequestStablePathConfirmed           := False
 ; Number of consecutive startup samples returning the same nonempty directory.
 Global explorerCtrlAddRequestStablePathHitCount            := 0
+; True only while the current request lacks a terminal trace event. This
+; trace-only flag distinguishes a replacement from a request that already ended.
+Global explorerCtrlAddRequestTracePending                  := False
+; True only while an event-backed changed-path request is sleeping until either
+; NavigateComplete2 or its low-frequency watchdog wakes the readiness timer.
+Global explorerCtrlAddRequestWaitingForNavigationEvent     := False
+; True when the current CabinetWClass request has a connected Explorer event sink.
+Global explorerCtrlAddRequestUsesNavigationEvents          := False
+; Retained per-tab COM objects keep NavigateComplete2 event sinks alive.
+Global explorerNavigationObservers                         := {}
+; Per-Explorer generations distinguish navigation events already consumed by a
+; request. A matching active-tab event may also retain a normalized filesystem
+; path so changed-path CabinetWClass requests can avoid a slower PIDL read.
+Global explorerNavigationStates                            := {}
 ; Buffered Explorer CtrlAdd trace text. Terminal outcomes flush this buffer so
 ; ordinary timer probes do not add a disk write to every readiness check.
 Global explorerCtrlAddTraceBuffer                          := ""
-; Fast directory-change polling used by every changed-path navigation request.
+; Fast fallback polling used by changed-path requests without Explorer navigation
+; events, including confirmed #32770 file dialogs.
 Global k_explorerCtrlAddFastPathPollMs                     := 15
 ; After this bounded fast window, directory-change polling uses
 ; k_explorerCtrlAddPollMs.
@@ -440,6 +460,9 @@ Global k_newExplorerCtrlAddTimeoutMs                       := 5000
 Global k_explorerCtrlAddPollMs                             := 50
 ; Shared UIA transaction budget for each Details/content readiness probe.
 Global k_explorerCtrlAddPollUIATimeoutMs                   := 150
+; Low-frequency safety read for event-backed Explorer navigation in case COM does
+; not publish NavigateComplete2 for a particular shell transition.
+Global k_explorerCtrlAddNavigationFallbackMs               := 250
 ; Maximum wait for Details mode and UIA item/empty-result evidence after path
 ; readiness or an applicable minimum settling delay.
 Global k_explorerCtrlAddTimeoutMs                          := 1200
@@ -450,7 +473,7 @@ Global k_explorerCtrlAddTraceBufferChars                   := 65536
 Global k_explorerCtrlAddTraceEnabled                       := True
 ; Persistent trace location beside this script so it is easy to find.
 Global k_explorerCtrlAddTraceFile                          := A_ScriptDir . "\AutoCorrect_ExplorerCtrlAddTrace.log"
-; Minimum non-blocking settle after Refresh before probing the file view.
+; Minimum delay before Refresh begins its verified Details/content probe.
 Global k_explorerCtrlAddRefreshMinimumWaitMs               := 300
 ; Shared UIA evidence accepted as proof that an Items View exposes either an
 ; item or a recognized empty-result message.
@@ -527,7 +550,11 @@ Global WindowTitleGuiReady                                 := False
 ; | Shared typing, click, and drag flags that let separate hotkeys and mouse   |
 ; | handlers coordinate one in-progress gesture.                               |
 ; +----------------------------------------------------------------------------+
-; Master toggle that lets custom click logic emit double-clicks.
+; Arms only this script's custom double-click navigation/alignment action;
+; `$~LButton` continues passing every physical click through to Windows.
+; Handling one matched pair sets this False so further clicks in the same rapid
+; sequence cannot repeat the custom action. The first eligible click after a
+; gap longer than k_DoubleClickTime sets it True and starts a new sequence.
 Global allowDoubleClicks                                   := True
 ; True while the custom live window-drag flow is in progress.
 Global DraggingWindow                                      := False
@@ -1493,7 +1520,7 @@ Hoty:
     If !IsGoogleDocWindow() && !StopAutoFix && CapCount == 3 && IsThisHotKeyLowerCase()  {
         CancelTbcTypingFixes(False, False)
         typingFixSeq += 1
-        CaptureActiveFocusSnapshot(tbcHotyHwnd, tbcHotyCtrl, tbcHotyCtrlHwnd, tbcHotyCtrlClass)
+        CaptureActiveFocusSnapshot(tbcHotyHwnd, tbcHotyCtrlNN, tbcHotyCtrlHwnd, tbcHotyCtrlClass)
         tbcHotyId          := typingFixSeq
         tbcHotyRequestedTick  := A_TickCount
         tbcHotyReplacement := SubStr(A_PriorHotKey,3,1)
@@ -1585,7 +1612,7 @@ Return
 ; withholds Enter until the queued slash decision is resolved.
 _RequestFixSlash(action) {
     global tbcFixSlashAction
-    global tbcFixSlashCtrl
+    global tbcFixSlashCtrlNN
     global tbcFixSlashCtrlClass
     global tbcFixSlashCtrlHwnd
     global tbcFixSlashHwnd
@@ -1596,7 +1623,7 @@ _RequestFixSlash(action) {
     CancelTbcTypingFixes(False, False)
     typingFixSeq += 1
     tbcFixSlashAction     := action
-    CaptureActiveFocusSnapshot(tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashCtrlHwnd, tbcFixSlashCtrlClass)
+    CaptureActiveFocusSnapshot(tbcFixSlashHwnd, tbcFixSlashCtrlNN, tbcFixSlashCtrlHwnd, tbcFixSlashCtrlClass)
     tbcFixSlashId         := typingFixSeq
     tbcFixSlashRequestedTick := A_TickCount
     SetTimer, FlushTbcFixSlash, -40
@@ -1787,7 +1814,7 @@ Return
 ; dropped. This now covers both slash+Space rewrites and slash+Enter barriers.
 _ClearTbcFixSlashState() {
     global tbcFixSlashAction
-    global tbcFixSlashCtrl
+    global tbcFixSlashCtrlNN
     global tbcFixSlashCtrlClass
     global tbcFixSlashCtrlHwnd
     global tbcFixSlashHwnd
@@ -1795,7 +1822,7 @@ _ClearTbcFixSlashState() {
     global tbcFixSlashRequestedTick
 
     tbcFixSlashAction     := ""
-    tbcFixSlashCtrl       := ""
+    tbcFixSlashCtrlNN     := ""
     tbcFixSlashCtrlClass  := ""
     tbcFixSlashCtrlHwnd   := 0
     tbcFixSlashHwnd       := 0
@@ -1806,7 +1833,7 @@ _ClearTbcFixSlashState() {
 ; Clears the deferred capitalization rewrite slot without invalidating the shared
 ; sequence token, allowing the caller to cancel one slot or both explicitly.
 _ClearTbcHotyState() {
-    global tbcHotyCtrl
+    global tbcHotyCtrlNN
     global tbcHotyCtrlClass
     global tbcHotyCtrlHwnd
     global tbcHotyHwnd
@@ -1815,7 +1842,7 @@ _ClearTbcHotyState() {
     global tbcHotyReplacement
     global tbcHotyTriggerChar
 
-    tbcHotyCtrl        := ""
+    tbcHotyCtrlNN      := ""
     tbcHotyCtrlClass   := ""
     tbcHotyCtrlHwnd    := 0
     tbcHotyHwnd        := 0
@@ -2020,14 +2047,14 @@ _IsTbcTypingFixStillValid(tbcId, tbcHwnd, tbcCtrl, tbcRequestedTick) {
 ; can run. The goal is to cancel late fixes rather than let a timer mutate a
 ; different field/control after the user has already moved on.
 _IsTbcFixSlashStillValid() {
-    global tbcFixSlashCtrl
+    global tbcFixSlashCtrlNN
     global tbcFixSlashCtrlClass
     global tbcFixSlashCtrlHwnd
     global tbcFixSlashHwnd
     global tbcFixSlashId
     global tbcFixSlashRequestedTick
 
-    if !_IsTbcTypingFixStillValid(tbcFixSlashId, tbcFixSlashHwnd, tbcFixSlashCtrl, tbcFixSlashRequestedTick)
+    if !_IsTbcTypingFixStillValid(tbcFixSlashId, tbcFixSlashHwnd, tbcFixSlashCtrlNN, tbcFixSlashRequestedTick)
         return False
 
     if (!tbcFixSlashCtrlHwnd && tbcFixSlashCtrlClass = "")
@@ -2036,7 +2063,7 @@ _IsTbcFixSlashStillValid() {
     if !TryCaptureCompleteFocusSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return False
 
-    if (tbcFixSlashCtrl != "" && currentCtrlNN != tbcFixSlashCtrl)
+    if (tbcFixSlashCtrlNN != "" && currentCtrlNN != tbcFixSlashCtrlNN)
         return False
 
     if (tbcFixSlashCtrlHwnd && currentCtrlHwnd != tbcFixSlashCtrlHwnd)
@@ -2053,17 +2080,17 @@ _IsTbcFixSlashStillValid() {
 ; not release Enter into a different window/control. Only send a plain Enter
 ; when the original active window and focused control name still match.
 _TryReleaseTbcFixSlashEnterFallback() {
-    global tbcFixSlashCtrl
+    global tbcFixSlashCtrlNN
     global tbcFixSlashHwnd
     global StopAutoFix
 
     if (!tbcFixSlashHwnd || !WinActive("ahk_id " . tbcFixSlashHwnd))
         return False
 
-    if (tbcFixSlashCtrl != "")
+    if (tbcFixSlashCtrlNN != "")
     {
         ControlGetFocus, currentCtrl, ahk_id %tbcFixSlashHwnd%
-        if (currentCtrl != tbcFixSlashCtrl)
+        if (currentCtrl != tbcFixSlashCtrlNN)
             return False
     }
 
@@ -2080,14 +2107,14 @@ _TryReleaseTbcFixSlashEnterFallback() {
 ; The goal is to cancel late fixes rather than let a timer mutate a different
 ; field/control after the user has already moved on.
 _IsTbcHotyStillValid() {
-    global tbcHotyCtrl
+    global tbcHotyCtrlNN
     global tbcHotyCtrlClass
     global tbcHotyCtrlHwnd
     global tbcHotyHwnd
     global tbcHotyId
     global tbcHotyRequestedTick
 
-    if !_IsTbcTypingFixStillValid(tbcHotyId, tbcHotyHwnd, tbcHotyCtrl, tbcHotyRequestedTick)
+    if !_IsTbcTypingFixStillValid(tbcHotyId, tbcHotyHwnd, tbcHotyCtrlNN, tbcHotyRequestedTick)
         return false
 
     if (!tbcHotyCtrlHwnd && tbcHotyCtrlClass = "")
@@ -2096,7 +2123,7 @@ _IsTbcHotyStillValid() {
     if !TryCaptureCompleteFocusSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
-    if (tbcHotyCtrl != "" && currentCtrlNN != tbcHotyCtrl)
+    if (tbcHotyCtrlNN != "" && currentCtrlNN != tbcHotyCtrlNN)
         return false
 
     if (tbcHotyCtrlHwnd && currentCtrlHwnd != tbcHotyCtrlHwnd)
@@ -2118,7 +2145,7 @@ _TryApplyTbcFixSlashClassicRewrite() {
     static emReplaceSel := 0x00C2
     static emSetSel := 0x00B1
     global tbcFixSlashAction
-    global tbcFixSlashCtrl
+    global tbcFixSlashCtrlNN
     global tbcFixSlashCtrlClass
     global tbcFixSlashCtrlHwnd
     global tbcFixSlashHwnd
@@ -2132,7 +2159,7 @@ _TryApplyTbcFixSlashClassicRewrite() {
     if !TryCaptureCompleteFocusSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return False
 
-    if (currentCtrlNN != tbcFixSlashCtrl || currentCtrlHwnd != tbcFixSlashCtrlHwnd || currentCtrlClass != tbcFixSlashCtrlClass)
+    if (currentCtrlNN != tbcFixSlashCtrlNN || currentCtrlHwnd != tbcFixSlashCtrlHwnd || currentCtrlClass != tbcFixSlashCtrlClass)
         return False
 
     if !_GetClassicControlSelectionRange(tbcFixSlashCtrlHwnd, selStart, selEnd)
@@ -2192,7 +2219,7 @@ _TryApplyTbcFixSlashClassicRewrite() {
 _TryApplyTbcHotyClassicRewrite() {
     static emReplaceSel := 0x00C2
     static emSetSel := 0x00B1
-    global tbcHotyCtrl
+    global tbcHotyCtrlNN
     global tbcHotyCtrlClass
     global tbcHotyCtrlHwnd
     global tbcHotyHwnd
@@ -2208,7 +2235,7 @@ _TryApplyTbcHotyClassicRewrite() {
     if !TryCaptureCompleteFocusSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
-    if (currentCtrlNN != tbcHotyCtrl || currentCtrlHwnd != tbcHotyCtrlHwnd || currentCtrlClass != tbcHotyCtrlClass)
+    if (currentCtrlNN != tbcHotyCtrlNN || currentCtrlHwnd != tbcHotyCtrlHwnd || currentCtrlClass != tbcHotyCtrlClass)
         return false
 
     if !_GetClassicControlSelectionRange(tbcHotyCtrlHwnd, selStart, selEnd)
@@ -2703,7 +2730,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 ? k_newExplorerCtrlAddMinimumWaitMs
                 : 0
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
-                , minimumContentProbeDelayMs, True, False, False, True)
+                , minimumContentProbeDelayMs, True, False, True)
         }
         else if (vWinClass == "CabinetWClass" && isFirstTrackedActivation) {
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
@@ -3479,7 +3506,7 @@ $~WheelUp::
      && wheelCanAdjustColumns)
     {
         tbcAdjustColumnsClass         := hoverClass
-        tbcAdjustColumnsCtrl          := wheelControl
+        tbcAdjustColumnsCtrlNN        := wheelControl
         tbcAdjustColumnsHwnd          := windowId
         tbcAdjustColumnsLastWheelTick := A_TickCount
         tbcAdjustColumnsRequestId += 1
@@ -3494,7 +3521,7 @@ $~WheelUp::
     else {
         tbcAdjustColumnsRequestId :=
         tbcAdjustColumnsHwnd      :=
-        tbcAdjustColumnsCtrl      := ""
+        tbcAdjustColumnsCtrlNN    := ""
     }
 
     Thread, NoTimers, False
@@ -3522,7 +3549,7 @@ $~WheelDown::
      && wheelCanAdjustColumns)
     {
         tbcAdjustColumnsClass         := hoverClass
-        tbcAdjustColumnsCtrl          := wheelControl
+        tbcAdjustColumnsCtrlNN        := wheelControl
         tbcAdjustColumnsHwnd          := windowId
         tbcAdjustColumnsLastWheelTick := A_TickCount
         tbcAdjustColumnsRequestId += 1
@@ -3545,7 +3572,7 @@ $~WheelDown::
     else {
         tbcAdjustColumnsRequestId :=
         tbcAdjustColumnsHwnd      :=
-        tbcAdjustColumnsCtrl      := ""
+        tbcAdjustColumnsCtrlNN    := ""
     }
 
     Thread, NoTimers, False
@@ -3611,7 +3638,7 @@ WheelSendCtrlAdd:
 
     ; Stage 1: basic request validation.
     ; If the wheel hook never captured a valid target, there is nothing to do.
-    if (!tbcAdjustColumnsRequestId || !tbcAdjustColumnsHwnd || tbcAdjustColumnsCtrl == "")
+    if (!tbcAdjustColumnsRequestId || !tbcAdjustColumnsHwnd || tbcAdjustColumnsCtrlNN == "")
         return
 
     ; Snapshot the request token once so every later stage can cheaply detect whether
@@ -3640,7 +3667,7 @@ WheelSendCtrlAdd:
 
     WinGetClass, adjustClassNow, ahk_id %tbcAdjustColumnsHwnd%
     isExplorerLikeWin := (adjustClassNow == "CabinetWClass" || adjustClassNow == "#32770")
-    isPlainListView   := (tbcAdjustColumnsCtrl == "SysListView321")
+    isPlainListView   := (tbcAdjustColumnsCtrlNN == "SysListView321")
 
     if (adjustClassNow != tbcAdjustColumnsClass)
         return
@@ -3670,14 +3697,14 @@ WheelSendCtrlAdd:
     ; - Explorer/dialog DirectUI: reuse the shared shell scan + chooser
     if (TargetControl == "") {
         if (isPlainListView) {
-            TargetControl := tbcAdjustColumnsCtrl
+            TargetControl := tbcAdjustColumnsCtrlNN
         }
         else {
             targetScan := GetSendCtrlAddTargetScan(tbcAdjustColumnsHwnd, adjustClassNow)
             ; Wheel hover can transiently report DirectUIHWND2/3 even when a different
             ; pane is the real Ctrl+NumpadAdd target, so do not blindly trust those two
             ; names here. Let the shared chooser resolve the final target instead.
-            TargetControl := ChooseSendCtrlAddTarget(tbcAdjustColumnsHwnd, adjustClassNow, tbcAdjustColumnsCtrl, targetScan, False)
+            TargetControl := ChooseSendCtrlAddTarget(tbcAdjustColumnsHwnd, adjustClassNow, tbcAdjustColumnsCtrlNN, targetScan, False)
         }
     }
 
@@ -8459,7 +8486,7 @@ IsDetailsView(winHwnd := "", ByRef itemsEl := "", transactionTimeout := 2000
     , ByRef detailsReason := "", ByRef itemsViewResolver := ""
     , ByRef itemsViewCandidateCount := 0
     , ByRef itemsViewResolutionReason := "", ByRef resolvedCtrlNN := ""
-    , ByRef resolvedCtrlHwnd := 0) {
+    , ByRef resolvedCtrlHwnd := 0, ByRef itemsViewResolutionElapsedMs := 0) {
     detailsReason := ""
     itemsEl := ""
     itemsViewResolver := ""
@@ -8467,6 +8494,7 @@ IsDetailsView(winHwnd := "", ByRef itemsEl := "", transactionTimeout := 2000
     itemsViewResolutionReason := ""
     resolvedCtrlNN := ""
     resolvedCtrlHwnd := 0
+    itemsViewResolutionElapsedMs := 0
     if (!winHwnd)
         WinGet, winHwnd, ID, A
     if (!winHwnd) {
@@ -8480,10 +8508,13 @@ IsDetailsView(winHwnd := "", ByRef itemsEl := "", transactionTimeout := 2000
         return IsDetailsView_ExplorerCOM(winHwnd, detailsReason)
 
     if (cls = "#32770") {
-        if !ResolveExplorerItemsView(winHwnd, itemsEl, transactionTimeout
+        itemsViewResolutionStartTick := A_TickCount
+        itemsViewResolved := ResolveExplorerItemsView(winHwnd, itemsEl, transactionTimeout
             , uiaDeadlineTick, useCachedDialogItems, itemsViewResolver
             , itemsViewCandidateCount, itemsViewResolutionReason
-            , resolvedCtrlNN, resolvedCtrlHwnd) {
+            , resolvedCtrlNN, resolvedCtrlHwnd)
+        itemsViewResolutionElapsedMs += A_TickCount - itemsViewResolutionStartTick
+        if !itemsViewResolved {
             detailsReason := "items_view_resolution_failed"
             return false
         }
@@ -8498,9 +8529,12 @@ IsDetailsView(winHwnd := "", ByRef itemsEl := "", transactionTimeout := 2000
             nativeDetailsReason := detailsReason
             pointItemsEl := ""
             pointReason := ""
-            if (_ResolveDialogItemsViewByPoint(winHwnd, pointItemsEl
+            itemsViewResolutionStartTick := A_TickCount
+            pointItemsViewResolved := _ResolveDialogItemsViewByPoint(winHwnd, pointItemsEl
                 , transactionTimeout, uiaDeadlineTick, useCachedDialogItems
-                , pointReason)) {
+                , pointReason)
+            itemsViewResolutionElapsedMs += A_TickCount - itemsViewResolutionStartTick
+            if pointItemsViewResolved {
                 itemsEl := pointItemsEl
                 ; The accepted point-resolved element is no longer proven to belong
                 ; to the native candidate returned by the first resolver.
@@ -9172,7 +9206,7 @@ _IsExplorerNavigationSurfaceCtrl(ctrlNN) {
 _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := "", headerKind := "") {
     global k_postActivationLButtonDelayMs
     global k_postActivationLButtonTimeoutMs
-    global postActivationLButtonCtrl
+    global postActivationLButtonCtrlNN
     global postActivationLButtonDeadlineTick
     global postActivationLButtonHeaderKind
     global postActivationLButtonHwnd
@@ -9185,7 +9219,7 @@ _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := 
     ; this into locals immediately so later clicks cannot partially mutate its
     ; decision state.
     postActivationLButtonId          += 1
-    postActivationLButtonCtrl        := ctrlNN
+    postActivationLButtonCtrlNN      := ctrlNN
     postActivationLButtonDeadlineTick := A_TickCount + k_postActivationLButtonTimeoutMs
     postActivationLButtonHeaderKind  := headerKind
     postActivationLButtonHwnd        := hwnd
@@ -9225,17 +9259,31 @@ _FlushExplorerCtrlAddTrace() {
 ; remain in memory until a terminal outcome or the safety limit requests a flush.
 _TraceExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := "") {
     global explorerCtrlAddRequestId
+    global explorerCtrlAddRequestTracePending
     global explorerCtrlAddTraceBuffer
     global k_explorerCtrlAddTraceBufferChars
     global k_explorerCtrlAddTraceEnabled
 
     static sessionHeaderWritten := False
 
-    if !k_explorerCtrlAddTraceEnabled
-        return
-
     if (requestId = "")
         requestId := explorerCtrlAddRequestId
+
+    ; Track whether the current request has produced a terminal trace record so
+    ; its replacement can be logged as debouncing rather than disappearing.
+    if (requestId = explorerCtrlAddRequestId) {
+        if (eventName = "request_started")
+            explorerCtrlAddRequestTracePending := True
+        else if (eventName = "request_aborted"
+              || eventName = "request_completed"
+              || eventName = "request_superseded"
+              || eventName = "sendctrladd_best_effort_dispatch"
+              || eventName = "sendctrladd_dispatch")
+            explorerCtrlAddRequestTracePending := False
+    }
+
+    if !k_explorerCtrlAddTraceEnabled
+        return
 
     ; A_Now avoids a FormatTime call on every probe, keeping trace overhead out
     ; of the sub-100 ms timing differences this log is intended to measure.
@@ -9286,6 +9334,335 @@ _ScheduleExplorerCtrlAddRetry(requestId, delayMs) {
     return requestIsCurrent
 }
 
+; Return the latest Explorer navigation generation for one top-level host.
+; Generations are incremented by NavigateComplete2 and never require a path read
+; from inside the COM callback.
+_GetExplorerNavigationGeneration(hwnd) {
+    global explorerNavigationStates
+
+    Critical, On
+    generation := explorerNavigationStates.HasKey(hwnd)
+        ? explorerNavigationStates[hwnd].generation
+        : 0
+    Critical, Off
+    return generation
+}
+
+; Record which event generation a new PIDL read is about to observe. Capturing
+; this before the synchronous read preserves any event that arrives during it:
+; the callback advances generation again, so the request knows another read is due.
+_BeginExplorerNavigationPathRead(hwnd) {
+    global explorerNavigationStates
+
+    Critical, On
+    if !explorerNavigationStates.HasKey(hwnd)
+        explorerNavigationStates[hwnd] := { eventPath: "", eventPathActiveTabHwnd: 0
+            , eventPathGeneration: 0, generation: 0, lastReadGeneration: 0 }
+    navigationState := explorerNavigationStates[hwnd]
+    hadPendingEvent := navigationState.generation != navigationState.lastReadGeneration
+    navigationState.lastReadGeneration := navigationState.generation
+    explorerNavigationStates[hwnd] := navigationState
+    generation := navigationState.lastReadGeneration
+    Critical, Off
+
+    return { generation: generation, hadPendingEvent: hadPendingEvent }
+}
+
+; Return the generation captured at the start of the most recent PIDL read.
+; A request starts from this value so an event raised after its baseline read is
+; still visible even when it arrived before the request timer was published.
+_GetExplorerLastPathReadGeneration(hwnd) {
+    global explorerNavigationStates
+
+    Critical, On
+    generation := explorerNavigationStates.HasKey(hwnd)
+        ? explorerNavigationStates[hwnd].lastReadGeneration
+        : 0
+    Critical, Off
+    return generation
+}
+
+; Report whether this Explorer host currently has a retained per-tab COM event
+; sink. Callers without a sink retain the existing bounded path-poll behavior.
+_HasExplorerNavigationObserver(hwnd) {
+    global explorerNavigationObservers
+
+    if (!hwnd)
+        return False
+
+    for _, observer in explorerNavigationObservers {
+        if (observer.hwnd = hwnd && IsObject(observer.shellWin))
+            return True
+    }
+    return False
+}
+
+; Retain and connect the Shell.Application tab object that GetExplorerPath()
+; already resolved. Its matching NavigateComplete2 event can provide a fast
+; filesystem-path candidate; unsupported URLs still use the active-view PIDL.
+_EnsureExplorerNavigationObserver(shellWin, hwnd, activeTabHwnd) {
+    global explorerNavigationObservers
+    global explorerNavigationStates
+
+    if (!IsObject(shellWin) || !hwnd)
+        return False
+
+    dispatchPtr := 0
+    try dispatchPtr := ComObjValue(shellWin)
+    catch
+        dispatchPtr := 0
+    if (!dispatchPtr)
+        return False
+
+    observerKey := hwnd . "|" . activeTabHwnd
+    if (explorerNavigationObservers.HasKey(observerKey)) {
+        existingObserver := explorerNavigationObservers[observerKey]
+        if (existingObserver.dispatchPtr = dispatchPtr)
+            return True
+    }
+
+    ; Only the visible tab should wake this host's current path request. Disconnect
+    ; an older tab/object before retaining the newly resolved active tab.
+    staleObserverKeys := []
+    for existingKey, existingObserver in explorerNavigationObservers {
+        if (existingObserver.hwnd != hwnd)
+            continue
+        try ComObjConnect(existingObserver.shellWin)
+        catch
+        {
+        }
+        staleObserverKeys.Push(existingKey)
+    }
+    for _, staleObserverKey in staleObserverKeys
+        explorerNavigationObservers.Delete(staleObserverKey)
+
+    try ComObjConnect(shellWin, "ExplorerNavigationEvent_")
+    catch
+        return False
+
+    explorerNavigationObservers[observerKey] := { shellWin: shellWin
+        , hwnd: hwnd, activeTabHwnd: activeTabHwnd, dispatchPtr: dispatchPtr }
+    Critical, On
+    if !explorerNavigationStates.HasKey(hwnd)
+        explorerNavigationStates[hwnd] := { eventPath: "", eventPathActiveTabHwnd: 0
+            , eventPathGeneration: 0, generation: 0, lastReadGeneration: 0 }
+    Critical, Off
+    return True
+}
+
+; Atomically sleep an event-backed path request. If NavigateComplete2 arrived
+; just before this call, run immediately instead of overwriting that wake-up with
+; the watchdog delay.
+_ScheduleExplorerCtrlAddNavigationWait(requestId, delayMs) {
+    global explorerCtrlAddRequestHwnd
+    global explorerCtrlAddRequestId
+    global explorerCtrlAddRequestNavigationGeneration
+    global explorerCtrlAddRequestWaitingForNavigationEvent
+    global explorerNavigationStates
+
+    delayMs := Max(1, delayMs)
+    Critical, On
+    requestIsCurrent := (requestId = explorerCtrlAddRequestId)
+    if requestIsCurrent {
+        targetHwnd := explorerCtrlAddRequestHwnd
+        currentGeneration := explorerNavigationStates.HasKey(targetHwnd)
+            ? explorerNavigationStates[targetHwnd].generation
+            : 0
+        eventPending := currentGeneration != explorerCtrlAddRequestNavigationGeneration
+        explorerCtrlAddRequestWaitingForNavigationEvent := !eventPending
+        effectiveDelayMs := eventPending ? 1 : delayMs
+        SetTimer, RunExplorerCtrlAddWhenReady, % -effectiveDelayMs
+    }
+    Critical, Off
+
+    if !requestIsCurrent {
+        _TraceExplorerCtrlAdd("request_aborted"
+            , "reason=superseded_before_navigation_wait currentRequestId="
+            . explorerCtrlAddRequestId, True, requestId)
+    }
+    return requestIsCurrent
+}
+
+; Return a filesystem path retained by the next unconsumed NavigateComplete2
+; generation only when the same ShellTabWindowClass remains active. An empty
+; result deliberately selects the existing authoritative PIDL lookup.
+_TryGetExplorerNavigationEventPath(hwnd, previousGeneration, ByRef eventGeneration) {
+    global explorerNavigationStates
+
+    eventGeneration := 0
+    eventPath := ""
+    eventPathActiveTabHwnd := 0
+    Critical, On
+    if (explorerNavigationStates.HasKey(hwnd)) {
+        navigationState := explorerNavigationStates[hwnd]
+        if (navigationState.generation != previousGeneration
+         && navigationState.HasKey("eventPathGeneration")
+         && navigationState.eventPathGeneration = navigationState.generation) {
+            eventGeneration := navigationState.eventPathGeneration
+            eventPath := navigationState.eventPath
+            eventPathActiveTabHwnd := navigationState.eventPathActiveTabHwnd
+        }
+    }
+    Critical, Off
+
+    if (eventPath = "" || !eventPathActiveTabHwnd) {
+        eventGeneration := 0
+        return ""
+    }
+
+    ; Reject a candidate from a tab that stopped being active before the request
+    ; consumed its event; the PIDL fallback will resolve the newly active tab.
+    ControlGet, activeTabHwnd, Hwnd,, ShellTabWindowClass1, % "ahk_id " hwnd
+    if (!activeTabHwnd || activeTabHwnd != eventPathActiveTabHwnd) {
+        eventGeneration := 0
+        return ""
+    }
+    return eventPath
+}
+
+; NavigateComplete2 is Microsoft's event name from DWebBrowserEvents2; the "2"
+; distinguishes this newer event interface from the older NavigateComplete event.
+; pDisp identifies the browser/Explorer tab that completed navigation, and url
+; reports its resulting location. Only a retained active-tab observer may turn a
+; filesystem URL into a path candidate; HWND-only fallbacks may wake but cannot
+; authorize that URL. Do no PIDL or UIA work here: advance a cheap generation,
+; retain an eligible candidate, and wake only the sleeping path-change request.
+; Same-window non-path events are trace-only so Refresh timing can be measured
+; without letting NavigateComplete2 schedule or authorize Refresh alignment.
+ExplorerNavigationEvent_NavigateComplete2(pDisp, url) {
+    global explorerCtrlAddRequestAllowBestEffortSend
+    global explorerCtrlAddRequestClass
+    global explorerCtrlAddRequestDeadlineTick
+    global explorerCtrlAddRequestEarliestContentProbeTick
+    global explorerCtrlAddRequestHwnd
+    global explorerCtrlAddRequestId
+    global explorerCtrlAddRequestNavigationGeneration
+    global explorerCtrlAddRequestRequirePathChange
+    global explorerCtrlAddRequestRequireStablePath
+    global explorerCtrlAddRequestStartTick
+    global explorerCtrlAddRequestUsesNavigationEvents
+    global explorerCtrlAddRequestWaitingForNavigationEvent
+    global explorerNavigationObservers
+    global explorerNavigationStates
+
+    eventDispatchPtr := 0
+    try eventDispatchPtr := ComObjValue(pDisp)
+    catch
+        eventDispatchPtr := 0
+
+    ; A dispatch-object match proves which retained Explorer tab raised the event;
+    ; that stronger identity is required before its URL may bypass a PIDL read.
+    eventHwnd := 0
+    observerActiveTabHwnd := 0
+    observerMatched := False
+    if (eventDispatchPtr) {
+        for _, observer in explorerNavigationObservers {
+            if (observer.dispatchPtr = eventDispatchPtr) {
+                eventHwnd := observer.hwnd
+                observerActiveTabHwnd := observer.activeTabHwnd
+                observerMatched := True
+                break
+            }
+        }
+    }
+
+    ; Some Explorer builds expose only an HWND on pDisp. It can safely wake the
+    ; correct host, but it does not prove which retained tab supplied url.
+    if (!eventHwnd) {
+        try eventHwnd := pDisp.HWND
+        catch
+            eventHwnd := 0
+        if (eventHwnd && DllCall("user32\IsWindow", "Ptr", eventHwnd, "Int")) {
+            rootHwnd := DllCall("user32\GetAncestor", "Ptr", eventHwnd, "UInt", 2, "Ptr")
+            if (rootHwnd)
+                eventHwnd := rootHwnd
+        }
+    }
+
+    ; Retain the existing last-resort wake-up for builds that expose neither
+    ; dispatch identity nor HWND; never use this fallback to accept url.
+    if (!eventHwnd && explorerCtrlAddRequestUsesNavigationEvents
+     && explorerCtrlAddRequestClass == "CabinetWClass")
+        eventHwnd := explorerCtrlAddRequestHwnd
+    if (!eventHwnd)
+        return
+
+    candidateRequestId := explorerCtrlAddRequestId
+    candidateEligible := observerMatched && observerActiveTabHwnd
+        && explorerCtrlAddRequestUsesNavigationEvents
+        && explorerCtrlAddRequestRequirePathChange
+        && explorerCtrlAddRequestClass == "CabinetWClass"
+        && explorerCtrlAddRequestHwnd = eventHwnd
+    eventPath := candidateEligible ? _NormalizeExplorerNavigationUrl(url) : ""
+
+    Critical, On
+    if !explorerNavigationStates.HasKey(eventHwnd)
+        explorerNavigationStates[eventHwnd] := { eventPath: "", eventPathActiveTabHwnd: 0
+            , eventPathGeneration: 0, generation: 0, lastReadGeneration: 0 }
+    navigationState := explorerNavigationStates[eventHwnd]
+    navigationState.generation += 1
+    eventGeneration := navigationState.generation
+    acceptEventPath := eventPath != ""
+        && candidateRequestId = explorerCtrlAddRequestId
+        && explorerCtrlAddRequestUsesNavigationEvents
+        && explorerCtrlAddRequestRequirePathChange
+        && explorerCtrlAddRequestClass == "CabinetWClass"
+        && explorerCtrlAddRequestHwnd = eventHwnd
+    if acceptEventPath {
+        navigationState.eventPath := eventPath
+        navigationState.eventPathActiveTabHwnd := observerActiveTabHwnd
+        navigationState.eventPathGeneration := eventGeneration
+    }
+    explorerNavigationStates[eventHwnd] := navigationState
+    wakePathRequest := explorerCtrlAddRequestUsesNavigationEvents
+        && explorerCtrlAddRequestWaitingForNavigationEvent
+        && explorerCtrlAddRequestClass == "CabinetWClass"
+        && explorerCtrlAddRequestHwnd = eventHwnd
+        && eventGeneration != explorerCtrlAddRequestNavigationGeneration
+    if wakePathRequest {
+        explorerCtrlAddRequestWaitingForNavigationEvent := False
+        SetTimer, RunExplorerCtrlAddWhenReady, -1
+    }
+    traceMatchingRequest := explorerCtrlAddRequestClass == "CabinetWClass"
+        && explorerCtrlAddRequestHwnd = eventHwnd
+    if traceMatchingRequest {
+        traceRequestId := explorerCtrlAddRequestId
+        traceRequestAgeMs := explorerCtrlAddRequestStartTick
+            ? A_TickCount - explorerCtrlAddRequestStartTick
+            : -1
+        traceContentGateRemainingMs := explorerCtrlAddRequestEarliestContentProbeTick > A_TickCount
+            ? explorerCtrlAddRequestEarliestContentProbeTick - A_TickCount
+            : 0
+        traceDeadlineRemainingMs := explorerCtrlAddRequestDeadlineTick > A_TickCount
+            ? explorerCtrlAddRequestDeadlineTick - A_TickCount
+            : 0
+        traceWithinDeadline := A_TickCount <= explorerCtrlAddRequestDeadlineTick
+        traceIsRefresh := !explorerCtrlAddRequestRequirePathChange
+            && !explorerCtrlAddRequestRequireStablePath
+            && !explorerCtrlAddRequestAllowBestEffortSend
+            && explorerCtrlAddRequestEarliestContentProbeTick > explorerCtrlAddRequestStartTick
+        traceRequestKind := explorerCtrlAddRequestRequirePathChange
+            ? "path_change"
+            : (explorerCtrlAddRequestRequireStablePath
+                ? "startup"
+                : (traceIsRefresh ? "refresh" : "other"))
+    }
+    Critical, Off
+
+    if traceMatchingRequest
+        _TraceExplorerCtrlAdd("navigation_event"
+            , "hwnd=" . eventHwnd . " generation=" . eventGeneration
+            . " requestKind=" . traceRequestKind
+            . " requestAgeMs=" . traceRequestAgeMs
+            . " contentGateRemainingMs=" . traceContentGateRemainingMs
+            . " deadlineRemainingMs=" . traceDeadlineRemainingMs
+            . " withinDeadline=" . traceWithinDeadline
+            . " observerMatched=" . observerMatched
+            . " hasEventPath=" . !!acceptEventPath
+            . " pathWake=" . !!wakePathRequest
+            . " wokeRequest=" . !!wakePathRequest, False, traceRequestId)
+}
+
 ; Resolve one request's current directory and retain only that request's successful
 ; #32770 source preference. The request-ID check prevents a slow stale probe from
 ; publishing its resolver into a newer navigation request.
@@ -9313,46 +9690,24 @@ _GetExplorerCtrlAddRequestPath(targetHwnd, windowClass, requestId, ByRef request
     return currentPath
 }
 
-; Start or replace one non-blocking Explorer CtrlAdd request for CabinetWClass
-; or #32770. The request covers these scenarios:
-; 1. First activation of a new Explorer window: require the same nonempty path
-;    twice because there is no prior directory to compare. Confirmed #32770 file
-;    dialogs use the same rule when a path is available, but may use Details mode
-;    plus visible UIA content when every folder-identity backend returns empty.
-; 2. Other path-changing navigation--Back, Forward, Up, breadcrumb,
-;    Quick Access/SysTreeView32, and generic file-view double-clicks--requires a
-;    nonempty path different from initialPath before examining the destination.
-;    Confirmed #32770 header navigation may instead continue when its post-click
-;    path remains unavailable after the short initial guard.
-; 3. Header navigation: attempt alignment as soon as the required path gate is
-;    satisfied, then retain the UIA follow-up so Explorer rebuilds are corrected.
-;    Any header click without a usable pre-click path uses guarded early,
-;    verified, and final attempts without a path comparison. Confirmed #32770
-;    header navigation also uses those attempts if its post-click path is unavailable.
-;    Refresh attempts immediately because its path does not change.
-; 4. Confirmed #32770 file-dialog SysTreeView32 folder navigation: use the same
-;    changed-path, Details-mode, and UIA item/empty-result proof as other navigation.
-;
-; Every verified alignment requires IsDetailsView() plus one UIA ListItem or a
-; recognized empty-result message. Header requests additionally make guarded
-; best-effort sends so a slow UIA provider cannot delay the first alignment or
-; prevent a final attempt. Every changed-path request starts promptly and uses
-; the shared bounded fast path-poll profile. A newer call replaces the single
-; pending request, and its ID invalidates stale callbacks.
-_RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumContentProbeDelayMs := 0, restoreTreeFocus := True, attemptImmediateSend := False, allowBestEffortSend := False, allowPathlessContentReady := False, allowUnresolvedPathFallback := False) {
+; Publish one non-blocking Explorer CtrlAdd request for CabinetWClass or #32770.
+; The timer callback below applies the source-specific path and readiness rules.
+_RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumContentProbeDelayMs := 0, restoreTreeFocus := True, allowBestEffortSend := False, allowPathlessContentReady := False) {
     global explorerCtrlAddRequestAllowBestEffortSend
     global explorerCtrlAddRequestAllowPathlessContentReady
-    global explorerCtrlAddRequestAllowUnresolvedPathFallback
     global explorerCtrlAddRequestClass
     global explorerCtrlAddRequestDeadlineTick
+    global explorerCtrlAddRequestDetailsOnlySendMade
+    global explorerCtrlAddRequestDetailsOnlySendPending
     global explorerCtrlAddRequestEarliestContentProbeTick
     global explorerCtrlAddRequestFastPathPollIntervalMs
     global explorerCtrlAddRequestFastPathPollUntilTick
     global explorerCtrlAddRequestHwnd
-    global explorerCtrlAddRequestImmediateSendPending
     global explorerCtrlAddRequestId
     global explorerCtrlAddRequestInitialPath
     global explorerCtrlAddRequestLocationResolver
+    global explorerCtrlAddRequestNavigationGeneration
+    global explorerCtrlAddRequestNextNavigationFallbackTick
     global explorerCtrlAddRequestPathChangeConfirmed
     global explorerCtrlAddRequestPathlessContentFallbackActive
     global explorerCtrlAddRequestPreProbeSendPending
@@ -9361,19 +9716,26 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     global explorerCtrlAddRequestRequireStablePath
     global explorerCtrlAddRequestRestoreTreeFocus
     global explorerCtrlAddRequestStartTick
-    global explorerCtrlAddRequestSourceCtrl
+    global explorerCtrlAddRequestSourceCtrlNN
     global explorerCtrlAddRequestStablePathConfirmed
     global explorerCtrlAddRequestStablePathHitCount
+    global explorerCtrlAddRequestTracePending
+    global explorerCtrlAddRequestWaitingForNavigationEvent
+    global explorerCtrlAddRequestUsesNavigationEvents
     global k_explorerCtrlAddFastPathPollMs
     global k_explorerCtrlAddFastPathWindowMs
+    global k_explorerCtrlAddNavigationFallbackMs
     global k_explorerCtrlAddPollMs
     global k_explorerCtrlAddTimeoutMs
     global k_newExplorerCtrlAddTimeoutMs
 
+    activeRequestId := explorerCtrlAddRequestTracePending
+        ? explorerCtrlAddRequestId
+        : 0
     if (!hwnd || !(windowClass == "CabinetWClass" || windowClass == "#32770")) {
         _TraceExplorerCtrlAdd("request_rejected"
             , "reason=invalid_window hwnd=" . hwnd . " class=[" . windowClass . "]"
-            , True)
+            . " activeReq=" . activeRequestId, True, 0)
         return
     }
 
@@ -9383,7 +9745,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     if (requirePathChange && initialPath = "") {
         _TraceExplorerCtrlAdd("request_rejected"
             , "reason=missing_initial_path hwnd=" . hwnd . " class=" . windowClass
-            , True)
+            . " activeReq=" . activeRequestId, True, 0)
         return
     }
 
@@ -9392,7 +9754,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     if (requirePathChange && requireStablePath) {
         _TraceExplorerCtrlAdd("request_rejected"
             , "reason=contradictory_path_gates hwnd=" . hwnd . " class=" . windowClass
-            , True)
+            . " activeReq=" . activeRequestId, True, 0)
         return
     }
 
@@ -9405,36 +9767,61 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
         readinessTimeoutMs := k_explorerCtrlAddTimeoutMs + Max(0, minimumContentProbeDelayMs)
     }
 
-    useFastPathPolling := requirePathChange
+    allowDetailsOnlySend := windowClass == "#32770"
+        && (requirePathChange || requireStablePath)
+        && !allowBestEffortSend
+    useFastPathPolling  := requirePathChange
+    useNavigationEvents := requirePathChange && windowClass == "CabinetWClass"
+        && _HasExplorerNavigationObserver(hwnd)
 
+    ; This single request slot intentionally debounces competing navigation.
+    ; Record a still-pending predecessor before incrementing the ID makes its
+    ; callbacks stale, distinguishing an intentional replacement from lost work.
+    replacementRequestId := explorerCtrlAddRequestId + 1
+    if explorerCtrlAddRequestTracePending {
+        _TraceExplorerCtrlAdd("request_superseded"
+            , "reason=replaced_by_new_request replacementRequestId=" . replacementRequestId
+            . " replacementHwnd=" . hwnd
+            . " replacementClass=" . windowClass
+            . " replacementSourceCtrlNN=[" . sourceCtrlNN . "]"
+            , False, explorerCtrlAddRequestId)
+    }
     requestStartTick                              := A_TickCount
     explorerCtrlAddRequestAllowBestEffortSend     := allowBestEffortSend
     explorerCtrlAddRequestAllowPathlessContentReady := allowPathlessContentReady
-    explorerCtrlAddRequestAllowUnresolvedPathFallback := allowUnresolvedPathFallback
     explorerCtrlAddRequestClass                   := windowClass
     explorerCtrlAddRequestDeadlineTick            := requestStartTick + readinessTimeoutMs
+    explorerCtrlAddRequestDetailsOnlySendMade     := False
+    explorerCtrlAddRequestDetailsOnlySendPending  := allowDetailsOnlySend
     explorerCtrlAddRequestEarliestContentProbeTick := requestStartTick + Max(0, minimumContentProbeDelayMs)
     explorerCtrlAddRequestFastPathPollIntervalMs  := useFastPathPolling ? k_explorerCtrlAddFastPathPollMs : 0
     explorerCtrlAddRequestFastPathPollUntilTick   := useFastPathPolling ? requestStartTick + k_explorerCtrlAddFastPathWindowMs : 0
     explorerCtrlAddRequestHwnd                    := hwnd
-    explorerCtrlAddRequestImmediateSendPending    := attemptImmediateSend
-    explorerCtrlAddRequestId                      += 1
+    explorerCtrlAddRequestId                      := replacementRequestId
     explorerCtrlAddRequestInitialPath             := initialPath
     explorerCtrlAddRequestLocationResolver        := ""
+    explorerCtrlAddRequestNavigationGeneration    := useNavigationEvents
+        ? _GetExplorerLastPathReadGeneration(hwnd)
+        : 0
+    explorerCtrlAddRequestNextNavigationFallbackTick := useNavigationEvents
+        ? requestStartTick + k_explorerCtrlAddNavigationFallbackMs
+        : 0
     explorerCtrlAddRequestPathChangeConfirmed     := !requirePathChange
     explorerCtrlAddRequestPathlessContentFallbackActive := False
-    explorerCtrlAddRequestPreProbeSendPending     := allowBestEffortSend && !attemptImmediateSend
+    explorerCtrlAddRequestPreProbeSendPending     := allowBestEffortSend
     explorerCtrlAddRequestPreviousPath            := ""
     explorerCtrlAddRequestRequirePathChange       := requirePathChange
     explorerCtrlAddRequestRequireStablePath       := requireStablePath
     explorerCtrlAddRequestRestoreTreeFocus        := restoreTreeFocus
     explorerCtrlAddRequestStartTick               := requestStartTick
-    explorerCtrlAddRequestSourceCtrl              := sourceCtrlNN
+    explorerCtrlAddRequestSourceCtrlNN            := sourceCtrlNN
     explorerCtrlAddRequestStablePathConfirmed     := !requireStablePath
     explorerCtrlAddRequestStablePathHitCount      := 0
+    explorerCtrlAddRequestWaitingForNavigationEvent := False
+    explorerCtrlAddRequestUsesNavigationEvents    := useNavigationEvents
     ; Changed-path checks start at the next timer opportunity. Other requests use
     ; the shared poll interval and schedule exact remaining minimum-gate delays.
-    initialPollMs := (useFastPathPolling || attemptImmediateSend) ? 1 : k_explorerCtrlAddPollMs
+    initialPollMs := useFastPathPolling ? 1 : k_explorerCtrlAddPollMs
     timerDelay    := (delayMs > 0) ? -delayMs : -initialPollMs
     _TraceExplorerCtrlAdd("request_started"
         , "hwnd=" . hwnd
@@ -9444,10 +9831,11 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
         . " requirePathChange=" . requirePathChange
         . " requireStablePath=" . requireStablePath
         . " restoreTreeFocus=" . restoreTreeFocus
-        . " attemptImmediateSend=" . attemptImmediateSend
         . " allowBestEffortSend=" . allowBestEffortSend
+        . " allowDetailsOnlySend=" . allowDetailsOnlySend
         . " allowPathlessContentReady=" . allowPathlessContentReady
-        . " allowUnresolvedPathFallback=" . allowUnresolvedPathFallback
+        . " useNavigationEvents=" . useNavigationEvents
+        . " navigationGeneration=" . explorerCtrlAddRequestNavigationGeneration
         . " minimumContentProbeDelayMs=" . minimumContentProbeDelayMs
         . " timeoutMs=" . readinessTimeoutMs
         . " firstTimerMs=" . Abs(timerDelay))
@@ -9462,8 +9850,14 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
 ; verified, and final attempts without a path comparison. When a baseline exists,
 ; only confirmed #32770 header navigation may continue if the post-click path is
 ; unavailable. A nonempty unchanged path still must change.
-; Refresh can attempt immediately because it has no changed-path gate.
-_RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePathChange := False, minimumContentProbeDelayMs := 0, attemptImmediateSend := False) {
+; Refresh skips unverified sends and waits for its timed Details/content probe.
+_RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePathChange := False, minimumContentProbeDelayMs := 0) {
+    global explorerCtrlAddRequestId
+    global explorerCtrlAddRequestTracePending
+
+    activeRequestId          := explorerCtrlAddRequestTracePending
+        ? explorerCtrlAddRequestId
+        : 0
     headerWithoutBaseline      := requirePathChange && initialPath = ""
     effectiveRequirePathChange := requirePathChange && !headerWithoutBaseline
     headerKind                 := headerWithoutBaseline
@@ -9474,10 +9868,13 @@ _RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePat
         . " class=" . windowClass
         . " headerKind=" . headerKind
         . " initialPath=[" . initialPath . "]"
-        . " rejectionReason=[]")
+        . " rejectionReason=[]"
+        . " activeReq=" . activeRequestId, False, 0)
+    ; Header navigation must leave the resolved file view focused, so pass
+    ; restoreTreeFocus := False instead of restoring a prior SysTreeView32 focus.
+    allowBestEffortSend := requirePathChange
     _RequestExplorerCtrlAdd(hwnd, windowClass, "", 0, initialPath, effectiveRequirePathChange
-        , False, minimumContentProbeDelayMs, False, attemptImmediateSend, True
-        , False, windowClass == "#32770" && requirePathChange)
+        , False, minimumContentProbeDelayMs, False, allowBestEffortSend, False)
 }
 
 ; Focus and verify the supplied ClassNN, then use the shared immediate
@@ -9507,48 +9904,39 @@ _IsHeaderNavigationCtrlAddCandidate(controlType, controlName := "", localizedCon
     return False
 }
 
-; Recheck the pending Explorer CtrlAdd request until its required path, minimum
-; settling delay, Details-mode, and UIA item/empty-result conditions are
-; satisfied, then call SendCtrlAdd().
-; The request is processed according to its source scenario:
-; 1. New Explorer activation: sample the same nonempty GetExplorerPath() result
-;    twice before checking the file view. Confirmed #32770 activation may use the
-;    same Details/content proof without a path when every path backend returns empty.
-; 2. Other path-changing navigation: require a nonempty path different from the
-;    path captured before the click so the old directory cannot authorize it.
-; 3. Header navigation: send once after its path gate, then align again after the
-;    shared file-view readiness proof. Any header request without a pre-click
-;    baseline uses the same guarded sends without a path comparison. Only confirmed
-;    #32770 header navigation may also continue when its post-click path is
-;    unavailable. A nonempty unchanged path remains gated.
-;    Refresh makes its first send immediately.
-; 4. Confirmed #32770 file-dialog SysTreeView32 navigation: use the same
-;    changed-path and file-view readiness proof as other path-changing scenarios.
-;
-; Every verified send requires IsDetailsView() to report Details mode and UIA to
-; expose one ListItem or a recognized empty-result message. Header requests also
-; make guarded best-effort sends before UIA and after a failed final probe, so a
-; provider timeout cannot delay the first alignment or suppress every attempt.
-; Each retry uses a one-shot SetTimer rather than a Sleep loop.
+; Advance one shared Explorer CtrlAdd request per one-shot timer callback:
+; validate its target, satisfy its path gate, probe Details/content readiness,
+; then call SendCtrlAdd() or schedule another bounded callback. No Sleep loop
+; blocks the script while Explorer or a file dialog finishes navigation.
 RunExplorerCtrlAddWhenReady:
+    ; Snapshot the published request before any synchronous path or UIA work.
+    ; A newer request changes explorerCtrlAddRequestId, which every slow step
+    ; rechecks before it can reuse or update this captured request's state.
     requestAllowBestEffortSend       := explorerCtrlAddRequestAllowBestEffortSend
     requestAllowPathlessContentReady := explorerCtrlAddRequestAllowPathlessContentReady
-    requestAllowUnresolvedPathFallback := explorerCtrlAddRequestAllowUnresolvedPathFallback
     requestWindowClass                := explorerCtrlAddRequestClass
     requestDeadlineTick               := explorerCtrlAddRequestDeadlineTick
+    requestDetailsOnlySendMade        := explorerCtrlAddRequestDetailsOnlySendMade
+    requestDetailsOnlySendPending     := explorerCtrlAddRequestDetailsOnlySendPending
     requestEarliestContentProbeTick   := explorerCtrlAddRequestEarliestContentProbeTick
     requestFastPathPollMs             := explorerCtrlAddRequestFastPathPollIntervalMs
     requestFastPathUntilTick          := explorerCtrlAddRequestFastPathPollUntilTick
     requestTargetHwnd                 := explorerCtrlAddRequestHwnd
-    requestImmediateSendPending       := explorerCtrlAddRequestImmediateSendPending
     requestId                         := explorerCtrlAddRequestId
     requestInitialPath                := explorerCtrlAddRequestInitialPath
+    requestNavigationGeneration       := explorerCtrlAddRequestNavigationGeneration
+    requestNextNavigationFallbackTick := explorerCtrlAddRequestNextNavigationFallbackTick
     requestPreProbeSendPending        := explorerCtrlAddRequestPreProbeSendPending
     requestRequiresPathChange         := explorerCtrlAddRequestRequirePathChange
     requestRequiresStablePath         := explorerCtrlAddRequestRequireStablePath
     requestRestoreTreeFocus           := explorerCtrlAddRequestRestoreTreeFocus
     requestStartTick                  := explorerCtrlAddRequestStartTick
-    requestSourceCtrl                 := explorerCtrlAddRequestSourceCtrl
+    requestSourceCtrlNN               := explorerCtrlAddRequestSourceCtrlNN
+    requestUsesNavigationEvents       := explorerCtrlAddRequestUsesNavigationEvents
+    Critical, On
+    if (requestId = explorerCtrlAddRequestId)
+        explorerCtrlAddRequestWaitingForNavigationEvent := False
+    Critical, Off
     ; Track the independent startup-path gate: even when the current file view
     ; passes the Details/content probe, alignment must wait for a second timer
     ; sample proving that the same nonempty startup path still owns it.
@@ -9560,9 +9948,12 @@ RunExplorerCtrlAddWhenReady:
         . " deadlineRemainingMs=" . (requestDeadlineTick - A_TickCount)
         . " pathConfirmed=" . explorerCtrlAddRequestPathChangeConfirmed
         . " stablePathConfirmed=" . explorerCtrlAddRequestStablePathConfirmed
+        . " navigationEvents=" . requestUsesNavigationEvents
         . " lbutton=" . GetKeyState("LButton", "P")
         , False, requestId)
 
+    ; A delayed callback may run after the original window closes, loses focus,
+    ; or is superseded. Abort before any alignment can target another window.
     targetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
     activeHwnd   := WinExist("A")
     if (!requestTargetHwnd || !targetExists || activeHwnd != requestTargetHwnd) {
@@ -9607,36 +9998,6 @@ RunExplorerCtrlAddWhenReady:
         Return
     }
 
-    ; Refresh has no changed-path signal, and its pre-refresh view may already
-    ; satisfy the Details/content probe. Make an early best-effort alignment for
-    ; responsiveness, but do not complete the request: the delayed verified send
-    ; remains responsible for correcting an alignment overwritten by rebuilding.
-    if (requestImmediateSendPending) {
-        Critical, On
-        immediateSendClaimed := (requestId = explorerCtrlAddRequestId
-            && explorerCtrlAddRequestImmediateSendPending)
-        if (immediateSendClaimed)
-            explorerCtrlAddRequestImmediateSendPending := False
-        Critical, Off
-
-        if (immediateSendClaimed) {
-            immediateResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
-                , currentClass, requestSourceCtrl, requestId)
-            _TraceExplorerCtrlAdd("sendctrladd_immediate"
-                , "elapsedMs=" . (A_TickCount - requestStartTick)
-                . " hasResolvedTarget=" . IsObject(immediateResolvedTarget)
-                , False, requestId)
-            SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrl, False, ""
-                , requestRestoreTreeFocus, immediateResolvedTarget, requestId)
-            if (requestId != explorerCtrlAddRequestId) {
-                _TraceExplorerCtrlAdd("request_aborted"
-                    , "reason=superseded_during_immediate_send currentRequestId="
-                    . explorerCtrlAddRequestId, True, requestId)
-                Return
-            }
-        }
-    }
-
     ; A startup request has no previous directory to compare. After the settling
     ; period, require the same nonempty path on two timer samples before checking
     ; Details mode and UIA item/empty-result evidence.
@@ -9670,8 +10031,9 @@ RunExplorerCtrlAddWhenReady:
             explorerCtrlAddRequestPreviousPath             := ""
             explorerCtrlAddRequestStablePathHitCount       := 0
             if (requestAllowPathlessContentReady && requestWindowClass == "#32770") {
-                ; A confirmed file dialog may expose a valid Details Items View even
-                ; when CDM_GETFOLDERPATH and breadcrumb identity resolution both fail.
+                ; Empty identity means the resolvers could not report a path; it does
+                ; not prove this confirmed file-dialog startup failed. Let Details
+                ; mode plus visible content authorize alignment instead.
                 explorerCtrlAddRequestPathlessContentFallbackActive := True
                 explorerCtrlAddRequestDeadlineTick := A_TickCount + k_explorerCtrlAddTimeoutMs
                 requestDeadlineTick                := explorerCtrlAddRequestDeadlineTick
@@ -9720,13 +10082,56 @@ RunExplorerCtrlAddWhenReady:
     }
     ; Back, Forward, Up, breadcrumb, and SysTreeView32 navigation normally must
     ; report a different nonempty directory before alignment. A confirmed #32770
-    ; header request may bypass only an unavailable post-click path after the
-    ; short guard; a nonempty unchanged path remains gated to protect the old view.
+    ; request may bypass only an unavailable post-click path after the short
+    ; guard; a nonempty unchanged path remains gated to protect the old view.
     if (requestRequiresPathChange && !explorerCtrlAddRequestPathChangeConfirmed) {
+        if (requestUsesNavigationEvents) {
+            currentNavigationGeneration := _GetExplorerNavigationGeneration(requestTargetHwnd)
+            navigationEventPending := currentNavigationGeneration != requestNavigationGeneration
+            navigationFallbackRemainingMs := requestNextNavigationFallbackTick - A_TickCount
+            if (!navigationEventPending && navigationFallbackRemainingMs > 0
+             && A_TickCount < requestDeadlineTick) {
+                navigationWaitMs := Min(navigationFallbackRemainingMs
+                    , Max(1, requestDeadlineTick - A_TickCount))
+                _TraceExplorerCtrlAdd("request_wait"
+                    , "reason=navigation_event_or_watchdog nextTimerMs=" . navigationWaitMs
+                    . " generation=" . currentNavigationGeneration
+                    , False, requestId)
+                _ScheduleExplorerCtrlAddNavigationWait(requestId, navigationWaitMs)
+                Return
+            }
+            _TraceExplorerCtrlAdd("navigation_path_probe_triggered"
+                , "source=" . (navigationEventPending ? "event" : "watchdog")
+                . " generation=" . currentNavigationGeneration
+                . " previousGeneration=" . requestNavigationGeneration
+                , False, requestId)
+        }
+
         pathProbeStartTick := A_TickCount
         pathProbeRequestIsCurrent := False
-        currentPath := _GetExplorerCtrlAddRequestPath(requestTargetHwnd
-            , requestWindowClass, requestId, pathProbeRequestIsCurrent)
+        pathProbeSource := "folder_identity"
+        eventPathGeneration := 0
+        currentPath := ""
+
+        ; Only an event-backed, path-changing CabinetWClass request can consume
+        ; the event URL. The helper also proves that its original tab is active.
+        if (requestUsesNavigationEvents && navigationEventPending) {
+            currentPath := _TryGetExplorerNavigationEventPath(requestTargetHwnd
+                , requestNavigationGeneration, eventPathGeneration)
+            if (currentPath != "") {
+                pathProbeSource := "navigate_complete_url"
+                Critical, On
+                pathProbeRequestIsCurrent := requestId = explorerCtrlAddRequestId
+                Critical, Off
+            }
+        }
+
+        ; Unsupported shell URLs, missing tab identity, and watchdog probes retain
+        ; the existing native PIDL and automation fallback without changed policy.
+        if (currentPath = "") {
+            currentPath := _GetExplorerCtrlAddRequestPath(requestTargetHwnd
+                , requestWindowClass, requestId, pathProbeRequestIsCurrent)
+        }
         pathProbeElapsedMs := A_TickCount - pathProbeStartTick
         if !pathProbeRequestIsCurrent {
             _TraceExplorerCtrlAdd("request_aborted"
@@ -9734,52 +10139,87 @@ RunExplorerCtrlAddWhenReady:
                 . explorerCtrlAddRequestId, True, requestId)
             Return
         }
+        if (requestUsesNavigationEvents) {
+            ; The URL consumes its exact event generation. A fallback PIDL read
+            ; records the generation present when that synchronous read began, so
+            ; a later event remains pending and wakes the next wait immediately.
+            explorerCtrlAddRequestNavigationGeneration := pathProbeSource == "navigate_complete_url"
+                ? eventPathGeneration
+                : _GetExplorerLastPathReadGeneration(requestTargetHwnd)
+            explorerCtrlAddRequestNextNavigationFallbackTick := A_TickCount + k_explorerCtrlAddNavigationFallbackMs
+            requestNavigationGeneration := explorerCtrlAddRequestNavigationGeneration
+            requestNextNavigationFallbackTick := explorerCtrlAddRequestNextNavigationFallbackTick
+        }
         _TraceExplorerCtrlAdd("path_probe"
             , "scenario=navigation elapsedMs=" . pathProbeElapsedMs
+            . " source=" . pathProbeSource
             . " initialPath=[" . requestInitialPath . "]"
-            . " currentPath=[" . currentPath . "]", False, requestId)
+            . " currentPath=[" . currentPath . "]"
+            . " pathState=" . (currentPath = ""
+                ? "unavailable"
+                : (currentPath = requestInitialPath ? "unchanged" : "changed"))
+            , False, requestId)
 
-        if (currentPath = "" && requestAllowUnresolvedPathFallback
+        navigationPathState := currentPath = ""
+            ? "unavailable"
+            : (currentPath = requestInitialPath ? "unchanged" : "changed")
+        if (navigationPathState == "unavailable"
          && requestWindowClass == "#32770") {
-            ; Match the existing no-baseline header timing rather than sending at
-            ; the first 1 ms path poll. This gives the dialog one short opportunity
-            ; to publish a comparable destination before guarded alignment proceeds.
+            ; Give the dialog one short opportunity to publish a comparable path.
+            ; After that, Details/content state becomes authoritative because every
+            ; #32770 folder-identity backend may legitimately remain unavailable.
             ; Recalculate elapsed time after path resolution so a slow resolver does
             ; not add an unnecessary timer interval to this short safety guard.
-            unresolvedPathGuardRemainingMs := k_explorerCtrlAddPollMs
+            unavailablePathGuardRemainingMs := k_explorerCtrlAddPollMs
                 - (A_TickCount - requestStartTick)
-            if (unresolvedPathGuardRemainingMs > 0) {
+            if (unavailablePathGuardRemainingMs > 0) {
                 _TraceExplorerCtrlAdd("request_wait"
-                    , "reason=unresolved_path_fallback_guard nextTimerMs="
-                    . unresolvedPathGuardRemainingMs, False, requestId)
-                _ScheduleExplorerCtrlAddRetry(requestId, unresolvedPathGuardRemainingMs)
+                    , "reason=unavailable_path_view_state_guard nextTimerMs="
+                    . unavailablePathGuardRemainingMs, False, requestId)
+                _ScheduleExplorerCtrlAddRetry(requestId, unavailablePathGuardRemainingMs)
                 Return
             }
 
-            ; The confirmed header hit, foreground-window guard, and subsequent
-            ; Details/content probe now authorize the same pathless flow used when
-            ; no pre-click baseline was available. Give that probe a fresh window.
-            explorerCtrlAddRequestDeadlineTick       := A_TickCount + k_explorerCtrlAddTimeoutMs
-            explorerCtrlAddRequestRequirePathChange  := False
-            requestDeadlineTick                      := explorerCtrlAddRequestDeadlineTick
-            requestRequiresPathChange                := False
-            _TraceExplorerCtrlAdd("navigation_unresolved_path_fallback"
+            ; Keep the request bounded, but give its view-state proof a fresh window
+            ; instead of spending that window repeatedly asking for a missing path.
+            ; Details mode may authorize one early alignment; visible content can
+            ; then authorize the corrective alignment without another path lookup.
+            explorerCtrlAddRequestDeadlineTick                 := A_TickCount + k_explorerCtrlAddTimeoutMs
+            explorerCtrlAddRequestPathlessContentFallbackActive := True
+            explorerCtrlAddRequestRequirePathChange            := False
+            requestDeadlineTick                                := explorerCtrlAddRequestDeadlineTick
+            requestRequiresPathChange                          := False
+            _TraceExplorerCtrlAdd("navigation_pathless_view_state_fallback"
                 , "initialPath=[" . requestInitialPath . "] newContentDeadlineMs="
                 . k_explorerCtrlAddTimeoutMs, False, requestId)
         }
-        else if (currentPath = "" || currentPath = requestInitialPath) {
+        else if (navigationPathState != "changed") {
             if (A_TickCount < requestDeadlineTick) {
-                pathPollMs := (requestFastPathPollMs > 0 && A_TickCount < requestFastPathUntilTick)
-                    ? requestFastPathPollMs
-                    : k_explorerCtrlAddPollMs
+                if (requestUsesNavigationEvents) {
+                    pathPollMs := Min(Max(1, requestNextNavigationFallbackTick - A_TickCount)
+                        , Max(1, requestDeadlineTick - A_TickCount))
+                }
+                else {
+                    pathPollMs := (requestFastPathPollMs > 0 && A_TickCount < requestFastPathUntilTick)
+                        ? requestFastPathPollMs
+                        : k_explorerCtrlAddPollMs
+                }
                 _TraceExplorerCtrlAdd("request_wait"
-                    , "reason=path_not_changed nextTimerMs=" . pathPollMs
+                    , "reason=" . (navigationPathState == "unavailable"
+                        ? "path_unavailable"
+                        : (requestUsesNavigationEvents
+                            ? "path_unchanged_waiting_for_navigation_event"
+                            : "path_unchanged"))
+                    . " nextTimerMs=" . pathPollMs
                     , False, requestId)
-                _ScheduleExplorerCtrlAddRetry(requestId, pathPollMs)
+                if (requestUsesNavigationEvents)
+                    _ScheduleExplorerCtrlAddNavigationWait(requestId, pathPollMs)
+                else
+                    _ScheduleExplorerCtrlAddRetry(requestId, pathPollMs)
             }
             else
                 _TraceExplorerCtrlAdd("request_aborted"
-                    , "reason=path_not_changed_at_deadline initialPath=["
+                    , "reason=path_" . navigationPathState . "_at_deadline initialPath=["
                     . requestInitialPath . "] currentPath=[" . currentPath . "]"
                     , True, requestId)
             Return
@@ -9798,15 +10238,31 @@ RunExplorerCtrlAddWhenReady:
 
     }
 
-    ; Startup and Refresh requests honor their minimum settling gate before any
-    ; Details/content UIA probe. Schedule the exact remaining delay so the timer
-    ; does not overshoot the requested gate by a full polling interval.
-    if (A_TickCount < requestEarliestContentProbeTick) {
-        remainingContentProbeDelayMs := Max(1, requestEarliestContentProbeTick - A_TickCount)
+    ; Startup and Refresh honor their configured minimum gate. Read the request ID
+    ; and gate together so a superseding request cannot mix its timing state into
+    ; this callback.
+    Critical, On
+    contentProbeGateIsCurrent := (requestId = explorerCtrlAddRequestId)
+    if contentProbeGateIsCurrent
+        requestEarliestContentProbeTick := explorerCtrlAddRequestEarliestContentProbeTick
+    contentProbeGateClosed := contentProbeGateIsCurrent
+        && A_TickCount < requestEarliestContentProbeTick
+    if contentProbeGateClosed {
+        remainingContentProbeDelayMs := Max(1
+            , requestEarliestContentProbeTick - A_TickCount)
+        SetTimer, RunExplorerCtrlAddWhenReady, % -remainingContentProbeDelayMs
+    }
+    Critical, Off
+    if !contentProbeGateIsCurrent {
+        _TraceExplorerCtrlAdd("request_aborted"
+            , "reason=superseded_before_content_probe_gate currentRequestId="
+            . explorerCtrlAddRequestId, True, requestId)
+        Return
+    }
+    if contentProbeGateClosed {
         _TraceExplorerCtrlAdd("request_wait"
             , "reason=minimum_content_probe_delay nextTimerMs=" . remainingContentProbeDelayMs
             , False, requestId)
-        _ScheduleExplorerCtrlAddRetry(requestId, remainingContentProbeDelayMs)
         Return
     }
 
@@ -9829,10 +10285,10 @@ RunExplorerCtrlAddWhenReady:
     }
 
     ; A header request either proved a changed path, lacked a pre-click baseline,
-    ; or entered through the permitted #32770 post-click path fallback. Align once
-    ; before synchronous UIA so a
-    ; slow provider cannot delay the user-visible result; retain the request for
-    ; the verified corrective send after the file view exposes content.
+    ; or entered through the permitted #32770 post-click path fallback. Align
+    ; once before synchronous UIA so a slow provider cannot delay the user-visible
+    ; result; retain the request for the verified corrective send after the file
+    ; view exposes content.
     if (requestPreProbeSendPending) {
         preProbeTargetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
         preProbeActiveHwnd   := WinExist("A")
@@ -9865,12 +10321,12 @@ RunExplorerCtrlAddWhenReady:
 
         if (preProbeSendClaimed) {
             preProbeResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
-                , currentClass, requestSourceCtrl, requestId)
+                , currentClass, requestSourceCtrlNN, requestId)
             _TraceExplorerCtrlAdd("sendctrladd_pre_probe"
                 , "elapsedMs=" . (A_TickCount - requestStartTick)
                 . " hasResolvedTarget=" . IsObject(preProbeResolvedTarget)
                 , False, requestId)
-            SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrl, False, ""
+            SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrlNN, False, ""
                 , requestRestoreTreeFocus, preProbeResolvedTarget, requestId)
             if (requestId != explorerCtrlAddRequestId) {
                 _TraceExplorerCtrlAdd("request_aborted"
@@ -9881,18 +10337,27 @@ RunExplorerCtrlAddWhenReady:
         }
     }
 
-    ; Confirm the file panel is in Details mode and exposes either one ListItem
-    ; or a recognized empty-result message. Each attempt has a short UIA budget;
-    ; an incomplete view is retried by this timer until the request deadline.
+    ; Report Details mode separately from visible ListItem/empty-result evidence.
+    ; Eligible #32770 startup/navigation requests may align once on Details-only;
+    ; every incomplete content result is still retried until the request deadline.
     contentProbeStartTick := A_TickCount
-    contentProbe := _ProbeExplorerDetailsContentReady(requestTargetHwnd
+    contentProbe := _ProbeExplorerDetailsViewState(requestTargetHwnd
         , k_explorerCtrlAddPollUIATimeoutMs, requestId)
     contentProbeElapsedMs := A_TickCount - contentProbeStartTick
     contentProbeOverBudgetMs := Max(0
         , contentProbeElapsedMs - k_explorerCtrlAddPollUIATimeoutMs)
+    contentProbeContentEvidenceLookupMs := contentProbe.HasKey("contentEvidenceLookupElapsedMs")
+        ? contentProbe.contentEvidenceLookupElapsedMs
+        : 0
     contentProbeDetailsReason := contentProbe.HasKey("detailsReason")
         ? contentProbe.detailsReason
         : ""
+    contentProbeIsDetailsViewMs := contentProbe.HasKey("isDetailsViewElapsedMs")
+        ? contentProbe.isDetailsViewElapsedMs
+        : 0
+    contentProbeItemsViewResolutionMs := contentProbe.HasKey("itemsViewResolutionElapsedMs")
+        ? contentProbe.itemsViewResolutionElapsedMs
+        : 0
     contentProbeItemsViewCandidateCount := contentProbe.HasKey("itemsViewCandidateCount")
         ? contentProbe.itemsViewCandidateCount
         : 0
@@ -9905,6 +10370,17 @@ RunExplorerCtrlAddWhenReady:
     contentProbeResolvedTarget := contentProbe.HasKey("resolvedTarget")
         ? contentProbe.resolvedTarget
         : ""
+    contentProbeDetailsReady := contentProbe.HasKey("detailsReady")
+        && contentProbe.detailsReady
+    contentProbeContentReady := contentProbe.HasKey("contentReady")
+        && contentProbe.contentReady
+    contentProbeViewState := contentProbeContentReady
+        ? "details_with_content"
+        : (contentProbeDetailsReady ? "details_only" : "not_details")
+    detailsOnlySendCandidate := (contentProbeViewState == "details_only"
+        && requestDetailsOnlySendPending)
+    ; UIA may finish after another click replaces this request. Recheck its ID
+    ; before the probe result can update shared state or authorize alignment.
     if (requestId != explorerCtrlAddRequestId) {
         _TraceExplorerCtrlAdd("request_aborted"
             , "reason=superseded_during_content_probe currentRequestId="
@@ -9917,7 +10393,11 @@ RunExplorerCtrlAddWhenReady:
         , "elapsedMs=" . contentProbeElapsedMs
         . " timeoutMs=" . k_explorerCtrlAddPollUIATimeoutMs
         . " overBudgetMs=" . contentProbeOverBudgetMs
+        . " isDetailsViewMs=" . contentProbeIsDetailsViewMs
+        . " itemsViewResolutionMs=" . contentProbeItemsViewResolutionMs
+        . " contentEvidenceLookupMs=" . contentProbeContentEvidenceLookupMs
         . " state=" . contentProbe.state
+        . " viewState=" . contentProbeViewState
         . " reason=" . contentProbe.reason
         . " detailsReason=[" . contentProbeDetailsReason . "]"
         . " resolver=" . contentProbeItemsViewResolver
@@ -9925,9 +10405,144 @@ RunExplorerCtrlAddWhenReady:
         . " resolutionReason=[" . contentProbeItemsViewResolutionReason . "]"
         , False, requestId)
 
+    ; UIA retries deliberately reuse the confirmed startup path instead of
+    ; repeatedly invoking Explorer COM. Re-read it once immediately before
+    ; either a Details-only or fully verified send; if the destination changed,
+    ; restart startup readiness so the old folder cannot authorize alignment.
+    if ((contentProbe.state == "ready" || detailsOnlySendCandidate)
+     && requestRequiresStablePath
+     && !explorerCtrlAddRequestPathlessContentFallbackActive) {
+        pathProbeStartTick := A_TickCount
+        pathProbeRequestIsCurrent := False
+        currentPath := _GetExplorerCtrlAddRequestPath(requestTargetHwnd
+            , requestWindowClass, requestId, pathProbeRequestIsCurrent)
+        pathProbeElapsedMs := A_TickCount - pathProbeStartTick
+        if !pathProbeRequestIsCurrent {
+            _TraceExplorerCtrlAdd("request_aborted"
+                , "reason=superseded_during_startup_pre_send_revalidation currentRequestId="
+                . explorerCtrlAddRequestId, True, requestId)
+            Return
+        }
+        _TraceExplorerCtrlAdd("path_probe"
+            , "scenario=startup_pre_send_revalidate elapsedMs=" . pathProbeElapsedMs
+            . " confirmedPath=[" . explorerCtrlAddRequestPreviousPath . "]"
+            . " currentPath=[" . currentPath . "]", False, requestId)
+
+        if (currentPath = "" && requestWindowClass == "#32770"
+         && requestAllowPathlessContentReady) {
+            ; The stable path was previously confirmed, but a file dialog can stop
+            ; reporting it during the final synchronous recheck. Preserve the proven
+            ; Details state and let the same pathless view-state fallback authorize
+            ; the send instead of restarting an unobtainable path sequence forever.
+            explorerCtrlAddRequestPathlessContentFallbackActive := True
+            _TraceExplorerCtrlAdd("startup_pre_send_pathless_view_state_fallback"
+                , "confirmedPath=[" . explorerCtrlAddRequestPreviousPath . "]"
+                , False, requestId)
+        }
+        else if (currentPath != explorerCtrlAddRequestPreviousPath) {
+            explorerCtrlAddRequestDeadlineTick             := A_TickCount + k_newExplorerCtrlAddTimeoutMs
+            explorerCtrlAddRequestEarliestContentProbeTick := A_TickCount + k_newExplorerCtrlAddMinimumWaitMs
+            explorerCtrlAddRequestPreviousPath             := currentPath
+            explorerCtrlAddRequestStablePathConfirmed      := False
+            explorerCtrlAddRequestStablePathHitCount       := (currentPath = "") ? 0 : 1
+            _TraceExplorerCtrlAdd("startup_path_reset"
+                , "reason=pre_send_path_changed path=[" . currentPath . "] nextTimerMs="
+                . k_explorerCtrlAddPollMs, False, requestId)
+            _ScheduleExplorerCtrlAddRetry(requestId, k_explorerCtrlAddPollMs)
+            Return
+        }
+    }
+
+    ; A confirmed #32770 Details view is enough for one early alignment even if
+    ; its UIA provider has not exposed a visible item yet. Keep the request alive
+    ; so Details-with-content can authorize a second, corrective alignment.
+    if (detailsOnlySendCandidate) {
+        detailsOnlyTargetExists := requestTargetHwnd
+            && WinExist("ahk_id " . requestTargetHwnd)
+        detailsOnlyActiveHwnd := WinExist("A")
+        detailsOnlyClass := ""
+        WinGetClass, detailsOnlyClass, ahk_id %requestTargetHwnd%
+        if (!detailsOnlyTargetExists || detailsOnlyActiveHwnd != requestTargetHwnd
+         || detailsOnlyClass != requestWindowClass) {
+            _TraceExplorerCtrlAdd("request_aborted"
+                , "reason=details_only_guard_failed targetExists="
+                . (detailsOnlyTargetExists ? 1 : 0)
+                . " activeHwnd=" . detailsOnlyActiveHwnd
+                . " expectedClass=" . requestWindowClass
+                . " actualClass=" . detailsOnlyClass, True, requestId)
+            Return
+        }
+        if GetKeyState("LButton", "P") {
+            if (A_TickCount < requestDeadlineTick) {
+                _TraceExplorerCtrlAdd("request_wait"
+                    , "reason=details_only_lbutton_held nextTimerMs="
+                    . k_explorerCtrlAddPollMs, False, requestId)
+                _ScheduleExplorerCtrlAddRetry(requestId, k_explorerCtrlAddPollMs)
+            }
+            else
+                _TraceExplorerCtrlAdd("request_aborted"
+                    , "reason=details_only_lbutton_held_at_deadline", True, requestId)
+            Return
+        }
+
+        Critical, On
+        detailsOnlySendClaimed := (requestId = explorerCtrlAddRequestId
+            && explorerCtrlAddRequestDetailsOnlySendPending)
+        if (detailsOnlySendClaimed) {
+            explorerCtrlAddRequestDetailsOnlySendPending := False
+            explorerCtrlAddRequestDetailsOnlySendMade    := True
+        }
+        Critical, Off
+
+        if (detailsOnlySendClaimed) {
+            detailsOnlyResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
+                , detailsOnlyClass, requestSourceCtrlNN, requestId, contentProbeResolvedTarget)
+            detailsOnlyDispatchElapsedMs := A_TickCount - requestStartTick
+            detailsOnlySendStartTick := A_TickCount
+            _TraceExplorerCtrlAdd("sendctrladd_details_only"
+                , "elapsedMs=" . detailsOnlyDispatchElapsedMs
+                . " probeReason=" . contentProbe.reason
+                . " detailsReason=[" . contentProbeDetailsReason . "]"
+                . " hasResolvedTarget=" . IsObject(detailsOnlyResolvedTarget)
+                , False, requestId)
+            SendCtrlAdd(requestTargetHwnd, detailsOnlyClass, requestSourceCtrlNN, False, ""
+                , requestRestoreTreeFocus, detailsOnlyResolvedTarget, requestId)
+            if (requestId != explorerCtrlAddRequestId) {
+                _TraceExplorerCtrlAdd("request_aborted"
+                    , "reason=superseded_during_details_only_send currentRequestId="
+                    . explorerCtrlAddRequestId, True, requestId)
+                Return
+            }
+            requestDetailsOnlySendMade    := True
+            requestDetailsOnlySendPending := False
+
+            if (A_TickCount < requestDeadlineTick) {
+                pollIntervalRemainingMs := Max(1
+                    , k_explorerCtrlAddPollMs - contentProbeElapsedMs)
+                deadlineRemainingMs := Max(1, requestDeadlineTick - A_TickCount)
+                nextPollMs := Min(pollIntervalRemainingMs, deadlineRemainingMs)
+                _TraceExplorerCtrlAdd("request_wait"
+                    , "reason=details_only_send_followup nextTimerMs=" . nextPollMs
+                    . " sendElapsedMs=" . (A_TickCount - detailsOnlySendStartTick)
+                    , False, requestId)
+                _ScheduleExplorerCtrlAddRetry(requestId, nextPollMs)
+            }
+            else
+                _TraceExplorerCtrlAdd("request_completed"
+                    , "reason=details_only_send_made_content_not_confirmed"
+                    . " sendElapsedMs=" . (A_TickCount - detailsOnlySendStartTick)
+                    , True, requestId)
+            Return
+        }
+    }
+
     if (contentProbe.state != "ready" && A_TickCount < requestDeadlineTick) {
-        nextPollMs := Min(k_explorerCtrlAddPollMs
-            , Max(1, requestDeadlineTick - A_TickCount))
+        ; Count time spent inside the UIA probe toward the requested polling
+        ; interval so a slow probe does not add another full delay afterward.
+        pollIntervalRemainingMs := Max(1
+            , k_explorerCtrlAddPollMs - contentProbeElapsedMs)
+        deadlineRemainingMs := Max(1, requestDeadlineTick - A_TickCount)
+        nextPollMs := Min(pollIntervalRemainingMs, deadlineRemainingMs)
         _TraceExplorerCtrlAdd("request_wait"
             , "reason=details_content_not_ready nextTimerMs=" . nextPollMs
             . " probeReason=" . contentProbe.reason
@@ -9938,6 +10553,14 @@ RunExplorerCtrlAddWhenReady:
     }
 
     if (contentProbe.state != "ready") {
+        if (requestDetailsOnlySendMade) {
+            _TraceExplorerCtrlAdd("request_completed"
+                , "reason=details_only_send_made_content_not_confirmed"
+                . " probeReason=" . contentProbe.reason
+                . " detailsReason=[" . contentProbeDetailsReason . "]"
+                , True, requestId)
+            Return
+        }
         if !requestAllowBestEffortSend {
             _TraceExplorerCtrlAdd("request_aborted"
                 , "reason=details_or_content_not_ready_at_deadline probeReason="
@@ -9949,7 +10572,7 @@ RunExplorerCtrlAddWhenReady:
 
         ; Header requests already passed button and target classification. Their
         ; path-changing request either proved the destination changed or entered
-        ; the #32770 unresolved-path fallback. If UIA cannot prove content by the
+        ; the #32770 pathless view-state fallback. If UIA cannot prove content by the
         ; deadline, make one final attempt only while that same window is
         ; foreground and no physical click is active.
         finalTargetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
@@ -9973,14 +10596,14 @@ RunExplorerCtrlAddWhenReady:
         bestEffortDispatchElapsedMs := A_TickCount - requestStartTick
         bestEffortSendStartTick := A_TickCount
         bestEffortResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
-            , finalClass, requestSourceCtrl, requestId, contentProbeResolvedTarget)
+            , finalClass, requestSourceCtrlNN, requestId, contentProbeResolvedTarget)
         _TraceExplorerCtrlAdd("sendctrladd_best_effort"
             , "elapsedMs=" . bestEffortDispatchElapsedMs
             . " probeReason=" . contentProbe.reason
             . " detailsReason=[" . contentProbeDetailsReason . "]"
             . " hasResolvedTarget=" . IsObject(bestEffortResolvedTarget)
             , False, requestId)
-        SendCtrlAdd(requestTargetHwnd, finalClass, requestSourceCtrl, False, ""
+        SendCtrlAdd(requestTargetHwnd, finalClass, requestSourceCtrlNN, False, ""
             , requestRestoreTreeFocus, bestEffortResolvedTarget, requestId)
         _TraceExplorerCtrlAdd("sendctrladd_best_effort_dispatch"
             , "elapsedMs=" . bestEffortDispatchElapsedMs
@@ -9999,49 +10622,13 @@ RunExplorerCtrlAddWhenReady:
     }
 
     verifiedResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
-        , currentClass, requestSourceCtrl, requestId, contentProbeResolvedTarget)
-
-    ; UIA retries deliberately reuse the confirmed startup path instead of
-    ; repeatedly invoking Explorer COM. Re-read it once immediately before the
-    ; verified send; if the destination changed, restart startup readiness so
-    ; Ctrl+NumpadAdd cannot be authorized by UIA evidence from the old folder.
-    if (requestRequiresStablePath
-     && !explorerCtrlAddRequestPathlessContentFallbackActive) {
-        pathProbeStartTick := A_TickCount
-        pathProbeRequestIsCurrent := False
-        currentPath := _GetExplorerCtrlAddRequestPath(requestTargetHwnd
-            , requestWindowClass, requestId, pathProbeRequestIsCurrent)
-        pathProbeElapsedMs := A_TickCount - pathProbeStartTick
-        if !pathProbeRequestIsCurrent {
-            _TraceExplorerCtrlAdd("request_aborted"
-                , "reason=superseded_during_startup_pre_send_revalidation currentRequestId="
-                . explorerCtrlAddRequestId, True, requestId)
-            Return
-        }
-        _TraceExplorerCtrlAdd("path_probe"
-            , "scenario=startup_pre_send_revalidate elapsedMs=" . pathProbeElapsedMs
-            . " confirmedPath=[" . explorerCtrlAddRequestPreviousPath . "]"
-            . " currentPath=[" . currentPath . "]", False, requestId)
-
-        if (currentPath = "" || currentPath != explorerCtrlAddRequestPreviousPath) {
-            explorerCtrlAddRequestDeadlineTick             := A_TickCount + k_newExplorerCtrlAddTimeoutMs
-            explorerCtrlAddRequestEarliestContentProbeTick := A_TickCount + k_newExplorerCtrlAddMinimumWaitMs
-            explorerCtrlAddRequestPreviousPath             := currentPath
-            explorerCtrlAddRequestStablePathConfirmed      := False
-            explorerCtrlAddRequestStablePathHitCount       := (currentPath = "") ? 0 : 1
-            _TraceExplorerCtrlAdd("startup_path_reset"
-                , "reason=pre_send_path_changed path=[" . currentPath . "] nextTimerMs="
-                . k_explorerCtrlAddPollMs, False, requestId)
-            _ScheduleExplorerCtrlAddRetry(requestId, k_explorerCtrlAddPollMs)
-            Return
-        }
-    }
+        , currentClass, requestSourceCtrlNN, requestId, contentProbeResolvedTarget)
 
     ; Issue the alignment before synchronously flushing its terminal trace, so
     ; disk or antivirus latency cannot delay the user-visible column adjustment.
     sendCtrlAddDispatchElapsedMs := A_TickCount - requestStartTick
     sendCtrlAddStartTick := A_TickCount
-    SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrl, False, ""
+    SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrlNN, False, ""
         , requestRestoreTreeFocus, verifiedResolvedTarget, requestId)
     _TraceExplorerCtrlAdd("sendctrladd_dispatch"
         , "elapsedMs=" . sendCtrlAddDispatchElapsedMs
@@ -10064,7 +10651,7 @@ PostActivationLButtonCheck:
     ; describes the current foreground target.
     queuedId           := postActivationLButtonId
     deadlineTick       := postActivationLButtonDeadlineTick
-    targetCtrl         := postActivationLButtonCtrl
+    targetCtrl         := postActivationLButtonCtrlNN
     capturedHeaderKind := postActivationLButtonHeaderKind
     targetHwnd         := postActivationLButtonHwnd
     initialPath        := postActivationLButtonInitialPath
@@ -10134,6 +10721,9 @@ PostActivationLButtonCheck:
             rejectionReason := (headerKind = "unavailable")
                 ? "header_kind_unavailable"
                 : "header_kind_not_navigation"
+            activeRequestId := explorerCtrlAddRequestTracePending
+                ? explorerCtrlAddRequestId
+                : 0
             _TraceExplorerCtrlAdd("header_request_rejected"
                 , "hwnd=" . targetHwnd
                 . " class=" . targetClass
@@ -10141,13 +10731,13 @@ PostActivationLButtonCheck:
                 . " headerKind=" . headerKind
                 . " initialPath=[" . initialPath . "]"
                 . " rejectionReason=" . rejectionReason
-                , True)
+                . " activeReq=" . activeRequestId
+                , True, 0)
             Return
         }
 
         if (headerKind = "refresh") {
-            _RequestHeaderNavigationCtrlAdd(targetHwnd, targetClass, initialPath, False
-                , k_explorerCtrlAddRefreshMinimumWaitMs, True)
+            _RequestHeaderNavigationCtrlAdd(targetHwnd, targetClass, initialPath, False, k_explorerCtrlAddRefreshMinimumWaitMs)
         }
         else if (headerKind = "path_change")
             _RequestHeaderNavigationCtrlAdd(targetHwnd, targetClass, initialPath, True)
@@ -10254,8 +10844,8 @@ $~LButton::
     CancelTbcTypingWorkForContextChange()
 
     WinGetClass, _winClassD, ahk_id %_winIdD%
-    isExplorerDirectUIClick := (_winClassD == "CabinetWClass" || _winClassD == "#32770")
-                            && InStr(_winCtrlD, "DirectUIHWND", True)
+    isExplorerDirectUIClick    := (_winClassD == "CabinetWClass" || _winClassD == "#32770")
+                               && InStr(_winCtrlD, "DirectUIHWND", True)
     isExplorerNavigationHeader := (_winClassD == "CabinetWClass" || _winClassD == "#32770")
                                && _IsExplorerNavigationHeaderCtrl(_winCtrlD)
 
@@ -10361,6 +10951,8 @@ $~LButton::
                         && (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))
     If (allowDoubleClicks && (IsObject(explorerDirectUIDoubleClick) || isLegacyDoubleClick)) {
 
+        ; Consume this rapid click sequence before performing its custom action
+        ; so a third or fourth click cannot be interpreted as another pair.
         allowDoubleClicks := False
         ; tooltip, %isBlankSpaceExplorer% - %isBlankSpaceNonExplorer%
         If (isBlankSpaceExplorer || isBlankSpaceNonExplorer) {
@@ -10409,7 +11001,9 @@ $~LButton::
     isColumnHeader          := False
     isItemClick             := False
 
-    If (!allowDoubleClicks && A_TimeSincePriorHotkey > k_DoubleClickTime) ; basically a single click
+    ; A quiet gap makes this the first click of a new sequence and rearms the
+    ; custom action for a matching second click.
+    If (!allowDoubleClicks && A_TimeSincePriorHotkey > k_DoubleClickTime)
         allowDoubleClicks := True
 
     prevPath := ""
@@ -10576,6 +11170,9 @@ $~LButton::
                 rejectionReason := (headerKind = "unavailable")
                     ? "header_kind_unavailable"
                     : "header_kind_not_navigation"
+                activeRequestId := explorerCtrlAddRequestTracePending
+                    ? explorerCtrlAddRequestId
+                    : 0
                 _TraceExplorerCtrlAdd("header_request_rejected"
                     , "hwnd=" . _winIdU
                     . " class=" . _winClassD
@@ -10583,15 +11180,15 @@ $~LButton::
                     . " headerKind=" . headerKind
                     . " initialPath=[" . navigationStartPath . "]"
                     . " rejectionReason=" . rejectionReason
-                    , True)
+                    . " activeReq=" . activeRequestId
+                    , True, 0)
 
                 GoSub, EnableTimers
                 Return
             }
 
             if (headerKind = "refresh") {
-                _RequestHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, False
-                    , k_explorerCtrlAddRefreshMinimumWaitMs, True)
+                _RequestHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, False, k_explorerCtrlAddRefreshMinimumWaitMs)
             }
             else if (headerKind = "path_change")
                 _RequestHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, True)
@@ -10708,25 +11305,31 @@ _ApplyExplorerUIABudget(uiaDeadlineTick, requestedTimeoutMs := 2000) {
     return effectiveTimeoutMs
 }
 
-; Confirm the two conditions required before an Explorer/file-dialog request may
-; call SendCtrlAdd(): the current file panel is in Details mode, and UIA exposes
-; either one ListItem or a recognized empty-result message. One shared deadline
-; bounds all UIA work; the timer caller retries a not-ready result. detailsReason
-; records the Details-mode result, while itemsViewResolver, candidate count, and
-; resolution reason identify how the current Items View was (or was not) found.
-_ProbeExplorerDetailsContentReady(targetHwndID, transactionTimeout := 150
+; Report Details mode and visible-content readiness independently so the timer
+; can distinguish not-Details, Details-only, and Details-with-content states.
+; One shared deadline bounds all UIA work. detailsReason records the Details-mode
+; result, while itemsViewResolver, candidate count, and resolution reason identify
+; how the current Items View was (or was not) found. The returned phase timings
+; identify which reliable check consumed the requested UIA budget. For #32770,
+; itemsViewResolutionElapsedMs is work performed inside isDetailsViewElapsedMs;
+; CabinetWClass performs those two phases separately.
+_ProbeExplorerDetailsViewState(targetHwndID, transactionTimeout := 150
     , requestId := "") {
     global UIA
     global k_explorerItemsViewContentEvidenceCondition
 
     if (!targetHwndID || !WinExist("ahk_id " . targetHwndID))
-        return { state: "not_ready", reason: "target_gone" }
+        return { state: "not_ready", reason: "target_gone"
+            , detailsReady: False, contentReady: False }
     if (transactionTimeout <= 0)
         transactionTimeout := 1
 
     priorConnectionTimeout  := ""
     priorTransactionTimeout := ""
     uiaDeadlineTick         := A_TickCount + transactionTimeout
+    contentEvidenceLookupElapsedMs := 0
+    isDetailsViewElapsedMs          := 0
+    itemsViewResolutionElapsedMs    := 0
 
     if !IsObject(UIA) {
         try
@@ -10735,7 +11338,8 @@ _ProbeExplorerDetailsContentReady(targetHwndID, transactionTimeout := 150
             UIA := ""
     }
     if !IsObject(UIA)
-        return { state: "not_ready", reason: "uia_unavailable" }
+        return { state: "not_ready", reason: "uia_unavailable"
+            , detailsReady: False, contentReady: False }
 
     try {
         try
@@ -10756,12 +11360,19 @@ _ProbeExplorerDetailsContentReady(targetHwndID, transactionTimeout := 150
         resolvedCtrlNN := ""
         ; Force #32770 to inspect its current Items View. Its 250 ms cache may
         ; still refer to the outgoing folder after the dialog path changes.
-        if !IsDetailsView(targetHwndID, itemsEl, transactionTimeout
+        isDetailsViewStartTick := A_TickCount
+        detailsReady := IsDetailsView(targetHwndID, itemsEl, transactionTimeout
             , uiaDeadlineTick, False, detailsReason, itemsViewResolver
             , itemsViewCandidateCount, itemsViewResolutionReason
-            , resolvedCtrlNN, resolvedCtrlHwnd)
+            , resolvedCtrlNN, resolvedCtrlHwnd, itemsViewResolutionElapsedMs)
+        isDetailsViewElapsedMs := A_TickCount - isDetailsViewStartTick
+        if !detailsReady
             return { state: "not_ready", reason: "not_details_view"
+                , detailsReady: False, contentReady: False
                 , detailsReason: detailsReason
+                , contentEvidenceLookupElapsedMs: contentEvidenceLookupElapsedMs
+                , isDetailsViewElapsedMs: isDetailsViewElapsedMs
+                , itemsViewResolutionElapsedMs: itemsViewResolutionElapsedMs
                 , itemsViewCandidateCount: itemsViewCandidateCount
                 , itemsViewResolutionReason: itemsViewResolutionReason
                 , itemsViewResolver: itemsViewResolver }
@@ -10770,50 +11381,65 @@ _ProbeExplorerDetailsContentReady(targetHwndID, transactionTimeout := 150
         ; CabinetWClass uses COM for that mode check, so resolve its UIA file
         ; panel separately through the same shared resolver.
         if !IsObject(itemsEl) {
+            itemsViewResolutionStartTick := A_TickCount
             ResolveExplorerItemsView(targetHwndID, itemsEl
                 , transactionTimeout, uiaDeadlineTick, False
                 , itemsViewResolver, itemsViewCandidateCount
                 , itemsViewResolutionReason, resolvedCtrlNN, resolvedCtrlHwnd)
+            itemsViewResolutionElapsedMs += A_TickCount - itemsViewResolutionStartTick
         }
-        if !IsObject(itemsEl)
-            return { state: "not_ready", reason: "items_view_unavailable"
-                , detailsReason: detailsReason
-                , itemsViewCandidateCount: itemsViewCandidateCount
-                , itemsViewResolutionReason: itemsViewResolutionReason
-                , itemsViewResolver: itemsViewResolver }
 
-        if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout))
-            return { state: "not_ready", reason: "uia_budget_exhausted"
-                , detailsReason: detailsReason
-                , itemsViewCandidateCount: itemsViewCandidateCount
-                , itemsViewResolutionReason: itemsViewResolutionReason
-                , itemsViewResolver: itemsViewResolver }
+        ; From this point onward, Details mode is proven even if UIA has not yet
+        ; exposed a ListItem or recognized empty-result message. Build the result
+        ; after the optional resolver so its target and diagnostic fields describe
+        ; the same final discovery attempt used by the content check.
+        probeResult := { state: "not_ready", reason: ""
+            , detailsReady: True, contentReady: False
+            , detailsReason: detailsReason
+            , contentEvidenceLookupElapsedMs: contentEvidenceLookupElapsedMs
+            , isDetailsViewElapsedMs: isDetailsViewElapsedMs
+            , itemsViewResolutionElapsedMs: itemsViewResolutionElapsedMs
+            , itemsViewCandidateCount: itemsViewCandidateCount
+            , itemsViewResolutionReason: itemsViewResolutionReason
+            , itemsViewResolver: itemsViewResolver }
+        if (resolvedCtrlNN != "" && resolvedCtrlHwnd)
+            probeResult.resolvedTarget := { ctrlNN: resolvedCtrlNN
+                , hwnd: resolvedCtrlHwnd + 0, requestId: requestId }
+
+        if !IsObject(itemsEl) {
+            probeResult.reason := "items_view_unavailable"
+            return probeResult
+        }
+
+        if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+            probeResult.reason := "uia_budget_exhausted"
+            return probeResult
+        }
 
         contentEvidenceEl := ""
+        contentEvidenceLookupStartTick := A_TickCount
         try
             contentEvidenceEl := itemsEl.FindFirstBy(k_explorerItemsViewContentEvidenceCondition)
         catch e
             contentEvidenceEl := ""
+        contentEvidenceLookupElapsedMs := A_TickCount - contentEvidenceLookupStartTick
+        probeResult.contentEvidenceLookupElapsedMs := contentEvidenceLookupElapsedMs
 
         if IsObject(contentEvidenceEl) {
-            readyResult := { state: "ready", reason: "details_content_visible"
-                , detailsReason: detailsReason
-                , itemsViewCandidateCount: itemsViewCandidateCount
-                , itemsViewResolutionReason: itemsViewResolutionReason
-                , itemsViewResolver: itemsViewResolver }
-            if (resolvedCtrlNN != "" && resolvedCtrlHwnd)
-                readyResult.resolvedTarget := { ctrlNN: resolvedCtrlNN
-                    , hwnd: resolvedCtrlHwnd + 0, requestId: requestId }
-            return readyResult
+            probeResult.state        := "ready"
+            probeResult.reason       := "details_content_visible"
+            probeResult.contentReady := True
+            return probeResult
         }
 
-        return { state: "not_ready", reason: "content_not_visible"
-            , detailsReason: detailsReason
-            , itemsViewCandidateCount: itemsViewCandidateCount
-            , itemsViewResolutionReason: itemsViewResolutionReason
-            , itemsViewResolver: itemsViewResolver }
+        probeResult.reason := "content_not_visible"
+        return probeResult
     } catch e {
-        return { state: "not_ready", reason: "probe_exception" }
+        return { state: "not_ready", reason: "probe_exception"
+            , detailsReady: False, contentReady: False
+            , contentEvidenceLookupElapsedMs: contentEvidenceLookupElapsedMs
+            , isDetailsViewElapsedMs: isDetailsViewElapsedMs
+            , itemsViewResolutionElapsedMs: itemsViewResolutionElapsedMs }
     } finally {
         try {
             if (priorTransactionTimeout != "" && IsObject(UIA))
@@ -13389,7 +14015,7 @@ ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6, targetWin
 ; Clears the queued Everything Edit1 auto-fit state so context changes or a
 ; completed send do not leave a stale deferred Ctrl+NumpadAdd request behind.
 _ClearTbcEverythingEditAdjustState() {
-    global tbcEverythingAdjustCtrl
+    global tbcEverythingAdjustCtrlNN
     global tbcEverythingAdjustCtrlClass
     global tbcEverythingAdjustCtrlHwnd
     global tbcEverythingAdjustHwnd
@@ -13397,7 +14023,7 @@ _ClearTbcEverythingEditAdjustState() {
     global tbcEverythingAdjustRequestedTick
     global tbcEverythingAdjustSourceTick
 
-    tbcEverythingAdjustCtrl       := ""
+    tbcEverythingAdjustCtrlNN     := ""
     tbcEverythingAdjustCtrlClass  := ""
     tbcEverythingAdjustCtrlHwnd   := 0
     tbcEverythingAdjustHwnd       := 0
@@ -13412,7 +14038,7 @@ _ClearTbcEverythingEditAdjustState() {
 ; before sending.
 _RequestEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
     global k_tbcEverythingAdjustTypingQuietMs
-    global tbcEverythingAdjustCtrl
+    global tbcEverythingAdjustCtrlNN
     global tbcEverythingAdjustCtrlClass
     global tbcEverythingAdjustCtrlHwnd
     global tbcEverythingAdjustHwnd
@@ -13437,7 +14063,7 @@ _RequestEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := ""
         return false
 
     tbcEverythingAdjustHwnd       := targetHwnd
-    tbcEverythingAdjustCtrl       := targetCtrlNN
+    tbcEverythingAdjustCtrlNN     := targetCtrlNN
     tbcEverythingAdjustCtrlHwnd   := targetCtrlHwnd
     tbcEverythingAdjustCtrlClass  := targetCtrlClass
     tbcEverythingAdjustId += 1
@@ -13495,7 +14121,7 @@ _TryRequestEverythingEditAdjust(sourceTick, hotkey, activeHwnd := 0) {
 ; the same exact control HWND/class before the deferred Ctrl+NumpadAdd send runs.
 _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
     global k_tbcEverythingAdjustMaxAgeMs
-    global tbcEverythingAdjustCtrl
+    global tbcEverythingAdjustCtrlNN
     global tbcEverythingAdjustCtrlClass
     global tbcEverythingAdjustCtrlHwnd
     global tbcEverythingAdjustHwnd
@@ -13506,7 +14132,7 @@ _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
     if (!expectedId)
         expectedId := currentId
 
-    if !_IsDeferredWorkStillValid(tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrl, expectedId, currentId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs)
+    if !_IsDeferredWorkStillValid(tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrlNN, expectedId, currentId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs)
         return false
 
     if (!tbcEverythingAdjustCtrlHwnd && tbcEverythingAdjustCtrlClass = "")
@@ -13515,7 +14141,7 @@ _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
     if !TryCaptureCompleteFocusSnapshot(tbcEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
-    if (tbcEverythingAdjustCtrl != "" && currentCtrlNN != tbcEverythingAdjustCtrl)
+    if (tbcEverythingAdjustCtrlNN != "" && currentCtrlNN != tbcEverythingAdjustCtrlNN)
         return false
 
     if (tbcEverythingAdjustCtrlHwnd && currentCtrlHwnd != tbcEverythingAdjustCtrlHwnd)
@@ -13568,7 +14194,7 @@ FlushTbcEverythingEditAdjust:
         Return
     }
 
-    if (_SendCtrlNumpadAddIfStillValid(6, 0, 0, tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrl, k_tbcEverythingAdjustTypingQuietMs, currentRequestId, tbcEverythingAdjustId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs))
+    if (_SendCtrlNumpadAddIfStillValid(6, 0, 0, tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrlNN, k_tbcEverythingAdjustTypingQuietMs, currentRequestId, tbcEverythingAdjustId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs))
     {
         if (currentRequestId = tbcEverythingAdjustId)
             _ClearTbcEverythingEditAdjustState()
@@ -14096,6 +14722,45 @@ _IsLiveResizeThreeEdgeDockedOnSide(hwndID, monitorNum, dockSide, refX := "", ref
     return false
 }
 
+; Return true only when an opposite-side live-resize partner is directly
+; across the requested shared edge and one window's perpendicular span
+; contains the other's. This preserves narrower panes beneath or beside a
+; wider pane while rejecting skewed windows that only partially overlap.
+_IsLiveResizePartnerOrthogonal(refX, refY, refW, refH, candidateX, candidateY, candidateW, candidateH, candidateTargetEdge, edgeTolerance := 10) {
+    refRightEdge          := refX + refW
+    refBottomEdge         := refY + refH
+    candidateRightEdge    := candidateX + candidateW
+    candidateBottomEdge   := candidateY + candidateH
+
+    if (candidateTargetEdge = "top" || candidateTargetEdge = "bottom") {
+        if (candidateTargetEdge = "top")
+            sharedEdgeIsFlush := (Abs(candidateY - refBottomEdge) <= edgeTolerance)
+        else
+            sharedEdgeIsFlush := (Abs(candidateBottomEdge - refY) <= edgeTolerance)
+
+        refContainsCandidate := (   candidateX >= refX - edgeTolerance
+                                 && candidateRightEdge <= refRightEdge + edgeTolerance)
+        candidateContainsRef := (   refX >= candidateX - edgeTolerance
+                                 && refRightEdge <= candidateRightEdge + edgeTolerance)
+        return (sharedEdgeIsFlush && (refContainsCandidate || candidateContainsRef))
+    }
+
+    if (candidateTargetEdge = "left" || candidateTargetEdge = "right") {
+        if (candidateTargetEdge = "left")
+            sharedEdgeIsFlush := (Abs(candidateX - refRightEdge) <= edgeTolerance)
+        else
+            sharedEdgeIsFlush := (Abs(candidateRightEdge - refX) <= edgeTolerance)
+
+        refContainsCandidate := (   candidateY >= refY - edgeTolerance
+                                 && candidateBottomEdge <= refBottomEdge + edgeTolerance)
+        candidateContainsRef := (   refY >= candidateY - edgeTolerance
+                                 && refBottomEdge <= candidateBottomEdge + edgeTolerance)
+        return (sharedEdgeIsFlush && (refContainsCandidate || candidateContainsRef))
+    }
+
+    return false
+}
+
 ; Decide whether two windows belong to the same live-resize peer group for the
 ; dragged edge. Horizontal drags group vertically contiguous windows whose left
 ; and right edges already match closely; vertical drags do the mirror image for
@@ -14213,9 +14878,9 @@ _ApplyLiveResizeSyncTbcMoves(tbcMoves) {
     }
 
     ; Horizontal shared-edge sync must not touch height, and vertical sync must
-    ; not touch width. Move-only horizontal updates are stricter still: they
-    ; must not pass width at all. If any tbc move is axis-specific, apply
-    ; the whole set with WinMove so blank parameters preserve the untouched axis
+    ; not touch width. Move-only updates on either axis are stricter still: they
+    ; must not pass a size at all. If any tbc move is axis-specific, apply the
+    ; whole set with WinMove so blank parameters preserve the untouched axis
     ; exactly.
     if (hasAxisSpecificMove) {
         for tbcIndex, tbcMove in tbcMoves {
@@ -14235,8 +14900,13 @@ _ApplyLiveResizeSyncTbcMoves(tbcMoves) {
             }
 
             if (tbcAxis = "vertical") {
-                tbcH := tbcMove.h
                 tbcY := tbcMove.y
+                if (tbcMove.moveOnly) {
+                    WinMove, ahk_id %tbcHwndID%, , , %tbcY%
+                    continue
+                }
+
+                tbcH := tbcMove.h
                 WinMove, ahk_id %tbcHwndID%, , , %tbcY%, , %tbcH%
                 continue
             }
@@ -14333,7 +15003,8 @@ _ApplyLButtonResizeSyncPreviewMoves(tbcMoves) {
         }
         else if (tbcMove.axis = "vertical") {
             targetY := tbcMove.y
-            targetH := tbcMove.h - 2*Abs(partnerOffsetY) - 1
+            if (!tbcMove.moveOnly)
+                targetH := tbcMove.h - 2*Abs(partnerOffsetY) - 1
         }
         else {
             targetH := tbcMove.h - 2*Abs(partnerOffsetY) - 1
@@ -14357,8 +15028,10 @@ _ApplyLButtonResizeSyncPreviewMoves(tbcMoves) {
 
 ; Build one live-resize move plan from the dragged window's current geometry so
 ; both the timer-driven updates and the final LButton-up safety net can enforce
-; the same shared-edge flush rules.
-_BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
+; the same shared-edge flush rules. Live previews continue from the gray card's
+; displayed rect; finalization must compare against the real follower window so
+; an already-positioned card cannot suppress the actual WinMove commit.
+_BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH, usePreviewGeometry := true) {
     global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncHit
     global lButtonResizeSyncPartners
@@ -14371,19 +15044,15 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
     draggedRightEdge  := draggedX + draggedW
     draggedBottomEdge := draggedY + draggedH
     didResizeAny      := false
-    haveHorizontalMonitorWorkArea := false
-    liveResizeEdgeGapTolerance    := 10
-    liveResizeEdgeTouchTolerance  := 10
+    haveMonitorWorkArea           := false
     liveResizeMoveSupportTolerance := 10
     tbcMoves          := []
     validPartners     := []
 
-    if (lButtonResizeSyncHit = HTRIGHT || lButtonResizeSyncHit = HTLEFT) {
-        monitorNum := GetWindowMonitorNumber(lButtonResizeSyncDraggedHwnd)
-        if (monitorNum >= 1) {
-            SysGet, monInfo, MonitorWorkArea, %monitorNum%
-            haveHorizontalMonitorWorkArea := true
-        }
+    monitorNum := GetWindowMonitorNumber(lButtonResizeSyncDraggedHwnd)
+    if (monitorNum >= 1) {
+        SysGet, monInfo, MonitorWorkArea, %monitorNum%
+        haveMonitorWorkArea := true
     }
 
     for partnerIndex, partnerInfo in lButtonResizeSyncPartners {
@@ -14414,7 +15083,7 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
             currentPartnerH := partnerH
 
         ghostCardInfo := partnerInfo.ghostCardInfo
-        if IsObject(ghostCardInfo) {
+        if (usePreviewGeometry && IsObject(ghostCardInfo)) {
             currentPartnerX := ghostCardInfo.x
             currentPartnerY := ghostCardInfo.y
             currentPartnerW := ghostCardInfo.w
@@ -14430,60 +15099,47 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 targetRightEdge := draggedRightEdge
             }
             else {
-                currentLeftEdge         := currentPartnerX
                 currentRightEdge        := currentPartnerX + currentPartnerW
-                partnerFarSideAnchored  := false
                 partnerTouchesTopOrBottom := false
-                seamMovesTowardFarSide  := false
+                partnerTouchesWorkAreaRight := false
 
-                if (haveHorizontalMonitorWorkArea) {
+                if (haveMonitorWorkArea) {
                     currentBottomEdge := currentPartnerY + currentPartnerH
                     partnerTouchesTopOrBottom := (   Abs(currentPartnerY - monInfoTop) <= liveResizeMoveSupportTolerance
                                                  || Abs(currentBottomEdge - monInfoBottom) <= liveResizeMoveSupportTolerance)
-                    seamMovesTowardFarSide := (draggedRightEdge > currentLeftEdge)
-                    partnerFarSideAnchored := (Abs(currentRightEdge - monInfoRight) <= liveResizeEdgeTouchTolerance)
-
-                    if (!partnerFarSideAnchored) {
-                        farSidePartnerHwndIDs := Find2DEdgePartnerWindows(partnerHwndID, monitorNum, liveResizeEdgeTouchTolerance, 0, 0, 100, "left", liveResizeEdgeGapTolerance, currentPartnerX, currentPartnerY, currentPartnerW, currentPartnerH)
-                        if (IsObject(farSidePartnerHwndIDs) && farSidePartnerHwndIDs.MaxIndex()) {
-                            for farSidePartnerIndex, farSidePartnerHwndID in farSidePartnerHwndIDs {
-                                if (!farSidePartnerHwndID || farSidePartnerHwndID = partnerHwndID)
-                                    continue
-                                if !WinGetPosEx(farSidePartnerHwndID, farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH, null, null)
-                                    continue
-                                if (_IsLiveResizeThreeEdgeDockedOnSide(farSidePartnerHwndID, monitorNum, "right", farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH)) {
-                                    partnerFarSideAnchored := true
-                                    break
-                                }
-                            }
-                        }
-                    }
+                    partnerTouchesWorkAreaRight := (Abs(currentRightEdge - monInfoRight) <= liveResizeMoveSupportTolerance)
                 }
 
-                if (   haveHorizontalMonitorWorkArea
-                    && partnerTouchesTopOrBottom
-                    && seamMovesTowardFarSide
-                    && !partnerFarSideAnchored) {
-                    ; Preserve width only while the partner's far side is still
-                    ; floating. As soon as that projected far edge would reach
-                    ; the monitor boundary, switch to a resize against that edge.
-                    projectedRightEdge := draggedRightEdge + currentPartnerW
-                    if (projectedRightEdge >= monInfoRight - liveResizeEdgeTouchTolerance) {
+                if (   haveMonitorWorkArea
+                    && partnerTouchesTopOrBottom) {
+                    if (partnerTouchesWorkAreaRight) {
+                        ; Preserve an existing monitor-right dock: the follower's
+                        ; right edge stays fixed while its left edge follows the
+                        ; dragged shared seam, so this window resizes but never moves.
                         targetLeftEdge  := draggedRightEdge
                         targetRightEdge := monInfoRight
                     }
                     else {
-                        targetMoveX       := draggedRightEdge + partnerOffsetX
-                        usedMoveOnlyPartnerHandling := true
-                        shouldMovePartner := (partnerX != targetMoveX)
-                        if (shouldMovePartner)
-                            tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
+                        ; An undocked follower moves with the seam without changing
+                        ; width while its full rect fits. Once its far edge reaches
+                        ; the monitor right, pin that edge and resize instead.
+                        projectedRightEdge := draggedRightEdge + currentPartnerW
+                        if (projectedRightEdge > monInfoRight) {
+                            targetLeftEdge  := draggedRightEdge
+                            targetRightEdge := monInfoRight
+                        }
+                        else {
+                            targetMoveX       := draggedRightEdge + partnerOffsetX
+                            usedMoveOnlyPartnerHandling := true
+                            shouldMovePartner := (partnerX != targetMoveX)
+                            if (shouldMovePartner)
+                                tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
+                        }
                     }
                 }
                 else {
-                    ; When the seam moves away from the partner's far side, or
-                    ; that far side is already anchored directly or through the
-                    ; next flush pane, keep the far edge fixed and resize.
+                    ; Ordinary horizontally stacked partners retain the existing
+                    ; shared-edge resize behavior.
                     targetLeftEdge  := draggedRightEdge
                     targetRightEdge := currentRightEdge
                 }
@@ -14511,60 +15167,47 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
             }
             else {
                 currentLeftEdge         := currentPartnerX
-                currentRightEdge        := currentPartnerX + currentPartnerW
-                partnerFarSideAnchored  := false
                 partnerTouchesTopOrBottom := false
-                seamMovesTowardFarSide  := false
+                partnerTouchesWorkAreaLeft := false
 
-                if (haveHorizontalMonitorWorkArea) {
+                if (haveMonitorWorkArea) {
                     currentBottomEdge := currentPartnerY + currentPartnerH
                     partnerTouchesTopOrBottom := (   Abs(currentPartnerY - monInfoTop) <= liveResizeMoveSupportTolerance
                                                  || Abs(currentBottomEdge - monInfoBottom) <= liveResizeMoveSupportTolerance)
-                    seamMovesTowardFarSide := (draggedX < currentRightEdge)
-                    partnerFarSideAnchored := (Abs(currentLeftEdge - monInfoLeft) <= liveResizeEdgeTouchTolerance)
-
-                    if (!partnerFarSideAnchored) {
-                        farSidePartnerHwndIDs := Find2DEdgePartnerWindows(partnerHwndID, monitorNum, liveResizeEdgeTouchTolerance, 0, 0, 100, "right", liveResizeEdgeGapTolerance, currentPartnerX, currentPartnerY, currentPartnerW, currentPartnerH)
-                        if (IsObject(farSidePartnerHwndIDs) && farSidePartnerHwndIDs.MaxIndex()) {
-                            for farSidePartnerIndex, farSidePartnerHwndID in farSidePartnerHwndIDs {
-                                if (!farSidePartnerHwndID || farSidePartnerHwndID = partnerHwndID)
-                                    continue
-                                if !WinGetPosEx(farSidePartnerHwndID, farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH, null, null)
-                                    continue
-                                if (_IsLiveResizeThreeEdgeDockedOnSide(farSidePartnerHwndID, monitorNum, "left", farSidePartnerX, farSidePartnerY, farSidePartnerW, farSidePartnerH)) {
-                                    partnerFarSideAnchored := true
-                                    break
-                                }
-                            }
-                        }
-                    }
+                    partnerTouchesWorkAreaLeft := (Abs(currentLeftEdge - monInfoLeft) <= liveResizeMoveSupportTolerance)
                 }
 
-                if (   haveHorizontalMonitorWorkArea
-                    && partnerTouchesTopOrBottom
-                    && seamMovesTowardFarSide
-                    && !partnerFarSideAnchored) {
-                    ; Mirror the right-edge rule above: preserve width only
-                    ; while the partner's far-left edge is still floating, then
-                    ; switch to a resize once that edge reaches the monitor.
-                    projectedLeftEdge := draggedX - currentPartnerW
-                    if (projectedLeftEdge <= monInfoLeft + liveResizeEdgeTouchTolerance) {
+                if (   haveMonitorWorkArea
+                    && partnerTouchesTopOrBottom) {
+                    if (partnerTouchesWorkAreaLeft) {
+                        ; Preserve an existing monitor-left dock: the follower's
+                        ; left edge stays fixed while its right edge follows the
+                        ; dragged shared seam, so this window resizes but never moves.
                         targetLeftEdge  := monInfoLeft
                         targetRightEdge := draggedX
                     }
                     else {
-                        targetLeftEdge    := draggedX - currentPartnerW
-                        targetMoveX       := targetLeftEdge + partnerOffsetX
-                        usedMoveOnlyPartnerHandling := true
-                        shouldMovePartner := (partnerX != targetMoveX)
-                        if (shouldMovePartner)
-                            tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
+                        ; An undocked follower moves with the seam without changing
+                        ; width while its full rect fits. Once its far edge reaches
+                        ; the monitor left, pin that edge and resize instead.
+                        projectedLeftEdge := draggedX - currentPartnerW
+                        if (projectedLeftEdge < monInfoLeft) {
+                            targetLeftEdge  := monInfoLeft
+                            targetRightEdge := draggedX
+                        }
+                        else {
+                            targetLeftEdge    := draggedX - currentPartnerW
+                            targetMoveX       := targetLeftEdge + partnerOffsetX
+                            usedMoveOnlyPartnerHandling := true
+                            shouldMovePartner := (partnerX != targetMoveX)
+                            if (shouldMovePartner)
+                                tbcMoves.Push({ axis: "horizontal", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, x: targetMoveX })
+                        }
                     }
                 }
                 else {
-                    ; When the seam moves away from the partner's far side, or
-                    ; that far side is already anchored directly or through the
-                    ; next flush pane, keep the far edge fixed and resize.
+                    ; Ordinary horizontally stacked partners retain the existing
+                    ; shared-edge resize behavior.
                     targetLeftEdge  := currentLeftEdge
                     targetRightEdge := draggedX
                 }
@@ -14591,25 +15234,69 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 targetBottomEdge := draggedBottomEdge
             }
             else {
-                ; Opposite-side partners keep their far-bottom edge fixed and
-                ; move only the shared top edge so it stays flush with the
-                ; dragged window's bottom edge.
-                targetTopEdge    := draggedBottomEdge
-                targetBottomEdge := partnerFixedEdge
+                currentBottomEdge        := currentPartnerY + currentPartnerH
+                currentRightEdge         := currentPartnerX + currentPartnerW
+                partnerTouchesLeftOrRight := false
+                partnerTouchesWorkAreaBottom := false
+
+                if (haveMonitorWorkArea) {
+                    ; Limit move-first behavior to a left- or right-docked
+                    ; follower. Ordinary vertically stacked windows retain the
+                    ; established shared-edge resize behavior below.
+                    partnerTouchesLeftOrRight := (   Abs(currentPartnerX - monInfoLeft) <= liveResizeMoveSupportTolerance
+                                                  || Abs(currentRightEdge - monInfoRight) <= liveResizeMoveSupportTolerance)
+                    partnerTouchesWorkAreaBottom := (Abs(currentBottomEdge - monInfoBottom) <= liveResizeMoveSupportTolerance)
+                }
+
+                if (   haveMonitorWorkArea
+                    && partnerTouchesLeftOrRight) {
+                    if (partnerTouchesWorkAreaBottom) {
+                        ; Preserve an existing monitor-bottom dock: the follower's
+                        ; bottom edge stays fixed while its top follows the dragged
+                        ; shared seam, so this window resizes but never moves.
+                        targetTopEdge    := draggedBottomEdge
+                        targetBottomEdge := monInfoBottom
+                    }
+                    else {
+                        ; An undocked follower moves with the seam without changing
+                        ; height while its full rect fits. Once its far edge reaches
+                        ; the monitor bottom, pin that edge and resize instead.
+                        projectedBottomEdge := draggedBottomEdge + currentPartnerH
+                        if (projectedBottomEdge > monInfoBottom) {
+                            targetTopEdge    := draggedBottomEdge
+                            targetBottomEdge := monInfoBottom
+                        }
+                        else {
+                            targetMoveY       := draggedBottomEdge
+                            usedMoveOnlyPartnerHandling := true
+                            shouldMovePartner := (currentPartnerY != targetMoveY)
+                            if (shouldMovePartner)
+                                tbcMoves.Push({ axis: "vertical", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, y: targetMoveY })
+                        }
+                    }
+                }
+                else {
+                    ; Ordinary vertically stacked partners retain the existing
+                    ; shared-edge resize behavior.
+                    targetTopEdge    := draggedBottomEdge
+                    targetBottomEdge := currentBottomEdge
+                }
             }
 
-            targetOuterHeight := targetBottomEdge - targetTopEdge
-            if (targetOuterHeight <= 0)
-                continue
+            if (!usedMoveOnlyPartnerHandling) {
+                targetOuterHeight := targetBottomEdge - targetTopEdge
+                if (targetOuterHeight <= 0)
+                    continue
 
-            targetMoveY       := targetTopEdge
-            ; The script's vertical offset conversion needs the established +1
-            ; pixel compensation. Without it, the visual bottom edge commonly
-            ; lands one pixel short after the frame-offset math is applied.
-            targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
-            shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
-            if (shouldMovePartner)
-                tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, partnerInfo: partnerInfo, y: targetMoveY })
+                targetMoveY       := targetTopEdge
+                ; The script's vertical offset conversion needs the established +1
+                ; pixel compensation. Without it, the visual bottom edge commonly
+                ; lands one pixel short after the frame-offset math is applied.
+                targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
+                shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
+                if (shouldMovePartner)
+                    tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, partnerInfo: partnerInfo, y: targetMoveY })
+            }
         }
         else if (lButtonResizeSyncHit = HTTOP) {
             if (partnerRole = "peer") {
@@ -14620,24 +15307,64 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH) {
                 targetBottomEdge := partnerFixedEdge
             }
             else {
-                ; Opposite-side partners keep their far-top edge fixed and move
-                ; only the shared bottom edge so it stays flush with the dragged
-                ; window's top edge.
-                targetTopEdge    := partnerFixedEdge
-                targetBottomEdge := draggedY
+                currentBottomEdge        := currentPartnerY + currentPartnerH
+                currentRightEdge         := currentPartnerX + currentPartnerW
+                partnerTouchesLeftOrRight := false
+                partnerTouchesWorkAreaTop := false
+
+                if (haveMonitorWorkArea) {
+                    partnerTouchesLeftOrRight := (   Abs(currentPartnerX - monInfoLeft) <= liveResizeMoveSupportTolerance
+                                                  || Abs(currentRightEdge - monInfoRight) <= liveResizeMoveSupportTolerance)
+                    partnerTouchesWorkAreaTop := (Abs(currentPartnerY - monInfoTop) <= liveResizeMoveSupportTolerance)
+                }
+
+                if (   haveMonitorWorkArea
+                    && partnerTouchesLeftOrRight) {
+                    if (partnerTouchesWorkAreaTop) {
+                        ; Preserve an existing monitor-top dock: Window #1's
+                        ; top stays fixed while its bottom follows Window #2's
+                        ; dragged top edge.
+                        targetTopEdge    := monInfoTop
+                        targetBottomEdge := draggedY
+                    }
+                    else {
+                        ; An undocked follower tracks the shared seam without
+                        ; changing height while its full rect fits. Once the
+                        ; proposed move reaches the monitor top, pin that edge
+                        ; and resize the remaining height instead.
+                        projectedTopEdge := draggedY - currentPartnerH
+                        if (projectedTopEdge < monInfoTop) {
+                            targetTopEdge    := monInfoTop
+                            targetBottomEdge := draggedY
+                        }
+                        else {
+                            targetMoveY       := projectedTopEdge
+                            usedMoveOnlyPartnerHandling := true
+                            shouldMovePartner := (currentPartnerY != targetMoveY)
+                            if (shouldMovePartner)
+                                tbcMoves.Push({ axis: "vertical", hwnd: partnerHwndID, moveOnly: true, partnerInfo: partnerInfo, y: targetMoveY })
+                        }
+                    }
+                }
+                else {
+                    targetTopEdge    := currentPartnerY
+                    targetBottomEdge := draggedY
+                }
             }
 
-            targetOuterHeight := targetBottomEdge - targetTopEdge
-            if (targetOuterHeight <= 0)
-                continue
+            if (!usedMoveOnlyPartnerHandling) {
+                targetOuterHeight := targetBottomEdge - targetTopEdge
+                if (targetOuterHeight <= 0)
+                    continue
 
-            targetMoveY       := targetTopEdge
-            ; As above, preserve the script's vertical offset conversion pattern,
-            ; including the +1 pixel bottom-edge compensation.
-            targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
-            shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
-            if (shouldMovePartner)
-                tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, partnerInfo: partnerInfo, y: targetMoveY })
+                targetMoveY       := targetTopEdge
+                ; As above, preserve the script's vertical offset conversion pattern,
+                ; including the +1 pixel bottom-edge compensation.
+                targetMoveHeight  := targetOuterHeight + 2*Abs(partnerOffsetY) + 1
+                shouldMovePartner := (partnerY != targetMoveY || partnerH != targetMoveHeight)
+                if (shouldMovePartner)
+                    tbcMoves.Push({ axis: "vertical", h: targetMoveHeight, hwnd: partnerHwndID, partnerInfo: partnerInfo, y: targetMoveY })
+            }
         }
         else
             return false
@@ -14668,7 +15395,9 @@ _FinalizeLButtonResizeSync() {
     if !WinGetPosEx(lButtonResizeSyncDraggedHwnd, draggedX, draggedY, draggedW, draggedH, null, null)
         return false
 
-    movePlan := _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH)
+    ; Ignore the gray preview rect here. It is already at the intended target,
+    ; while the real follower still needs the corresponding WinMove applied.
+    movePlan := _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH, false)
     if !IsObject(movePlan)
         return false
 
@@ -14984,6 +15713,12 @@ _TrackLiveResizeSyncTopmostState(hwndID, ByRef topmostStates) {
 ; | TOP/BOTTOM drag:                 |
 ; | - windows touching the moving    |
 ; |   horizontal boundary            |
+; |                                  |
+; | BOTH:                            |
+; | - one perpendicular span must    |
+; |   contain the other              |
+; | - skewed partial overlaps are    |
+; |   excluded                       |
 ; +----------------------------------+
         ; |
         ; v
@@ -15004,11 +15739,14 @@ _TrackLiveResizeSyncTopmostState(hwndID, ByRef topmostStates) {
 ; | - mirror the dragged edge        |
 ; |                                  |
 ; | opposite-side partners:          |
-; | - anchored far edge: resize      |
-; |   against that fixed far edge    |
-; | - floating far edge: keep width  |
-; |   and slide until it reaches a   |
-; |   far-side anchor, then resize   |
+; | - far edge already at a monitor  |
+; |   work-area edge: keep that edge |
+; |   fixed and always resize        |
+; | - far edge not docked: move with |
+; |   the seam while its full rect   |
+; |   fits, then resize at boundary  |
+; | - ordinary follower: resize      |
+; |   against its fixed far edge     |
 ; +----------------------------------+
         ; |
         ; v
@@ -15226,9 +15964,8 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
         if !WinGetPosEx(sameSidePeerHwndID, sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH, null, null)
             continue
 
-        ; Cache the peer's "full monitor height" state once at arm time so the
-        ; live-resize plan can distinguish true split panes from floating side
-        ; followers without recomputing geometry on every timer tick.
+        ; Cache each same-side peer and the outer edge it keeps fixed while it
+        ; mirrors the dragged edge during live resizing.
         resizeTargetInfo := { hwnd: sameSidePeerHwndID, isFullHeight: _IsFullMonitorHeightWindow(sameSidePeerHwndID, monitorNum), role: "peer" }
         resizeTargetInfo.fixedEdge := _GetLiveResizeSyncFixedEdge(sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH, edgeHit, "peer")
         lButtonResizeSyncPartners.Push(resizeTargetInfo)
@@ -15259,10 +15996,15 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
             if !WinGetPosEx(partnerHwndID, partnerX, partnerY, partnerW, partnerH, null, null)
                 continue
 
-            ; Cache only the partner relationship and the seam-fixed edge at arm
-            ; time. Horizontal opposite-side followers re-evaluate move versus
-            ; resize later from the live preview rect so they can switch as soon
-            ; as their far side becomes anchored mid-drag.
+            ; A shared edge alone is insufficient: require nested perpendicular
+            ; spans so a diagonal partial overlap cannot join the resize group.
+            if !_IsLiveResizePartnerOrthogonal(sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH, partnerX, partnerY, partnerW, partnerH, partnerSearchMode, liveResizeEdgeTouchTolerance)
+                continue
+
+            ; Cache the opposite-side relationship at arm time. Each timer tick
+            ; re-reads its preview rect: a follower already docked at its far
+            ; monitor edge resizes from that fixed edge, while an undocked
+            ; follower moves until the monitor boundary requires resizing.
             resizeTargetInfo := { hwnd: partnerHwndID, isFullHeight: partnerIsFullHeight, role: "opposite" }
             resizeTargetInfo.fixedEdge := _GetLiveResizeSyncFixedEdge(partnerX, partnerY, partnerW, partnerH, edgeHit, "opposite")
             lButtonResizeSyncPartners.Push(resizeTargetInfo)
@@ -15328,10 +16070,11 @@ EndLButtonResizeSync() {
 }
 
 ; While a native edge resize is in progress, keep each matched same-side peer
-; and opposite-side partner in sync with the dragged window. Peers mirror the
-; dragged edge directly, while opposite-side partners either preserve their far
-; edge and resize, or preserve width and slide, based on the partner's current
-; preview rect and live far-side anchor state.
+; and opposite-side partner synchronized with the dragged window. Peers resize
+; to mirror the dragged edge. An opposite partner already docked at its far
+; monitor edge resizes from that fixed edge and never moves; an undocked partner
+; moves while its full rect fits, then resizes when it reaches the work-area edge.
+; An ordinary opposite partner resizes against its current far edge.
 UpdateLButtonResizeSync() {
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
@@ -16760,7 +17503,10 @@ return
 ;    lower-z-order window; if none qualifies, use the best higher-z-order match;
 ;    then prefer the smallest absolute gap and largest active-axis overlap.
 ; 4. Apply the selected adjacent vertical and horizontal fits independently.
-;    Finding either adjacent partner prevents the CASE 5 fallback.
+;    For a left/right-docked window and a vertically opposite partner, shift
+;    the whole window first; resize only if that shift would cross the monitor
+;    work area's top or bottom. Finding either adjacent partner prevents the
+;    CASE 5 fallback.
 ; 5. Only when neither adjacent search found a partner, inspect the first docked
 ;    lower-z-order window that overlaps [moved/reference] on at least one axis.
 ; 6. Treat that CASE 5 window only as a size template: copy width and/or height
@@ -17075,6 +17821,11 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; True when a move-first side fit succeeded and later resize fallback
     ; should be skipped.
     usedSideMoveOnlyFit                  := false
+    ; True when a move-first vertical fit succeeded and later resize fallback
+    ; should be skipped.
+    usedVerticalMoveOnlyFit              := false
+    ; Move-first Y position to try before falling back to vertical resize.
+    verticalMoveOnlyTargetY              := ""
     ; Candidate edge that must face the moved window on the vertical axis.
     verticalPartnerEdgeToMatch           := ""
     ; True when the vertical fit keeps the dropped top/bottom side fixed
@@ -17359,10 +18110,10 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     sideHwndID     := adjacentSideHwndID
 
     ; Hierarchy step 4: resolve and apply vertical fitting first. Top/bottom-docked
-    ; windows span from the monitor edge to the opposing partner. Left/right-only
-    ; windows use the mirrored special case: keep the dropped top/bottom side fixed
-    ; while
-    ; moving the opposite side to an above/below partner edge.
+    ; windows span from the monitor edge to the opposing partner. For a
+    ; left/right-docked window, first shift its complete released rectangle away
+    ; from an above/below partner; resize only when that shift would cross the
+    ; monitor work area's top or bottom.
     if (!fullHeightSideFitMode && verticalHwndID && verticalHwndID != movedHwndID && WinGetPosEx(verticalHwndID, verticalWinX, verticalWinY, verticalWinW, verticalWinH, null, null)) {
         c_verticalPartnerRightEdge := verticalWinX + verticalWinW
         c_verticalPartnerW         := verticalWinW
@@ -17371,19 +18122,21 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
 
         if (verticalFitUsesReleasedOuterEdge) {
             if (verticalPartnerEdgeToMatch = "top") {
-                ; Left/right-docked moved window: keep its released top edge
-                ; fixed and resize its bottom edge until it reaches the partner
-                ; below it.
-                targetTopEdge     := movedY
+                ; A partner below pushes the complete moved window upward so
+                ; its height is preserved. If that would cross the work-area
+                ; top, the values below provide the bounded resize fallback.
+                verticalMoveOnlyTargetY := verticalWinY - c_originalMovedH
+                targetTopEdge     := monInfoTop
                 targetBottomEdge  := verticalWinY
                 targetOuterHeight := targetBottomEdge - targetTopEdge
             }
             else {
-                ; Left/right-docked moved window: keep its released bottom edge
-                ; fixed and move/resize its top edge until it reaches the
-                ; partner above it.
+                ; A partner above pushes the complete moved window downward so
+                ; its height is preserved. If that would cross the taskbar/work-
+                ; area bottom, the values below provide the resize fallback.
+                verticalMoveOnlyTargetY := c_verticalWinBottomEdge
                 targetTopEdge     := c_verticalWinBottomEdge
-                targetBottomEdge  := c_movedBottomEdge
+                targetBottomEdge  := monInfoBottom
                 targetOuterHeight := targetBottomEdge - targetTopEdge
             }
         }
@@ -17403,7 +18156,29 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
             targetOuterHeight := targetBottomEdge - targetTopEdge
         }
 
-        if (targetOuterHeight > 0) {
+        ; A projected-bounds check precedes WinMove so move-first fitting never
+        ; sends the window through the taskbar or the opposite monitor edge.
+        if (verticalMoveOnlyTargetY != "") {
+            projectedMoveOnlyBottomEdge := verticalMoveOnlyTargetY + c_originalMovedH
+            if (   verticalMoveOnlyTargetY >= monInfoTop
+                && projectedMoveOnlyBottomEdge <= monInfoBottom)
+            {
+                WinMove, ahk_id %movedHwndID%, , , %verticalMoveOnlyTargetY%
+                WaitForStableWindow(movedHwndID)
+                if (WinGetPosEx(movedHwndID, movedPostMoveX, movedPostMoveY, movedPostMoveW, movedPostMoveH, null, null)) {
+                    movedPostMoveBottomEdge := movedPostMoveY + movedPostMoveH
+                    if (   movedPostMoveY >= (monInfoTop - strictDockEdgeTolerance)
+                        && movedPostMoveBottomEdge <= (monInfoBottom + strictDockEdgeTolerance))
+                    {
+                        usedVerticalMoveOnlyFit := true
+                        didVerticalFit          := true
+                        didFitWindow            := true
+                    }
+                }
+            }
+        }
+
+        if (!usedVerticalMoveOnlyFit && targetOuterHeight > 0) {
             targetMoveY      := targetTopEdge
             targetMoveHeight := targetOuterHeight + 2*Abs(movedOffsetY) + 1
             didVerticalFit   := true
@@ -18295,6 +19070,30 @@ _NormalizeExplorerFolderIdentity(folderIdentity) {
     return folderIdentity
 }
 
+; Convert a NavigateComplete2 filesystem URL into the same folder identity used
+; by the other Explorer resolvers. Virtual and non-file URLs return empty so the
+; active-view PIDL remains the authoritative fallback for those shell locations.
+_NormalizeExplorerNavigationUrl(navigationUrl) {
+    static maxPathChars := 32768
+
+    navigationUrl := Trim(navigationUrl, " `t`r`n")
+    if !RegExMatch(navigationUrl, "i)^file:")
+        return ""
+
+    pathChars := maxPathChars
+    VarSetCapacity(pathBuffer, pathChars * 2, 0)
+    pathCreateResult := DllCall("shlwapi\PathCreateFromUrlW"
+        , "WStr", navigationUrl
+        , "Ptr", &pathBuffer
+        , "UIntP", pathChars
+        , "UInt", 0
+        , "Int")
+    if (pathCreateResult < 0)
+        return ""
+
+    return _NormalizeExplorerFolderIdentity(StrGet(&pathBuffer, "UTF-16"))
+}
+
 ; Normalize a dialog-reported folder path so the native common-dialog message
 ; and breadcrumb fallbacks produce directly comparable folder identities.
 _NormalizeDialogFolderPath(folderPath) {
@@ -18461,6 +19260,11 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
     if (winClass != "CabinetWClass")
         return ""
 
+    ; Associate this authoritative path read with the current navigation-event
+    ; generation. If another event arrives during the synchronous PIDL query, its
+    ; newer generation remains pending for the request timer.
+    navigationReadState := _BeginExplorerNavigationPathRead(hwnd)
+
     ; Preserve the Windows 10 title-based behavior because that Explorer version exposes useful location text there.
     if (!k_isWin11) {
         ; Read the Explorer title because this legacy branch returns it as the current location label.
@@ -18526,8 +19330,11 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
 
     ; Reuse cached state only when it is a valid object because failed or empty entries cannot safely be dereferenced.
     if (IsObject(cacheItem)) {
+        if (cacheItem.activeTabHwnd = activeTabHwnd && IsObject(cacheItem.shellWin))
+            _EnsureExplorerNavigationObserver(cacheItem.shellWin, hwnd, activeTabHwnd)
+
         ; Apply a 10 ms throttle because tight polling loops do not need to repeat COM work within the same instant.
-        if (A_TickCount - cacheItem.lastTick < 10)
+        if (!navigationReadState.hadPendingEvent && A_TickCount - cacheItem.lastTick < 10)
         {
             ; Require the same active tab because a cached path from another tab would report the wrong directory.
             if (cacheItem.activeTabHwnd = activeTabHwnd) {
@@ -18727,6 +19534,12 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
             . " found=" . (foundPath != "")
             . " exception=" . scanException
             . " path=[" . foundPath . "]", False, traceRequestId)
+
+    ; Keep the matched active-tab automation object alive as an event source.
+    ; A matching filesystem NavigateComplete2 URL may satisfy a path-changing
+    ; CabinetWClass request; every other case retains the native PIDL lookup.
+    if IsObject(foundWin)
+        _EnsureExplorerNavigationObserver(foundWin, hwnd, activeTabHwnd)
 
     ; Use a nonempty folder identity immediately because no toolbar fallback is needed when either shell resolver succeeded.
     if (foundPath != "") {
@@ -21487,6 +22300,8 @@ SafeUIA_GetIsControlElement(el, default := 0) {
 ::inlined::
 ::peaks::
 ::posed::
+::tier::
+::tiers::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -21929,7 +22744,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:critiz::criticiz
 :*:desicant::desiccant
 :*:desicat::desiccat
-:*:disparat::disparit
 :*:dissapoint::disappoint
 :*:divsion::division
 :*:dcument::document
@@ -23729,6 +24543,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::it's texture::its texture
 ::it's time::its time
 ::it's users::its users
+::it's utility::its utility
 ::it's value::its value
 ::it's values::its values
 ::it's weight::its weight
