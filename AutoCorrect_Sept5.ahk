@@ -520,7 +520,6 @@ Global k_useNativeSysListViewColumnAutoFit                 := True
 Global currentMon                                          := 0
 ; Previously targeted monitor index for cross-monitor transitions.
 Global previousMon                                         := 0
-; Virtual desktop index being targeted by desktop-switching logic.
 ; Current Explorer path snapshot used by folder-aware actions.
 Global currentPath                                         := ""
 ; Previous Explorer path snapshot used for path-change comparisons.
@@ -644,10 +643,10 @@ Global k_Opacity                                           := 220     ; 255=opaq
 ; | native right-click flow so custom RButton chords do not leak shell input.  |
 ; +----------------------------------------------------------------------------+
 ; Right-button state machine:
-; - held/nativeDown track whether we have started a real OS-level right-click yet.
-; - comboUsed suppresses the fallback Click, Right path when the hold was consumed by a combo.
-; - suppressMenuOnUp dismisses the shell context menu after a successful RButton+wheel action.
-; - taskbarPassthrough keeps the entire custom RButton state machine out of taskbar
+; - rightButtonHeld/rightButtonNativeDown track whether a real OS-level right-click has started.
+; - rightButtonComboUsed suppresses the fallback Click, Right after a combo consumes the hold.
+; - rightButtonSuppressMenuOnUp dismisses the shell menu after an RButton+wheel action.
+; - rightButtonTaskbarPassthrough keeps the custom RButton state machine out of taskbar
 ;   and desktop-shell clicks so those surfaces stay fully native.
 Global rightButtonHeld                                     := false
 Global rightButtonComboUsed                                := false
@@ -2352,15 +2351,9 @@ WhichButton(vPosX, vPosY, hWnd) {
         ; msgbox, 2 - %vName% - %wx% %wy% %ww% %wh%
     }
 
-    ; vValue := "", try vValue := oAcc.accValue(vChildID)
     oAcc := ""
 
     vOutput := ""
-    ; vOutput := "role: " vRole "`r`n"
-    ; If (vRoleText1 == vRoleText2)
-        ; vOutput .= "role text: " vRoleText1 "`r`n"
-    ; Else
-    ; vOutput .= "role text (1): " vRoleText1 "`r`n" "role text (2): " vRoleText2 "`r`n"
     If !errorFound
         vOutput .= "name: " vName ; "`r`n"
     Else
@@ -3225,7 +3218,7 @@ $*RButton::
     if (IsMouseOverShellItemForRButton()) {
         ; Shell items need a real right-button-down immediately so Explorer/Desktop can start
         ; a native right-drag from the item itself. rightButtonNativeDown is what makes the
-        ; up-handler send the balancing {RButton Up}; comboUsed is kept as a safety/intent
+        ; up-handler send the balancing {RButton Up}; rightButtonComboUsed is kept as a safety/intent
         ; marker so this hold is treated as already consumed by a special path.
         rightButtonComboUsed  := true
         rightButtonNativeDown := true
@@ -5692,10 +5685,6 @@ RunDynaWinFind:
     DynaRun(WinFindExpr, Expr_Name)
 Return
 
-; RunDynaAltUp:
-    ; DynaRun(ExprAltUp, ExprAltUp_Name)
-; Return
-
 RunDynaExprTimeout:
     DynaRun(TooltipExpr, ExprTimeout_Name)
 Return
@@ -5814,8 +5803,6 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
 Cycle() {
     global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, k_Opacity, bufferedCycleAdvance
 
-    prev_exe             :=
-    prev_cl              :=
     cycleCount           := 1
     ; Start each Alt+Tab session with an empty buffer. DrawWindowTitlePopup() will set
     ; this if a fast second Tab lands before KeyWait, Tab, D gets a chance to see it.
@@ -5846,7 +5833,6 @@ Cycle() {
                 WinGet, state, MinMax, ahk_id %hwndID%
                 If (state > -1) {
                     ValidWindows.push(hwndID)
-                    ; If (prev_cl != cl || prev_exe != exe) {
                     GroupedWindows.push(hwndID)
 
                     If (GroupedWindows.MaxIndex() == 2) {
@@ -5879,9 +5865,6 @@ Cycle() {
                         Critical, Off
                         Return 0
                     }
-                    ; }
-                    ; prev_exe := exe
-                    ; prev_cl  := cl
                 }
             }
         }
@@ -5901,7 +5884,6 @@ Cycle() {
     If !GetKeyState("LAlt","P")
         Return 0
 
-    ; WinGetTitle, tits, ahk_id %gwHwndId%
     WinGet, pp, ProcessPath , ahk_id %gwHwndId%
     tits := GetAppDisplayNameFromHwnd(gwHwndId)
     DrawWindowTitlePopup(gwHwndId, tits, pp)
@@ -5954,7 +5936,6 @@ Cycle() {
 
                 KeyWait, Tab, U
 
-                ; WinGetTitle, tits,ahk_id %gwHwnd%
                 WinGet, pp, ProcessPath , ahk_id %gwHwndId%
                 tits := GetAppDisplayNameFromHwnd(gwHwndId)
                 DrawWindowTitlePopup(gwHwndId, tits, pp)
@@ -6388,7 +6369,6 @@ ActivateWindow:
     Else
         WinGet, hwndOfTitle, ID, %fulltitle%
 
-    ; DrawBlackMonitor_aot(hwndOfTitle)
     WinGetPosEx(hwndOfTitle, wx, wy, ww, wh, null, null)
     Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 60)
 
@@ -6487,10 +6467,6 @@ DrawRect:
         newH        := h+2*k_border_thickness
 
     } Else If (borderType="inside") {
-        ; WinGet, myState, MinMax, A
-        ; If (myState == 1)
-            ; offset:=8
-        ; Else
         offset      := 0
 
         outerX      := offset
@@ -11158,12 +11134,6 @@ $~LButton::
         Return
     }
 
-    ; tickTotalEnd := A_TickCount
-    ; traceText .= "TOTAL dt=" (tickTotalEnd - tickTotalStart) "ms`n"
-    ; ToolTip, %traceText%
-    ; tooltip, %isColumnHeader%
-    ; tooltip, %timeDiff% ms-allowDoubleclick:%allowDoubleClicks%-isBlankSpaceExplorer:%isBlankSpaceExplorer%-isItemClick:%isItemClick% - isColumnHeader:%isColumnHeader% ; - %_winClassD% - %_winCtrlU% - %LBD_HexColor1% - %LBD_HexColor2% - %LBD_HexColor3% - %lbX1% - %lbX2%
-
     If (timeDiff < floor(k_DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
 
         If (   (InStr(_winCtrlU, "SysListView32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
@@ -12995,10 +12965,6 @@ ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ; Show popup menu by handle o
     ; This is important for proper popup-menu behavior and dismissal.
     DllCall("User32\SetForegroundWindow", "Ptr", mWnd := A_ScriptHwnd)
 
-    ; These were likely considered to prevent interruption while the menu is shown.
-    ; Old_IsCritical := A_IsCritical
-    ; Critical On
-
     ; Show the popup menu at screen position X,Y using the requested flags.
     ; hMenu must be a real HMENU handle at this point.
     ; mWnd is used as the owner window for the popup.
@@ -13022,9 +12988,6 @@ ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ; Show popup menu by handle o
     ; restore the previously focused window.
     If DllCall("User32\GetForegroundWindow", "Ptr") = mWnd And Not WinActive("ahk_id " mWnd)
         DllCall("User32\SetForegroundWindow", "Ptr", pWnd)
-
-    ; Restore previous Critical state if you decide to enable it above.
-    ; Critical %Old_IsCritical%
 
     Return R
 }
@@ -13063,12 +13026,11 @@ CoordYCenterScreen()
 ; gives you roughly the correct results (tested on Windows 7)
 ; The function approximates Windows' Alt-Tab eligibility:
 ; Include: visible, enabled, top-level windows; anything explicitly marked WS_EX_APPWINDOW.
-; Exclude: child/owned/tool windows, non-activating windows, disabled/invisible windows, and some known host processes.
+; Exclude: child/tool windows, non-activating windows, disabled/invisible windows, and some known host processes.
 JEE_WinHasAltTabIcon(hWnd)
 {
     local
     If !(DllCall("user32\GetDesktopWindow", "Ptr") = DllCall("user32\GetAncestor", "Ptr",hWnd, "UInt",1, "Ptr")) ;GA_PARENT := 1
-    ;|| DllCall("user32\GetWindow", "Ptr",hWnd, "UInt",4, "Ptr") ;GW_OWNER := 4 ;affects taskbar but not alt-tab
         Return 0
 
     WinGet, vWinProc, ProcessName, % "ahk_id " hWnd
