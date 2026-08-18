@@ -27,7 +27,6 @@ Global k_VDA_DllName                                 := "VirtualDesktopAccessor_
 Global k_dllPath                                     := A_ScriptDir . "\" . k_VDA_DllName  ; destination: next to EXE/script
 Global hVirtualDesktopAccessor                       := 0
 Global GetDesktopCountProc                           := 0
-Global GoToDesktopNumberProc                         := 0
 Global GetCurrentDesktopNumberProc                   := 0
 Global IsWindowOnCurrentVirtualDesktopProc           := 0
 Global IsWindowOnDesktopNumberProc                   := 0
@@ -469,15 +468,23 @@ Global k_explorerCtrlAddTimeoutMs                          := 1200
 ; Maximum buffered trace characters before a safety flush. Normal requests
 ; flush at their terminal outcome, keeping file I/O out of readiness timing.
 Global k_explorerCtrlAddTraceBufferChars                   := 65536
-; Enables the detailed Explorer/file-dialog CtrlAdd timing trace.
-Global k_explorerCtrlAddTraceEnabled                       := True
-; Persistent trace location beside this script so it is easy to find.
-Global k_explorerCtrlAddTraceFile                          := A_ScriptDir . "\AutoCorrect_ExplorerCtrlAddTrace.log"
 ; Minimum delay before Refresh begins its verified Details/content probe.
 Global k_explorerCtrlAddRefreshMinimumWaitMs               := 300
 ; Shared UIA evidence accepted as proof that an Items View exposes either an
 ; item or a recognized empty-result message.
 Global k_explorerItemsViewContentEvidenceCondition         := "ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search."
+; +----------------------------------------------------------------------------+
+; | Debug Logging Configuration                                                |
+; | Enables diagnostic logs and defines their output files.                   |
+; +----------------------------------------------------------------------------+
+; Enables the detailed Explorer/file-dialog CtrlAdd timing trace.
+Global k_debugLogExplorerCtrlAddEnabled                    := True
+; Persistent trace location beside this script so it is easy to find.
+Global k_debugLogExplorerCtrlAddFile                       := A_ScriptDir . "\AutoCorrect_ExplorerCtrlAddTrace.log"
+; Enables general virtual-desktop, session, and DWM diagnostic logging.
+Global k_debugLogGeneralEnabled                            := False
+; Persistent general diagnostic location beside this script.
+Global k_debugLogGeneralFile                               := A_ScriptDir . "\AutoCorrect_Debug.log"
 ; +----------------------------------------------------------------------------+
 ; | Runtime Context And Click/Drag Scratch State                               |
 ; | Stores the current desktop, monitor, Explorer path, click target, and      |
@@ -514,7 +521,6 @@ Global currentMon                                          := 0
 ; Previously targeted monitor index for cross-monitor transitions.
 Global previousMon                                         := 0
 ; Virtual desktop index being targeted by desktop-switching logic.
-Global targetDesktop                                       := 0
 ; Current Explorer path snapshot used by folder-aware actions.
 Global currentPath                                         := ""
 ; Previous Explorer path snapshot used for path-change comparisons.
@@ -1149,7 +1155,7 @@ _gp(name)
 InitVDA()
 {
     global hVirtualDesktopAccessor, k_dllPath
-    global GetDesktopCountProc, GoToDesktopNumberProc, GetCurrentDesktopNumberProc
+    global GetDesktopCountProc, GetCurrentDesktopNumberProc
     global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
     global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
     global CreateDesktopProc, RemoveDesktopProc
@@ -1184,7 +1190,6 @@ InitVDA()
 
     ; --- core exports (require these) ---
     GetDesktopCountProc                 := _gp("GetDesktopCount")
-    GoToDesktopNumberProc               := _gp("GoToDesktopNumber")
     GetCurrentDesktopNumberProc         := _gp("GetCurrentDesktopNumber")
     IsWindowOnCurrentVirtualDesktopProc := _gp("IsWindowOnCurrentVirtualDesktop")
     IsWindowOnDesktopNumberProc         := _gp("IsWindowOnDesktopNumber")
@@ -1201,7 +1206,6 @@ InitVDA()
 
     ; only require "core" to succeed
     if !(GetDesktopCountProc
-      && GoToDesktopNumberProc
       && GetCurrentDesktopNumberProc
       && IsWindowOnCurrentVirtualDesktopProc
       && IsWindowOnDesktopNumberProc
@@ -2839,9 +2843,7 @@ UnhookHooks:
         DllCall("ole32\CoUninitialize")
         comInitd := ""  ; prevent double-uninit on repeated exit paths
     }
-    ; IMPORTANT:
-    ; Do NOT call CoUninitialize here (not required for clean process exit)
-    ; Do NOT call FreeLibrary on VirtualDesktopAccessor here (can hang on Win11)
+    ; IMPORTANT: Do NOT call FreeLibrary on VirtualDesktopAccessor here; it can hang on Win11.
 return
 
 ; Purpose        : support the taskbar/Start-button workflow that needs a reliable
@@ -5376,127 +5378,37 @@ Return
 #1::
     Critical, On
     StopRecursion := True
-    GoSub, SwitchToVD1
+    SwitchToDesktop(0)
     StopRecursion := False
     SyncModifierSidesToPhys("Ctrl Win")
     Critical, Off
-Return
-
-SwitchToVD1:
-    CurrentDesktop := GetCurrentDesktopNumber() + 1
-    testDesktop := CurrentDesktop
-    while (CurrentDesktop < 1) {
-        Send #^{Right}
-        while (CurrentDesktop == testDesktop) {
-            sleep, 100
-            testDesktop := GetCurrentDesktopNumber() + 1
-        }
-        CurrentDesktop := GetCurrentDesktopNumber() + 1
-    }
-    while (CurrentDesktop > 1) {
-        Send #^{Left}
-        while (CurrentDesktop == testDesktop) {
-            sleep, 100
-            testDesktop := GetCurrentDesktopNumber() + 1
-        }
-        CurrentDesktop := GetCurrentDesktopNumber() + 1
-    }
 Return
 
 #2::
     Critical, On
     StopRecursion := True
-    GoSub, SwitchToVD2
+    SwitchToDesktop(1)
     StopRecursion := False
     SyncModifierSidesToPhys("Ctrl Win")
     Critical, Off
-Return
-
-SwitchToVD2:
-    If  (GetDesktopCount() >= 2) {
-        CurrentDesktop := GetCurrentDesktopNumber() + 1
-        testDesktop := CurrentDesktop
-        while (CurrentDesktop < 2) {
-            Send #^{Right}
-            while (CurrentDesktop == testDesktop) {
-                sleep, 100
-                testDesktop := GetCurrentDesktopNumber() + 1
-            }
-            CurrentDesktop := GetCurrentDesktopNumber() + 1
-        }
-        while (CurrentDesktop > 2) {
-            Send #^{Left}
-            while (CurrentDesktop == testDesktop) {
-                sleep, 100
-                testDesktop := GetCurrentDesktopNumber() + 1
-            }
-            CurrentDesktop := GetCurrentDesktopNumber() + 1
-        }
-    }
 Return
 
 #3::
     Critical, On
     StopRecursion := True
-    GoSub, SwitchToVD3
+    SwitchToDesktop(2)
     SyncModifierSidesToPhys("Ctrl Win")
     StopRecursion := False
     Critical, Off
-Return
-
-SwitchToVD3:
-    If  (GetDesktopCount() >= 3) {
-        CurrentDesktop := GetCurrentDesktopNumber() + 1
-        testDesktop := CurrentDesktop
-        while (CurrentDesktop < 3) {
-            Send #^{Right}
-            while (CurrentDesktop == testDesktop) {
-                sleep, 100
-                testDesktop := GetCurrentDesktopNumber() + 1
-            }
-            CurrentDesktop := GetCurrentDesktopNumber() + 1
-        }
-        while (CurrentDesktop > 3) {
-            Send #^{Left}
-            while (CurrentDesktop == testDesktop) {
-                sleep, 100
-                testDesktop := GetCurrentDesktopNumber() + 1
-            }
-            CurrentDesktop := GetCurrentDesktopNumber() + 1
-        }
-    }
 Return
 
 #4::
     Critical, On
     StopRecursion := True
-    GoSub, SwitchToVD4
+    SwitchToDesktop(3)
     StopRecursion := False
     SyncModifierSidesToPhys("Ctrl Win")
     Critical, Off
-Return
-
-SwitchToVD4:
-    If  (GetDesktopCount() >= 4) {
-        CurrentDesktop := GetCurrentDesktopNumber() + 1
-        testDesktop := CurrentDesktop
-        while (CurrentDesktop < 4) {
-            Send #^{Right}
-            while (CurrentDesktop == testDesktop) {
-                sleep, 100
-                testDesktop := GetCurrentDesktopNumber() + 1
-            }
-            CurrentDesktop := GetCurrentDesktopNumber() + 1
-        }
-        while (CurrentDesktop > 4) {
-            Send #^{Left}
-            while (CurrentDesktop == testDesktop) {
-                sleep, 100
-                testDesktop := GetCurrentDesktopNumber() + 1
-            }
-            CurrentDesktop := GetCurrentDesktopNumber() + 1
-        }
-    }
 Return
 
 ;https://superuser.com/questions/1261225/prevent-alttab-from-switching-to-minimized-windows
@@ -6001,8 +5913,20 @@ Cycle() {
 
         If (GroupedWindows.length() >= 2)
         {
-            ; A quick second Tab can happen while DrawWindowTitlePopup() is still running.
-            ; If that happened, consume the buffered press here instead of waiting for a new one.
+            ; Each additional physical Tab press follows this execution sequence:
+            ; 1. DrawWindowTitlePopup() can set bufferedCycleAdvance := True when one of
+            ;    its four GetKeyState("Tab", "P") expressions runs while Tab is down.
+            ; 2. Copy that value into bufferedAdvance, then clear bufferedCycleAdvance so
+            ;    a later DrawWindowTitlePopup() call can represent one later Tab press.
+            ; 3. If bufferedAdvance is False, KeyWait, Tab, D T0.1 instead waits up to
+            ;    100 ms for Tab to become physically down and sets ErrorLevel = 0 if seen.
+            ; 4. If (bufferedAdvance || !ErrorLevel) evaluates True, update cycleCount,
+            ;    assign gwHwndId, and execute WinActivate for that grouped window.
+            ; 5. KeyWait, Tab, U then waits only for Tab to become physically released;
+            ;    it does not store another Tab-down event. After it returns, the next
+            ;    DrawWindowTitlePopup() call and next loop iteration repeat this sequence.
+            ; bufferedCycleAdvance is a Boolean, not a counter. Multiple complete Tab
+            ; presses before it is copied and cleared remain only one pending advance.
             bufferedAdvance      := bufferedCycleAdvance
             bufferedCycleAdvance := False
             If !bufferedAdvance
@@ -6767,7 +6691,7 @@ Get2ndAlphaForTransparencyTarget(alphaPrimary, alphaTarget) {
     ; If primary is fully opaque, combined opacity is forced to 255 no matter what the other is.
     if (remainingPrimary255 <= 0)
     {
-        return (alphaTarget = 255) ? 0 : 0
+        return 0
     }
 
     ; backgroundThroughOther = requiredBackground / remainingPrimary
@@ -7981,6 +7905,104 @@ _ResolveDialogItemsViewByPoint(dlgHwnd, ByRef itemsEl, transactionTimeout
     return true
 }
 
+; Resolve a CabinetWClass Items View below the native file-panel control chosen
+; by the same scan used for column alignment. The lookup receives only a short
+; sub-budget so the existing window-root search remains a compatibility fallback.
+_ResolveCabinetItemsViewFromNativeControl(explorerHwnd, ByRef itemsEl
+    , transactionTimeout, uiaDeadlineTick, ByRef candidateCount
+    , ByRef resolutionReason, ByRef resolvedCtrlNN := ""
+    , ByRef resolvedCtrlHwnd := 0) {
+    itemsEl := ""
+    candidateCount := 0
+    resolutionReason := ""
+    resolvedCtrlNN := ""
+    resolvedCtrlHwnd := 0
+    if (!explorerHwnd) {
+        resolutionReason := "explorer_hwnd_unavailable"
+        return false
+    }
+
+    ; Reuse SendCtrlAdd()'s native-control scan so readiness and alignment target the same file panel.
+    targetScan := GetSendCtrlAddTargetScan(explorerHwnd, "CabinetWClass")
+    ; Count every unique native candidate so traces distinguish failed discovery from failed UIA resolution.
+    candidateCtrlNNs := []
+    seenCtrlNNs := {}
+    for ctrlIndex, candidateCtrlNN in StrSplit(targetScan.sysListCtrls, A_Space)
+    {
+        if (candidateCtrlNN = "" || seenCtrlNNs.HasKey(candidateCtrlNN))
+            continue
+        candidateCtrlNNs.Push(candidateCtrlNN)
+        seenCtrlNNs[candidateCtrlNN] := True
+    }
+    for ctrlIndex, candidateCtrlNN in StrSplit(targetScan.directCtrls, A_Space)
+    {
+        if (candidateCtrlNN = "" || seenCtrlNNs.HasKey(candidateCtrlNN))
+            continue
+        candidateCtrlNNs.Push(candidateCtrlNN)
+        seenCtrlNNs[candidateCtrlNN] := True
+    }
+    candidateCount := candidateCtrlNNs.Length()
+
+    ; Prefer the focused file panel, then use the chooser's existing modern-Explorer control priorities.
+    ControlGetFocus, focusedCtrlNN, ahk_id %explorerHwnd%
+    preferredCtrlNN := ChooseSendCtrlAddTarget(explorerHwnd, "CabinetWClass"
+        , focusedCtrlNN, targetScan)
+    if (preferredCtrlNN = "") {
+        resolutionReason := candidateCount
+            ? "preferred_native_control_unresolved"
+            : "native_candidates_unavailable"
+        return false
+    }
+
+    ; Resolve the ClassNN to a live child HWND before asking UIA to search only that subtree.
+    ControlGet, preferredCtrlHwnd, Hwnd,, %preferredCtrlNN%, ahk_id %explorerHwnd%
+    if (!preferredCtrlHwnd
+     || !DllCall("user32\IsWindow", "Ptr", preferredCtrlHwnd, "Int")) {
+        resolutionReason := "preferred_native_control_unavailable=" . preferredCtrlNN
+        return false
+    }
+
+    ; Do not let a recycled ClassNN direct the narrow lookup into an unrelated Explorer control.
+    preferredCtrlClass := GetClassName(preferredCtrlHwnd)
+    if (SubStr(preferredCtrlClass, 1, 13) != "SysListView32"
+     && SubStr(preferredCtrlClass, 1, 12) != "DirectUIHWND") {
+        resolutionReason := "unexpected_native_control_class=" . preferredCtrlClass
+        return false
+    }
+
+    remainingMs := uiaDeadlineTick
+        ? uiaDeadlineTick - A_TickCount
+        : transactionTimeout
+    if (remainingMs <= 0) {
+        resolutionReason := "uia_budget_exhausted_before_native_lookup"
+        return false
+    }
+
+    ; Spend at most 60 ms and half the remaining budget here so window-scoped fallback keeps time to run.
+    nativeBudgetMs := Min(60, Max(1, remainingMs // 2))
+    nativeDeadlineTick := A_TickCount + nativeBudgetMs
+    if (uiaDeadlineTick)
+        nativeDeadlineTick := Min(nativeDeadlineTick, uiaDeadlineTick)
+
+    items := FindExplorerItemsViewElement(preferredCtrlHwnd
+        , transactionTimeout, nativeDeadlineTick)
+    if !IsObject(items) {
+        resolutionReason := "control=" . preferredCtrlNN
+            . " hwnd=" . preferredCtrlHwnd
+            . (A_TickCount >= nativeDeadlineTick
+                ? " native_budget_exhausted"
+                : " native_items_view_not_found")
+        return false
+    }
+
+    itemsEl := items
+    resolvedCtrlNN := preferredCtrlNN
+    resolvedCtrlHwnd := preferredCtrlHwnd
+    resolutionReason := "control=" . preferredCtrlNN
+        . " hwnd=" . preferredCtrlHwnd
+    return true
+}
+
 ; Resolve a #32770 file dialog's Items View below its most likely native file-
 ; panel controls. At most two candidates share a short sub-budget so the point
 ; fallback retains time when a provider does not expose the native subtree.
@@ -8116,9 +8138,9 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd, ByRef itemsEl
 }
 
 ; Resolve the current Explorer/file-dialog Items View without deciding whether
-; it is in Details mode or has visible content. #32770 dialogs first search the
-; subtree of likely native file-panel HWNDs, then retain proportional point
-; probing as a compatibility fallback. Explorer windows use their window root.
+; it is in Details mode or has visible content. CabinetWClass first searches the
+; most likely native file-panel subtree and retains its window root as fallback.
+; #32770 similarly prefers native controls, then retains proportional point probing.
 ResolveExplorerItemsView(targetHwndID, ByRef itemsEl := ""
     , transactionTimeout := 2000, uiaDeadlineTick := 0
     , useCachedDialogItems := True, ByRef resolver := ""
@@ -8153,13 +8175,43 @@ ResolveExplorerItemsView(targetHwndID, ByRef itemsEl := ""
     }
 
     WinGetClass, targetClass, ahk_id %targetHwndID%
-    if (targetClass = "CabinetWClass" || targetClass = "ExplorerWClass") {
+    if (targetClass = "CabinetWClass") {
+        nativeReason := ""
+        nativeLookupStartTick := A_TickCount
+        if (_ResolveCabinetItemsViewFromNativeControl(targetHwndID, itemsEl
+            , transactionTimeout, uiaDeadlineTick, candidateCount, nativeReason
+            , resolvedCtrlNN, resolvedCtrlHwnd)) {
+            resolver := "native_scoped"
+            resolutionReason := "native=[" . nativeReason
+                . " lookupMs=" . (A_TickCount - nativeLookupStartTick) . "]"
+            return true
+        }
+        nativeLookupElapsedMs := A_TickCount - nativeLookupStartTick
+
+        windowLookupStartTick := A_TickCount
         itemsEl := FindExplorerItemsViewElement(targetHwndID
             , transactionTimeout, uiaDeadlineTick)
+        windowLookupElapsedMs := A_TickCount - windowLookupStartTick
         resolver := IsObject(itemsEl) ? "window_scoped" : "unresolved"
-        resolutionReason := IsObject(itemsEl)
+        windowReason := IsObject(itemsEl)
             ? "explorer_window_root"
             : "items_view_not_found_below_window"
+        resolutionReason := "fallbackReason=[native=" . nativeReason
+            . " lookupMs=" . nativeLookupElapsedMs . "] window=["
+            . windowReason . " lookupMs=" . windowLookupElapsedMs . "]"
+        return IsObject(itemsEl)
+    }
+
+    if (targetClass = "ExplorerWClass") {
+        windowLookupStartTick := A_TickCount
+        itemsEl := FindExplorerItemsViewElement(targetHwndID
+            , transactionTimeout, uiaDeadlineTick)
+        windowLookupElapsedMs := A_TickCount - windowLookupStartTick
+        resolver := IsObject(itemsEl) ? "window_scoped" : "unresolved"
+        resolutionReason := (IsObject(itemsEl)
+            ? "explorer_window_root"
+            : "items_view_not_found_below_window")
+            . " lookupMs=" . windowLookupElapsedMs
         return IsObject(itemsEl)
     }
 
@@ -9234,10 +9286,10 @@ _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := 
 ; new events without losing them during the disk write.
 _FlushExplorerCtrlAddTrace() {
     global explorerCtrlAddTraceBuffer
-    global k_explorerCtrlAddTraceEnabled
-    global k_explorerCtrlAddTraceFile
+    global k_debugLogExplorerCtrlAddEnabled
+    global k_debugLogExplorerCtrlAddFile
 
-    if (!k_explorerCtrlAddTraceEnabled || explorerCtrlAddTraceBuffer = "")
+    if (!k_debugLogExplorerCtrlAddEnabled || explorerCtrlAddTraceBuffer = "")
         return
 
     Critical, On
@@ -9245,7 +9297,7 @@ _FlushExplorerCtrlAddTrace() {
     explorerCtrlAddTraceBuffer := ""
     Critical, Off
 
-    FileAppend, %traceChunk%, %k_explorerCtrlAddTraceFile%, UTF-8
+    FileAppend, %traceChunk%, %k_debugLogExplorerCtrlAddFile%, UTF-8
     if ErrorLevel {
         ; Preserve the unwritten lines for the next flush attempt rather than
         ; silently losing the evidence when the file is temporarily unavailable.
@@ -9261,8 +9313,8 @@ _TraceExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := 
     global explorerCtrlAddRequestId
     global explorerCtrlAddRequestTracePending
     global explorerCtrlAddTraceBuffer
+    global k_debugLogExplorerCtrlAddEnabled
     global k_explorerCtrlAddTraceBufferChars
-    global k_explorerCtrlAddTraceEnabled
 
     static sessionHeaderWritten := False
 
@@ -9282,7 +9334,7 @@ _TraceExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := 
             explorerCtrlAddRequestTracePending := False
     }
 
-    if !k_explorerCtrlAddTraceEnabled
+    if !k_debugLogExplorerCtrlAddEnabled
         return
 
     ; A_Now avoids a FormatTime call on every probe, keeping trace overhead out
@@ -9690,8 +9742,30 @@ _GetExplorerCtrlAddRequestPath(targetHwnd, windowClass, requestId, ByRef request
     return currentPath
 }
 
-; Publish one non-blocking Explorer CtrlAdd request for CabinetWClass or #32770.
-; The timer callback below applies the source-specific path and readiness rules.
+; Start or replace one non-blocking Explorer CtrlAdd request for CabinetWClass
+; or #32770. The single pending slot intentionally debounces these scenarios:
+; 1. First activation: require the same nonempty path twice before probing the
+;    file view. A confirmed #32770 file dialog may instead use Details mode plus
+;    visible UIA content when every folder-identity backend returns empty.
+; 2. Back, Forward, Up, breadcrumb, Quick Access/SysTreeView32, and generic
+;    file-view double-click navigation normally require a nonempty path different
+;    from initialPath. A confirmed #32770 request may use Details/content state
+;    when its post-click path remains unavailable after the short guard.
+; 3. Path-changing header requests make a guarded early alignment after their
+;    path gate, then retain the verified UIA follow-up to correct Explorer rebuilds.
+;    A header click without a pre-click path baseline uses guarded early, verified,
+;    and final attempts without path comparison. Refresh makes no unverified send;
+;    it waits for its minimum gate and verified Details/content evidence.
+; 4. Confirmed #32770 SysTreeView32 navigation uses the same changed-path,
+;    Details-mode, and UIA item/empty-result proof as other navigation, with the
+;    same unavailable-path view-state fallback.
+;
+; Every verified send requires Details mode plus one visible UIA ListItem or a
+; recognized empty-result message. Eligible #32770 startup/navigation may also
+; make one earlier Details-only send and retain the verified corrective attempt.
+; Event-backed CabinetWClass path changes wake from NavigateComplete2; a bounded
+; watchdog and every #32770 request retain polling. A newer call replaces the one
+; pending request, and its request ID prevents stale callbacks from publishing.
 _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumContentProbeDelayMs := 0, restoreTreeFocus := True, allowBestEffortSend := False, allowPathlessContentReady := False) {
     global explorerCtrlAddRequestAllowBestEffortSend
     global explorerCtrlAddRequestAllowPathlessContentReady
@@ -9826,7 +9900,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     _TraceExplorerCtrlAdd("request_started"
         , "hwnd=" . hwnd
         . " class=" . windowClass
-        . " sourceCtrl=[" . sourceCtrlNN . "]"
+        . " sourceCtrlNN=[" . sourceCtrlNN . "]"
         . " initialPath=[" . initialPath . "]"
         . " requirePathChange=" . requirePathChange
         . " requireStablePath=" . requireStablePath
@@ -10571,10 +10645,11 @@ RunExplorerCtrlAddWhenReady:
         }
 
         ; Header requests already passed button and target classification. Their
-        ; path-changing request either proved the destination changed or entered
-        ; the #32770 pathless view-state fallback. If UIA cannot prove content by the
-        ; deadline, make one final attempt only while that same window is
-        ; foreground and no physical click is active.
+        ; path-changing request either proved the destination changed, lacked a
+        ; usable pre-click path baseline, or entered the #32770 pathless view-state
+        ; fallback. If UIA cannot prove content by the deadline, make one final
+        ; attempt only while that same window is foreground and no physical click
+        ; is active.
         finalTargetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
         finalActiveHwnd   := WinExist("A")
         finalClass        := ""
@@ -10727,7 +10802,7 @@ PostActivationLButtonCheck:
             _TraceExplorerCtrlAdd("header_request_rejected"
                 , "hwnd=" . targetHwnd
                 . " class=" . targetClass
-                . " sourceCtrl=[" . targetCtrl . "]"
+                    . " sourceCtrlNN=[" . targetCtrl . "]"
                 . " headerKind=" . headerKind
                 . " initialPath=[" . initialPath . "]"
                 . " rejectionReason=" . rejectionReason
@@ -11176,7 +11251,7 @@ $~LButton::
                 _TraceExplorerCtrlAdd("header_request_rejected"
                     , "hwnd=" . _winIdU
                     . " class=" . _winClassD
-                    . " sourceCtrl=[" . _winCtrlU . "]"
+                    . " sourceCtrlNN=[" . _winCtrlU . "]"
                     . " headerKind=" . headerKind
                     . " initialPath=[" . navigationStartPath . "]"
                     . " rejectionReason=" . rejectionReason
@@ -11721,7 +11796,6 @@ Return
 
 SwitchDesktop:
     global movehWndId
-    global GoToDesktop := False
 
     Thread, NoTimers, True
     StopRecursion := True
@@ -11760,86 +11834,63 @@ SwitchDesktop:
     }
     Menu, vdeskMenu, Show
 
-    If GoToDesktop
-        sleep, 1000
-
     StopRecursion := False
     Thread, NoTimers, False
 Return
 
 SendWindow:
     global movehWndId
-    global targetDesktop
-    moveLeftConst  := -1
-    moveRightConst := 1
-    moveConst      := 0
 
+    targetDesktopNumber := GetDesktopNumberFromMenuItem(A_ThisMenuItem)
+    if (targetDesktopNumber < 0)
+        Return
+
+    Critical, On
     DetectHiddenWindows, On
 
-    InitialDesktop := GetCurrentDesktopNumber() + 1
-
-    If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move and Go to Desktop 1")
-        targetDesktop := 1
-    Else If (A_ThisMenuItem == "Move to Desktop 2") || (A_ThisMenuItem == "Move and Go to Desktop 2")
-        targetDesktop := 2
-    Else If (A_ThisMenuItem == "Move to Desktop 3") || (A_ThisMenuItem == "Move and Go to Desktop 3")
-        targetDesktop := 3
-    Else If (A_ThisMenuItem == "Move to Desktop 4") || (A_ThisMenuItem == "Move and Go to Desktop 4")
-        targetDesktop := 4
-    Else If (A_ThisMenuItem == "Move to Desktop 5") || (A_ThisMenuItem == "Move and Go to Desktop 5")
-        targetDesktop := 5
-    Else If (A_ThisMenuItem == "Move to Desktop 6") || (A_ThisMenuItem == "Move and Go to Desktop 6")
-        targetDesktop := 6
-    Else If (A_ThisMenuItem == "Move to Desktop 7") || (A_ThisMenuItem == "Move and Go to Desktop 7")
-        targetDesktop := 7
-    Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move and Go to Desktop 8")
-        targetDesktop := 8
+    initialDesktopNumber := GetCurrentDesktopNumber()
 
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
-    If (targetDesktop < InitialDesktop)
+    If (targetDesktopNumber < initialDesktopNumber)
         MoveAndFadeWindow(movehWndId, sw_x, False)
     Else
         MoveAndFadeWindow(movehWndId, sw_x, True)
 
-    If      (A_ThisMenuItem == "Move to Desktop 1") || (A_ThisMenuItem == "Move and Go to Desktop 1")
-        MoveCurrentWindowToDesktop(1)
-    Else If (A_ThisMenuItem == "Move to Desktop 2") || (A_ThisMenuItem == "Move and Go to Desktop 2")
-        MoveCurrentWindowToDesktop(2)
-    Else If (A_ThisMenuItem == "Move to Desktop 3") || (A_ThisMenuItem == "Move and Go to Desktop 3")
-        MoveCurrentWindowToDesktop(3)
-    Else If (A_ThisMenuItem == "Move to Desktop 4") || (A_ThisMenuItem == "Move and Go to Desktop 4")
-        MoveCurrentWindowToDesktop(4)
-    Else If (A_ThisMenuItem == "Move to Desktop 5") || (A_ThisMenuItem == "Move and Go to Desktop 5")
-        MoveCurrentWindowToDesktop(5)
-    Else If (A_ThisMenuItem == "Move to Desktop 6") || (A_ThisMenuItem == "Move and Go to Desktop 6")
-        MoveCurrentWindowToDesktop(6)
-    Else If (A_ThisMenuItem == "Move to Desktop 7") || (A_ThisMenuItem == "Move and Go to Desktop 7")
-        MoveCurrentWindowToDesktop(7)
-    Else If (A_ThisMenuItem == "Move to Desktop 8") || (A_ThisMenuItem == "Move and Go to Desktop 8")
-        MoveCurrentWindowToDesktop(8)
-
-    If !GoToDesktop
-        WinSet, Transparent, 255, ahk_id %movehWndId%
+    MoveWindowToDesktop(movehWndId, targetDesktopNumber)
+    WinSet, Transparent, 255, ahk_id %movehWndId%
 
     DetectHiddenWindows, Off
+    Critical, Off
 Return
 
 SendWindowAndGo:
-    global movehWndId, targetDesktop
+    global movehWndId
 
-    GoToDesktop := True
-    GoSub, SendWindow
+    targetDesktopNumber := GetDesktopNumberFromMenuItem(A_ThisMenuItem)
+    if (targetDesktopNumber < 0)
+        Return
 
-    GoSub, SwitchToVD%targetDesktop%
+    Critical, On
+    DetectHiddenWindows, On
+
+    initialDesktopNumber := GetCurrentDesktopNumber()
+    WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
+    If (targetDesktopNumber < initialDesktopNumber)
+        MoveAndFadeWindow(movehWndId, sw_x, False)
+    Else
+        MoveAndFadeWindow(movehWndId, sw_x, True)
+
+    MoveWindowToDesktopAndSwitch(movehWndId, targetDesktopNumber)
     sleep, 400
 
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
-    If (targetDesktop < InitialDesktop)
+    If (targetDesktopNumber < initialDesktopNumber)
         MoveAndFadeWindow(movehWndId, sw_x, False, "in")
     Else
         MoveAndFadeWindow(movehWndId, sw_x, True, "in")
 
-    GoToDesktop := False
+    DetectHiddenWindows, Off
+    Critical, Off
 Return
 
 ; → Returns the entire window’s bounding box in screen coordinates.
@@ -12280,21 +12331,21 @@ _ValidateResolvedCtrlAddTarget(hwndTop, resolvedTarget) {
 ; supplies a pre-resolved control; traceRequestId only enables diagnostic timing
 ; and must never influence target selection or validation.
 SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := "", waitForExplorerLoad := False, targetScan := "", restoreTreeFocus := True, resolvedTarget := "", traceRequestId := "") {
-    global k_explorerCtrlAddTraceEnabled, k_nativeSysListViewColumnAutoFitMode
+    global k_debugLogExplorerCtrlAddEnabled, k_nativeSysListViewColumnAutoFitMode
     global k_sendCtrlAddShellTabProbeTimeoutMs, k_useNativeSysListViewColumnAutoFit
 
     sendCtrlAddStartTick := A_TickCount
     hasResolvedTarget    := IsObject(resolvedTarget)
     if (traceRequestId = "" && hasResolvedTarget)
         traceRequestId := resolvedTarget.requestId
-    traceThisCall := k_explorerCtrlAddTraceEnabled && traceRequestId != ""
+    traceThisCall := k_debugLogExplorerCtrlAddEnabled && traceRequestId != ""
     resolvedCtrl  := hasResolvedTarget ? resolvedTarget.ctrlNN : ""
     resolvedHwnd  := hasResolvedTarget ? resolvedTarget.hwnd : 0
     if traceThisCall
         _TraceExplorerCtrlAdd("sendctrladd_enter"
             , "targetHwnd=" . initTargetHwnd
             . " targetClass=" . initTargetClass
-            . " sourceCtrl=[" . initFocusedCtrlNN . "]"
+            . " sourceCtrlNN=[" . initFocusedCtrlNN . "]"
             . " waitForExplorerLoad=" . waitForExplorerLoad
             . " restoreTreeFocus=" . restoreTreeFocus
             . " hasTargetScan=" . IsObject(targetScan)
@@ -13441,20 +13492,6 @@ GetDesktopCount() {
     return DllCall(GetDesktopCountProc, "Int")
 }
 
-GoToDesktopNumber(num) {
-    global GoToDesktopNumberProc
-
-    if (!InitVDA() || !GoToDesktopNumberProc)
-        return false
-
-    ; Caller passes 1-based. DLL expects 0-based.
-    correctDesktopNumber := num - 1
-    if (correctDesktopNumber < 0)
-        correctDesktopNumber := 0
-
-    return DllCall(GoToDesktopNumberProc, "Int", correctDesktopNumber, "Int")
-}
-
 GetCurrentDesktopNumber() {
     global GetCurrentDesktopNumberProc
 
@@ -13463,46 +13500,13 @@ GetCurrentDesktopNumber() {
     return DllCall(GetCurrentDesktopNumberProc, "Int")
 }
 
-GoToPrevDesktop() {
-    global GetCurrentDesktopNumberProc
+; Extracts the displayed 1-based desktop number at the end of a virtual-desktop
+; menu item and returns its zero-based internal number, or -1 for invalid text.
+GetDesktopNumberFromMenuItem(menuItem) {
+    if !RegExMatch(menuItem, "(\d+)$", match)
+        return -1
 
-    if (!InitVDA() || !GetCurrentDesktopNumberProc)
-        return false
-
-    current := GetCurrentDesktopNumber() ; typically 0-based
-    last_desktop := GetDesktopCount() - 1                  ; 0-based max index
-
-    if (last_desktop < 0)
-        last_desktop := 0
-
-    ; If current desktop is 0, go to last desktop
-    if (current = 0) {
-        MoveOrGotoDesktopNumber(last_desktop)
-    } else {
-        MoveOrGotoDesktopNumber(current - 1)
-    }
-    return true
-}
-
-GoToNextDesktop() {
-    global GetCurrentDesktopNumberProc
-
-    if (!InitVDA() || !GetCurrentDesktopNumberProc)
-        return false
-
-    current := GetCurrentDesktopNumber() ; typically 0-based
-    last_desktop := GetDesktopCount() - 1                  ; 0-based max index
-
-    if (last_desktop < 0)
-        last_desktop := 0
-
-    ; If current desktop is last, go to first desktop
-    if (current = last_desktop) {
-        MoveOrGotoDesktopNumber(0)
-    } else {
-        MoveOrGotoDesktopNumber(current + 1)
-    }
-    return true
+    return match1 - 1
 }
 
 IsWindowOnCurrentVirtualDesktop(hwnd) {
@@ -13526,17 +13530,26 @@ IsWindowOnDesktopNumber(hwnd, desktopNumber)
         , "Int", desktopNumber)
 }
 
-
-MoveWindowToDesktopNumber(hwnd, desktopNumber)
+; Moves hwnd to the zero-based desktopNumber and returns the DLL operation result.
+MoveWindowToDesktop(hwnd, desktopNumber)
 {
     global MoveWindowToDesktopNumberProc
-    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
+
     if (!InitVDA() || !MoveWindowToDesktopNumberProc)
-        return true
+        return false
+
     return DllCall(MoveWindowToDesktopNumberProc
         , "Ptr", hwnd
         , "Int", desktopNumber
         , "Int") ; return i32
+}
+
+; Moves hwnd to the zero-based desktopNumber, then switches to that desktop.
+; Returns the desktop-switch result after both operations have been requested.
+MoveWindowToDesktopAndSwitch(hwnd, desktopNumber)
+{
+    MoveWindowToDesktop(hwnd, desktopNumber)
+    return SwitchToDesktop(desktopNumber)
 }
 
 IsPinnedWindow(hwnd)
@@ -13586,6 +13599,40 @@ SetDesktopName(desktopNumber, name)
         , "Int") ; return i32
 }
 
+; Switches to the zero-based desktopNumber by sending Ctrl+Win+Left or Right.
+; After each send, waits until GetCurrentDesktopNumber() reports the change.
+SwitchToDesktop(desktopNumber)
+{
+    global GetCurrentDesktopNumberProc
+
+    if (!InitVDA() || !GetCurrentDesktopNumberProc)
+        return false
+
+    desktopCount := GetDesktopCount()
+    if (desktopNumber < 0 || desktopNumber >= desktopCount)
+        return false
+
+    currentDesktopNumber := GetCurrentDesktopNumber()
+    while (currentDesktopNumber < desktopNumber) {
+        previousDesktopNumber := currentDesktopNumber
+        Send #^{Right}
+        while (currentDesktopNumber == previousDesktopNumber) {
+            Sleep, 100
+            currentDesktopNumber := GetCurrentDesktopNumber()
+        }
+    }
+    while (currentDesktopNumber > desktopNumber) {
+        previousDesktopNumber := currentDesktopNumber
+        Send #^{Left}
+        while (currentDesktopNumber == previousDesktopNumber) {
+            Sleep, 100
+            currentDesktopNumber := GetCurrentDesktopNumber()
+        }
+    }
+
+    return true
+}
+
 ; ---- Desktop creation/removal (Win11-only exports in this DLL) ----
 
 CreateDesktop()
@@ -13608,52 +13655,6 @@ RemoveDesktop(removeDesktopNumber, fallbackDesktopNumber)
         , "Int", removeDesktopNumber
         , "Int", fallbackDesktopNumber
         , "Int") ; return i32 (often 1/0)
-}
-
-MoveCurrentWindowToDesktopAndSwitch(desktopNumber) {
-    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
-
-    if (!InitVDA() || !MoveWindowToDesktopNumberProc || !GoToDesktopNumberProc)
-        return false
-
-    ; desktopNumber is already zero-based; pass it directly to both DLL procedures.
-    WinGet, activeHwnd, ID, A
-    DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", desktopNumber, "Int")
-    return DllCall(GoToDesktopNumberProc, "Int", desktopNumber, "Int")
-}
-
-MoveCurrentWindowToDesktop(num) {
-    global MoveWindowToDesktopNumberProc
-
-    if (!InitVDA() || !MoveWindowToDesktopNumberProc)
-        return false
-
-    ; Caller passes 1-based. DLL expects 0-based.
-    correctDesktopNumber := num - 1
-    if (correctDesktopNumber < 0)
-        correctDesktopNumber := 0
-
-    WinGet, activeHwnd, ID, A
-    return DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", correctDesktopNumber, "Int")
-}
-
-MoveOrGotoDesktopNumber(num) {
-    global MoveWindowToDesktopNumberProc, GoToDesktopNumberProc
-    ; num is a zero-based desktop index produced by GoToPrevDesktop() or
-    ; GoToNextDesktop(), so pass it directly to the zero-based DLL procedures.
-
-    if (!InitVDA() || !GoToDesktopNumberProc)
-        return false
-
-    if (GetKeyState("LButton")) {
-        if (!MoveWindowToDesktopNumberProc)
-            return false
-        WinGet, activeHwnd, ID, A
-        DllCall(MoveWindowToDesktopNumberProc, "Ptr", activeHwnd, "Int", num, "Int")
-        return DllCall(GoToDesktopNumberProc, "Int", num, "Int")
-    } else {
-        return DllCall(GoToDesktopNumberProc, "Int", num, "Int")
-    }
 }
 
 getForemostWindowIdOnDesktop(n)
@@ -14691,41 +14692,44 @@ _IsFullMonitorHeightWindow(hwndID, monitorNum) {
             && Abs(winBottomEdge - monInfoBottom) <= strictDockEdgeTolerance)
 }
 
-; Return true when the window already looks like a left- or right-side
-; 3-edge dock during live-resize arm time: full monitor height plus the named
-; outer monitor edge. This is the shape that should make the opposite pane act
-; like a side follower instead of a split pane.
-_IsLiveResizeThreeEdgeDockedOnSide(hwndID, monitorNum, dockSide, refX := "", refY := "", refW := "", refH := "") {
-    liveResizeThreeEdgeDockTolerance := 10
-
-    if (!hwndID || monitorNum < 1)
-        return false
-
-    if (refX = "" || refY = "" || refW = "" || refH = "") {
-        if !WinGetPosEx(hwndID, refX, refY, refW, refH, null, null)
-            return false
-    }
-
-    SysGet, monInfo, MonitorWorkArea, %monitorNum%
-    refRightEdge  := refX + refW
-    refBottomEdge := refY + refH
-
-    if (   Abs(refY - monInfoTop) > liveResizeThreeEdgeDockTolerance
-        || Abs(refBottomEdge - monInfoBottom) > liveResizeThreeEdgeDockTolerance)
-        return false
-
-    if (dockSide = "left")
-        return (Abs(refX - monInfoLeft) <= liveResizeThreeEdgeDockTolerance)
-    if (dockSide = "right")
-        return (Abs(refRightEdge - monInfoRight) <= liveResizeThreeEdgeDockTolerance)
-
-    return false
-}
-
 ; Return true only when an opposite-side live-resize partner is directly
 ; across the requested shared edge and one window's perpendicular span
 ; contains the other's. This preserves narrower panes beneath or beside a
 ; wider pane while rejecting skewed windows that only partially overlap.
+/*
+    Orthogonal partner test (every comparison allows edgeTolerance):
+
+    Vertical pair: candidateTargetEdge = "top"
+    ("bottom" is the same arrangement reflected vertically.)
+
+        +-------------------- Ref --------------------+
+        |                                             |
+        +-----------+---------------------+-----------+  refBottomEdge
+                    |      Candidate      |              ~= candidateY
+                    +---------------------+
+
+        The shared top/bottom edge must be flush, and one horizontal span
+        must completely contain the other. A partial, skewed overlap fails.
+
+    Horizontal pair: candidateTargetEdge = "left"
+    ("right" is the same arrangement reflected horizontally.)
+
+        +------------- Ref -------------+
+        |                               +---------------+
+        |                               |   Candidate   |
+        |                               +---------------+
+        +-------------------------------+
+                                        ^
+                                        refRightEdge ~= candidateX
+
+        The shared left/right edge must be flush, and one vertical span
+        must completely contain the other. A partial, skewed overlap fails.
+
+    Result = sharedEdgeIsFlush
+             AND (refContainsCandidate OR candidateContainsRef)
+
+    Any candidateTargetEdge other than top, bottom, left, or right is false.
+*/
 _IsLiveResizePartnerOrthogonal(refX, refY, refW, refH, candidateX, candidateY, candidateW, candidateH, candidateTargetEdge, edgeTolerance := 10) {
     refRightEdge          := refX + refW
     refBottomEdge         := refY + refH
@@ -15966,7 +15970,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
 
         ; Cache each same-side peer and the outer edge it keeps fixed while it
         ; mirrors the dragged edge during live resizing.
-        resizeTargetInfo := { hwnd: sameSidePeerHwndID, isFullHeight: _IsFullMonitorHeightWindow(sameSidePeerHwndID, monitorNum), role: "peer" }
+        resizeTargetInfo := { hwnd: sameSidePeerHwndID, role: "peer" }
         resizeTargetInfo.fixedEdge := _GetLiveResizeSyncFixedEdge(sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH, edgeHit, "peer")
         lButtonResizeSyncPartners.Push(resizeTargetInfo)
         resizeTargetHwndMap[sameSidePeerHwndID] := true
@@ -16005,7 +16009,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
             ; re-reads its preview rect: a follower already docked at its far
             ; monitor edge resizes from that fixed edge, while an undocked
             ; follower moves until the monitor boundary requires resizing.
-            resizeTargetInfo := { hwnd: partnerHwndID, isFullHeight: partnerIsFullHeight, role: "opposite" }
+            resizeTargetInfo := { hwnd: partnerHwndID, role: "opposite" }
             resizeTargetInfo.fixedEdge := _GetLiveResizeSyncFixedEdge(partnerX, partnerY, partnerW, partnerH, edgeHit, "opposite")
             lButtonResizeSyncPartners.Push(resizeTargetInfo)
             resizeTargetHwndMap[partnerHwndID] := true
@@ -16339,7 +16343,6 @@ join( strArray )
 
 MoveAndFadeWindow(Hwnd, initPosx, toRight := True, fadeInOut := "out") {
     DetectHiddenWindows, On
-    Critical, On
     If toRight
         moveConst := 1
     Else
@@ -16413,7 +16416,6 @@ MoveAndFadeWindow(Hwnd, initPosx, toRight := True, fadeInOut := "out") {
         WinSet, Transparent, 255, ahk_id %Hwnd%
     }
 
-    Critical, Off
     Return
 }
 
@@ -16683,13 +16685,13 @@ mapDesktopsFromRegistry()
     while (CurrentDesktopId and i < DesktopCount) {
         StartPos := (i * IdLength) + 1
         DesktopIter := SubStr(DesktopList, StartPos, IdLength)
-        OutputDebug, The iterator is pointing at %DesktopIter% and count is %i%.
+        WriteGeneralDebugLog("The iterator is pointing at " . DesktopIter . " and count is " . i . ".")
 
         ; Break out If we find a match in the list. If we didn't find anything, keep the
         ; old guess and pray we're still correct :-D.
         If (DesktopIter = CurrentDesktopId) {
             CurrentDesktop := i + 1
-            OutputDebug, Current desktop number is %CurrentDesktop% with an ID of %DesktopIter%.
+            WriteGeneralDebugLog("Current desktop number is " . CurrentDesktop . " with an ID of " . DesktopIter . ".")
             break
         }
         i++
@@ -16703,18 +16705,32 @@ getSessionId()
 {
     ProcessId := DllCall("GetCurrentProcessId", "UInt")
     If ErrorLevel {
-        OutputDebug, Error getting current process id: %ErrorLevel%
+        WriteGeneralDebugLog("Error getting current process id: " . ErrorLevel)
         Return
     }
-    OutputDebug, Current Process Id: %ProcessId%
+    WriteGeneralDebugLog("Current Process Id: " . ProcessId)
 
     DllCall("ProcessIdToSessionId", "UInt", ProcessId, "UInt*", SessionId)
     If ErrorLevel {
-        OutputDebug, Error getting session id: %ErrorLevel%
+        WriteGeneralDebugLog("Error getting session id: " . ErrorLevel)
         Return
     }
-    OutputDebug, Current Session Id: %SessionId%
+    WriteGeneralDebugLog("Current Session Id: " . SessionId)
     Return SessionId
+}
+
+; Append one timestamped general diagnostic message when its debug-log switch is enabled.
+WriteGeneralDebugLog(message)
+{
+    global k_debugLogGeneralEnabled
+    global k_debugLogGeneralFile
+
+    if !k_debugLogGeneralEnabled
+        return False
+
+    logLine := A_Now . "." . A_MSec . " " . message . "`r`n"
+    FileAppend, %logLine%, %k_debugLogGeneralFile%, UTF-8
+    return !ErrorLevel
 }
 
 WinSetAlphaTopmost(guiHwnd, transparencyLevel := 220, isTopmost := true)
@@ -18476,16 +18492,14 @@ WinGetPosEx(hWindow,ByRef X="",ByRef Y="",ByRef Width="",ByRef Height="",ByRef O
             {
             ;-- Do nothing Else (for now)
             }
-         Else
-            outputdebug,
-               (ltrim join`s
-                Function: %A_ThisFunc% -
-                Unknown error calling "dwmapi\DwmGetWindowAttribute".
-                RC=%DWMRC%,
-                ErrorLevel=%ErrorLevel%,
-                A_LastError=%A_LastError%.
-                "GetWindowRect" used instead.
-               )
+         Else {
+            WriteGeneralDebugLog("Function: " . A_ThisFunc
+                . " - Unknown error calling ""dwmapi\DwmGetWindowAttribute""."
+                . " RC=" . DWMRC
+                . ", ErrorLevel=" . ErrorLevel
+                . ", A_LastError=" . A_LastError
+                . ". ""GetWindowRect"" used instead.")
+         }
 
         ;-- Collect the position and size from "GetWindowRect"
         DllCall("GetWindowRect",PtrType,hWindow,PtrType,&RECTPlus)
@@ -20753,7 +20767,10 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
         Return
     ; Popup creation can take long enough for the next Tab/` press to arrive before the
-    ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
+    ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Each of the four
+    ; GetKeyState expressions in this function samples only the key's current physical
+    ; state. bufferedCycleAdvance retains at most one pending advance until the caller
+    ; copies and clears it; it does not count multiple complete presses.
     bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
 
     EnsureWindowTitlePopupGui()
