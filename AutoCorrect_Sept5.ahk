@@ -9124,7 +9124,11 @@ WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove := "", timeoutMs :=
 ; which supports composite controls such as DirectUIHWND*.
 EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15)
 {
-    ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hwndTop%
+    try
+        ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hwndTop%
+    catch
+        return false
+
     if (!hCtl)
         return false
     return EnsureFocusedHwnd(hCtl, totalMs, refocusEveryMs)
@@ -11659,8 +11663,12 @@ ResolveFocusTargetHwnd(hwndTop, ctrlNN, topClass := "")
     if ((topClass = "CabinetWClass" || topClass = "#32770") && InStr(ctrlNN, "DirectUIHWND", True))
         hCtl := GetItemsViewHwnd(hwndTop)
 
-    if (!hCtl)
-        ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hwndTop%
+    if (!hCtl) {
+        try
+            ControlGet, hCtl, Hwnd,, %ctrlNN%, ahk_id %hwndTop%
+        catch
+            hCtl := 0
+    }
 
     if (hCtl)
         cache[cacheKey] := { hwnd: hCtl, tick: A_TickCount }
