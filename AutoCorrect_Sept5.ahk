@@ -450,9 +450,6 @@ Global k_explorerCtrlAddFastPathPollMs                     := 15
 ; After this bounded fast window, directory-change polling uses
 ; k_explorerCtrlAddPollMs.
 Global k_explorerCtrlAddFastPathWindowMs                   := 300
-; Minimum non-blocking settle before a new Explorer or newly tracked file-dialog
-; activation may sample its destination path and file-view readiness.
-Global k_newExplorerCtrlAddMinimumWaitMs                   := 300
 ; Maximum non-blocking wait for a startup request to expose a stable path.
 Global k_newExplorerCtrlAddTimeoutMs                       := 5000
 ; Timer interval for non-blocking Details/content readiness probes.
@@ -2658,18 +2655,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     initFocusedCtrlForWait := ""
     ControlGetFocus, initFocusedCtrlForWait, ahk_id %hWnd%
-    ; Base the fade-settle wait on the actual control shape that SendCtrlAdd()
-    ; targets, so SysListView32-hosting apps such as 7-Zip still wait even
-    ; when their top-level class is not Explorer or #32770. Windows that do not
-    ; expose a likely shell/list target skip this wait so activation stays
-    ; cheaper for the first keystrokes typed right after focus lands.
-    if (NeedsSendCtrlAddFadeWait(hWnd, initFocusedCtrlForWait)) {
+    isFirstTrackedActivation := !HasVal(prevActiveWindows, hWnd)
+    ; Only a newly tracked window may need its initial fade to settle. Base that
+    ; first-activation wait on the actual control shape that SendCtrlAdd() targets,
+    ; so later activations never repeat the synchronous pixel polling.
+    if (isFirstTrackedActivation && NeedsSendCtrlAddFadeWait(hWnd, initFocusedCtrlForWait)) {
         WaitForFadeInStop(hWnd)
     }
 
     LbuttonEnabled := False
 
-    isFirstTrackedActivation := !HasVal(prevActiveWindows, hWnd)
     if ( isFirstTrackedActivation || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
         Critical, On
         prevActiveWindows.push(hWnd)
@@ -2723,15 +2718,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ; Details/content proof. Confirmed #32770 file dialogs normally do the same,
         ; but may use that proof alone when no folder-identity backend returns a path.
         if (dialogKind == "file_dialog") {
-            minimumContentProbeDelayMs := isFirstTrackedActivation
-                ? k_newExplorerCtrlAddMinimumWaitMs
-                : 0
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
-                , minimumContentProbeDelayMs, True, False, True)
+                , 0, True, False, True)
         }
         else if (vWinClass == "CabinetWClass" && isFirstTrackedActivation) {
-            _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
-                , k_newExplorerCtrlAddMinimumWaitMs)
+            _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True)
         }
         else {
             ; tooltip, sent to %initFocusedCtrl%
@@ -10052,9 +10043,9 @@ RunExplorerCtrlAddWhenReady:
         Return
     }
 
-    ; A startup request has no previous directory to compare. After the settling
-    ; period, require the same nonempty path on two timer samples before checking
-    ; Details mode and UIA item/empty-result evidence.
+    ; A startup request has no previous directory to compare. Require the same
+    ; nonempty path on two timer samples before checking Details mode and UIA
+    ; item/empty-result evidence.
     if (requestRequiresStablePath && !explorerCtrlAddRequestStablePathConfirmed
      && !explorerCtrlAddRequestPathlessContentFallbackActive) {
         if (A_TickCount < requestEarliestContentProbeTick) {
@@ -10495,7 +10486,6 @@ RunExplorerCtrlAddWhenReady:
         }
         else if (currentPath != explorerCtrlAddRequestPreviousPath) {
             explorerCtrlAddRequestDeadlineTick             := A_TickCount + k_newExplorerCtrlAddTimeoutMs
-            explorerCtrlAddRequestEarliestContentProbeTick := A_TickCount + k_newExplorerCtrlAddMinimumWaitMs
             explorerCtrlAddRequestPreviousPath             := currentPath
             explorerCtrlAddRequestStablePathConfirmed      := False
             explorerCtrlAddRequestStablePathHitCount       := (currentPath = "") ? 0 : 1
