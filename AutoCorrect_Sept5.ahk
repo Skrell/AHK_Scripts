@@ -50,7 +50,7 @@ SetControlDelay,  1 ;
 ; +----------------------------------------------------------------------------+
 ; | Window, Search, And Selection State                                        |
 ; | Tracks the live window lists, Alt+Tab-style cycling, popup-selection UI,   |
-; | and other top-level state shared by the window-management hotkeys.          |
+; | and other top-level state shared by the window-management hotkeys.         |
 ; +----------------------------------------------------------------------------+
 Global CurrentDesktop                                      := 1
 Global mouseMoving                                         := False
@@ -79,7 +79,7 @@ Global DrawingRect                                         := False
 Global LclickSelected                                      := False
 ; +----------------------------------------------------------------------------+
 ; | Measurement Overlay State                                                  |
-; | Backs the temporary pixel-measure tool so one drag can reuse lightweight    |
+; | Backs the temporary pixel-measure tool so one drag can reuse lightweight   |
 ; | GUI overlays instead of rebuilding them on every mouse move.               |
 ; +----------------------------------------------------------------------------+
 ; True while the pixel-measure drag tool owns the current LButton hold.
@@ -99,9 +99,9 @@ Global currMonWidth                                        := 0
 Global LbuttonEnabled                                      := True
 ; +----------------------------------------------------------------------------+
 ; | Typing Auto-Fix, Deferred Rewrite, And Activation State                    |
-; | Caches whether typing fixes are allowed, queues short-lived deferred text   |
-; | rewrites, and keeps focus/activation bookkeeping cheap while typing or      |
-; | clicking into another window.                                               |
+; | Caches whether typing fixes are allowed, queues short-lived deferred text  |
+; | rewrites, and keeps focus/activation bookkeeping cheap while typing or     |
+; | clicking into another window.                                              |
 ; +----------------------------------------------------------------------------+
 Global X_PriorPriorHotKey                                  :=
 Global StopAutoFix                                         := False
@@ -270,7 +270,7 @@ Global k_tbcAdjustColumnsTargetTtlMs                       := 350
 ; the custom $Enter hotkey instead of through this timer.
 ; +----------------------------------------------------------------------------+
 ; True when the latest physical slash follows another slash in the current
-; whitespace-delimited string, so every FixSlash path shares the same guard.
+; whitespace-delimited string, so every FixSlash path can reject path-like input.
 Global fixSlashCandidateHasPriorSlash                      := False
 ; Whitespace-delimited string sequence in which the last physical slash occurred.
 Global fixSlashLastSlashStringSeq                          := -1
@@ -360,7 +360,7 @@ Global k_postActivationLButtonPollMs                       := 15
 Global k_postActivationLButtonTimeoutMs                    := 1000
 ; +----------------------------------------------------------------------------+
 ; | Explorer CtrlAdd Request State                                             |
-; | Coordinates guarded header attempts and timer-verified readiness sends    |
+; | Coordinates guarded header attempts and timer-verified readiness sends     |
 ; | before delegating each column adjustment to SendCtrlAdd().                 |
 ; +----------------------------------------------------------------------------+
 ; True only for header-button requests. These requests may make a guarded send
@@ -487,10 +487,10 @@ Global k_explorerCtrlAddRefreshMinimumWaitMs               := 300
 Global k_explorerItemsViewContentEvidenceCondition         := "ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search."
 ; +----------------------------------------------------------------------------+
 ; | Debug Logging Configuration                                                |
-; | Enables diagnostic logs and defines their output files.                   |
+; | Enables diagnostic logs and defines their output files.                    |
 ; +----------------------------------------------------------------------------+
 ; Enables the detailed Explorer/file-dialog CtrlAdd timing trace.
-Global k_debugLogExplorerCtrlAddEnabled                    := True
+Global k_debugLogExplorerCtrlAddEnabled                    := False
 ; Persistent trace location beside this script so it is easy to find.
 Global k_debugLogExplorerCtrlAddFile                       := A_ScriptDir . "\AutoCorrect_ExplorerCtrlAddTrace.log"
 ; Enables general virtual-desktop, session, and DWM diagnostic logging.
@@ -1632,6 +1632,7 @@ Return
 ; is that slash+Space lets the real Space land immediately, while slash+Enter
 ; withholds Enter until the queued slash decision is resolved.
 _RequestFixSlash(action) {
+    global fixSlashCandidateHasPriorSlash
     global tbcFixSlashAction
     global tbcFixSlashCtrlNN
     global tbcFixSlashCtrlClass
@@ -1641,7 +1642,7 @@ _RequestFixSlash(action) {
     global tbcFixSlashRequestedTick
     global typingFixSeq
 
-    if (!_ShouldApplyFixSlashCandidate())
+    if (fixSlashCandidateHasPriorSlash)
         return False
 
     CancelTbcTypingFixes(False, False)
@@ -1662,7 +1663,7 @@ _RecordFixSlashCandidate() {
     global fixSlashStringBoundarySeq
 
     fixSlashCandidateHasPriorSlash := (fixSlashLastSlashStringSeq = fixSlashStringBoundarySeq)
-    fixSlashLastSlashStringSeq := fixSlashStringBoundarySeq
+    fixSlashLastSlashStringSeq     := fixSlashStringBoundarySeq
 }
 
 ; Clear slash history when a focus or caret change makes the physical typing
@@ -1672,15 +1673,7 @@ _ResetFixSlashStringTracking() {
     global fixSlashLastSlashStringSeq
 
     fixSlashCandidateHasPriorSlash := False
-    fixSlashLastSlashStringSeq := -1
-}
-
-; Allow FixSlash only when the latest slash is the first slash in the current
-; whitespace-delimited string; a prior slash identifies path-like input.
-_ShouldApplyFixSlashCandidate() {
-    global fixSlashCandidateHasPriorSlash
-
-    return !fixSlashCandidateHasPriorSlash
+    fixSlashLastSlashStringSeq     := -1
 }
 
 ; Inline slash+Enter fast path for classic edits:
@@ -1730,6 +1723,7 @@ _CommitFixSlashEnterInline() {
 ; deferred boundary-key barrier used by non-classic editors.
 _ShouldHandleFixSlashEnter() {
     global disableEnter
+    global fixSlashCandidateHasPriorSlash
     global k_keys
     global StopAutoFix
     global X_PriorPriorHotKey
@@ -1737,7 +1731,7 @@ _ShouldHandleFixSlashEnter() {
     return (disableEnter
          && !IsGoogleDocWindow()
          && !StopAutoFix
-         && _ShouldApplyFixSlashCandidate()
+         && !fixSlashCandidateHasPriorSlash
          && InStr(k_keys, X_PriorPriorHotKey, False)
          && A_PriorHotKey == "~/"
          && A_ThisHotkey == "$Enter"
@@ -1955,11 +1949,17 @@ _ClearTypingAutoFixEligibilityCache() {
 ; A pointer action or focus change invalidates queued typing work tied to the
 ; previous caret or focused control, so discard it before using the new context.
 CancelTbcTypingWorkForContextChange() {
+    ; Cancel deferred slash/Hoty rewrites and release Enter so old-context work cannot affect the new caret.
     CancelTbcTypingFixes(True, True)
+    ; Clear any pending Everything Edit1 auto-fit so it cannot send to a control that is no longer current.
     _ClearTbcEverythingEditAdjustState()
+    ; Invalidate cached editability and reset the Hotstring buffer because the active field may have changed.
     _ClearTypingAutoFixEligibilityCache()
+    ; Discard the queued eligibility refresh so an old control's result cannot overwrite the new context.
     _ClearTbcTypingAutoFixRefresh()
+    ; Forget prior-slash history so text from the previous caret position cannot suppress a valid replacement.
     _ResetFixSlashStringTracking()
+    ; Prewarm eligibility for the new focus context so later hotstring checks can use an up-to-date cache.
     _RequestTypingAutoFixPrewarm()
 }
 
@@ -3682,7 +3682,7 @@ WheelSendCtrlAdd:
     TargetControlHwnd := 0
 
     ; Stage 1: basic request validation.
-    ; If the wheel hook never captured a valid target, there is nothing to do.
+    ; If no wheel hotkey created a valid target request, there is nothing to do.
     if (!tbcAdjustColumnsRequestId || !tbcAdjustColumnsHwnd || tbcAdjustColumnsCtrlNN == "")
         return
 
@@ -7336,8 +7336,8 @@ $^Lbutton Up::
     tooltip,
 Return
 
-; Ordinary caption clicks are also script-owned: block the physical down/up,
-; identify the button on release, then forward one complete click underneath.
+; Block the original caption-button click, then send one replacement click
+; on release unless the title-bar LButton+RButton chord consumed it.
 $Lbutton::
     titleBarChordOwnsLButton := false
 Return
@@ -9965,41 +9965,47 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     useNavigationEvents := requirePathChange && windowClass == "CabinetWClass"
         && _HasExplorerNavigationObserver(hwnd)
 
-    ; This single request slot intentionally debounces competing navigation.
-    ; Record a still-pending predecessor before incrementing the ID makes its
-    ; callbacks stale, distinguishing an intentional replacement from lost work.
-    replacementRequestId := explorerCtrlAddRequestId + 1
-    if explorerCtrlAddRequestTracePending {
-        _TraceExplorerCtrlAdd("request_superseded"
-            , "reason=replaced_by_new_request replacementRequestId=" . replacementRequestId
-            . " replacementHwnd=" . hwnd
-            . " replacementClass=" . windowClass
-            . " replacementSourceCtrlNN=[" . sourceCtrlNN . "]"
-            , False, explorerCtrlAddRequestId)
-    }
+    ; Capture request creation time so every readiness gate uses the same time origin.
+    requestStartTick                     := A_TickCount
+    ; Set the absolute deadline so readiness polling cannot continue indefinitely.
+    requestDeadlineTick                  := requestStartTick + readinessTimeoutMs
+    ; Delay the first content probe when the triggering action requires time to settle.
+    requestEarliestContentProbeTick      := requestStartTick + Max(0, minimumContentProbeDelayMs)
+    ; Enable the shorter polling cadence only when a path-changing request benefits from it.
+    requestFastPathPollIntervalMs        := useFastPathPolling ? k_explorerCtrlAddFastPathPollMs : 0
+    ; Bound fast polling to its initial window so later retries return to the normal cadence.
+    requestFastPathPollUntilTick         := useFastPathPolling ? requestStartTick + k_explorerCtrlAddFastPathWindowMs : 0
+    ; Snapshot the observer generation so a later navigation event can wake this request.
+    requestNavigationGeneration          := useNavigationEvents
+        ? _GetExplorerLastPathReadGeneration(hwnd)
+        : 0
+    ; Schedule fallback polling so event-backed requests still progress if no event arrives.
+    requestNextNavigationFallbackTick    := useNavigationEvents
+        ? requestStartTick + k_explorerCtrlAddNavigationFallbackMs
+        : 0
 
-    requestStartTick                                    := A_TickCount
+    ; Publish the complete single-slot request atomically. Assigning its ID last
+    ; prevents a timer callback from pairing a new ID with partially replaced fields.
+    Critical, On
+    supersededRequestId                                   := explorerCtrlAddRequestId
+    supersededRequestPending                              := explorerCtrlAddRequestTracePending
+    replacementRequestId                                  := explorerCtrlAddRequestId + 1
     explorerCtrlAddRequestAllowBestEffortSend           := allowBestEffortSend
     explorerCtrlAddRequestAllowPathlessContentReady     := allowPathlessContentReady
     explorerCtrlAddRequestClass                         := windowClass
-    explorerCtrlAddRequestDeadlineTick                  := requestStartTick + readinessTimeoutMs
+    explorerCtrlAddRequestDeadlineTick                  := requestDeadlineTick
     explorerCtrlAddRequestDetailsConfirmed              := False
     explorerCtrlAddRequestDetailsReason                 := ""
     explorerCtrlAddRequestDetailsOnlySendMade           := False
     explorerCtrlAddRequestDetailsOnlySendPending        := allowDetailsOnlySend
-    explorerCtrlAddRequestEarliestContentProbeTick      := requestStartTick + Max(0, minimumContentProbeDelayMs)
-    explorerCtrlAddRequestFastPathPollIntervalMs        := useFastPathPolling ? k_explorerCtrlAddFastPathPollMs : 0
-    explorerCtrlAddRequestFastPathPollUntilTick         := useFastPathPolling ? requestStartTick + k_explorerCtrlAddFastPathWindowMs : 0
+    explorerCtrlAddRequestEarliestContentProbeTick      := requestEarliestContentProbeTick
+    explorerCtrlAddRequestFastPathPollIntervalMs        := requestFastPathPollIntervalMs
+    explorerCtrlAddRequestFastPathPollUntilTick         := requestFastPathPollUntilTick
     explorerCtrlAddRequestHwnd                          := hwnd
-    explorerCtrlAddRequestId                            := replacementRequestId
     explorerCtrlAddRequestInitialPath                   := initialPath
     explorerCtrlAddRequestLocationResolver              := ""
-    explorerCtrlAddRequestNavigationGeneration          := useNavigationEvents
-        ? _GetExplorerLastPathReadGeneration(hwnd)
-        : 0
-    explorerCtrlAddRequestNextNavigationFallbackTick    := useNavigationEvents
-        ? requestStartTick + k_explorerCtrlAddNavigationFallbackMs
-        : 0
+    explorerCtrlAddRequestNavigationGeneration          := requestNavigationGeneration
+    explorerCtrlAddRequestNextNavigationFallbackTick    := requestNextNavigationFallbackTick
     explorerCtrlAddRequestPathChangeConfirmed           := !requirePathChange
     explorerCtrlAddRequestPathlessContentFallbackActive := False
     explorerCtrlAddRequestPreProbeSendPending           := allowBestEffortSend
@@ -10014,6 +10020,20 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     explorerCtrlAddRequestStablePathHitCount            := 0
     explorerCtrlAddRequestWaitingForNavigationEvent     := False
     explorerCtrlAddRequestUsesNavigationEvents          := useNavigationEvents
+    explorerCtrlAddRequestId                            := replacementRequestId
+    Critical, Off
+
+    ; This single request slot intentionally debounces competing navigation.
+    ; Trace a still-pending predecessor after its callbacks have been made stale,
+    ; distinguishing an intentional replacement from lost work.
+    if supersededRequestPending {
+        _TraceExplorerCtrlAdd("request_superseded"
+            , "reason=replaced_by_new_request replacementRequestId=" . replacementRequestId
+            . " replacementHwnd=" . hwnd
+            . " replacementClass=" . windowClass
+            . " replacementSourceCtrlNN=[" . sourceCtrlNN . "]"
+            , False, supersededRequestId)
+    }
 
     ; Changed-path checks start at the next timer opportunity. Other requests use
     ; the shared poll interval and schedule exact remaining minimum-gate delays.
@@ -10031,7 +10051,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
         . " allowDetailsOnlySend=" . allowDetailsOnlySend
         . " allowPathlessContentReady=" . allowPathlessContentReady
         . " useNavigationEvents=" . useNavigationEvents
-        . " navigationGeneration=" . explorerCtrlAddRequestNavigationGeneration
+        . " navigationGeneration=" . requestNavigationGeneration
         . " minimumContentProbeDelayMs=" . minimumContentProbeDelayMs
         . " timeoutMs=" . readinessTimeoutMs
         . " firstTimerMs=" . Abs(timerDelay))
@@ -10108,6 +10128,7 @@ RunExplorerCtrlAddWhenReady:
     ; Snapshot the published request before any synchronous path or UIA work.
     ; A newer request changes explorerCtrlAddRequestId, which every slow step
     ; rechecks before it can reuse or update this captured request's state.
+    Critical, On
     requestAllowBestEffortSend       := explorerCtrlAddRequestAllowBestEffortSend
     requestAllowPathlessContentReady := explorerCtrlAddRequestAllowPathlessContentReady
     requestWindowClass                := explorerCtrlAddRequestClass
@@ -10132,7 +10153,6 @@ RunExplorerCtrlAddWhenReady:
     requestStartTick                  := explorerCtrlAddRequestStartTick
     requestSourceCtrlNN               := explorerCtrlAddRequestSourceCtrlNN
     requestUsesNavigationEvents       := explorerCtrlAddRequestUsesNavigationEvents
-    Critical, On
     if (requestId = explorerCtrlAddRequestId)
         explorerCtrlAddRequestWaitingForNavigationEvent := False
     Critical, Off
@@ -10539,51 +10559,68 @@ RunExplorerCtrlAddWhenReady:
     ; Report Details mode separately from visible ListItem/empty-result evidence.
     ; Eligible #32770 startup/navigation requests may align once on Details-only;
     ; every incomplete content result is still retried until the request deadline.
+    ; Capture the start tick so the complete UIA probe duration can be measured.
     contentProbeStartTick := A_TickCount
+    ; Run one shared probe so Details, content, target, and timing results stay correlated.
     contentProbe := _ProbeExplorerDetailsViewState(requestTargetHwnd
-        , k_explorerCtrlAddPollUIATimeoutMs, requestId
-        , requestDetailsConfirmed, requestDetailsReason, requestPreferredTarget)
-    contentProbeElapsedMs := A_TickCount - contentProbeStartTick
-    contentProbeOverBudgetMs := Max(0
-        , contentProbeElapsedMs - k_explorerCtrlAddPollUIATimeoutMs)
+                                                 , k_explorerCtrlAddPollUIATimeoutMs
+                                                 , requestId
+                                                 , requestDetailsConfirmed
+                                                 , requestDetailsReason
+                                                 , requestPreferredTarget)
+
+    ; Measure total probe time because an in-flight UIA call can exceed its requested timeout.
+    contentProbeElapsedMs    := A_TickCount - contentProbeStartTick
+    ; Record only the timeout overrun so traces expose UIA work beyond the requested budget.
+    contentProbeOverBudgetMs := Max(0, contentProbeElapsedMs - k_explorerCtrlAddPollUIATimeoutMs)
+    ; Extract content-evidence lookup time so ListItem/empty-result latency is isolated in traces.
     contentProbeContentEvidenceLookupMs := contentProbe.HasKey("contentEvidenceLookupElapsedMs")
-        ? contentProbe.contentEvidenceLookupElapsedMs
-        : 0
+                                            ? contentProbe.contentEvidenceLookupElapsedMs
+                                            : 0
+    ; Preserve the Details verdict reason so readiness failures identify their exact cause.
     contentProbeDetailsReason := contentProbe.HasKey("detailsReason")
-        ? contentProbe.detailsReason
-        : ""
-    contentProbeDetailsCheckReused := contentProbe.HasKey("detailsCheckReused")
-        && contentProbe.detailsCheckReused
+                                ? contentProbe.detailsReason
+                                : ""
+    ; Record whether a prior positive Details result was reused to show avoided repeat work.
+    contentProbeDetailsCheckReused := contentProbe.HasKey("detailsCheckReused") && contentProbe.detailsCheckReused
+    ; Extract Details-check time separately so its contribution to probe latency is visible.
     contentProbeIsDetailsViewMs := contentProbe.HasKey("isDetailsViewElapsedMs")
-        ? contentProbe.isDetailsViewElapsedMs
-        : 0
+                                    ? contentProbe.isDetailsViewElapsedMs
+                                    : 0
+    ; Extract Items View resolution time so target-discovery delays can be distinguished.
     contentProbeItemsViewResolutionMs := contentProbe.HasKey("itemsViewResolutionElapsedMs")
-        ? contentProbe.itemsViewResolutionElapsedMs
-        : 0
+                                        ? contentProbe.itemsViewResolutionElapsedMs
+                                        : 0
+    ; Preserve the number of searched native candidates to expose resolver search breadth.
     contentProbeItemsViewCandidateCount := contentProbe.HasKey("itemsViewCandidateCount")
-        ? contentProbe.itemsViewCandidateCount
-        : 0
+                                            ? contentProbe.itemsViewCandidateCount
+                                            : 0
+    ; Preserve the resolution outcome so a fallback or miss has a concrete diagnostic reason.
     contentProbeItemsViewResolutionReason := contentProbe.HasKey("itemsViewResolutionReason")
-        ? contentProbe.itemsViewResolutionReason
-        : ""
+                                            ? contentProbe.itemsViewResolutionReason
+                                            : ""
+    ; Preserve the resolver name so traces show which native-scoped or fallback path ran.
     contentProbeItemsViewResolver := contentProbe.HasKey("itemsViewResolver")
-        ? contentProbe.itemsViewResolver
-        : ""
+                                    ? contentProbe.itemsViewResolver
+                                    : ""
+    ; Record how the request-scoped target hint behaved so its optimization can be evaluated.
     contentProbePreferredTargetState := contentProbe.HasKey("preferredTargetState")
-        ? contentProbe.preferredTargetState
-        : "unused"
+                                        ? contentProbe.preferredTargetState
+                                        : "unused"
+    ; Retain the validated native target so later alignment and #32770 probes avoid rediscovery.
     contentProbeResolvedTarget := contentProbe.HasKey("resolvedTarget")
-        ? contentProbe.resolvedTarget
-        : ""
-    contentProbeDetailsReady := contentProbe.HasKey("detailsReady")
-        && contentProbe.detailsReady
-    contentProbeContentReady := contentProbe.HasKey("contentReady")
-        && contentProbe.contentReady
-    contentProbeViewState := contentProbeContentReady
-        ? "details_with_content"
-        : (contentProbeDetailsReady ? "details_only" : "not_details")
-    detailsOnlySendCandidate := (contentProbeViewState == "details_only"
-        && requestDetailsOnlySendPending)
+                                ? contentProbe.resolvedTarget
+                                : ""
+    ; Convert the optional Details result to a strict Boolean for downstream readiness gates.
+    contentProbeDetailsReady := contentProbe.HasKey("detailsReady") && contentProbe.detailsReady
+    ; Convert the optional visible-content result to a strict Boolean before authorizing alignment.
+    contentProbeContentReady := contentProbe.HasKey("contentReady") && contentProbe.contentReady
+    ; Collapse the two readiness flags into one explicit state for later send and retry branches.
+    contentProbeViewState    := contentProbeContentReady
+                                ? "details_with_content"
+                                : (contentProbeDetailsReady ? "details_only" : "not_details")
+    ; Permit the guarded early send only when Details is proven and that attempt remains pending.
+    detailsOnlySendCandidate := (contentProbeViewState == "details_only" && requestDetailsOnlySendPending)
     ; UIA may finish after another click replaces this request. Recheck its ID
     ; before the probe result can update shared state or authorize alignment.
     if (requestId != explorerCtrlAddRequestId) {
