@@ -269,6 +269,13 @@ Global k_tbcAdjustColumnsTargetTtlMs                       := 350
 ; non-classic editors. Classic Edit/RichEdit slash+Enter is handled inline by
 ; the custom $Enter hotkey instead of through this timer.
 ; +----------------------------------------------------------------------------+
+; True when the latest physical slash follows another slash in the current
+; whitespace-delimited string, so every FixSlash path shares the same guard.
+Global fixSlashCandidateHasPriorSlash                      := False
+; Whitespace-delimited string sequence in which the last physical slash occurred.
+Global fixSlashLastSlashStringSeq                          := -1
+; Advances on physical Tab, Enter, or Space so slash history cannot cross strings.
+Global fixSlashStringBoundarySeq                           := 0
 Global tbcFixSlashAction                                   := ""
 ; Focused control name captured when the "/ " fix is queued so the timer can
 ; cancel instead of rewriting text after focus moves to another control.
@@ -366,6 +373,11 @@ Global explorerCtrlAddRequestAllowPathlessContentReady     := False
 Global explorerCtrlAddRequestClass                         := ""
 ; Latest tick at which the pending request may call SendCtrlAdd().
 Global explorerCtrlAddRequestDeadlineTick                  := 0
+; True after CabinetWClass proves Details mode for this request. Later retries
+; reuse only this positive result while still resolving current UIA content.
+Global explorerCtrlAddRequestDetailsConfirmed              := False
+; Diagnostic reason returned by the successful CabinetWClass Details check.
+Global explorerCtrlAddRequestDetailsReason                 := ""
 ; True after a #32770 startup/navigation request aligned a confirmed Details
 ; view before UIA exposed a visible item or recognized empty-folder message.
 Global explorerCtrlAddRequestDetailsOnlySendMade           := False
@@ -404,6 +416,9 @@ Global explorerCtrlAddRequestPathlessContentFallbackActive := False
 ; True until a path-changing header request makes its one pre-UIA alignment.
 ; UIA still runs afterward so a verified send can correct a rebuilt file view.
 Global explorerCtrlAddRequestPreProbeSendPending           := False
+; Request-scoped #32770 native file-panel HWND/ClassNN hint. Every retry
+; revalidates it and resolves a fresh UIA element; no UIA object is retained.
+Global explorerCtrlAddRequestPreferredTarget               := ""
 ; Latest startup directory sample, retained after confirmation across UIA retries
 ; for final pre-send validation.
 Global explorerCtrlAddRequestPreviousPath                  := ""
@@ -1278,6 +1293,7 @@ LL_KeyboardHook(nCode, wParam, lParam)
     ; The warning below describes the old failure mode that happened when
     ; blockKeys swallowed physical KEYUP. The current hook allows KEYUP through.
     global blockKeys, hHookKbd
+    global fixSlashStringBoundarySeq
     global hotstringResetTimerPending
     global hotstringBoundarySeq, hotstringResetAtBoundarySeq
     global physicalTypingSeq
@@ -1318,6 +1334,11 @@ LL_KeyboardHook(nCode, wParam, lParam)
                 || (vkCode >= 0xBA && vkCode <= 0xE2))
             if (isTextInputKey)
                 physicalTypingSeq += 1
+
+            ; Treat whitespace as the end of the current FixSlash string. The
+            ; slash hotkey records its candidate before a later separator arrives.
+            if (vkCode = 0x09 || vkCode = 0x0D || vkCode = 0x20)
+                fixSlashStringBoundarySeq += 1
 
             isBoundary := (vkCode = 0x09 || vkCode = 0x0D || vkCode = 0x20
                 || vkCode = 0xBA || vkCode = 0xDB || vkCode = 0xDD)
@@ -1620,6 +1641,9 @@ _RequestFixSlash(action) {
     global tbcFixSlashRequestedTick
     global typingFixSeq
 
+    if (!_ShouldApplyFixSlashCandidate())
+        return False
+
     CancelTbcTypingFixes(False, False)
     typingFixSeq += 1
     tbcFixSlashAction     := action
@@ -1627,6 +1651,36 @@ _RequestFixSlash(action) {
     tbcFixSlashId         := typingFixSeq
     tbcFixSlashRequestedTick := A_TickCount
     SetTimer, FlushTbcFixSlash, -40
+    return True
+}
+
+; Record whether the slash just typed follows another slash in the same
+; whitespace-delimited string so every FixSlash apply path shares one decision.
+_RecordFixSlashCandidate() {
+    global fixSlashCandidateHasPriorSlash
+    global fixSlashLastSlashStringSeq
+    global fixSlashStringBoundarySeq
+
+    fixSlashCandidateHasPriorSlash := (fixSlashLastSlashStringSeq = fixSlashStringBoundarySeq)
+    fixSlashLastSlashStringSeq := fixSlashStringBoundarySeq
+}
+
+; Clear slash history when a focus or caret change makes the physical typing
+; history unreliable for the newly selected text position.
+_ResetFixSlashStringTracking() {
+    global fixSlashCandidateHasPriorSlash
+    global fixSlashLastSlashStringSeq
+
+    fixSlashCandidateHasPriorSlash := False
+    fixSlashLastSlashStringSeq := -1
+}
+
+; Allow FixSlash only when the latest slash is the first slash in the current
+; whitespace-delimited string; a prior slash identifies path-like input.
+_ShouldApplyFixSlashCandidate() {
+    global fixSlashCandidateHasPriorSlash
+
+    return !fixSlashCandidateHasPriorSlash
 }
 
 ; Inline slash+Enter fast path for classic edits:
@@ -1683,6 +1737,7 @@ _ShouldHandleFixSlashEnter() {
     return (disableEnter
          && !IsGoogleDocWindow()
          && !StopAutoFix
+         && _ShouldApplyFixSlashCandidate()
          && InStr(k_keys, X_PriorPriorHotKey, False)
          && A_PriorHotKey == "~/"
          && A_ThisHotkey == "$Enter"
@@ -1690,6 +1745,9 @@ _ShouldHandleFixSlashEnter() {
 }
 
 FixSlash:
+    if (!StopAutoFix && A_ThisHotkey == "~/")
+        _RecordFixSlashCandidate()
+
     If !IsGoogleDocWindow() && (!StopAutoFix && IsPriorHotKeyLetterKey()) && A_ThisHotkey == "~/"
         disableEnter := True
     Else If !IsGoogleDocWindow() && (!StopAutoFix && IsThisHotKeyLetterKey())
@@ -1901,6 +1959,7 @@ CancelTbcTypingWorkForContextChange() {
     _ClearTbcEverythingEditAdjustState()
     _ClearTypingAutoFixEligibilityCache()
     _ClearTbcTypingAutoFixRefresh()
+    _ResetFixSlashStringTracking()
     _RequestTypingAutoFixPrewarm()
 }
 
@@ -1999,7 +2058,7 @@ _IsDeferredWorkStillValid(expectedHwnd, expectedCtrlNN := "", expectedId := 0, c
 
 ; Captures the currently focused control identity so deferred typing rewrites can
 ; require the exact same edit target before they mutate caret-relative text.
-TryCaptureCompleteFocusSnapshot(activeHwnd, ByRef ctrlNN, ByRef ctrlHwnd, ByRef ctrlClass) {
+TryCaptureActiveFocusSnapshotFull(activeHwnd, ByRef ctrlNN, ByRef ctrlHwnd, ByRef ctrlClass) {
     if !CaptureActiveFocusSnapshot(snapshotHwnd, ctrlNN, ctrlHwnd, ctrlClass, activeHwnd)
         return false
 
@@ -2060,7 +2119,7 @@ _IsTbcFixSlashStillValid() {
     if (!tbcFixSlashCtrlHwnd && tbcFixSlashCtrlClass = "")
         return True
 
-    if !TryCaptureCompleteFocusSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureActiveFocusSnapshotFull(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return False
 
     if (tbcFixSlashCtrlNN != "" && currentCtrlNN != tbcFixSlashCtrlNN)
@@ -2120,7 +2179,7 @@ _IsTbcHotyStillValid() {
     if (!tbcHotyCtrlHwnd && tbcHotyCtrlClass = "")
         return true
 
-    if !TryCaptureCompleteFocusSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureActiveFocusSnapshotFull(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
     if (tbcHotyCtrlNN != "" && currentCtrlNN != tbcHotyCtrlNN)
@@ -2156,7 +2215,7 @@ _TryApplyTbcFixSlashClassicRewrite() {
     if !IsClassicEditControlClass(tbcFixSlashCtrlClass)
         return False
 
-    if !TryCaptureCompleteFocusSnapshot(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureActiveFocusSnapshotFull(tbcFixSlashHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return False
 
     if (currentCtrlNN != tbcFixSlashCtrlNN || currentCtrlHwnd != tbcFixSlashCtrlHwnd || currentCtrlClass != tbcFixSlashCtrlClass)
@@ -2232,7 +2291,7 @@ _TryApplyTbcHotyClassicRewrite() {
     if !IsClassicEditControlClass(tbcHotyCtrlClass)
         return false
 
-    if !TryCaptureCompleteFocusSnapshot(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureActiveFocusSnapshotFull(tbcHotyHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
     if (currentCtrlNN != tbcHotyCtrlNN || currentCtrlHwnd != tbcHotyCtrlHwnd || currentCtrlClass != tbcHotyCtrlClass)
@@ -5051,7 +5110,7 @@ $Enter::
         currentFixSlashEnterCtrlHwnd  := 0
         currentFixSlashEnterCtrlClass := ""
 
-        if (TryCaptureCompleteFocusSnapshot(currentFixSlashEnterHwnd, currentFixSlashEnterCtrlNN, currentFixSlashEnterCtrlHwnd, currentFixSlashEnterCtrlClass)
+        if (TryCaptureActiveFocusSnapshotFull(currentFixSlashEnterHwnd, currentFixSlashEnterCtrlNN, currentFixSlashEnterCtrlHwnd, currentFixSlashEnterCtrlClass)
             && IsClassicEditControlClass(currentFixSlashEnterCtrlClass)) {
             ; Classic Edit/RichEdit keeps the older immediate Enter-thread path.
             ; Non-classic editors cannot prove the rewrite inline as reliably, so
@@ -5066,7 +5125,8 @@ $Enter::
             ; wait for brief idle, revalidate the same target, then apply or
             ; cancel. The extra rule here is that Enter itself stays withheld
             ; until the queued slash rewrite has been resolved.
-            _RequestFixSlash("enter")
+            if (!_RequestFixSlash("enter"))
+                Send, {Enter}
         }
     }
     else {
@@ -5133,6 +5193,7 @@ Return
 
 $~^Backspace::
     CancelTbcTypingFixes(True, True)
+    _ResetFixSlashStringTracking()
     Hotstring("Reset")
 Return
 
@@ -5141,6 +5202,7 @@ Return
 ; against text the user has already changed or navigated away from.
 $~Backspace::
     CancelTbcTypingFixes(True, True)
+    _ResetFixSlashStringTracking()
     TimeOfLastHotkeyTyped := A_TickCount
     lastHotkeyTyped := "~Backspace"
     X_PriorPriorHotKey :=
@@ -5148,11 +5210,13 @@ Return
 
 $~Left::
     CancelTbcTypingFixes(True, True)
+    _ResetFixSlashStringTracking()
     X_PriorPriorHotKey :=
 Return
 
 $~Right::
     CancelTbcTypingFixes(True, True)
+    _ResetFixSlashStringTracking()
     X_PriorPriorHotKey :=
 Return
 
@@ -8107,20 +8171,37 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd, ByRef itemsEl
 ; Resolve the current Explorer/file-dialog Items View without deciding whether
 ; it is in Details mode or has visible content. CabinetWClass first searches the
 ; most likely native file-panel subtree and retains its window root as fallback.
-; #32770 similarly prefers native controls, then retains proportional point probing.
-ResolveExplorerItemsView(targetHwndID, ByRef itemsEl := ""
-    , transactionTimeout := 2000, uiaDeadlineTick := 0
-    , useCachedDialogItems := True, ByRef resolver := ""
-    , ByRef candidateCount := 0, ByRef resolutionReason := ""
-    , ByRef resolvedCtrlNN := "", ByRef resolvedCtrlHwnd := 0) {
+; #32770 may first try a validated request-scoped native target, then scans all
+; native candidates and retains proportional point probing as the final fallback.
+ResolveExplorerItemsView( targetHwndID                           ; Top-level Explorer/dialog HWND that confines discovery to the intended window.
+                        , ByRef itemsEl              := ""       ; Returns the current Items View UIA element for later Details/content checks.
+                        , transactionTimeout         := 2000     ; Supplies the UIA lookup budget when no tighter shared deadline remains.
+                        , uiaDeadlineTick            := 0        ; Supplies the shared deadline used to request remaining time and stop new work after expiry.
+                        , useCachedDialogItems       := True     ; Allows safe reuse of the dialog point-fallback cache.
+                        , ByRef resolver             := ""       ; Identifies the successful discovery path for fallback tracing.
+                        , ByRef candidateCount       := 0        ; Reports how many native file-panel candidates were examined.
+                        , ByRef resolutionReason     := ""       ; Reports the concrete evidence explaining discovery success or failure.
+                        , ByRef resolvedCtrlNN       := ""       ; Returns the native ClassNN associated with itemsEl for direct targeting.
+                        , ByRef resolvedCtrlHwnd     := 0        ; Returns the native control HWND for later validation and targeting.
+                        , preferredTarget            := ""       ; Supplies an optional request-scoped HWND/ClassNN hint to avoid rescanning #32770.
+                        , ByRef preferredTargetState := "") {    ; Reports whether that hint was unused, invalid, missed, or successfully resolved.
     global UIA
 
-    itemsEl := ""
-    resolver := ""
-    candidateCount := 0
-    resolutionReason := ""
-    resolvedCtrlNN := ""
-    resolvedCtrlHwnd := 0
+    ; Clear the returned UIA Items View so a failed lookup cannot expose an earlier invocation's element.
+    itemsEl              := ""
+    ; Clear the resolver name so tracing identifies only the discovery path used by this invocation.
+    resolver             := ""
+    ; Reset the candidate count so tracing reports only the native controls examined by this invocation.
+    candidateCount       := 0
+    ; Clear the resolution evidence so callers can diagnose this invocation's lookup outcome precisely.
+    resolutionReason     := ""
+    ; Clear the returned ClassNN so a failed ownership check cannot expose a stale native target identity.
+    resolvedCtrlNN       := ""
+    ; Clear the returned control HWND so later work cannot reuse a native target that was not proven here.
+    resolvedCtrlHwnd     := 0
+    ; Default the optional target hint to unused until validation proves whether it was resolved, invalid, or missed.
+    preferredTargetState := "unused"
+
     if (!targetHwndID) {
         resolutionReason := "target_hwnd_unavailable"
         return false
@@ -8146,8 +8227,7 @@ ResolveExplorerItemsView(targetHwndID, ByRef itemsEl := ""
         nativeReason := ""
         nativeLookupStartTick := A_TickCount
         if (_ResolveCabinetItemsViewFromNativeControl(targetHwndID, itemsEl
-            , transactionTimeout, uiaDeadlineTick, candidateCount, nativeReason
-            , resolvedCtrlNN, resolvedCtrlHwnd)) {
+            , transactionTimeout, uiaDeadlineTick, candidateCount, nativeReason, resolvedCtrlNN, resolvedCtrlHwnd)) {
             resolver := "native_scoped"
             resolutionReason := "native=[" . nativeReason
                 . " lookupMs=" . (A_TickCount - nativeLookupStartTick) . "]"
@@ -8171,11 +8251,10 @@ ResolveExplorerItemsView(targetHwndID, ByRef itemsEl := ""
 
     if (targetClass = "ExplorerWClass") {
         windowLookupStartTick := A_TickCount
-        itemsEl := FindExplorerItemsViewElement(targetHwndID
-            , transactionTimeout, uiaDeadlineTick)
+        itemsEl               := FindExplorerItemsViewElement(targetHwndID , transactionTimeout, uiaDeadlineTick)
         windowLookupElapsedMs := A_TickCount - windowLookupStartTick
-        resolver := IsObject(itemsEl) ? "window_scoped" : "unresolved"
-        resolutionReason := (IsObject(itemsEl)
+        resolver              := IsObject(itemsEl) ? "window_scoped" : "unresolved"
+        resolutionReason      := (IsObject(itemsEl)
             ? "explorer_window_root"
             : "items_view_not_found_below_window")
             . " lookupMs=" . windowLookupElapsedMs
@@ -8187,11 +8266,41 @@ ResolveExplorerItemsView(targetHwndID, ByRef itemsEl := ""
         return false
     }
 
+    ; Revalidate a prior #32770 probe's native HWND/ClassNN before resolving a
+    ; new UIA object. Failure falls through to the complete candidate scan.
+    if IsObject(preferredTarget) {
+        preferredTargetState := "invalid"
+        validatedPreferredCtrlNN := _ValidateResolvedCtrlAddTarget(targetHwndID, preferredTarget)
+        if (validatedPreferredCtrlNN != "") {
+            preferredTargetState     := "miss"
+            preferredLookupStartTick := A_TickCount
+            preferredLookupBudgetMs  := Min(transactionTimeout, 50)
+            if (uiaDeadlineTick)
+                preferredLookupBudgetMs := Min(preferredLookupBudgetMs, Max(1, uiaDeadlineTick - A_TickCount))
+            preferredLookupDeadlineTick := uiaDeadlineTick
+                ? Min(uiaDeadlineTick, A_TickCount + preferredLookupBudgetMs)
+                : A_TickCount + preferredLookupBudgetMs
+            itemsEl := FindExplorerItemsViewElement(preferredTarget.hwnd, preferredLookupBudgetMs, preferredLookupDeadlineTick)
+            preferredLookupElapsedMs := A_TickCount - preferredLookupStartTick
+            if IsObject(itemsEl) {
+                preferredTargetState := "hit"
+                resolver             := "preferred_native"
+                candidateCount       := 1
+                resolvedCtrlNN       := validatedPreferredCtrlNN
+                resolvedCtrlHwnd     := preferredTarget.hwnd + 0
+                resolutionReason     := "control=" . resolvedCtrlNN
+                    . " hwnd=" . resolvedCtrlHwnd
+                    . " lookupMs=" . preferredLookupElapsedMs
+                return true
+            }
+        }
+    }
+
     nativeReason := ""
     if (_ResolveDialogItemsViewFromNativeControls(targetHwndID, itemsEl
         , transactionTimeout, uiaDeadlineTick, candidateCount, nativeReason
         , resolvedCtrlNN, resolvedCtrlHwnd)) {
-        resolver := "native_scoped"
+        resolver         := "native_scoped"
         resolutionReason := nativeReason
         return true
     }
@@ -8500,20 +8609,43 @@ IsDetailsView_ExplorerCOM(winHwnd := "", ByRef detailsReason := "") {
     return false
 }
 
-IsDetailsView(winHwnd := "", ByRef itemsEl := "", transactionTimeout := 2000
-    , uiaDeadlineTick := 0, useCachedDialogItems := True
-    , ByRef detailsReason := "", ByRef itemsViewResolver := ""
-    , ByRef itemsViewCandidateCount := 0
-    , ByRef itemsViewResolutionReason := "", ByRef resolvedCtrlNN := ""
-    , ByRef resolvedCtrlHwnd := 0, ByRef itemsViewResolutionElapsedMs := 0) {
-    detailsReason := ""
-    itemsEl := ""
-    itemsViewResolver := ""
-    itemsViewCandidateCount := 0
-    itemsViewResolutionReason := ""
-    resolvedCtrlNN := ""
-    resolvedCtrlHwnd := 0
+; Determine whether an Explorer window or #32770 file dialog currently exposes
+; a Details view. #32770 also returns its accepted Items View and native target
+; metadata so subsequent work can avoid rediscovery while native ownership remains proven.
+IsDetailsView(winHwnd := ""                                          ; Window to test; an empty value uses the active window.
+            , ByRef itemsEl                      := ""               ; Returns the resolved #32770 Items View for later content checks.
+            , transactionTimeout                 := 2000             ; Supplies the #32770 UIA budget for resolving and testing the Items View.
+            , uiaDeadlineTick                    := 0                ; Supplies the shared deadline used to request remaining time and stop new work after expiry.
+            , useCachedDialogItems               := True             ; Allows safe reuse of cached #32770 point-fallback data.
+            , ByRef detailsReason                := ""               ; Reports the exact Details-mode evidence used for decisions and tracing.
+            , ByRef itemsViewResolver            := ""               ; Identifies the #32770 discovery path that supplied the tested Items View.
+            , ByRef itemsViewCandidateCount      := 0                ; Reports how many native dialog candidates were examined.
+            , ByRef itemsViewResolutionReason    := ""               ; Reports Items View discovery evidence separately from Details evidence.
+            , ByRef resolvedCtrlNN               := ""               ; Returns the native ClassNN proven to own the accepted Items View.
+            , ByRef resolvedCtrlHwnd             := 0                ; Returns that native HWND when ownership is proven, avoiding later rediscovery.
+            , ByRef itemsViewResolutionElapsedMs := 0                ; Accumulates lookup time so tracing can isolate resolver latency.
+            , preferredTarget                    := ""               ; Supplies an optional request-scoped #32770 native target hint.
+            , ByRef preferredTargetState         := "") {            ; Reports whether that hint was unused, invalid, missed, or successfully reused.
+
+    ; Clear the returned Details-mode evidence so this invocation reports only its own result.
+    detailsReason                := ""
+    ; Clear the returned UIA Items View so a failed lookup cannot expose an earlier invocation's element.
+    itemsEl                      := ""
+    ; Clear the resolver name so tracing identifies only the discovery path used by this invocation.
+    itemsViewResolver            := ""
+    ; Reset the candidate count so tracing reports only the native controls examined by this invocation.
+    itemsViewCandidateCount      := 0
+    ; Clear the resolution evidence so callers can distinguish this invocation's lookup outcome precisely.
+    itemsViewResolutionReason    := ""
+    ; Clear the returned ClassNN so a failed ownership check cannot expose a stale native target identity.
+    resolvedCtrlNN               := ""
+    ; Clear the returned control HWND so later work cannot reuse a native target that was not proven here.
+    resolvedCtrlHwnd             := 0
+    ; Reset accumulated resolver time so tracing measures only this invocation's Items View lookup cost.
     itemsViewResolutionElapsedMs := 0
+    ; Default the optional target hint to unused until validation proves whether it was reused, invalid, or missed.
+    preferredTargetState         := "unused"
+
     if (!winHwnd)
         WinGet, winHwnd, ID, A
     if (!winHwnd) {
@@ -8528,10 +8660,18 @@ IsDetailsView(winHwnd := "", ByRef itemsEl := "", transactionTimeout := 2000
 
     if (cls = "#32770") {
         itemsViewResolutionStartTick := A_TickCount
-        itemsViewResolved := ResolveExplorerItemsView(winHwnd, itemsEl, transactionTimeout
-            , uiaDeadlineTick, useCachedDialogItems, itemsViewResolver
-            , itemsViewCandidateCount, itemsViewResolutionReason
-            , resolvedCtrlNN, resolvedCtrlHwnd)
+        itemsViewResolved := ResolveExplorerItemsView(winHwnd
+                                                    , itemsEl
+                                                    , transactionTimeout
+                                                    , uiaDeadlineTick
+                                                    , useCachedDialogItems
+                                                    , itemsViewResolver
+                                                    , itemsViewCandidateCount
+                                                    , itemsViewResolutionReason
+                                                    , resolvedCtrlNN
+                                                    , resolvedCtrlHwnd
+                                                    , preferredTarget
+                                                    , preferredTargetState)
         itemsViewResolutionElapsedMs += A_TickCount - itemsViewResolutionStartTick
         if !itemsViewResolved {
             detailsReason := "items_view_resolution_failed"
@@ -8541,10 +8681,11 @@ IsDetailsView(winHwnd := "", ByRef itemsEl := "", transactionTimeout := 2000
             , transactionTimeout, detailsReason)
             return true
 
-        ; A native candidate can expose a different List beneath an ambiguous
-        ; DirectUI host. Preserve point probing as the final authority before
-        ; concluding that the current #32770 file panel is not in Details mode.
-        if (itemsViewResolver = "native_scoped") {
+        ; A preferred or newly scanned native candidate can expose a different
+        ; List beneath an ambiguous DirectUI host. Preserve point probing as the
+        ; final authority before concluding that the file panel is not Details.
+        if (itemsViewResolver = "native_scoped"
+         || itemsViewResolver = "preferred_native") {
             nativeDetailsReason := detailsReason
             pointItemsEl := ""
             pointReason := ""
@@ -9734,6 +9875,8 @@ _GetExplorerCtrlAddRequestPath(targetHwnd, windowClass, requestId, ByRef request
 ; Every verified send requires Details mode plus one visible UIA ListItem or a
 ; recognized empty-result message. Eligible #32770 startup/navigation may also
 ; make one earlier Details-only send and retain the verified corrective attempt.
+; CabinetWClass reuses a positive Details-mode result within the same request,
+; while resolving the current Items View and visible-content proof on every retry.
 ; Event-backed CabinetWClass path changes wake from NavigateComplete2; a bounded
 ; watchdog and every #32770 request retain polling. A newer call replaces the one
 ; pending request, and its request ID prevents stale callbacks from publishing.
@@ -9742,6 +9885,8 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     global explorerCtrlAddRequestAllowPathlessContentReady
     global explorerCtrlAddRequestClass
     global explorerCtrlAddRequestDeadlineTick
+    global explorerCtrlAddRequestDetailsConfirmed
+    global explorerCtrlAddRequestDetailsReason
     global explorerCtrlAddRequestDetailsOnlySendMade
     global explorerCtrlAddRequestDetailsOnlySendPending
     global explorerCtrlAddRequestEarliestContentProbeTick
@@ -9756,6 +9901,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     global explorerCtrlAddRequestPathChangeConfirmed
     global explorerCtrlAddRequestPathlessContentFallbackActive
     global explorerCtrlAddRequestPreProbeSendPending
+    global explorerCtrlAddRequestPreferredTarget
     global explorerCtrlAddRequestPreviousPath
     global explorerCtrlAddRequestRequirePathChange
     global explorerCtrlAddRequestRequireStablePath
@@ -9831,39 +9977,44 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
             . " replacementSourceCtrlNN=[" . sourceCtrlNN . "]"
             , False, explorerCtrlAddRequestId)
     }
-    requestStartTick                              := A_TickCount
-    explorerCtrlAddRequestAllowBestEffortSend     := allowBestEffortSend
-    explorerCtrlAddRequestAllowPathlessContentReady := allowPathlessContentReady
-    explorerCtrlAddRequestClass                   := windowClass
-    explorerCtrlAddRequestDeadlineTick            := requestStartTick + readinessTimeoutMs
-    explorerCtrlAddRequestDetailsOnlySendMade     := False
-    explorerCtrlAddRequestDetailsOnlySendPending  := allowDetailsOnlySend
-    explorerCtrlAddRequestEarliestContentProbeTick := requestStartTick + Max(0, minimumContentProbeDelayMs)
-    explorerCtrlAddRequestFastPathPollIntervalMs  := useFastPathPolling ? k_explorerCtrlAddFastPathPollMs : 0
-    explorerCtrlAddRequestFastPathPollUntilTick   := useFastPathPolling ? requestStartTick + k_explorerCtrlAddFastPathWindowMs : 0
-    explorerCtrlAddRequestHwnd                    := hwnd
-    explorerCtrlAddRequestId                      := replacementRequestId
-    explorerCtrlAddRequestInitialPath             := initialPath
-    explorerCtrlAddRequestLocationResolver        := ""
-    explorerCtrlAddRequestNavigationGeneration    := useNavigationEvents
+
+    requestStartTick                                    := A_TickCount
+    explorerCtrlAddRequestAllowBestEffortSend           := allowBestEffortSend
+    explorerCtrlAddRequestAllowPathlessContentReady     := allowPathlessContentReady
+    explorerCtrlAddRequestClass                         := windowClass
+    explorerCtrlAddRequestDeadlineTick                  := requestStartTick + readinessTimeoutMs
+    explorerCtrlAddRequestDetailsConfirmed              := False
+    explorerCtrlAddRequestDetailsReason                 := ""
+    explorerCtrlAddRequestDetailsOnlySendMade           := False
+    explorerCtrlAddRequestDetailsOnlySendPending        := allowDetailsOnlySend
+    explorerCtrlAddRequestEarliestContentProbeTick      := requestStartTick + Max(0, minimumContentProbeDelayMs)
+    explorerCtrlAddRequestFastPathPollIntervalMs        := useFastPathPolling ? k_explorerCtrlAddFastPathPollMs : 0
+    explorerCtrlAddRequestFastPathPollUntilTick         := useFastPathPolling ? requestStartTick + k_explorerCtrlAddFastPathWindowMs : 0
+    explorerCtrlAddRequestHwnd                          := hwnd
+    explorerCtrlAddRequestId                            := replacementRequestId
+    explorerCtrlAddRequestInitialPath                   := initialPath
+    explorerCtrlAddRequestLocationResolver              := ""
+    explorerCtrlAddRequestNavigationGeneration          := useNavigationEvents
         ? _GetExplorerLastPathReadGeneration(hwnd)
         : 0
-    explorerCtrlAddRequestNextNavigationFallbackTick := useNavigationEvents
+    explorerCtrlAddRequestNextNavigationFallbackTick    := useNavigationEvents
         ? requestStartTick + k_explorerCtrlAddNavigationFallbackMs
         : 0
-    explorerCtrlAddRequestPathChangeConfirmed     := !requirePathChange
+    explorerCtrlAddRequestPathChangeConfirmed           := !requirePathChange
     explorerCtrlAddRequestPathlessContentFallbackActive := False
-    explorerCtrlAddRequestPreProbeSendPending     := allowBestEffortSend
-    explorerCtrlAddRequestPreviousPath            := ""
-    explorerCtrlAddRequestRequirePathChange       := requirePathChange
-    explorerCtrlAddRequestRequireStablePath       := requireStablePath
-    explorerCtrlAddRequestRestoreTreeFocus        := restoreTreeFocus
-    explorerCtrlAddRequestStartTick               := requestStartTick
-    explorerCtrlAddRequestSourceCtrlNN            := sourceCtrlNN
-    explorerCtrlAddRequestStablePathConfirmed     := !requireStablePath
-    explorerCtrlAddRequestStablePathHitCount      := 0
-    explorerCtrlAddRequestWaitingForNavigationEvent := False
-    explorerCtrlAddRequestUsesNavigationEvents    := useNavigationEvents
+    explorerCtrlAddRequestPreProbeSendPending           := allowBestEffortSend
+    explorerCtrlAddRequestPreferredTarget               := ""
+    explorerCtrlAddRequestPreviousPath                  := ""
+    explorerCtrlAddRequestRequirePathChange             := requirePathChange
+    explorerCtrlAddRequestRequireStablePath             := requireStablePath
+    explorerCtrlAddRequestRestoreTreeFocus              := restoreTreeFocus
+    explorerCtrlAddRequestStartTick                     := requestStartTick
+    explorerCtrlAddRequestSourceCtrlNN                  := sourceCtrlNN
+    explorerCtrlAddRequestStablePathConfirmed           := !requireStablePath
+    explorerCtrlAddRequestStablePathHitCount            := 0
+    explorerCtrlAddRequestWaitingForNavigationEvent     := False
+    explorerCtrlAddRequestUsesNavigationEvents          := useNavigationEvents
+
     ; Changed-path checks start at the next timer opportunity. Other requests use
     ; the shared poll interval and schedule exact remaining minimum-gate delays.
     initialPollMs := useFastPathPolling ? 1 : k_explorerCtrlAddPollMs
@@ -9961,6 +10112,8 @@ RunExplorerCtrlAddWhenReady:
     requestAllowPathlessContentReady := explorerCtrlAddRequestAllowPathlessContentReady
     requestWindowClass                := explorerCtrlAddRequestClass
     requestDeadlineTick               := explorerCtrlAddRequestDeadlineTick
+    requestDetailsConfirmed           := explorerCtrlAddRequestDetailsConfirmed
+    requestDetailsReason              := explorerCtrlAddRequestDetailsReason
     requestDetailsOnlySendMade        := explorerCtrlAddRequestDetailsOnlySendMade
     requestDetailsOnlySendPending     := explorerCtrlAddRequestDetailsOnlySendPending
     requestEarliestContentProbeTick   := explorerCtrlAddRequestEarliestContentProbeTick
@@ -9972,6 +10125,7 @@ RunExplorerCtrlAddWhenReady:
     requestNavigationGeneration       := explorerCtrlAddRequestNavigationGeneration
     requestNextNavigationFallbackTick := explorerCtrlAddRequestNextNavigationFallbackTick
     requestPreProbeSendPending        := explorerCtrlAddRequestPreProbeSendPending
+    requestPreferredTarget            := explorerCtrlAddRequestPreferredTarget
     requestRequiresPathChange         := explorerCtrlAddRequestRequirePathChange
     requestRequiresStablePath         := explorerCtrlAddRequestRequireStablePath
     requestRestoreTreeFocus           := explorerCtrlAddRequestRestoreTreeFocus
@@ -10387,7 +10541,8 @@ RunExplorerCtrlAddWhenReady:
     ; every incomplete content result is still retried until the request deadline.
     contentProbeStartTick := A_TickCount
     contentProbe := _ProbeExplorerDetailsViewState(requestTargetHwnd
-        , k_explorerCtrlAddPollUIATimeoutMs, requestId)
+        , k_explorerCtrlAddPollUIATimeoutMs, requestId
+        , requestDetailsConfirmed, requestDetailsReason, requestPreferredTarget)
     contentProbeElapsedMs := A_TickCount - contentProbeStartTick
     contentProbeOverBudgetMs := Max(0
         , contentProbeElapsedMs - k_explorerCtrlAddPollUIATimeoutMs)
@@ -10397,6 +10552,8 @@ RunExplorerCtrlAddWhenReady:
     contentProbeDetailsReason := contentProbe.HasKey("detailsReason")
         ? contentProbe.detailsReason
         : ""
+    contentProbeDetailsCheckReused := contentProbe.HasKey("detailsCheckReused")
+        && contentProbe.detailsCheckReused
     contentProbeIsDetailsViewMs := contentProbe.HasKey("isDetailsViewElapsedMs")
         ? contentProbe.isDetailsViewElapsedMs
         : 0
@@ -10412,6 +10569,9 @@ RunExplorerCtrlAddWhenReady:
     contentProbeItemsViewResolver := contentProbe.HasKey("itemsViewResolver")
         ? contentProbe.itemsViewResolver
         : ""
+    contentProbePreferredTargetState := contentProbe.HasKey("preferredTargetState")
+        ? contentProbe.preferredTargetState
+        : "unused"
     contentProbeResolvedTarget := contentProbe.HasKey("resolvedTarget")
         ? contentProbe.resolvedTarget
         : ""
@@ -10434,11 +10594,40 @@ RunExplorerCtrlAddWhenReady:
             , True, requestId)
         Return
     }
+
+    ; Retain only the current #32770 request's validated native identity. A later
+    ; probe resolves a fresh UIA element, and a failed hint falls back to the
+    ; complete native candidate scan before this cached identity is replaced.
+    if (requestWindowClass == "#32770") {
+        Critical, On
+        if (requestId == explorerCtrlAddRequestId) {
+            if IsObject(contentProbeResolvedTarget)
+                explorerCtrlAddRequestPreferredTarget := contentProbeResolvedTarget
+            else if (contentProbePreferredTargetState != "unused")
+                explorerCtrlAddRequestPreferredTarget := ""
+        }
+        Critical, Off
+    }
+
+    ; Publish only a successful CabinetWClass Details result. The request ID
+    ; prevents a slow probe from populating a replacement request's cache.
+    if (requestWindowClass == "CabinetWClass"
+     && contentProbeDetailsReady
+     && !requestDetailsConfirmed) {
+        Critical, On
+        if (requestId == explorerCtrlAddRequestId
+         && !explorerCtrlAddRequestDetailsConfirmed) {
+            explorerCtrlAddRequestDetailsConfirmed := True
+            explorerCtrlAddRequestDetailsReason    := contentProbeDetailsReason
+        }
+        Critical, Off
+    }
     _TraceExplorerCtrlAdd("details_content_probe"
         , "elapsedMs=" . contentProbeElapsedMs
         . " timeoutMs=" . k_explorerCtrlAddPollUIATimeoutMs
         . " overBudgetMs=" . contentProbeOverBudgetMs
         . " isDetailsViewMs=" . contentProbeIsDetailsViewMs
+        . " detailsCheckReused=" . (contentProbeDetailsCheckReused ? 1 : 0)
         . " itemsViewResolutionMs=" . contentProbeItemsViewResolutionMs
         . " contentEvidenceLookupMs=" . contentProbeContentEvidenceLookupMs
         . " state=" . contentProbe.state
@@ -10447,6 +10636,7 @@ RunExplorerCtrlAddWhenReady:
         . " detailsReason=[" . contentProbeDetailsReason . "]"
         . " resolver=" . contentProbeItemsViewResolver
         . " candidateCount=" . contentProbeItemsViewCandidateCount
+        . " preferredTargetState=" . contentProbePreferredTargetState
         . " resolutionReason=[" . contentProbeItemsViewResolutionReason . "]"
         , False, requestId)
 
@@ -10486,6 +10676,11 @@ RunExplorerCtrlAddWhenReady:
         }
         else if (currentPath != explorerCtrlAddRequestPreviousPath) {
             explorerCtrlAddRequestDeadlineTick             := A_TickCount + k_newExplorerCtrlAddTimeoutMs
+            ; A new startup path can select a different view mode or native file
+            ; panel, so every request-scoped readiness hint must be rebuilt.
+            explorerCtrlAddRequestDetailsConfirmed         := False
+            explorerCtrlAddRequestDetailsReason            := ""
+            explorerCtrlAddRequestPreferredTarget          := ""
             explorerCtrlAddRequestPreviousPath             := currentPath
             explorerCtrlAddRequestStablePathConfirmed      := False
             explorerCtrlAddRequestStablePathHitCount       := (currentPath = "") ? 0 : 1
@@ -11316,8 +11511,8 @@ GetItemsViewHwndFromUIA(shellEl)
     return hCtl
 }
 
-; Cap the next UIA transaction and provider connection to the time remaining in
-; one Explorer readiness probe. A zero return prevents a new call after the deadline.
+; Request UIA transaction and provider-connection timeouts from the time remaining
+; in one readiness probe. UIA may overrun them; zero prevents a new post-deadline call.
 _ApplyExplorerUIABudget(uiaDeadlineTick, requestedTimeoutMs := 2000) {
     global UIA
 
@@ -11346,14 +11541,24 @@ _ApplyExplorerUIABudget(uiaDeadlineTick, requestedTimeoutMs := 2000) {
 
 ; Report Details mode and visible-content readiness independently so the timer
 ; can distinguish not-Details, Details-only, and Details-with-content states.
-; One shared deadline bounds all UIA work. detailsReason records the Details-mode
-; result, while itemsViewResolver, candidate count, and resolution reason identify
+; One shared deadline supplies the remaining requested timeout to all UIA work.
+; It prevents new calls after expiry but cannot stop an in-flight provider overrun.
+; detailsReason records the Details-mode result, while itemsViewResolver, candidate count, and resolution reason identify
 ; how the current Items View was (or was not) found. The returned phase timings
 ; identify which reliable check consumed the requested UIA budget. For #32770,
 ; itemsViewResolutionElapsedMs is work performed inside isDetailsViewElapsedMs;
 ; CabinetWClass performs those two phases separately.
-_ProbeExplorerDetailsViewState(targetHwndID, transactionTimeout := 150
-    , requestId := "") {
+; A request-scoped positive CabinetWClass Details result may skip only the mode
+; check; current Items View resolution and visible-content proof still repeat.
+; #32770 may reuse a validated native HWND/ClassNN hint, but resolves a fresh UIA
+; element and repeats the current-view Details check on every probe.
+_ProbeExplorerDetailsViewState(targetHwndID                                  ; Top-level Explorer/dialog HWND that confines the probe to the request target.
+                             , transactionTimeout      := 150                ; Supplies the requested UIA budget shared by every nested readiness check.
+                             , requestId               := ""                 ; Correlates resolved-target metadata with the Explorer CtrlAdd request.
+                             , cabinetDetailsConfirmed := False              ; Reuses this request's positive CabinetWClass Details result to skip its COM recheck.
+                             , cabinetDetailsReason    := ""                 ; Preserves the evidence supporting that reused Details result in the probe output.
+                             , preferredTarget         := "") {              ; Supplies an optional #32770 native target hint to reduce repeated candidate scans.
+
     global UIA
     global k_explorerItemsViewContentEvidenceCondition
 
@@ -11363,12 +11568,22 @@ _ProbeExplorerDetailsViewState(targetHwndID, transactionTimeout := 150
     if (transactionTimeout <= 0)
         transactionTimeout := 1
 
-    priorConnectionTimeout  := ""
-    priorTransactionTimeout := ""
-    uiaDeadlineTick         := A_TickCount + transactionTimeout
-    contentEvidenceLookupElapsedMs := 0
+    ; Preserve UIA's connection timeout so this probe can restore it after applying shorter lookup budgets.
+    priorConnectionTimeout          := ""
+    ; Preserve UIA's transaction timeout so this probe cannot leave later UIA work with its temporary budget.
+    priorTransactionTimeout         := ""
+    ; Set one absolute deadline so every nested UIA lookup shares the probe's remaining time budget.
+    uiaDeadlineTick                 := A_TickCount + transactionTimeout
+    ; Measure content-evidence lookup time so tracing can isolate ListItem or empty-result discovery delays.
+    contentEvidenceLookupElapsedMs  := 0
+    ; Record whether CabinetWClass reused this request's proven Details state instead of checking it again.
+    detailsCheckReused              := False
+    ; Measure the Details-mode check so tracing can separate it from Items View and content lookup delays.
     isDetailsViewElapsedMs          := 0
+    ; Accumulate Items View resolution time so tracing can identify delays across every resolver path used.
     itemsViewResolutionElapsedMs    := 0
+    ; Track whether the optional #32770 native-control hint was unused, invalid, missed, or resolved successfully.
+    preferredTargetState            := "unused"
 
     if !IsObject(UIA) {
         try
@@ -11382,49 +11597,95 @@ _ProbeExplorerDetailsViewState(targetHwndID, transactionTimeout := 150
 
     try {
         try
-            priorConnectionTimeout := UIA.ConnectionTimeout
+            priorConnectionTimeout  := UIA.ConnectionTimeout
         catch e
-            priorConnectionTimeout := ""
+            priorConnectionTimeout  := ""
         try
             priorTransactionTimeout := UIA.TransactionTimeout
         catch e
             priorTransactionTimeout := ""
 
-        detailsReason := ""
-        itemsEl := ""
-        itemsViewCandidateCount := 0
+        ; Record the exact Details-mode proof or failure so callers and traces can explain the probe result.
+        detailsReason             := ""
+        ; Receive the current UIA Items View so Details and content checks can inspect the same resolved panel.
+        itemsEl                   := ""
+        ; Count examined native file-panel candidates so tracing can reveal broad or repeated resolution work.
+        itemsViewCandidateCount   := 0
+        ; Record why Items View resolution succeeded or failed so fallback behavior can be diagnosed precisely.
         itemsViewResolutionReason := ""
-        itemsViewResolver := ""
-        resolvedCtrlHwnd := 0
-        resolvedCtrlNN := ""
-        ; Force #32770 to inspect its current Items View. Its 250 ms cache may
-        ; still refer to the outgoing folder after the dialog path changes.
-        isDetailsViewStartTick := A_TickCount
-        detailsReady := IsDetailsView(targetHwndID, itemsEl, transactionTimeout
-            , uiaDeadlineTick, False, detailsReason, itemsViewResolver
-            , itemsViewCandidateCount, itemsViewResolutionReason
-            , resolvedCtrlNN, resolvedCtrlHwnd, itemsViewResolutionElapsedMs)
-        isDetailsViewElapsedMs := A_TickCount - isDetailsViewStartTick
-        if !detailsReady
-            return { state: "not_ready", reason: "not_details_view"
-                , detailsReady: False, contentReady: False
-                , detailsReason: detailsReason
-                , contentEvidenceLookupElapsedMs: contentEvidenceLookupElapsedMs
-                , isDetailsViewElapsedMs: isDetailsViewElapsedMs
-                , itemsViewResolutionElapsedMs: itemsViewResolutionElapsedMs
-                , itemsViewCandidateCount: itemsViewCandidateCount
-                , itemsViewResolutionReason: itemsViewResolutionReason
-                , itemsViewResolver: itemsViewResolver }
+        ; Identify the resolver path used so traces can distinguish preferred, native-scoped, and broad lookups.
+        itemsViewResolver         := ""
+        ; Retain the resolved native control HWND so SendCtrlAdd can target it without rediscovery.
+        resolvedCtrlHwnd          := 0
+        ; Retain the resolved control's ClassNN so its identity can be validated and passed with its HWND.
+        resolvedCtrlNN            := ""
+        ; Reuse only a positive CabinetWClass Details result from this request.
+        ; The current Items View and content evidence are still resolved below.
+        ; #32770 always repeats IsDetailsView so it cannot reuse an old panel.
+        WinGetClass, targetClass, ahk_id %targetHwndID%
+        if (targetClass == "CabinetWClass" && cabinetDetailsConfirmed) {
+            detailsReady  := True
+            detailsReason := cabinetDetailsReason
+            if (detailsReason = "")
+                detailsReason := "request_cached"
+            detailsCheckReused := True
+        } else {
+            isDetailsViewStartTick := A_TickCount
+            detailsReady := IsDetailsView(targetHwndID
+                                        , itemsEl
+                                        , transactionTimeout
+                                        , uiaDeadlineTick
+                                        , False
+                                        , detailsReason
+                                        , itemsViewResolver
+                                        , itemsViewCandidateCount
+                                        , itemsViewResolutionReason
+                                        , resolvedCtrlNN
+                                        , resolvedCtrlHwnd
+                                        , itemsViewResolutionElapsedMs
+                                        , preferredTarget
+                                        , preferredTargetState)
 
-        ; #32770 returns the Items View already inspected for Details mode.
-        ; CabinetWClass uses COM for that mode check, so resolve its UIA file
-        ; panel separately through the same shared resolver.
+            isDetailsViewElapsedMs := A_TickCount - isDetailsViewStartTick
+        }
+        if !detailsReady {
+            notDetailsResult := { state                          : "not_ready"
+                                , reason                         : "not_details_view"
+                                , detailsReady                   : False
+                                , contentReady                   : False
+                                , detailsReason                  : detailsReason
+                                , detailsCheckReused             : detailsCheckReused
+                                , contentEvidenceLookupElapsedMs : contentEvidenceLookupElapsedMs
+                                , isDetailsViewElapsedMs         : isDetailsViewElapsedMs
+                                , itemsViewResolutionElapsedMs   : itemsViewResolutionElapsedMs
+                                , itemsViewCandidateCount        : itemsViewCandidateCount
+                                , itemsViewResolutionReason      : itemsViewResolutionReason
+                                , itemsViewResolver              : itemsViewResolver
+                                , preferredTargetState           : preferredTargetState }
+
+            if (resolvedCtrlNN != "" && resolvedCtrlHwnd)
+                notDetailsResult.resolvedTarget := { ctrlNN: resolvedCtrlNN, hwnd: resolvedCtrlHwnd + 0, requestId: requestId }
+            return notDetailsResult
+        }
+
+        ; #32770 returns the current Items View inspected for Details mode.
+        ; CabinetWClass either used COM or reused this request's positive result,
+        ; so resolve its current UIA file panel through the shared resolver.
         if !IsObject(itemsEl) {
             itemsViewResolutionStartTick := A_TickCount
-            ResolveExplorerItemsView(targetHwndID, itemsEl
-                , transactionTimeout, uiaDeadlineTick, False
-                , itemsViewResolver, itemsViewCandidateCount
-                , itemsViewResolutionReason, resolvedCtrlNN, resolvedCtrlHwnd)
+            ResolveExplorerItemsView(targetHwndID
+                                    , itemsEl
+                                    , transactionTimeout
+                                    , uiaDeadlineTick
+                                    , False
+                                    , itemsViewResolver
+                                    , itemsViewCandidateCount
+                                    , itemsViewResolutionReason
+                                    , resolvedCtrlNN
+                                    , resolvedCtrlHwnd
+                                    , preferredTarget
+                                    , preferredTargetState)
+
             itemsViewResolutionElapsedMs += A_TickCount - itemsViewResolutionStartTick
         }
 
@@ -11432,15 +11693,19 @@ _ProbeExplorerDetailsViewState(targetHwndID, transactionTimeout := 150
         ; exposed a ListItem or recognized empty-result message. Build the result
         ; after the optional resolver so its target and diagnostic fields describe
         ; the same final discovery attempt used by the content check.
-        probeResult := { state: "not_ready", reason: ""
-            , detailsReady: True, contentReady: False
-            , detailsReason: detailsReason
-            , contentEvidenceLookupElapsedMs: contentEvidenceLookupElapsedMs
-            , isDetailsViewElapsedMs: isDetailsViewElapsedMs
-            , itemsViewResolutionElapsedMs: itemsViewResolutionElapsedMs
-            , itemsViewCandidateCount: itemsViewCandidateCount
-            , itemsViewResolutionReason: itemsViewResolutionReason
-            , itemsViewResolver: itemsViewResolver }
+        probeResult := { state                           : "not_ready"
+                        , reason                         : ""
+                        , detailsReady                   : True, contentReady: False
+                        , detailsReason                  : detailsReason
+                        , detailsCheckReused             : detailsCheckReused
+                        , contentEvidenceLookupElapsedMs : contentEvidenceLookupElapsedMs
+                        , isDetailsViewElapsedMs         : isDetailsViewElapsedMs
+                        , itemsViewResolutionElapsedMs   : itemsViewResolutionElapsedMs
+                        , itemsViewCandidateCount        : itemsViewCandidateCount
+                        , itemsViewResolutionReason      : itemsViewResolutionReason
+                        , itemsViewResolver              : itemsViewResolver
+                        , preferredTargetState           : preferredTargetState }
+
         if (resolvedCtrlNN != "" && resolvedCtrlHwnd)
             probeResult.resolvedTarget := { ctrlNN: resolvedCtrlNN
                 , hwnd: resolvedCtrlHwnd + 0, requestId: requestId }
@@ -11474,11 +11739,15 @@ _ProbeExplorerDetailsViewState(targetHwndID, transactionTimeout := 150
         probeResult.reason := "content_not_visible"
         return probeResult
     } catch e {
-        return { state: "not_ready", reason: "probe_exception"
-            , detailsReady: False, contentReady: False
-            , contentEvidenceLookupElapsedMs: contentEvidenceLookupElapsedMs
-            , isDetailsViewElapsedMs: isDetailsViewElapsedMs
-            , itemsViewResolutionElapsedMs: itemsViewResolutionElapsedMs }
+        return { state                          : "not_ready"
+               , reason                         : "probe_exception"
+               , detailsReady                   : False
+               , contentReady                   : False
+               , detailsCheckReused             : detailsCheckReused
+               , contentEvidenceLookupElapsedMs : contentEvidenceLookupElapsedMs
+               , isDetailsViewElapsedMs         : isDetailsViewElapsedMs
+               , itemsViewResolutionElapsedMs   : itemsViewResolutionElapsedMs
+               , preferredTargetState           : preferredTargetState }
     } finally {
         try {
             if (priorTransactionTimeout != "" && IsObject(UIA))
@@ -11497,9 +11766,9 @@ _ProbeExplorerDetailsViewState(targetHwndID, transactionTimeout := 150
 ; 1) accept the supplied native control itself when UIA exposes it as an item view
 ; 2) search its descendants by the common shell item-container control types
 ; 3) use the legacy "Items View" name lookup as the broad fallback
-; transactionTimeout caps each lookup when no shared deadline is supplied.
-; uiaDeadlineTick instead makes every root and descendant lookup consume one
-; shared remaining-time budget.
+; transactionTimeout requests each lookup's timeout when no shared deadline is supplied.
+; uiaDeadlineTick instead derives each requested timeout from one shared remaining-time
+; budget and prevents another root or descendant lookup after that deadline expires.
 FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadlineTick := 0)
 {
     effectiveTimeoutMs := _ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)
@@ -14099,7 +14368,7 @@ _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
     if (!tbcEverythingAdjustCtrlHwnd && tbcEverythingAdjustCtrlClass = "")
         return true
 
-    if !TryCaptureCompleteFocusSnapshot(tbcEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
+    if !TryCaptureActiveFocusSnapshotFull(tbcEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
     if (tbcEverythingAdjustCtrlNN != "" && currentCtrlNN != tbcEverythingAdjustCtrlNN)
@@ -22793,7 +23062,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:incorect::incorrect
 :*:incorrct::incorrect
 :*:incorret::incorrect
-:*:incorrec::incorrect
 :*:nicorrect::incorrect
 :*:icnorrect::incorrect
 :*:inocrrect::incorrect
