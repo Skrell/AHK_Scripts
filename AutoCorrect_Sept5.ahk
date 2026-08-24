@@ -7672,16 +7672,16 @@ IsMouseOverShellItemForRButton() {
     return false
 }
 ; ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-Explorer__GetRoleNum(ByRef accObj := "") {
-    if (accObj == "")
-        accObj := Acc_ObjectFromPoint()
+Explorer__GetRoleNum(ByRef io_accObj := "") {
+    if (io_accObj == "")
+        io_accObj := Acc_ObjectFromPoint()
 
-    if !accObj
+    if !io_accObj
         return
     ; Safely get numeric MSAA role
     role := ""
     try
-        role := accObj.accRole(0)
+        role := io_accObj.accRole(0)
     catch
         return 0
 
@@ -14368,15 +14368,19 @@ _IsEverythingEditAdjustTrigger(hotkey) {
 _TryRequestEverythingEditAdjust(sourceTick, hotkey, activeHwnd := 0) {
     global tbcEverythingAdjustSourceTick
 
+    ; Reject a missing or already-handled typing tick so one physical event cannot schedule duplicate adjustment requests.
     if (!sourceTick || tbcEverythingAdjustSourceTick = sourceTick)
         return false
 
+    ; Ignore hotkeys that do not edit Everything's search text because they do not require a deferred column adjustment.
     if (!_IsEverythingEditAdjustTrigger(hotkey))
         return false
 
+    ; Require an exact active-window and focused-control snapshot so deferred work is never armed for an ambiguous target.
     if !CaptureActiveFocusSnapshot(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass, activeHwnd)
         return false
 
+    ; Restrict this typing-driven adjustment to Everything's Edit1 search field so other focused controls remain unaffected.
     if (targetCtrlNN != "Edit1")
         return false
 
@@ -14399,21 +14403,27 @@ _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
     if (!expectedId)
         expectedId := currentId
 
+    ; Reject replaced, expired, or retargeted work so a stale deferred callback cannot adjust the wrong window or control.
     if !_IsDeferredWorkStillValid(tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrlNN, expectedId, currentId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs)
         return false
 
+    ; Accept the basic window/ClassNN validation when no exact control HWND or class metadata was captured for comparison.
     if (!tbcEverythingAdjustCtrlHwnd && tbcEverythingAdjustCtrlClass = "")
         return true
 
+    ; Capture the current active-window and focused-control identity so the saved exact target metadata can be revalidated.
     if !TryCaptureActiveFocusSnapshotFull(tbcEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
         return false
 
+    ; Reject a different focused ClassNN so the deferred adjustment remains tied to the originally focused control slot.
     if (tbcEverythingAdjustCtrlNN != "" && currentCtrlNN != tbcEverythingAdjustCtrlNN)
         return false
 
+    ; Reject a different focused HWND so a replacement control with the same ClassNN cannot inherit the pending adjustment.
     if (tbcEverythingAdjustCtrlHwnd && currentCtrlHwnd != tbcEverythingAdjustCtrlHwnd)
         return false
 
+    ; Reject a changed control class so the pending adjustment cannot run against a different kind of focused control.
     if (tbcEverythingAdjustCtrlClass != "" && currentCtrlClass != tbcEverythingAdjustCtrlClass)
         return false
 
@@ -14425,10 +14435,12 @@ _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
 ; gate, and then delegate to the low-level send helper only if the action is
 ; still safe for the original deferred target.
 _SendCtrlNumpadAddIfStillValid(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0, guardCtrlNN := "", requiredTypingQuietMs := 0, expectedDeferredId := 0, currentDeferredId := 0, requestTick := 0, maxAgeMs := 0) {
+    ; Revalidate any supplied target, request token, and age guards so stale deferred work cannot send to the wrong context.
     if ((guardHwnd || guardCtrlNN != "" || expectedDeferredId || requestTick || maxAgeMs)
      && !_IsDeferredWorkStillValid(guardHwnd, guardCtrlNN, expectedDeferredId, currentDeferredId, requestTick, maxAgeMs))
         return false
 
+    ; Reject the send while the required typing-quiet interval is unmet so synthetic Ctrl cannot interfere with active typing.
     if (requiredTypingQuietMs && !_IsDeferredTypingQuiet(requiredTypingQuietMs))
         return false
 
@@ -14440,16 +14452,20 @@ _SendCtrlNumpadAddIfStillValid(syncPassCount := 6, guardRequestId := 0, guardQui
 ; still owns focus, then send the column auto-fit chord as late as possible.
 FlushTbcEverythingEditAdjust:
     currentRequestId := tbcEverythingAdjustId
+    ; Stop when no deferred request or target window remains because a previously armed timer may fire after state was cleared.
     if (!currentRequestId || !tbcEverythingAdjustHwnd)
         Return
 
+    ; Reject an invalid target, token, or request age before waiting or sending so stale work cannot reach the wrong context.
     if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
     {
+        ; Clear invalid state only while this callback still owns the request slot so a newer replacement request is preserved.
         if (currentRequestId = tbcEverythingAdjustId)
             _ClearTbcEverythingEditAdjustState()
         Return
     }
 
+    ; Defer the chord until physical typing is quiet so its synthetic Ctrl input cannot interfere with active typing.
     if (!_IsDeferredTypingQuiet(k_tbcEverythingAdjustTypingQuietMs))
     {
         ; Physical idle time has an exact deadline. The fixed fallback remains
@@ -14461,22 +14477,27 @@ FlushTbcEverythingEditAdjust:
         Return
     }
 
+    ; Attempt the fully guarded chord and finish this callback once column alignment has actually been dispatched.
     if (_SendCtrlNumpadAddIfStillValid(6, 0, 0, tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrlNN, k_tbcEverythingAdjustTypingQuietMs, currentRequestId, tbcEverythingAdjustId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs))
     {
+        ; Clear completed state only while this callback still owns the request slot so a newer request remains pending.
         if (currentRequestId = tbcEverythingAdjustId)
             _ClearTbcEverythingEditAdjustState()
         Return
     }
 
+    ; Stop if a newer request replaced this one during the send attempt so this stale callback cannot alter its state or timer.
     if (currentRequestId != tbcEverythingAdjustId)
         Return
 
+    ; Revalidate after the failed send because its guarded checks may have outlived the original focus or request lifetime.
     if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
     {
         _ClearTbcEverythingEditAdjustState()
         Return
     }
 
+    ; Reschedule if typing resumed during the send attempt so the retry waits for a fresh quiet interval.
     if (!_IsDeferredTypingQuiet(k_tbcEverythingAdjustTypingQuietMs)) {
         remainingQuietMs := (A_TimeIdlePhysical < k_tbcEverythingAdjustTypingQuietMs)
                           ? GetRemainingQuietDelayMs(A_TimeIdlePhysical, k_tbcEverythingAdjustTypingQuietMs, False)
@@ -15735,12 +15756,12 @@ _GetLButtonResizeSyncGhostCardIconSize(ghostW, ghostH) {
 
 ; Make each synced follower window fully transparent and swap in an overlay
 ; placeholder so the live timer no longer forces heavy apps to repaint on every drag tick.
-_PrepareLButtonResizeSyncGhostCards(ByRef resizeTargets) {
-    if !IsObject(resizeTargets)
+_PrepareLButtonResizeSyncGhostCards(ByRef io_resizeTargets) {
+    if !IsObject(io_resizeTargets)
         return false
 
     preparedAnyFollower := false
-    for resizeTargetIndex, resizeTargetInfo in resizeTargets {
+    for resizeTargetIndex, resizeTargetInfo in io_resizeTargets {
         followerHwndID := resizeTargetInfo.hwnd
         if (!followerHwndID || !WinExist("ahk_id " . followerHwndID))
             continue
@@ -15757,7 +15778,7 @@ _PrepareLButtonResizeSyncGhostCards(ByRef resizeTargets) {
         WinSet, Transparent, 0, ahk_id %followerHwndID%
 
         resizeTargetInfo.ghostCardInfo := ghostCardInfo
-        resizeTargets[resizeTargetIndex] := resizeTargetInfo
+        io_resizeTargets[resizeTargetIndex] := resizeTargetInfo
         preparedAnyFollower := true
     }
 
@@ -15794,11 +15815,11 @@ _ReleaseLButtonResizeSyncDroppedFollowers(previousPartners, currentPartners) {
 
 ; Restore one follower window's previous transparency state and destroy the
 ; matching overlay card so cleanup can run both on button-up and on mid-drag drop-out.
-_ReleaseLButtonResizeSyncFollower(ByRef partnerInfo) {
-    if !IsObject(partnerInfo)
+_ReleaseLButtonResizeSyncFollower(ByRef io_partnerInfo) {
+    if !IsObject(io_partnerInfo)
         return false
 
-    ghostCardInfo := partnerInfo.ghostCardInfo
+    ghostCardInfo := io_partnerInfo.ghostCardInfo
     if !IsObject(ghostCardInfo)
         return false
 
@@ -15806,7 +15827,7 @@ _ReleaseLButtonResizeSyncFollower(ByRef partnerInfo) {
     if (resizeGhostGuiName != "")
         Gui, %resizeGhostGuiName%: Destroy
 
-    followerHwndID := partnerInfo.hwnd
+    followerHwndID := io_partnerInfo.hwnd
     if (followerHwndID && WinExist("ahk_id " . followerHwndID)) {
         if (ghostCardInfo.restoreTransparency = "")
             WinSet, Transparent, Off, ahk_id %followerHwndID%
@@ -15815,19 +15836,19 @@ _ReleaseLButtonResizeSyncFollower(ByRef partnerInfo) {
         WinSet, Redraw,, ahk_id %followerHwndID%
     }
 
-    partnerInfo.ghostCardInfo := ""
+    io_partnerInfo.ghostCardInfo := ""
     return true
 }
 
 ; Restore every follower window still participating in the live resize cohort.
-_ReleaseLButtonResizeSyncGhostCards(ByRef resizeTargets) {
-    if !IsObject(resizeTargets)
+_ReleaseLButtonResizeSyncGhostCards(ByRef io_resizeTargets) {
+    if !IsObject(io_resizeTargets)
         return false
 
     releasedAnyFollower := false
-    for resizeTargetIndex, resizeTargetInfo in resizeTargets {
+    for resizeTargetIndex, resizeTargetInfo in io_resizeTargets {
         if (_ReleaseLButtonResizeSyncFollower(resizeTargetInfo)) {
-            resizeTargets[resizeTargetIndex] := resizeTargetInfo
+            io_resizeTargets[resizeTargetIndex] := resizeTargetInfo
             releasedAnyFollower := true
         }
     }
@@ -15837,27 +15858,27 @@ _ReleaseLButtonResizeSyncGhostCards(ByRef resizeTargets) {
 
 ; Resize and reposition one follower overlay card while keeping its centered app
 ; icon aligned to the current preview rect.
-_UpdateLButtonResizeSyncGhostCardRect(ByRef ghostCardInfo, ghostX, ghostY, ghostW, ghostH) {
-    if !IsObject(ghostCardInfo)
+_UpdateLButtonResizeSyncGhostCardRect(ByRef io_ghostCardInfo, ghostX, ghostY, ghostW, ghostH) {
+    if !IsObject(io_ghostCardInfo)
         return false
 
-    followerGhostHwnd := ghostCardInfo.hwnd
+    followerGhostHwnd := io_ghostCardInfo.hwnd
     if (!followerGhostHwnd || !WinExist("ahk_id " . followerGhostHwnd) || ghostW <= 0 || ghostH <= 0)
         return false
 
     WinMove, ahk_id %followerGhostHwnd%, , %ghostX%, %ghostY%, %ghostW%, %ghostH%
 
-    if (ghostCardInfo.iconHwnd && DllCall("IsWindow", "ptr", ghostCardInfo.iconHwnd)) {
+    if (io_ghostCardInfo.iconHwnd && DllCall("IsWindow", "ptr", io_ghostCardInfo.iconHwnd)) {
         iconSize := _GetLButtonResizeSyncGhostCardIconSize(ghostW, ghostH)
         iconX := Floor((ghostW - iconSize) / 2)
         iconY := Floor((ghostH - iconSize) / 2)
-        DllCall("MoveWindow", "ptr", ghostCardInfo.iconHwnd, "int", iconX, "int", iconY, "int", iconSize, "int", iconSize, "int", True)
+        DllCall("MoveWindow", "ptr", io_ghostCardInfo.iconHwnd, "int", iconX, "int", iconY, "int", iconSize, "int", iconSize, "int", True)
     }
 
-    ghostCardInfo.x := ghostX
-    ghostCardInfo.y := ghostY
-    ghostCardInfo.w := ghostW
-    ghostCardInfo.h := ghostH
+    io_ghostCardInfo.x := ghostX
+    io_ghostCardInfo.y := ghostY
+    io_ghostCardInfo.w := ghostW
+    io_ghostCardInfo.h := ghostH
     return true
 }
 
@@ -15918,17 +15939,17 @@ _RestoreLiveResizeSyncTopmostStates(topmostStates, draggedHwndID := 0) {
 
 ; Record one live-resize window's starting topmost state once, then force it
 ; topmost immediately so the active resize cohort stays visually on top.
-_TrackLiveResizeSyncTopmostState(hwndID, ByRef topmostStates) {
-    if (!hwndID || !IsObject(topmostStates))
+_TrackLiveResizeSyncTopmostState(hwndID, ByRef io_topmostStates) {
+    if (!hwndID || !IsObject(io_topmostStates))
         return false
 
-    if (topmostStates.HasKey(hwndID))
+    if (io_topmostStates.HasKey(hwndID))
         return true
 
     if !WinExist("ahk_id " . hwndID)
         return false
 
-    topmostStates[hwndID] := IsAlwaysOnTop(hwndID)
+    io_topmostStates[hwndID] := IsAlwaysOnTop(hwndID)
     WinSet, AlwaysOnTop, On, ahk_id %hwndID%
     return true
 }
