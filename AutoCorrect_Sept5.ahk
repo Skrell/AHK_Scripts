@@ -538,6 +538,16 @@ Global currentPath                                         := ""
 Global prevPath                                            := ""
 ; Cached taskbar height used by taskbar-aware positioning logic.
 Global TaskBarHeight                                       := 0
+; Maximum time a taskbar-launched Explorer window may claim the saved click context.
+Global k_taskbarExplorerSpawnTimeoutMs                     := 5000
+; Screen X coordinate of the blank-taskbar double-click that launched Explorer.
+Global taskbarExplorerSpawnClickX                          := 0
+; Screen Y coordinate of the blank-taskbar double-click that launched Explorer.
+Global taskbarExplorerSpawnClickY                          := 0
+; Deadline after which an unrelated CabinetWClass activation cannot claim the launch.
+Global taskbarExplorerSpawnDeadlineTick                    := 0
+; CabinetWClass HWNDs present before the pending Explorer launch began.
+Global taskbarExplorerSpawnExistingHwnds                   := {}
 ; Screen X coordinate of the last taskbar/tray click.
 Global trayClickPosX                                       := 0
 ; Screen Y coordinate of the last taskbar/tray click.
@@ -2715,6 +2725,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     initFocusedCtrlForWait := ""
     ControlGetFocus, initFocusedCtrlForWait, ahk_id %hWnd%
     isFirstTrackedActivation := !HasVal(prevActiveWindows, hWnd)
+    isTaskbarExplorerSpawn := isFirstTrackedActivation && _ClaimTaskbarExplorerSpawn(hWnd, vWinClass, taskbarExplorerClickX, taskbarExplorerClickY)
     ; Only a newly tracked window may need its initial fade to settle. Base that
     ; first-activation wait on the actual control shape that SendCtrlAdd() targets,
     ; so later activations never repeat the synchronous pixel polling.
@@ -2730,12 +2741,19 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         Critical, Off
 
         WinGet, state, MinMax, ahk_id %hWnd%
-        If (state > -1 && vWinTitle != "" && MonCount > 1) {
-            currentMon := MWAGetMonitorMouseIsIn()
-            currentMonHasActWin := IsWindowOnMonNum(hWnd, currentMon)
-            If !currentMonHasActWin {
-                WinActivate, ahk_id %hWnd%
-                Send, #+{Left}
+        If (state > -1) {
+            taskbarExplorerMoveMade := False
+            if (isTaskbarExplorerSpawn) {
+                taskbarExplorerMoveMade := _MoveTaskbarExplorerSpawn(hWnd, taskbarExplorerClickX, taskbarExplorerClickY)
+            }
+
+            If (!taskbarExplorerMoveMade && vWinTitle != "" && MonCount > 1) {
+                currentMon := MWAGetMonitorMouseIsIn()
+                currentMonHasActWin := IsWindowOnMonNum(hWnd, currentMon)
+                If !currentMonHasActWin {
+                    WinActivate, ahk_id %hWnd%
+                    Send, #+{Left}
+                }
             }
         }
 
@@ -7515,13 +7533,175 @@ BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) 
     WinSet, AlwaysOnTop, Off, ahk_id %targetID%
 }
 
+; Claim the pending taskbar launch only for a newly created CabinetWClass window.
+_ClaimTaskbarExplorerSpawn(hWnd, windowClass, ByRef clickX, ByRef clickY) {
+    global taskbarExplorerSpawnClickX
+    global taskbarExplorerSpawnClickY
+    global taskbarExplorerSpawnDeadlineTick
+    global taskbarExplorerSpawnExistingHwnds
+
+    ; Ignore activations when no taskbar-launched Explorer window is pending.
+    if (!taskbarExplorerSpawnDeadlineTick)
+        return False
+
+    ; Clear an expired launch so later Explorer activations cannot claim stale click coordinates.
+    if (A_TickCount > taskbarExplorerSpawnDeadlineTick) {
+        taskbarExplorerSpawnClickX        := 0
+        taskbarExplorerSpawnClickY        := 0
+        taskbarExplorerSpawnDeadlineTick  := 0
+        taskbarExplorerSpawnExistingHwnds := {}
+        return False
+    }
+
+    ; Accept only a new CabinetWClass HWND that was absent before Explorer launched.
+    if (windowClass != "CabinetWClass" || taskbarExplorerSpawnExistingHwnds.HasKey(hWnd)) {
+        return False
+    }
+
+    ; Copy the click and clear pending state so exactly one new window can claim this launch.
+    clickX := taskbarExplorerSpawnClickX
+    clickY := taskbarExplorerSpawnClickY
+    taskbarExplorerSpawnClickX        := 0
+    taskbarExplorerSpawnClickY        := 0
+    taskbarExplorerSpawnDeadlineTick  := 0
+    taskbarExplorerSpawnExistingHwnds := {}
+    return True
+}
+
+; Reapply a taskbar-launched Explorer window's maximized state after its move finishes.
+_MaximizeTaskbarExplorerAfterMove(hWnd) {
+    if DllCall("IsWindow", "Ptr", hWnd)
+        WinMaximize, ahk_id %hWnd%
+}
+
+; Move a claimed Explorer window against the clicked taskbar edge without crossing it.
+; Declare the placement helper so the activation callback has one owner for taskbar-relative movement.
+_MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
+    ; Use full bounds to classify the taskbar and the work area for safe placement.
+    GetMonitorRectForMouse(clickX, clickY, False, monitorLeft, monitorTop, monitorRight, monitorBottom)
+    GetMonitorRectForMouse(clickX, clickY, True, safeLeft, safeTop, safeRight, safeBottom)
+
+    if (safeRight <= safeLeft || safeBottom <= safeTop)
+        return False
+
+    ; Only use the clicked monitor's taskbar when excluding its strip from the destination.
+    taskbarEdge := ""
+    taskbarHwnd := FindTaskbarAtPoint(clickX, clickY)
+    if (taskbarHwnd) {
+        WinGetPos, taskbarX, taskbarY, taskbarWidth, taskbarHeight, ahk_id %taskbarHwnd%
+        ; Find the horizontal midpoint so the taskbar can be tied to the correct monitor and edge.
+        taskbarCenterX           := taskbarX + Floor(taskbarWidth / 2)
+        ; Find the vertical midpoint so the taskbar can be tied to the correct monitor and edge.
+        taskbarCenterY           := taskbarY + Floor(taskbarHeight / 2)
+        taskbarIsOnTargetMonitor := (taskbarCenterX >= monitorLeft && taskbarCenterX < monitorRight && taskbarCenterY >= monitorTop && taskbarCenterY < monitorBottom)
+
+        ; Classify the edge and tighten the work area so the window cannot overlap the taskbar.
+        if (taskbarIsOnTargetMonitor && taskbarWidth >= taskbarHeight) {
+            ; Compare against the monitor's vertical midpoint to distinguish its top and bottom edges.
+            if (taskbarCenterY < Floor((monitorTop + monitorBottom) / 2)) {
+                ; Move the safe top below the taskbar while preserving any stricter work-area boundary.
+                safeTop     := Max(safeTop, taskbarY + taskbarHeight)
+                taskbarEdge := "top"
+            } else {
+                ; Keep the safe bottom at the strictest boundary above a bottom taskbar.
+                safeBottom  := Min(safeBottom, taskbarY)
+                taskbarEdge := "bottom"
+            }
+        } else if (taskbarIsOnTargetMonitor) {
+            ; Compare against the monitor's horizontal midpoint to distinguish its left and right edges.
+            if (taskbarCenterX < Floor((monitorLeft + monitorRight) / 2)) {
+                ; Move the safe left beyond the taskbar while preserving any stricter work-area boundary.
+                safeLeft    := Max(safeLeft, taskbarX + taskbarWidth)
+                taskbarEdge := "left"
+            } else {
+                ; Keep the safe right at the strictest boundary beside a right taskbar.
+                safeRight   := Min(safeRight, taskbarX)
+                taskbarEdge := "right"
+            }
+        }
+    }
+
+    if (taskbarEdge == "")
+        return False
+
+    if (safeRight <= safeLeft || safeBottom <= safeTop)
+        return False
+
+    ; Restore before measuring movable geometry, then re-maximize after the move if needed.
+    WinGet, windowState, MinMax, ahk_id %hWnd%
+    wasMaximized := (windowState == 1)
+    if (windowState != 0)
+        WinRestore, ahk_id %hWnd%
+
+    WinGetPos, windowX, windowY, windowWidth, windowHeight, ahk_id %hWnd%
+    if (windowWidth <= 0 || windowHeight <= 0)
+        return False
+
+    ; Clamp the width to the safe area's calculated horizontal capacity.
+    windowWidth  := Min(windowWidth, safeRight - safeLeft)
+    ; Clamp the height to the safe area's calculated vertical capacity.
+    windowHeight := Min(windowHeight, safeBottom - safeTop)
+
+    ; Center along the clicked taskbar coordinate and attach the window to its inner edge.
+    if (taskbarEdge == "top" || taskbarEdge == "bottom") {
+        ; Center on the click and clamp X so the window remains within the safe horizontal bounds.
+        targetX := Max(safeLeft, Min(clickX - Floor(windowWidth / 2), safeRight - windowWidth))
+        ; Subtract the height for a bottom taskbar so the window attaches above its safe edge.
+        targetY := (taskbarEdge == "top") ? safeTop : safeBottom - windowHeight
+    } else {
+        ; Subtract the width for a right taskbar so the window attaches left of its safe edge.
+        targetX := (taskbarEdge == "left") ? safeLeft : safeRight - windowWidth
+        ; Center on the click and clamp Y so the window remains within the safe vertical bounds.
+        targetY := Max(safeTop, Min(clickY - Floor(windowHeight / 2), safeBottom - windowHeight))
+    }
+
+    completionCallback := ""
+    if (wasMaximized)
+        completionCallback := Func("_MaximizeTaskbarExplorerAfterMove").Bind(hWnd)
+
+    ; Let this animation own placement; False leaves OnWinActiveChange() responsible for its fallback.
+    moveStarted := MoveWindow(hWnd, targetX, targetY, windowWidth, windowHeight, 180, completionCallback)
+    if (!moveStarted && wasMaximized)
+        WinMaximize, ahk_id %hWnd%
+    return moveStarted
+}
+
+; Snapshot existing Explorer HWNDs and launch one while activation callbacks are deferred.
+_SpawnExplorerFromTaskbar(clickX, clickY) {
+    global k_taskbarExplorerSpawnTimeoutMs
+    global taskbarExplorerSpawnClickX
+    global taskbarExplorerSpawnClickY
+    global taskbarExplorerSpawnDeadlineTick
+    global taskbarExplorerSpawnExistingHwnds
+
+    ; Defer activation callbacks until the pending-launch state is ready to be claimed.
+    Critical, On
+    ; Snapshot existing CabinetWClass HWNDs so the activation callback can identify the new one.
+    taskbarExplorerSpawnExistingHwnds := {}
+    WinGet, cabinetWindowList, List, ahk_class CabinetWClass
+    Loop, %cabinetWindowList%
+    {
+        cabinetHwnd := cabinetWindowList%A_Index%
+        taskbarExplorerSpawnExistingHwnds[cabinetHwnd] := True
+    }
+
+    ; Preserve the double-click coordinates so the new window can be positioned near them.
+    taskbarExplorerSpawnClickX       := clickX
+    taskbarExplorerSpawnClickY       := clickY
+    ; Add the timeout to the current tick so stale launches cannot claim a later Explorer window.
+    taskbarExplorerSpawnDeadlineTick := A_TickCount + k_taskbarExplorerSpawnTimeoutMs
+    ; Launch only after claim state is complete so OnWinActiveChange() sees a consistent snapshot.
+    Run, explorer.exe
+    Critical, Off
+}
+
 #If MouseIsOverTaskbarBlank()
 $~Lbutton::
     MouseGetPos, expX1, expY1,
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < k_DoubleClickTime)
         && (abs(expX1-expX2) < 20 && abs(expY1-expY2) < 20)) {
-        run, explorer.exe
+        _SpawnExplorerFromTaskbar(expX1, expY1)
         expX2 := 0
         expY2 := 0
         Return
@@ -16626,6 +16806,166 @@ join( strArray )
   for i,v in strArray
     s .= ", " . v
   Return substr(s, 3)
+}
+
+; Returns the shared registry of non-blocking window-move animations keyed by HWND.
+_GetWindowMoveAnimations() {
+    static animations := {}
+    return animations
+}
+
+; Advances one window-move animation frame and completes its optional callback.
+_MoveWindowFrame(animation) {
+    ; Stop stale timers when the window disappears or a newer request owns its animation.
+    animations       := _GetWindowMoveAnimations()
+    hWnd             := animation.hWnd
+    timerCallback    := animation.timerCallback
+    currentAnimation := animations[hWnd]
+
+    if (!IsObject(currentAnimation)
+        || currentAnimation.requestId != animation.requestId
+        || !DllCall("IsWindow", "Ptr", hWnd)) {
+        if IsObject(timerCallback)
+            SetTimer, % timerCallback, Delete
+        animation.timerCallback := ""
+        if (IsObject(currentAnimation)
+            && currentAnimation.requestId == animation.requestId) {
+            animations.Delete(hWnd)
+        }
+        return
+    }
+
+    ; Account for A_TickCount wraparound so elapsed time remains valid in long-running scripts.
+    elapsedMs := A_TickCount - animation.startTick
+    if (elapsedMs < 0)
+        ; Restore the unsigned 32-bit tick distance after the counter wraps through zero.
+        elapsedMs += 0x100000000
+
+    ; Per-frame movement (illustrative X-only trace with ideal 15 ms timer ticks):
+    ;
+    ; startX = 100, targetX = 700, durationMs = 180
+    ; total X distance = 700 - 100 = 600 px
+    ;
+    ; time       0 ms                  15 ms              30 ms           45 ms         ... 180 ms
+    ;             |                      |                  |               |                  |
+    ;          +-----+                +-----+            +-----+         +-----+            +-----+
+    ;          |  W  |--------------->|  W  |----------> |  W  |-------->|  W  |-- ... ---->|  W  |
+    ;          +-----+     138 px      +-----+  115 px   +-----+ 94 px   +-----+            +-----+
+    ;          X=100                  X=238              X=353           X=447              X=700
+    ;             |                      ^
+    ;             |                      |
+    ;             +-- frame 1 calculation:
+    ;                 progress = 15 / 180 = 0.0833
+    ;                 easedProgress = 1 - (1 - 0.0833)^3 = 0.2297
+    ;                 currentX[1] = 100 + ((700 - 100) * 0.2297) = 238
+    ;                 frameDeltaX[1] = 238 - 100 = 138 px
+    ;
+    ; Cubic ease-out makes successive gaps shrink as the window approaches targetX.
+    ; A larger targetX - startX over the same durationMs scales every gap upward.
+    ; Y follows the same calculation; 2D frame distance is not separately stored.
+
+    ; Divide elapsed time by duration and cap it so the final frame never exceeds the target.
+    progress        := Min(1, elapsedMs / animation.durationMs)
+    ; Invert progress because the cubic ease-out curve operates on the remaining distance.
+    inverseProgress := 1 - progress
+    ; Cube the remaining distance so motion decelerates smoothly as it approaches the target.
+    easedProgress   := 1 - (inverseProgress * inverseProgress * inverseProgress)
+
+    ; Scale the height delta by eased progress and round it for WinMove.
+    currentHeight   := Round(animation.startHeight + ((animation.targetHeight - animation.startHeight) * easedProgress))
+    ; Scale the width delta by eased progress and round it for WinMove.
+    currentWidth    := Round(animation.startWidth + ((animation.targetWidth - animation.startWidth) * easedProgress))
+    ; Scale the horizontal delta by eased progress and round it for WinMove.
+    currentX        := Round(animation.startX + ((animation.targetX - animation.startX) * easedProgress))
+    ; Scale the vertical delta by eased progress and round it for WinMove.
+    currentY        := Round(animation.startY + ((animation.targetY - animation.startY) * easedProgress))
+
+    WinMove, ahk_id %hWnd%, , %currentX%, %currentY%, %currentWidth%, %currentHeight%
+
+    ; Finalize only after the target frame, clearing ownership before callback re-entry.
+    if (progress < 1)
+        return
+
+    if IsObject(timerCallback)
+        SetTimer, % timerCallback, Delete
+    completionCallback := animation.completionCallback
+    animations.Delete(hWnd)
+    animation.timerCallback := ""
+    if IsObject(completionCallback)
+        completionCallback.Call()
+}
+
+; Animates a window to exact screen bounds without blocking the calling thread.
+MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durationMs := 180, completionCallback := "") {
+    static nextRequestId := 0
+
+    ; Validate the window and its current bounds before creating timer-owned animation state.
+    if !DllCall("IsWindow", "Ptr", hWnd)
+        return False
+
+    WinGetPos, startX, startY, startWidth, startHeight, ahk_id %hWnd%
+    if (startWidth <= 0 || startHeight <= 0)
+        return False
+
+    ; Default omitted dimensions to the current size so callers can animate position only.
+    if (targetWidth == "")
+        targetWidth := startWidth
+    if (targetHeight == "")
+        targetHeight := startHeight
+    if (targetWidth <= 0 || targetHeight <= 0)
+        return False
+
+    ; Clamp duration to at least one millisecond so frame progress never divides by zero.
+    durationMs   := Max(1, Round(durationMs))
+    ; Round the target height once so every frame converges on an exact WinMove value.
+    targetHeight := Round(targetHeight)
+    ; Round the target width once so every frame converges on an exact WinMove value.
+    targetWidth  := Round(targetWidth)
+    ; Round the target X coordinate once so every frame converges on an exact WinMove value.
+    targetX      := Round(targetX)
+    ; Round the target Y coordinate once so every frame converges on an exact WinMove value.
+    targetY      := Round(targetY)
+
+    ; Replace any in-flight move for this HWND so competing timers cannot race its position.
+    animations := _GetWindowMoveAnimations()
+    previousAnimation := animations[hWnd]
+    if IsObject(previousAnimation) {
+        previousTimerCallback := previousAnimation.timerCallback
+        if IsObject(previousTimerCallback)
+            SetTimer, % previousTimerCallback, Delete
+        previousAnimation.timerCallback := ""
+        animations.Delete(hWnd)
+    }
+
+    ; Finish immediately when already at the target while preserving completion-callback behavior.
+    if (startX == targetX && startY == targetY
+        && startWidth == targetWidth && startHeight == targetHeight) {
+        WinMove, ahk_id %hWnd%, , %targetX%, %targetY%, %targetWidth%, %targetHeight%
+        if IsObject(completionCallback)
+            completionCallback.Call()
+        return True
+    }
+
+    ; Store one uniquely identified request and animate by timer so the caller remains non-blocking.
+    nextRequestId++
+    animation := { completionCallback: completionCallback
+        , durationMs: durationMs
+        , hWnd: hWnd
+        , requestId: nextRequestId
+        , startHeight: startHeight
+        , startTick: A_TickCount
+        , startWidth: startWidth
+        , startX: startX
+        , startY: startY
+        , targetHeight: targetHeight
+        , targetWidth: targetWidth
+        , targetX: targetX
+        , targetY: targetY }
+    timerCallback := Func("_MoveWindowFrame").Bind(animation)
+    animation.timerCallback := timerCallback
+    animations[hWnd] := animation
+    SetTimer, % timerCallback, 15
+    return True
 }
 
 MoveAndFadeWindow(Hwnd, initPosx, toRight := True, fadeInOut := "out") {
