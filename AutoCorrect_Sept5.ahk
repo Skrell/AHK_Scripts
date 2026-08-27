@@ -3623,8 +3623,10 @@ $~WheelDown::
     {
         MouseGetPos,,, windowHwnd, controlHwnd, 2
         rootHwnd := DllCall("GetAncestor", "ptr", windowHwnd, "uint", 2, "ptr")
+        BeginBlockWheel()
         WinMinimize, ahk_id %rootHwnd%
         Sleep, 500
+        EndBlockWheel()
         return
     }
     else if (MouseIsOverTaskbarBlank())
