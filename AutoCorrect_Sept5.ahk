@@ -15911,6 +15911,12 @@ _CreateLButtonResizeSyncGhostCard(hwndID, ghostX, ghostY, ghostW, ghostH) {
     }
 
     Gui, %resizeGhostGuiName%: Show, NA x%ghostX% y%ghostY% w%ghostW% h%ghostH%
+    ; Combine flags that invalidate and erase the card, include its icon child, and repaint both immediately.
+    redrawFlags := 0x0001 | 0x0004 | 0x0080 | 0x0100
+    ; Finish painting the gray card and its icon before the real follower can be made transparent.
+    DllCall("user32\RedrawWindow", "Ptr", followerGhostHwnd, "Ptr", 0, "Ptr", 0, "UInt", redrawFlags, "Int")
+    ; Wait for DWM to process the painted card so the real follower is not hidden one composited frame too early.
+    DllCall("dwmapi\DwmFlush", "Int")
     return { guiName: resizeGhostGuiName, hwnd: followerGhostHwnd, iconHwnd: ghostIconHwnd, restoreTransparency: "", w: ghostW, x: ghostX, y: ghostY, h: ghostH }
 }
 
@@ -16800,14 +16806,6 @@ MWAGetMonitorMouseIsIn(buffer := 0) ; we didn't actually need the "Monitor = 0"
     Return ActiveMon
 }
 
-join( strArray )
-{
-  s := ""
-  for i,v in strArray
-    s .= ", " . v
-  Return substr(s, 3)
-}
-
 ; Returns the shared registry of non-blocking window-move animations keyed by HWND.
 _GetWindowMoveAnimations() {
     static animations := {}
@@ -16835,6 +16833,9 @@ _MoveWindowFrame(animation) {
         return
     }
 
+    ; Keep one animation frame uninterruptible while checking messages every 5 ms so its calculation and WinMove stay together.
+    Critical, On
+
     ; Account for A_TickCount wraparound so elapsed time remains valid in long-running scripts.
     elapsedMs := A_TickCount - animation.startTick
     if (elapsedMs < 0)
@@ -16855,32 +16856,37 @@ _MoveWindowFrame(animation) {
     ;             |                      ^
     ;             |                      |
     ;             +-- frame 1 calculation:
-    ;                 progress = 15 / 180 = 0.0833
-    ;                 easedProgress = 1 - (1 - 0.0833)^3 = 0.2297
-    ;                 currentX[1] = 100 + ((700 - 100) * 0.2297) = 238
-    ;                 frameDeltaX[1] = 238 - 100 = 138 px
+    ;                 progress                    = 15 / 180 = 0.0833 elapsed-time fraction
+    ;                 inverseProgress             = 1 - 0.0833 = 0.9167 remaining-time fraction
+    ;                 remaining-distance fraction = 0.9167^3 = 0.7703
+    ;                 easedProgress               = 1 - 0.7703 = 0.2297 covered-distance fraction
+    ;                 frameX[1]                   = 100 + (600 * 0.2297) = 238
+    ;                 frameDeltaX[1]              = 238 - 100 = 138 px
     ;
     ; Cubic ease-out makes successive gaps shrink as the window approaches targetX.
     ; A larger targetX - startX over the same durationMs scales every gap upward.
     ; Y follows the same calculation; 2D frame distance is not separately stored.
 
-    ; Divide elapsed time by duration and cap it so the final frame never exceeds the target.
+    ; Divide elapsed time by duration and cap it to obtain the elapsed-time fraction.
     progress        := Min(1, elapsedMs / animation.durationMs)
-    ; Invert progress because the cubic ease-out curve operates on the remaining distance.
+    ; Subtract the elapsed-time fraction from one to obtain the remaining-time fraction.
     inverseProgress := 1 - progress
-    ; Cube the remaining distance so motion decelerates smoothly as it approaches the target.
+    ; Cube the remaining-time fraction, then subtract it from one to obtain the covered-distance fraction.
     easedProgress   := 1 - (inverseProgress * inverseProgress * inverseProgress)
 
     ; Scale the height delta by eased progress and round it for WinMove.
-    currentHeight   := Round(animation.startHeight + ((animation.targetHeight - animation.startHeight) * easedProgress))
+    frameHeight     := Round(animation.startHeight + ((animation.targetHeight - animation.startHeight) * easedProgress))
     ; Scale the width delta by eased progress and round it for WinMove.
-    currentWidth    := Round(animation.startWidth + ((animation.targetWidth - animation.startWidth) * easedProgress))
-    ; Scale the horizontal delta by eased progress and round it for WinMove.
-    currentX        := Round(animation.startX + ((animation.targetX - animation.startX) * easedProgress))
+    frameWidth      := Round(animation.startWidth + ((animation.targetWidth - animation.startWidth) * easedProgress))
+    ; Scale the total horizontal distance by the covered-distance fraction, add startX, and round for WinMove.
+    frameX          := Round(animation.startX + ((animation.targetX - animation.startX) * easedProgress))
     ; Scale the vertical delta by eased progress and round it for WinMove.
-    currentY        := Round(animation.startY + ((animation.targetY - animation.startY) * easedProgress))
+    frameY          := Round(animation.startY + ((animation.targetY - animation.startY) * easedProgress))
 
-    WinMove, ahk_id %hWnd%, , %currentX%, %currentY%, %currentWidth%, %currentHeight%
+    WinMove, ahk_id %hWnd%, , %frameX%, %frameY%, %frameWidth%, %frameHeight%
+
+    ; Restore normal thread interruption after the complete frame has been applied.
+    Critical, Off
 
     ; Finalize only after the target frame, clearing ownership before callback re-entry.
     if (progress < 1)
@@ -16961,9 +16967,9 @@ MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durati
         , targetWidth: targetWidth
         , targetX: targetX
         , targetY: targetY }
-    timerCallback := Func("_MoveWindowFrame").Bind(animation)
+    timerCallback           := Func("_MoveWindowFrame").Bind(animation)
     animation.timerCallback := timerCallback
-    animations[hWnd] := animation
+    animations[hWnd]        := animation
     SetTimer, % timerCallback, 15
     return True
 }
