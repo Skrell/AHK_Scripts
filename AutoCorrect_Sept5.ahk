@@ -48,12 +48,11 @@ SetWinDelay,      1 ;
 SetControlDelay,  1 ;
 
 ; +----------------------------------------------------------------------------+
-; | Window, Search, And Selection State                                        |
-; | Tracks the live window lists, Alt+Tab-style cycling, popup-selection UI,   |
-; | and other top-level state shared by the window-management hotkeys.         |
+; | Window Enumeration And Cycle State                                         |
+; | Tracks the live window lists and retained selection state shared by the    |
+; | Alt+Tab-style window-cycling flows.                                         |
 ; +----------------------------------------------------------------------------+
 Global CurrentDesktop                                      := 1
-Global mouseMoving                                         := False
 Global CanceledWinSwap                                     := False
 Global ValidWindows                                        := []
 Global GroupedWindows                                      := []
@@ -65,18 +64,31 @@ Global cycleCount                                          := 1
 ; building the GUI. Buffer that press here so the loop consumes it instead of losing it.
 Global bufferedCycleAdvance                                := False
 Global startHighlight                                      := False
-Global k_border_thickness                                  := 4
-Global k_border_color                                      := 0xFF00FF
 Global hitTAB                                              := False
 Global hitTilde                                            := False
+Global LclickSelected                                      := False
+; HWND of the last active window retained by the window-cycle selection flow.
+Global lastActWinID                                        :=
+; +----------------------------------------------------------------------------+
+; | Window Search State                                                        |
+; | Stores the query, result counts, and selection flags used while searching  |
+; | the current window collection.                                             |
+; +----------------------------------------------------------------------------+
 Global SearchingWindows                                    := False
 Global UserInputTrimmed                                    := ""
 Global memotext                                            := ""
 Global totalMenuItemCount                                  := 0
 Global onlyTitleFound                                      := ""
 Global CancelClose                                         := False
+; +----------------------------------------------------------------------------+
+; | Window Highlight Overlay State                                             |
+; | Configures and tracks the reusable outline and dimming surfaces used to    |
+; | emphasize a selected window.                                               |
+; +----------------------------------------------------------------------------+
+Global k_border_thickness                                  := 4
+Global k_border_color                                      := 0xFF00FF
+Global k_Opacity                                           := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 Global DrawingRect                                         := False
-Global LclickSelected                                      := False
 ; +----------------------------------------------------------------------------+
 ; | Measurement Overlay State                                                  |
 ; | Backs the temporary pixel-measure tool so one drag can reuse lightweight   |
@@ -94,16 +106,11 @@ Global measureStartX                                       := 0
 Global measureStartY                                       := 0
 ; Thickness in pixels for the horizontal and vertical measurement guides.
 Global k_measureThickness                                  := 3
-Global currMonHeight                                       := 0
-Global currMonWidth                                        := 0
-Global LbuttonEnabled                                      := True
 ; +----------------------------------------------------------------------------+
-; | Typing Auto-Fix, Deferred Rewrite, And Activation State                    |
-; | Caches whether typing fixes are allowed, queues short-lived deferred text  |
-; | rewrites, and keeps focus/activation bookkeeping cheap while typing or     |
-; | clicking into another window.                                              |
+; | Typing Auto-Fix Gate And Cache State                                       |
+; | Caches whether typing fixes are allowed so most keystrokes can reuse the   |
+; | latest focus and editability decision.                                     |
 ; +----------------------------------------------------------------------------+
-Global X_PriorPriorHotKey                                  :=
 Global StopAutoFix                                         := False
 ; Cache the typing-auto-fix eligibility decision so most keystrokes avoid the
 ; slower UIA/MSAA focus probes.
@@ -120,22 +127,17 @@ Global c_typingAutoFixHwnd                                 := 0
 Global c_typingAutoFixReason                               := ""
 ; Tick count when the cache entry was last refreshed.
 Global c_typingAutoFixTick                                 := 0
-; True while the post-boundary hotstring-buffer reset timer is pending.
-Global hotstringResetTimerPending                          := False
-; Target hotstringBoundarySeq that schedules a post-boundary Hotstring("Reset").
-; Zero means no deferred buffer reset is pending.
-Global hotstringResetAtBoundarySeq                         := 0
 ; Maximum age for a same-window/same-control fast cache hit.
 Global k_typingAutoFixFastTtlMs                            := 125
 ; Minimum gap before repeating slower UIA/MSAA probes for unchanged focus.
 Global k_typingAutoFixSlowPathMs                           := 400
 ; Tick count of the last slow UIA/MSAA probe attempt.
 Global typingAutoFixSlowProbeTick                          := 0
-; Monotonic count of physical text-input key-downs. Async editability probes
-; compare this with their queued snapshot to detect typing during the probe.
-Global physicalTypingSeq                                   := 0
-; Monotonic count of physical keys that exactly match #HotString EndChars.
-Global hotstringBoundarySeq                                := 0
+; +----------------------------------------------------------------------------+
+; | Typing Auto-Fix Refresh And Prewarm State                                  |
+; | Retains the target and sequence snapshots used by deferred editability     |
+; | probes after focus, activation, or click changes settle.                   |
+; +----------------------------------------------------------------------------+
 ; Focused control class captured with an async editability-refresh request.
 Global typingAutoFixRefreshCtrlClass                       := ""
 ; Exact focused control handle captured with an async refresh request.
@@ -169,6 +171,22 @@ Global typingAutoFixPrewarmStartHotstringBoundarySeq       := 0
 Global typingAutoFixPrewarmStartTypingSeq                  := 0
 ; Short delay that lets a click or activation finish assigning keyboard focus.
 Global k_typingAutoFixPrewarmDelayMs                       := 25
+; +----------------------------------------------------------------------------+
+; | Typing Sequence And Deferred Rewrite State                                 |
+; | Coordinates physical typing boundaries and short-lived rewrite callbacks   |
+; | so stale corrections cannot land in a newer text context.                  |
+; +----------------------------------------------------------------------------+
+Global X_PriorPriorHotKey                                  :=
+; True while the post-boundary hotstring-buffer reset timer is pending.
+Global hotstringResetTimerPending                          := False
+; Target hotstringBoundarySeq that schedules a post-boundary Hotstring("Reset").
+; Zero means no deferred buffer reset is pending.
+Global hotstringResetAtBoundarySeq                         := 0
+; Monotonic count of physical text-input key-downs. Async editability probes
+; compare this with their queued snapshot to detect typing during the probe.
+Global physicalTypingSeq                                   := 0
+; Monotonic count of physical keys that exactly match #HotString EndChars.
+Global hotstringBoundarySeq                                := 0
 ; Shared sequence token for deferred typing rewrites so older timer callbacks can
 ; detect that a newer key event already replaced their context and should win.
 Global typingFixSeq                                        := 0
@@ -184,6 +202,10 @@ Global clipPreferExplicitCtrlV                             := False
 ; either commit "{BS}{?}{ENTER}" inline or fall back to one normal Enter, but
 ; never let both the raw key and the rewrite path fire.
 Global disableEnter                                        := False
+; Name of the most recently triggered hotkey for repeat-sensitive logic.
+Global lastHotkeyTyped                                     := ""
+; Tick count of the most recent hotkey-triggered send used by typing heuristics.
+Global TimeOfLastHotkeyTyped                               := A_TickCount
 ; +----------------------------------------------------------------------------+
 ; | Everything Edit1 Deferred Column Auto-Fit State                            |
 ; | Queues Ctrl+NumpadAdd for Everything's search box so the send runs only    |
@@ -262,12 +284,9 @@ Global c_tbcAdjustColumnsTargetTick                        := 0
 ; full target resolution to avoid using a stale DirectUI/ListView guess.
 Global k_tbcAdjustColumnsTargetTtlMs                       := 350
 ; +----------------------------------------------------------------------------+
-; Deferred typing correction state so punctuation and capitalization rewrites can
-; happen just after the live keypress cycle settles instead of on the triggering
-; key event itself.
-; Slash uses this slot for deferred "/ " rewrites and for slash+Enter in
-; non-classic editors. Classic Edit/RichEdit slash+Enter is handled inline by
-; the custom $Enter hotkey instead of through this timer.
+; | Deferred Slash Correction State                                            |
+; | Retains one slash rewrite until the live keypress settles and verifies the |
+; | same window, control, string, and typing sequence still own the request.    |
 ; +----------------------------------------------------------------------------+
 ; True when the latest physical slash follows another slash in the current
 ; whitespace-delimited string, so every FixSlash path can reject path-like input.
@@ -297,6 +316,11 @@ Global tbcFixSlashId                                       := 0
 ; Tick count recorded when the slash-space rewrite is queued, used to drop the
 ; request once it has been tbc longer than k_tbcTypingFixMaxAgeMs.
 Global tbcFixSlashRequestedTick                            := 0
+; +----------------------------------------------------------------------------+
+; | Deferred Hoty Correction State                                             |
+; | Retains one capitalization rewrite until the live keypress settles and     |
+; | verifies that its original edit target and typing sequence are unchanged.  |
+; +----------------------------------------------------------------------------+
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
 Global tbcHotyCtrlNN                                       := ""
@@ -359,7 +383,7 @@ Global k_postActivationLButtonPollMs                       := 15
 ; Maximum lifetime of one deferred inactive-window click snapshot.
 Global k_postActivationLButtonTimeoutMs                    := 1000
 ; +----------------------------------------------------------------------------+
-; | Explorer CtrlAdd Request State                                             |
+; | Explorer CtrlAdd Active Request State                                      |
 ; | Coordinates guarded header attempts and timer-verified readiness sends     |
 ; | before delegating each column adjustment to SendCtrlAdd().                 |
 ; +----------------------------------------------------------------------------+
@@ -442,6 +466,12 @@ Global explorerCtrlAddRequestSourceCtrlNN                  := ""
 Global explorerCtrlAddRequestStablePathConfirmed           := False
 ; Number of consecutive startup samples returning the same nonempty directory.
 Global explorerCtrlAddRequestStablePathHitCount            := 0
+; Counts repeated unchanged #32770 toolbar-path samples before one trace-only
+; comparison with the dialog's native folder-path sources.
+Global explorerCtrlAddRequestToolbarBaselineUnchangedHits  := 0
+; Prevents repeated native-path comparisons for the same unchanged toolbar
+; baseline; this exists only to keep diagnostic tracing bounded per request.
+Global explorerCtrlAddRequestToolbarBaselineCrosscheckMade := False
 ; True only while the current request lacks a terminal trace event. This
 ; trace-only flag distinguishes a replacement from a request that already ended.
 Global explorerCtrlAddRequestTracePending                  := False
@@ -450,12 +480,22 @@ Global explorerCtrlAddRequestTracePending                  := False
 Global explorerCtrlAddRequestWaitingForNavigationEvent     := False
 ; True when the current CabinetWClass request has a connected Explorer event sink.
 Global explorerCtrlAddRequestUsesNavigationEvents          := False
+; +----------------------------------------------------------------------------+
+; | Explorer Navigation Observer State                                         |
+; | Retains per-window COM event sinks and the navigation generations consumed |
+; | by active Explorer CtrlAdd requests.                                        |
+; +----------------------------------------------------------------------------+
 ; Retained per-tab COM objects keep NavigateComplete2 event sinks alive.
 Global explorerNavigationObservers                         := {}
 ; Per-Explorer generations distinguish navigation events already consumed by a
 ; request. A matching active-tab event may also retain a normalized filesystem
 ; path so changed-path CabinetWClass requests can avoid a slower PIDL read.
 Global explorerNavigationStates                            := {}
+; +----------------------------------------------------------------------------+
+; | Explorer CtrlAdd Timing And Trace Configuration                            |
+; | Defines readiness polling, navigation fallbacks, trace buffering, and the  |
+; | shared UIA evidence accepted by Explorer column-alignment requests.         |
+; +----------------------------------------------------------------------------+
 ; Buffered Explorer CtrlAdd trace text. Terminal outcomes flush this buffer so
 ; ordinary timer probes do not add a disk write to every readiness check.
 Global explorerCtrlAddTraceBuffer                          := ""
@@ -490,7 +530,7 @@ Global k_explorerItemsViewContentEvidenceCondition         := "ControlType=ListI
 ; | Enables diagnostic logs and defines their output files.                    |
 ; +----------------------------------------------------------------------------+
 ; Enables the detailed Explorer/file-dialog CtrlAdd timing trace.
-Global k_debugLogExplorerCtrlAddEnabled                    := False
+Global k_debugLogExplorerCtrlAddEnabled                    := True
 ; Persistent trace location beside this script so it is easy to find.
 Global k_debugLogExplorerCtrlAddFile                       := A_ScriptDir . "\AutoCorrect_ExplorerCtrlAddTrace.log"
 ; Enables general virtual-desktop, session, and DWM diagnostic logging.
@@ -498,9 +538,9 @@ Global k_debugLogGeneralEnabled                            := False
 ; Persistent general diagnostic location beside this script.
 Global k_debugLogGeneralFile                               := A_ScriptDir . "\AutoCorrect_Debug.log"
 ; +----------------------------------------------------------------------------+
-; | Runtime Context And Click/Drag Scratch State                               |
-; | Stores the current desktop, monitor, Explorer path, click target, and      |
-; | in-progress drag metadata shared across mouse and window-management flows. |
+; | Platform And Input Constants                                               |
+; | Caches OS feature flags, click timing thresholds, and character sets used  |
+; | across input and window-management flows.                                  |
 ; +----------------------------------------------------------------------------+
 ; Platform/runtime flags cached once for OS-specific behavior.
 Global k_isWin11                                           := DetectWin11()
@@ -512,11 +552,16 @@ Global k_DoubleClickTime                                   := DllCall("GetDouble
 Global k_SingleClickTime                                   := floor(DllCall("GetDoubleClickTime") * 0.5)
 ; Lowercase alphabet characters used by text and hotstring helpers.
 Global k_keys                                              := "abcdefghijklmnopqrstuvwxyz"
+; Decimal digit characters used by text and hotstring helpers.
+Global k_numbers                                           := "0123456789"
+; +----------------------------------------------------------------------------+
+; | Native List-View Auto-Fit Configuration                                    |
+; | Configures the direct SysListView32 column-width path and its fallback     |
+; | child-control probe.                                                       |
+; +----------------------------------------------------------------------------+
 ; Selects whether native SysListView32 columns fit their item content or header
 ; text while the direct-message auto-fit experiment is enabled.
 Global k_nativeSysListViewColumnAutoFitMode                := "header_no_fill"
-; Decimal digit characters used by text and hotstring helpers.
-Global k_numbers                                           := "0123456789"
 ; Maximum time SendCtrlAdd() waits for MouseGetPos to identify a specific child
 ; when Explorer initially reports the generic ShellTabWindowClass1 host.
 Global k_sendCtrlAddShellTabProbeTimeoutMs                 := 50
@@ -524,10 +569,14 @@ Global k_sendCtrlAddShellTabProbeTimeoutMs                 := 50
 ; False restores the existing focus plus Ctrl+NumpadAdd behavior unchanged.
 Global k_useNativeSysListViewColumnAutoFit                 := True
 ; +----------------------------------------------------------------------------+
-; | Monitor/Desktop/Context State                                              |
-; | Shared monitor, desktop, Explorer-path, and click-position context reused  |
-; | across window activation, taskbar, and shell-navigation flows.             |
+; | Monitor, Desktop, And Explorer Path Context                                |
+; | Retains the monitor selection, virtual desktop context, and Explorer paths |
+; | shared by window activation and shell-navigation flows.                    |
 ; +----------------------------------------------------------------------------+
+; Height of the monitor most recently matched by MWAGetMonitorMouseIsIn().
+Global currMonHeight                                       := 0
+; Width of the monitor most recently matched by MWAGetMonitorMouseIsIn().
+Global currMonWidth                                        := 0
 ; Monitor index currently targeted by monitor-aware window flows.
 Global currentMon                                          := 0
 ; Previously targeted monitor index for cross-monitor transitions.
@@ -538,6 +587,11 @@ Global currentPath                                         := ""
 Global prevPath                                            := ""
 ; Cached taskbar height used by taskbar-aware positioning logic.
 Global TaskBarHeight                                       := 0
+; +----------------------------------------------------------------------------+
+; | Taskbar Explorer Spawn State                                               |
+; | Retains one blank-taskbar double-click until the newly activated Explorer  |
+; | window claims that click-relative placement request or it expires.         |
+; +----------------------------------------------------------------------------+
 ; Maximum time a taskbar-launched Explorer window may claim the saved click context.
 Global k_taskbarExplorerSpawnTimeoutMs                     := 5000
 ; Screen X coordinate of the blank-taskbar double-click that launched Explorer.
@@ -548,22 +602,18 @@ Global taskbarExplorerSpawnClickY                          := 0
 Global taskbarExplorerSpawnDeadlineTick                    := 0
 ; CabinetWClass HWNDs present before the pending Explorer launch began.
 Global taskbarExplorerSpawnExistingHwnds                   := {}
+; +----------------------------------------------------------------------------+
+; | Tray Popup Position State                                                  |
+; | Retains the last taskbar or tray click position used to place popup UI.    |
+; +----------------------------------------------------------------------------+
 ; Screen X coordinate of the last taskbar/tray click.
 Global trayClickPosX                                       := 0
 ; Screen Y coordinate of the last taskbar/tray click.
 Global trayClickPosY                                       := 0
-; Cached Win+Ctrl+D helper state used by desktop creation logic.
-Global _winCtrlD                                           := ""
 ; +----------------------------------------------------------------------------+
-; | Window/UI State                                                            |
-; | Shared HWNDs and retained popup content reused across activation and cycle |
-; | UI updates.                                                                |
+; | Window Title Popup State                                                   |
+; | Retains the HWND and displayed content for the reusable WindowTitle GUI.   |
 ; +----------------------------------------------------------------------------+
-; HWND of the last active window tracked by activation logic.
-Global lastActWinID                                        :=
-; HWND whose LButton-driven column alignment is blocked after a SysHeader drag.
-; A qualifying double-click in that window's SysListView clears the block.
-Global disableSendCtrlHwnd                                 := ""
 ; HWND of the retained WindowTitle popup GUI.
 Global WindowTitleID                                       :=
 ; Current icon source spec shown in the WindowTitle popup.
@@ -573,9 +623,9 @@ Global WindowTitleText                                     := ""
 ; True once the retained WindowTitle popup GUI has been created.
 Global WindowTitleGuiReady                                 := False
 ; +----------------------------------------------------------------------------+
-; | Input/Gesture State                                                        |
-; | Shared typing, click, and drag flags that let separate hotkeys and mouse   |
-; | handlers coordinate one in-progress gesture.                               |
+; | Left-Button Gesture And Explorer Click State                               |
+; | Coordinates custom LButton navigation, Explorer column alignment, and the  |
+; | live window-drag flow.                                                     |
 ; +----------------------------------------------------------------------------+
 ; Arms only this script's custom double-click navigation/alignment action;
 ; `$~LButton` continues passing every physical click through to Windows.
@@ -585,23 +635,29 @@ Global WindowTitleGuiReady                                 := False
 Global allowDoubleClicks                                   := True
 ; True while the custom live window-drag flow is in progress.
 Global DraggingWindow                                      := False
-; Name of the most recently triggered hotkey for repeat-sensitive logic.
-Global lastHotkeyTyped                                     := ""
-; True when MButton should behave like Enter for the current gesture.
-Global MbuttonIsEnter                                      := False
-; Temporarily suppresses native RButton handling during MButton drag flows.
-Global suspendRightButtonForMButtonDrag                    := False
-; Tick count of the most recent hotkey-triggered send used by typing heuristics.
-Global TimeOfLastHotkeyTyped                               := A_TickCount
+; HWND whose LButton-driven column alignment is blocked after a SysHeader drag.
+; A qualifying double-click in that window's SysListView clears the block.
+Global disableSendCtrlHwnd                                 := ""
+; Allows the script's context-sensitive LButton hotkeys while no guarded flow owns them.
+Global LbuttonEnabled                                      := True
+; Legacy window-drag flag; current executable code does not read or update it.
+Global mouseMoving                                         := False
+; ClassNN of the child control captured beneath the pointer for the current Explorer click.
+Global _winCtrlD                                           := ""
 ; +----------------------------------------------------------------------------+
-; | Live-Resize And Cursor-Clamp State                                         |
-; | Shared per-drag state for synced left-button resize and the temporary      |
-; | bottom-taskbar window-edge boundary enforced through cursor confinement.  |
+; | Bottom Resize Cursor-Clamp State                                           |
+; | Retains the window that owns the temporary bottom-taskbar resize boundary  |
+; | enforced through cursor confinement.                                       |
 ; +----------------------------------------------------------------------------+
 ; True while this script owns a bottom-edge native-resize ClipCursor boundary.
 Global bottomResizeCursorClampActive                       := False
 ; Top-level window handle whose native bottom-edge resize owns the cursor clamp.
 Global bottomResizeCursorClampHwnd                         := 0
+; +----------------------------------------------------------------------------+
+; | Synchronized Left-Button Resize State                                      |
+; | Retains the dragged window, follower windows, ghost surfaces, and original |
+; | topmost states for one synchronized resize gesture.                        |
+; +----------------------------------------------------------------------------+
 ; True while the synced left-button resize workflow is armed and running.
 Global lButtonResizeSyncActive                             := False
 ; HWND of the actively dragged window in the synced resize workflow.
@@ -610,6 +666,8 @@ Global lButtonResizeSyncDraggedHwnd                        := 0
 Global lButtonResizeSyncDraggedStartedAlwaysOnTop          := False
 ; Whether the dragged window has been made transparent during synced resize.
 Global lButtonResizeSyncDraggedTransparent                 := False
+; Ghost-card HWNDs whose gray surface and black perimeter are painted directly.
+Global lButtonResizeGhostPaintHwnds                        := {}
 ; Monotonic suffix used to generate unique resize-ghost GUI names.
 Global lButtonResizeGhostSeq                               := 0
 ; Hit-test code for the edge or corner currently being dragged.
@@ -647,7 +705,7 @@ Global deferredModifierTargetHwnd                          := 0
 ; +----------------------------------------------------------------------------+
 ; | Window Snap And Drag Configuration                                         |
 ; | These are the coarse behavior knobs for snapping, monitor work-area rules, |
-; | classes that should never be drag-managed, and overlay dimming strength.   |
+; | and classes that should never be drag-managed.                             |
 ; +----------------------------------------------------------------------------+
 Global k_UseWorkArea                                       := true   ; true = monitor work area (ignores taskbar). false = full monitor.
 Global k_SnapRange                                         := 20     ; px: distance from edge to begin snapping
@@ -656,8 +714,6 @@ Global k_ReleaseAway                                       := 24     ; px: while
 
 ; Skip dragging these classes (taskbar/desktop)
 Global k_skipClasses                                       := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
-
-Global k_Opacity                                           := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
 
 ; +----------------------------------------------------------------------------+
 ; | Right-Button State Machine                                                 |
@@ -670,12 +726,16 @@ Global k_Opacity                                           := 220     ; 255=opaq
 ; - rightButtonSuppressMenuOnUp dismisses the shell menu after an RButton+wheel action.
 ; - rightButtonTaskbarPassthrough keeps the custom RButton state machine out of taskbar
 ;   and desktop-shell clicks so those surfaces stay fully native.
+; True when MButton should behave like Enter for the current gesture.
+Global MbuttonIsEnter                                      := False
 Global rightButtonHeld                                     := false
 Global rightButtonComboUsed                                := false
 Global rightButtonNativeDown                               := false
 Global rightButtonSuppressMenuOnUp                         := false
 Global rightButtonTaskbarPassthrough                       := false
 Global swallowNextRButtonUpFromMButtonDrag                 := false
+; Temporarily suppresses native RButton handling during MButton drag flows.
+Global suspendRightButtonForMButtonDrag                    := False
 
 ; Used by explicit LButton+RButton chords that should consume the normal
 ; right-click flow, such as the title-bar toggle and clear-edit gesture.
@@ -730,6 +790,10 @@ if (runAtStartup)
     Menu, TrayPopup, Check, Run at startup
 else
     Menu, TrayPopup, Uncheck, Run at startup
+; Paint resize ghost cards directly so their borders do not require moving child surfaces.
+OnMessage(0x000F, "_PaintLButtonResizeSyncGhostCard")
+; Suppress background erasure because WM_PAINT replaces the complete ghost-card surface.
+OnMessage(0x0014, "_EraseLButtonResizeSyncGhostCardBackground")
 ; listens for tray icon notifications
 ; - watch for message 0x404
 ; - sent to your script window
@@ -7703,6 +7767,7 @@ $~Lbutton::
     If (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < k_DoubleClickTime)
         && (abs(expX1-expX2) < 20 && abs(expY1-expY2) < 20)) {
+
         _SpawnExplorerFromTaskbar(expX1, expY1)
         expX2 := 0
         expY2 := 0
@@ -8028,8 +8093,7 @@ UIA_SafeElementFromPoint_(x, y, transactionTimeout := 2000, uiaDeadlineTick := 0
 
 ; Resolve a #32770 file dialog's Items View from proportional screen points.
 ; This is the fallback when native child-HWND scoping cannot find the file panel.
-_ResolveDialogItemsViewByPoint(dlgHwnd, ByRef itemsEl, transactionTimeout
-    , uiaDeadlineTick, useCachedItems, ByRef resolutionReason) {
+_ResolveDialogItemsViewByPoint(dlgHwnd, ByRef itemsEl, transactionTimeout, uiaDeadlineTick, useCachedItems, ByRef resolutionReason) {
     static c_cachedItemsDlgHwnd  := 0
     static c_cachedItemsEl       := ""
     static c_cachedItemsTick     := 0
@@ -8038,14 +8102,17 @@ _ResolveDialogItemsViewByPoint(dlgHwnd, ByRef itemsEl, transactionTimeout
     static fallbackProbes        := [[75,35],[75,65]]
 
     global UIA
+
     resolutionReason := ""
-    itemsEl := ""
+    itemsEl          := ""
+
     if (!IsObject(UIA)) {
         try
             UIA := UIA_Interface()
         catch e
             UIA := ""
     }
+
     if !IsObject(UIA) {
         resolutionReason := "uia_unavailable"
         return false
@@ -8060,8 +8127,9 @@ _ResolveDialogItemsViewByPoint(dlgHwnd, ByRef itemsEl, transactionTimeout
     if (!uiaDeadlineTick)
         uiaDeadlineTick := A_TickCount + transactionTimeout
 
-    items := ""
+    items             := ""
     resolvedFromCache := False
+
     if (useCachedItems && c_cachedItemsDlgHwnd = dlgHwnd && (A_TickCount - c_cachedItemsTick) <= k_cachedItemsTtlMs && IsObject(c_cachedItemsEl)) {
         if (_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
             info := SafeUIA_GetElementSnapshot(c_cachedItemsEl, "className|controlType|name")
@@ -8108,12 +8176,10 @@ _ResolveDialogItemsViewByPoint(dlgHwnd, ByRef itemsEl, transactionTimeout
     }
 
     c_cachedItemsDlgHwnd := dlgHwnd
-    c_cachedItemsEl := items
-    c_cachedItemsTick := A_TickCount
-    itemsEl := items
-    resolutionReason := resolvedFromCache
-        ? "cached_items_view"
-        : "screen_point_items_view"
+    c_cachedItemsEl      := items
+    c_cachedItemsTick    := A_TickCount
+    itemsEl              := items
+    resolutionReason     := resolvedFromCache ? "cached_items_view" : "screen_point_items_view"
 
     return true
 }
@@ -8121,15 +8187,21 @@ _ResolveDialogItemsViewByPoint(dlgHwnd, ByRef itemsEl, transactionTimeout
 ; Resolve a CabinetWClass Items View below the native file-panel control chosen
 ; by the same scan used for column alignment. The lookup receives only a short
 ; sub-budget so the existing window-root search remains a compatibility fallback.
-_ResolveCabinetItemsViewFromNativeControl(explorerHwnd, ByRef itemsEl
-    , transactionTimeout, uiaDeadlineTick, ByRef candidateCount
-    , ByRef resolutionReason, ByRef resolvedCtrlNN := ""
-    , ByRef resolvedCtrlHwnd := 0) {
-    itemsEl := ""
-    candidateCount := 0
+_ResolveCabinetItemsViewFromNativeControl(explorerHwnd
+                                        , ByRef itemsEl
+                                        , transactionTimeout
+                                        , uiaDeadlineTick
+                                        , ByRef candidateCount
+                                        , ByRef resolutionReason
+                                        , ByRef resolvedCtrlNN   := ""
+                                        , ByRef resolvedCtrlHwnd := 0) {
+
+    itemsEl          := ""
+    candidateCount   := 0
     resolutionReason := ""
-    resolvedCtrlNN := ""
+    resolvedCtrlNN   := ""
     resolvedCtrlHwnd := 0
+
     if (!explorerHwnd) {
         resolutionReason := "explorer_hwnd_unavailable"
         return false
@@ -8158,12 +8230,11 @@ _ResolveCabinetItemsViewFromNativeControl(explorerHwnd, ByRef itemsEl
 
     ; Prefer the focused file panel, then use the chooser's existing modern-Explorer control priorities.
     ControlGetFocus, focusedCtrlNN, ahk_id %explorerHwnd%
-    preferredCtrlNN := ChooseSendCtrlAddTarget(explorerHwnd, "CabinetWClass"
-        , focusedCtrlNN, targetScan)
+    preferredCtrlNN := ChooseSendCtrlAddTarget(explorerHwnd, "CabinetWClass", focusedCtrlNN, targetScan)
     if (preferredCtrlNN = "") {
         resolutionReason := candidateCount
-            ? "preferred_native_control_unresolved"
-            : "native_candidates_unavailable"
+                            ? "preferred_native_control_unresolved"
+                            : "native_candidates_unavailable"
         return false
     }
 
@@ -8208,26 +8279,29 @@ _ResolveCabinetItemsViewFromNativeControl(explorerHwnd, ByRef itemsEl
         return false
     }
 
-    itemsEl := items
-    resolvedCtrlNN := preferredCtrlNN
+    itemsEl          := items
+    resolvedCtrlNN   := preferredCtrlNN
     resolvedCtrlHwnd := preferredCtrlHwnd
-    resolutionReason := "control=" . preferredCtrlNN
-        . " hwnd=" . preferredCtrlHwnd
+    resolutionReason := "control=" . preferredCtrlNN . " hwnd=" . preferredCtrlHwnd
     return true
 }
 
 ; Resolve a #32770 file dialog's Items View below its most likely native file-
 ; panel controls. At most two candidates share a short sub-budget so the point
 ; fallback retains time when a provider does not expose the native subtree.
-_ResolveDialogItemsViewFromNativeControls(dlgHwnd, ByRef itemsEl
-    , transactionTimeout, uiaDeadlineTick, ByRef candidateCount
-    , ByRef resolutionReason, ByRef resolvedCtrlNN := ""
-    , ByRef resolvedCtrlHwnd := 0) {
+_ResolveDialogItemsViewFromNativeControls(dlgHwnd
+                                        , ByRef itemsEl
+                                        , transactionTimeout
+                                        , uiaDeadlineTick
+                                        , ByRef candidateCount
+                                        , ByRef resolutionReason
+                                        , ByRef resolvedCtrlNN := ""
+                                        , ByRef resolvedCtrlHwnd := 0) {
     ; Clear every output first so a failed lookup cannot expose stale data to its fallback caller.
-    itemsEl := ""
-    candidateCount := 0
+    itemsEl          := ""
+    candidateCount   := 0
     resolutionReason := ""
-    resolvedCtrlNN := ""
+    resolvedCtrlNN   := ""
     resolvedCtrlHwnd := 0
     ; A live dialog root is required because every candidate ClassNN and HWND is resolved beneath it.
     if (!dlgHwnd) {
@@ -8245,7 +8319,7 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd, ByRef itemsEl
 
     ; Preserve candidate priority in an array while the map prevents duplicate UIA searches by ClassNN.
     candidateCtrlNNs := []
-    seenCtrlNNs := {}
+    seenCtrlNNs      := {}
     ; Put the preferred control first so the shortest UIA budget is spent on the most likely Items View.
     if (preferredCtrlNN != "") {
         candidateCtrlNNs.Push(preferredCtrlNN)
@@ -8257,16 +8331,15 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd, ByRef itemsEl
     {
         if (candidateCtrlNN = "" || seenCtrlNNs.HasKey(candidateCtrlNN))
             continue
+
         candidateCtrlNNs.Push(candidateCtrlNN)
         seenCtrlNNs[candidateCtrlNN] := True
     }
-    for ctrlIndex, candidateCtrlNN in ["DirectUIHWND2", "DirectUIHWND3"
-        , "DirectUIHWND4", "DirectUIHWND6", "DirectUIHWND8"]
+    for ctrlIndex, candidateCtrlNN in ["DirectUIHWND2", "DirectUIHWND3", "DirectUIHWND4", "DirectUIHWND6", "DirectUIHWND8"]
     {
-        if (!InStr(A_Space . targetScan.directCtrls . A_Space
-            , A_Space . candidateCtrlNN . A_Space, True)
-         || seenCtrlNNs.HasKey(candidateCtrlNN))
+        if (!InStr(A_Space . targetScan.directCtrls . A_Space, A_Space . candidateCtrlNN . A_Space, True) || seenCtrlNNs.HasKey(candidateCtrlNN))
             continue
+
         candidateCtrlNNs.Push(candidateCtrlNN)
         seenCtrlNNs[candidateCtrlNN] := True
     }
@@ -8276,6 +8349,7 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd, ByRef itemsEl
     {
         if (candidateCtrlNN = "" || seenCtrlNNs.HasKey(candidateCtrlNN))
             continue
+
         candidateCtrlNNs.Push(candidateCtrlNN)
         seenCtrlNNs[candidateCtrlNN] := True
     }
@@ -8288,16 +8362,14 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd, ByRef itemsEl
     }
 
     ; Honor the caller's shared deadline so this preferred native lookup cannot starve the point fallback.
-    remainingMs := uiaDeadlineTick
-        ? uiaDeadlineTick - A_TickCount
-        : transactionTimeout
+    remainingMs := uiaDeadlineTick ? uiaDeadlineTick - A_TickCount : transactionTimeout
     if (remainingMs <= 0) {
         resolutionReason := "uia_budget_exhausted_before_native_lookup"
         return false
     }
 
     ; Spend at most 60 ms and half the remaining budget here, reserving time for compatibility probing.
-    nativeBudgetMs := Min(60, Max(1, remainingMs // 2))
+    nativeBudgetMs     := Min(60, Max(1, remainingMs // 2))
     nativeDeadlineTick := A_TickCount + nativeBudgetMs
     ; Never extend a locally calculated deadline beyond the request's absolute UIA deadline.
     if (uiaDeadlineTick)
@@ -8317,36 +8389,32 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd, ByRef itemsEl
 
         ; Reject an unexpected reused ClassNN so only known file-panel control families authorize readiness.
         candidateClass := GetClassName(candidateHwnd)
-        if (SubStr(candidateClass, 1, 13) != "SysListView32"
-         && SubStr(candidateClass, 1, 12) != "DirectUIHWND")
+        if (SubStr(candidateClass, 1, 13) != "SysListView32" && SubStr(candidateClass, 1, 12) != "DirectUIHWND")
             continue
 
         attemptedCount++
         ; Search below this HWND to avoid the slower and less precise dialog-wide UIA traversal.
-        items := FindExplorerItemsViewElement(candidateHwnd, transactionTimeout
-            , nativeDeadlineTick)
+        items := FindExplorerItemsViewElement(candidateHwnd, transactionTimeout, nativeDeadlineTick)
         if IsObject(items) {
             ; Return the resolved element plus its native source so later traces can explain the successful path.
-            itemsEl := items
-            resolvedCtrlNN := candidateCtrlNN
+            itemsEl          := items
+            resolvedCtrlNN   := candidateCtrlNN
             resolvedCtrlHwnd := candidateHwnd
-            resolutionReason := "control=" . candidateCtrlNN
-                . " hwnd=" . candidateHwnd
-                . " attempted=" . attemptedCount
+            resolutionReason := "control=" . candidateCtrlNN . " hwnd=" . candidateHwnd . " attempted=" . attemptedCount
             return true
         }
 
         ; Stop immediately when the native sub-budget expires so the caller retains its fallback opportunity.
         if (A_TickCount >= nativeDeadlineTick)
             break
-    }
+            }
 
     ; Preserve counts and timeout state so logs distinguish absent UIA content from an exhausted budget.
-    resolutionReason := "candidate_count=" . candidateCount
-        . " attempted=" . attemptedCount
-        . (A_TickCount >= nativeDeadlineTick
-            ? " native_budget_exhausted"
-            : " native_items_view_not_found")
+    resolutionReason := "candidate_count="
+                        . candidateCount
+                        . " attempted="
+                        . attemptedCount
+                        . (A_TickCount >= nativeDeadlineTick ? " native_budget_exhausted" : " native_items_view_not_found")
     return false
 }
 
@@ -8406,11 +8474,17 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
 
     WinGetClass, targetClass, ahk_id %targetHwndID%
     if (targetClass = "CabinetWClass") {
-        nativeReason := ""
+        nativeReason          := ""
         nativeLookupStartTick := A_TickCount
-        if (_ResolveCabinetItemsViewFromNativeControl(targetHwndID, itemsEl
-            , transactionTimeout, uiaDeadlineTick, candidateCount, nativeReason, resolvedCtrlNN, resolvedCtrlHwnd)) {
-            resolver := "native_scoped"
+        if (_ResolveCabinetItemsViewFromNativeControl(targetHwndID
+                                                    , itemsEl
+                                                    , transactionTimeout
+                                                    , uiaDeadlineTick
+                                                    , candidateCount
+                                                    , nativeReason
+                                                    , resolvedCtrlNN
+                                                    , resolvedCtrlHwnd)) {
+            resolver         := "native_scoped"
             resolutionReason := "native=[" . nativeReason
                 . " lookupMs=" . (A_TickCount - nativeLookupStartTick) . "]"
             return true
@@ -8418,16 +8492,12 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
         nativeLookupElapsedMs := A_TickCount - nativeLookupStartTick
 
         windowLookupStartTick := A_TickCount
-        itemsEl := FindExplorerItemsViewElement(targetHwndID
-            , transactionTimeout, uiaDeadlineTick)
+        itemsEl               := FindExplorerItemsViewElement(targetHwndID, transactionTimeout, uiaDeadlineTick)
         windowLookupElapsedMs := A_TickCount - windowLookupStartTick
-        resolver := IsObject(itemsEl) ? "window_scoped" : "unresolved"
-        windowReason := IsObject(itemsEl)
-            ? "explorer_window_root"
-            : "items_view_not_found_below_window"
-        resolutionReason := "fallbackReason=[native=" . nativeReason
-            . " lookupMs=" . nativeLookupElapsedMs . "] window=["
-            . windowReason . " lookupMs=" . windowLookupElapsedMs . "]"
+        resolver              := IsObject(itemsEl) ? "window_scoped" : "unresolved"
+        windowReason          := IsObject(itemsEl) ? "explorer_window_root" : "items_view_not_found_below_window"
+        resolutionReason      := "fallbackReason=[native=" . nativeReason . " lookupMs=" . nativeLookupElapsedMs . "] window=["
+                                . windowReason . " lookupMs=" . windowLookupElapsedMs . "]"
         return IsObject(itemsEl)
     }
 
@@ -8437,9 +8507,8 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
         windowLookupElapsedMs := A_TickCount - windowLookupStartTick
         resolver              := IsObject(itemsEl) ? "window_scoped" : "unresolved"
         resolutionReason      := (IsObject(itemsEl)
-            ? "explorer_window_root"
-            : "items_view_not_found_below_window")
-            . " lookupMs=" . windowLookupElapsedMs
+                                ? "explorer_window_root"
+                                : "items_view_not_found_below_window") . " lookupMs=" . windowLookupElapsedMs
         return IsObject(itemsEl)
     }
 
@@ -8451,7 +8520,7 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
     ; Revalidate a prior #32770 probe's native HWND/ClassNN before resolving a
     ; new UIA object. Failure falls through to the complete candidate scan.
     if IsObject(preferredTarget) {
-        preferredTargetState := "invalid"
+        preferredTargetState     := "invalid"
         validatedPreferredCtrlNN := _ValidateResolvedCtrlAddTarget(targetHwndID, preferredTarget)
         if (validatedPreferredCtrlNN != "") {
             preferredTargetState     := "miss"
@@ -8459,9 +8528,11 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
             preferredLookupBudgetMs  := Min(transactionTimeout, 50)
             if (uiaDeadlineTick)
                 preferredLookupBudgetMs := Min(preferredLookupBudgetMs, Max(1, uiaDeadlineTick - A_TickCount))
+
             preferredLookupDeadlineTick := uiaDeadlineTick
                 ? Min(uiaDeadlineTick, A_TickCount + preferredLookupBudgetMs)
                 : A_TickCount + preferredLookupBudgetMs
+
             itemsEl := FindExplorerItemsViewElement(preferredTarget.hwnd, preferredLookupBudgetMs, preferredLookupDeadlineTick)
             preferredLookupElapsedMs := A_TickCount - preferredLookupStartTick
             if IsObject(itemsEl) {
@@ -8470,18 +8541,21 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
                 candidateCount       := 1
                 resolvedCtrlNN       := validatedPreferredCtrlNN
                 resolvedCtrlHwnd     := preferredTarget.hwnd + 0
-                resolutionReason     := "control=" . resolvedCtrlNN
-                    . " hwnd=" . resolvedCtrlHwnd
-                    . " lookupMs=" . preferredLookupElapsedMs
+                resolutionReason     := "control=" . resolvedCtrlNN . " hwnd=" . resolvedCtrlHwnd . " lookupMs=" . preferredLookupElapsedMs
                 return true
             }
         }
     }
 
     nativeReason := ""
-    if (_ResolveDialogItemsViewFromNativeControls(targetHwndID, itemsEl
-        , transactionTimeout, uiaDeadlineTick, candidateCount, nativeReason
-        , resolvedCtrlNN, resolvedCtrlHwnd)) {
+    if (_ResolveDialogItemsViewFromNativeControls(targetHwndID
+                                                , itemsEl
+                                                , transactionTimeout
+                                                , uiaDeadlineTick
+                                                , candidateCount
+                                                , nativeReason
+                                                , resolvedCtrlNN
+                                                , resolvedCtrlHwnd)) {
         resolver         := "native_scoped"
         resolutionReason := nativeReason
         return true
@@ -8491,15 +8565,13 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
     if (_ResolveDialogItemsViewByPoint(targetHwndID, itemsEl
         , transactionTimeout, uiaDeadlineTick, useCachedDialogItems
         , pointReason)) {
-        resolver := "point_fallback"
-        resolutionReason := "native=[" . nativeReason . "] point=["
-            . pointReason . "]"
+        resolver         := "point_fallback"
+        resolutionReason := "native=[" . nativeReason . "] point=[" . pointReason . "]"
         return true
     }
 
-    resolver := "unresolved"
-    resolutionReason := "native=[" . nativeReason . "] point=["
-        . pointReason . "]"
+    resolver         := "unresolved"
+    resolutionReason := "native=[" . nativeReason . "] point=[" . pointReason . "]"
     return false
 }
 
@@ -10036,6 +10108,39 @@ _GetExplorerCtrlAddRequestPath(targetHwnd, windowClass, requestId, ByRef request
     return currentPath
 }
 
+; Compare a repeatedly unchanged #32770 toolbar path with both bounded native
+; folder sources for diagnostics only. This never changes readiness, retry, or
+; alignment decisions; it reveals whether the toolbar text is stale or native
+; folder identity becomes available after the normal resolver returned it.
+_TraceDialogToolbarBaselineCrosscheck(hwndDlg, initialPath, toolbarPath, unchangedHits, traceRequestId) {
+    global k_debugLogExplorerCtrlAddEnabled
+
+    if !k_debugLogExplorerCtrlAddEnabled
+        return
+
+    dialogPathStartTick := A_TickCount
+    dialogPath := GetDialogFolderPath(hwndDlg, 25)
+    dialogPathElapsedMs := A_TickCount - dialogPathStartTick
+
+    dialogIdListStartTick := A_TickCount
+    dialogIdListPath := GetDialogFolderIdentityFromIdList(hwndDlg, 25)
+    dialogIdListElapsedMs := A_TickCount - dialogIdListStartTick
+
+    dialogPathChanged := (dialogPath != "" && dialogPath != initialPath)
+    dialogIdListChanged := (dialogIdListPath != "" && dialogIdListPath != initialPath)
+    _TraceExplorerCtrlAdd("dialog_toolbar_baseline_crosscheck"
+        , "unchangedHits=" . unchangedHits
+        . " initialPath=[" . initialPath . "]"
+        . " toolbarPath=[" . toolbarPath . "]"
+        . " dialogPath=[" . dialogPath . "]"
+        . " dialogPathElapsedMs=" . dialogPathElapsedMs
+        . " dialogPathChanged=" . !!dialogPathChanged
+        . " dialogIdListPath=[" . dialogIdListPath . "]"
+        . " dialogIdListElapsedMs=" . dialogIdListElapsedMs
+        . " dialogIdListChanged=" . !!dialogIdListChanged
+        , False, traceRequestId)
+}
+
 ; Start or replace one non-blocking Explorer CtrlAdd request for CabinetWClass
 ; or #32770. The single pending slot intentionally debounces these scenarios:
 ; 1. First activation: require the same nonempty path twice before probing the
@@ -10092,6 +10197,8 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     global explorerCtrlAddRequestSourceCtrlNN
     global explorerCtrlAddRequestStablePathConfirmed
     global explorerCtrlAddRequestStablePathHitCount
+    global explorerCtrlAddRequestToolbarBaselineUnchangedHits
+    global explorerCtrlAddRequestToolbarBaselineCrosscheckMade
     global explorerCtrlAddRequestTracePending
     global explorerCtrlAddRequestWaitingForNavigationEvent
     global explorerCtrlAddRequestUsesNavigationEvents
@@ -10200,6 +10307,8 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     explorerCtrlAddRequestSourceCtrlNN                  := sourceCtrlNN
     explorerCtrlAddRequestStablePathConfirmed           := !requireStablePath
     explorerCtrlAddRequestStablePathHitCount            := 0
+    explorerCtrlAddRequestToolbarBaselineUnchangedHits  := 0
+    explorerCtrlAddRequestToolbarBaselineCrosscheckMade := False
     explorerCtrlAddRequestWaitingForNavigationEvent     := False
     explorerCtrlAddRequestUsesNavigationEvents          := useNavigationEvents
     explorerCtrlAddRequestId                            := replacementRequestId
@@ -10564,6 +10673,45 @@ RunExplorerCtrlAddWhenReady:
         navigationPathState := currentPath = ""
             ? "unavailable"
             : (currentPath = requestInitialPath ? "unchanged" : "changed")
+
+        ; When two consecutive #32770 probes repeat the same toolbar text, compare
+        ; it once with the direct dialog path sources. This trace-only cross-check
+        ; can reveal a stale toolbar without weakening the unchanged-path gate.
+        toolbarBaselineCrosscheckNeeded := False
+        toolbarBaselineUnchangedHits    := 0
+        Critical, On
+        if (requestId = explorerCtrlAddRequestId) {
+            if (k_debugLogExplorerCtrlAddEnabled
+             && requestWindowClass == "#32770"
+             && navigationPathState == "unchanged"
+             && explorerCtrlAddRequestLocationResolver == "dialog_toolbar_text") {
+                explorerCtrlAddRequestToolbarBaselineUnchangedHits += 1
+                toolbarBaselineUnchangedHits := explorerCtrlAddRequestToolbarBaselineUnchangedHits
+                if (toolbarBaselineUnchangedHits >= 2
+                 && !explorerCtrlAddRequestToolbarBaselineCrosscheckMade) {
+                    explorerCtrlAddRequestToolbarBaselineCrosscheckMade := True
+                    toolbarBaselineCrosscheckNeeded := True
+                }
+            }
+            else
+                explorerCtrlAddRequestToolbarBaselineUnchangedHits := 0
+        }
+        Critical, Off
+
+        if (toolbarBaselineCrosscheckNeeded) {
+            _TraceDialogToolbarBaselineCrosscheck(requestTargetHwnd, requestInitialPath
+                , currentPath, toolbarBaselineUnchangedHits, requestId)
+            Critical, On
+            toolbarBaselineCrosscheckRequestIsCurrent := (requestId = explorerCtrlAddRequestId)
+            Critical, Off
+            if !toolbarBaselineCrosscheckRequestIsCurrent {
+                _TraceExplorerCtrlAdd("request_aborted"
+                    , "reason=superseded_during_dialog_toolbar_baseline_crosscheck currentRequestId="
+                    . explorerCtrlAddRequestId, True, requestId)
+                Return
+            }
+        }
+
         if (navigationPathState == "unavailable"
          && requestWindowClass == "#32770") {
             ; Give the dialog one short opportunity to publish a comparable path.
@@ -15885,6 +16033,7 @@ _FinalizeLButtonResizeSync() {
 ; Build one opaque preview card for a synced follower window so the live drag
 ; can animate a cheap surface instead of continuously resizing the real window.
 _CreateLButtonResizeSyncGhostCard(hwndID, ghostX, ghostY, ghostW, ghostH) {
+    global lButtonResizeGhostPaintHwnds
     global lButtonResizeGhostSeq
 
     if (!hwndID || ghostW <= 0 || ghostH <= 0)
@@ -15912,14 +16061,25 @@ _CreateLButtonResizeSyncGhostCard(hwndID, ghostX, ghostY, ghostW, ghostH) {
         Gui, %resizeGhostGuiName%: Add, Picture, %iconControlOptions%, % iconSpec.path
     }
 
+    ; Register the parent before Show sends its first paint message.
+    lButtonResizeGhostPaintHwnds[followerGhostHwnd] := true
     Gui, %resizeGhostGuiName%: Show, NA x%ghostX% y%ghostY% w%ghostW% h%ghostH%
-    ; Combine flags that invalidate and erase the card, include its icon child, and repaint both immediately.
-    redrawFlags := 0x0001 | 0x0004 | 0x0080 | 0x0100
+    ; Invalidate without erasing, include the icon child, and repaint both immediately.
+    redrawFlags := 0x0001 | 0x0020 | 0x0080 | 0x0100
     ; Finish painting the gray card and its icon before the real follower can be made transparent.
     DllCall("user32\RedrawWindow", "Ptr", followerGhostHwnd, "Ptr", 0, "Ptr", 0, "UInt", redrawFlags, "Int")
     ; Wait for DWM to process the painted card so the real follower is not hidden one composited frame too early.
     DllCall("dwmapi\DwmFlush", "Int")
     return { guiName: resizeGhostGuiName, hwnd: followerGhostHwnd, iconHwnd: ghostIconHwnd, restoreTransparency: "", w: ghostW, x: ghostX, y: ghostY, h: ghostH }
+}
+
+; Confirm that a ghost-card WM_PAINT owns background replacement so Windows can
+; skip its separate erase pass, which prevents a gray-to-empty flicker between frames.
+_EraseLButtonResizeSyncGhostCardBackground(wParam, lParam, msg, hwnd) {
+    global lButtonResizeGhostPaintHwnds
+
+    if (lButtonResizeGhostPaintHwnds.HasKey(hwnd))
+        return 1
 }
 
 ; Read one follower window's icon source so the ghost card can still identify
@@ -15940,6 +16100,44 @@ _GetLButtonResizeSyncGhostCardSpec(hwndID) {
 _GetLButtonResizeSyncGhostCardIconSize(ghostW, ghostH) {
     shortestEdge := Min(ghostW, ghostH)
     return Max(32, Min(72, Floor(shortestEdge / 5)))
+}
+
+; Paint a ghost card's complete client surface gray, then draw its one-pixel
+; black perimeter in the same paint cycle so resize frames cannot expose a gap.
+_PaintLButtonResizeSyncGhostCard(wParam, lParam, msg, hwnd) {
+    global lButtonResizeGhostPaintHwnds
+
+    static borderBrush := 0
+    static fillBrush   := 0
+
+    if !lButtonResizeGhostPaintHwnds.HasKey(hwnd)
+        return
+
+    ; Cache the GDI brushes because every ghost card uses the same two colors.
+    if (!borderBrush)
+        borderBrush := DllCall("gdi32\CreateSolidBrush", "UInt", 0x000000, "Ptr")
+    if (!fillBrush)
+        fillBrush := DllCall("gdi32\CreateSolidBrush", "UInt", 0x4A4A4A, "Ptr")
+    if (!borderBrush || !fillBrush)
+        return
+
+    VarSetCapacity(clientRect, 16, 0)
+    if !DllCall("user32\GetClientRect", "Ptr", hwnd, "Ptr", &clientRect, "Int")
+        return
+
+    paintStructSize := (A_PtrSize = 8) ? 72 : 64
+    VarSetCapacity(paintStruct, paintStructSize, 0)
+    ; BeginPaint limits drawing to the invalid region and prepares it for validation.
+    paintHdc := DllCall("user32\BeginPaint", "Ptr", hwnd, "Ptr", &paintStruct, "Ptr")
+    if (!paintHdc)
+        return
+
+    ; Repaint the interior and its border together to avoid separately composited surfaces.
+    DllCall("user32\FillRect", "Ptr", paintHdc, "Ptr", &clientRect, "Ptr", fillBrush, "Int")
+    DllCall("user32\FrameRect", "Ptr", paintHdc, "Ptr", &clientRect, "Ptr", borderBrush, "Int")
+    ; EndPaint validates the region so Windows does not continuously resend WM_PAINT.
+    DllCall("user32\EndPaint", "Ptr", hwnd, "Ptr", &paintStruct, "Int")
+    return 0
 }
 
 ; Make each synced follower window fully transparent and swap in an overlay
@@ -16004,6 +16202,8 @@ _ReleaseLButtonResizeSyncDroppedFollowers(previousPartners, currentPartners) {
 ; Restore one follower window's previous transparency state and destroy the
 ; matching overlay card so cleanup can run both on button-up and on mid-drag drop-out.
 _ReleaseLButtonResizeSyncFollower(ByRef io_partnerInfo) {
+    global lButtonResizeGhostPaintHwnds
+
     if !IsObject(io_partnerInfo)
         return false
 
@@ -16011,9 +16211,12 @@ _ReleaseLButtonResizeSyncFollower(ByRef io_partnerInfo) {
     if !IsObject(ghostCardInfo)
         return false
 
+    ghostCardHwnd      := ghostCardInfo.hwnd
     resizeGhostGuiName := ghostCardInfo.guiName
     if (resizeGhostGuiName != "")
         Gui, %resizeGhostGuiName%: Destroy
+    if (ghostCardHwnd)
+        lButtonResizeGhostPaintHwnds.Delete(ghostCardHwnd)
 
     followerHwndID := io_partnerInfo.hwnd
     if (followerHwndID && WinExist("ahk_id " . followerHwndID)) {
@@ -16060,8 +16263,13 @@ _UpdateLButtonResizeSyncGhostCardRect(ByRef io_ghostCardInfo, ghostX, ghostY, gh
         iconSize := _GetLButtonResizeSyncGhostCardIconSize(ghostW, ghostH)
         iconX := Floor((ghostW - iconSize) / 2)
         iconY := Floor((ghostH - iconSize) / 2)
-        DllCall("MoveWindow", "ptr", io_ghostCardInfo.iconHwnd, "int", iconX, "int", iconY, "int", iconSize, "int", iconSize, "int", True)
+        ; Defer the icon repaint so the parent and child can be redrawn together below.
+        DllCall("MoveWindow", "ptr", io_ghostCardInfo.iconHwnd, "int", iconX, "int", iconY, "int", iconSize, "int", iconSize, "int", False)
     }
+
+    ; Invalidate without erasing, include the icon child, and finish this frame's repaint immediately.
+    redrawFlags := 0x0001 | 0x0020 | 0x0080 | 0x0100
+    DllCall("user32\RedrawWindow", "Ptr", followerGhostHwnd, "Ptr", 0, "Ptr", 0, "UInt", redrawFlags, "Int")
 
     io_ghostCardInfo.x := ghostX
     io_ghostCardInfo.y := ghostY
