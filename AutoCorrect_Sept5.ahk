@@ -2790,10 +2790,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     ControlGetFocus, initFocusedCtrlForWait, ahk_id %hWnd%
     isFirstTrackedActivation := !HasVal(prevActiveWindows, hWnd)
     isTaskbarExplorerSpawn := isFirstTrackedActivation && _ClaimTaskbarExplorerSpawn(hWnd, vWinClass, taskbarExplorerClickX, taskbarExplorerClickY)
-    ; Only a newly tracked window may need its initial fade to settle. Base that
-    ; first-activation wait on the actual control shape that SendCtrlAdd() targets,
-    ; so later activations never repeat the synchronous pixel polling.
-    if (isFirstTrackedActivation && NeedsSendCtrlAddFadeWait(hWnd, initFocusedCtrlForWait)) {
+    ; Taskbar-spawned Explorer windows skip this synchronous fade wait so their
+    ; placement animation can start immediately; their Ctrl+Add readiness remains deferred.
+    ; Other newly tracked windows wait only when their SendCtrlAdd() target needs it.
+    if (isFirstTrackedActivation && !isTaskbarExplorerSpawn
+        && NeedsSendCtrlAddFadeWait(hWnd, initFocusedCtrlForWait)) {
         WaitForFadeInStop(hWnd)
     }
 
@@ -21178,6 +21179,11 @@ MouseIsOverTaskbarBlank() {
     local controlUnderMouseHwnd
     local windowClass
     local controlClass
+    local taskbarHwnd
+    local taskbarX
+    local taskbarY
+    local taskbarWidth
+    local taskbarHeight
 
     if !(GetKeyState("WheelDown", "P")
       || GetKeyState("WheelUp",   "P")
@@ -21204,7 +21210,20 @@ MouseIsOverTaskbarBlank() {
     if (controlClass = "TrayNotifyWnd")
         return False
 
-    return AreaLooksUniformFast(mousePosX, mousePosY, , 6, 10)
+    ; Read the actual taskbar beneath the pointer so each monitor and taskbar
+    ; orientation supplies the correct live sampling boundary.
+    taskbarHwnd := FindTaskbarAtPoint(mousePosX, mousePosY)
+    if (!taskbarHwnd)
+        return False
+
+    WinGetPos, taskbarX, taskbarY, taskbarWidth, taskbarHeight, ahk_id %taskbarHwnd%
+    if (taskbarWidth <= 0 || taskbarHeight <= 0)
+        return False
+
+    ; Keep the uniformity sample inside the live taskbar rectangle rather than
+    ; letting a click near its edge sample pixels from an adjacent window.
+    return AreaLooksUniformFast(mousePosX, mousePosY, , 6, 10
+        , taskbarX, taskbarY, taskbarX + taskbarWidth, taskbarY + taskbarHeight)
 }
 ; Use AreaLooksUniformFast() when false positives are costly and every pixel in
 ; a small region must be checked to confirm that the region is visually flat.
@@ -21237,34 +21256,52 @@ MouseIsOverTaskbarBlank() {
 ; 12     safer low value for mica
 ; 14-16  robust but still conservative
 ; 18     already moderately forgiving
-AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 2, tolerance := 18) {
-
+AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 2, tolerance := 18
+    , sampleBoundsLeft := "", sampleBoundsTop := "", sampleBoundsRight := "", sampleBoundsBottom := "") {
     ; Compute the width/height of the square sample region.
     sampleSize := (sampleRadius * 2) + 1
 
     ; Top-left corner of the sampled square in screen coordinates.
-    startPosX := centerPosX - sampleRadius
-    startPosY := centerPosY - sampleRadius
+    initSamplePosX := centerPosX - sampleRadius
+    initSamplePosY := centerPosY - sampleRadius
 
-    ; Keep the complete capture inside the monitor containing the requested
-    ; point. This avoids reading invalid pixels or an adjacent monitor when the
-    ; mouse is near an edge, while preserving the requested sample size.
-    GetMonitorRectForMouse(centerPosX, centerPosY, False
-        , monitorLeft, monitorTop, monitorRight, monitorBottom)
-    monitorWidth  := monitorRight - monitorLeft
-    monitorHeight := monitorBottom - monitorTop
-    if (sampleSize > monitorWidth || sampleSize > monitorHeight)
+    ; A caller-supplied rectangle, such as the taskbar, fully defines the
+    ; permitted sampling area.
+    if (sampleBoundsLeft != "" && sampleBoundsTop != "" && sampleBoundsRight != "" && sampleBoundsBottom != "") {
+        sampleLeft   := sampleBoundsLeft
+        sampleTop    := sampleBoundsTop
+        sampleRight  := sampleBoundsRight
+        sampleBottom := sampleBoundsBottom
+    }
+    else {
+        ; Keep the complete capture inside the monitor containing the requested
+        ; point to avoid reading invalid pixels or an adjacent monitor.
+        GetMonitorRectForMouse(centerPosX, centerPosY, False, monitorLeft, monitorTop, monitorRight, monitorBottom)
+        sampleLeft   := monitorLeft
+        sampleTop    := monitorTop
+        sampleRight  := monitorRight
+        sampleBottom := monitorBottom
+    }
+
+    sampleWidth  := sampleRight  - sampleLeft
+    sampleHeight := sampleBottom - sampleTop
+    if (sampleSize > sampleWidth || sampleSize > sampleHeight)
         return False
 
-    if (startPosX < monitorLeft)
-        startPosX := monitorLeft
-    else if ((startPosX + sampleSize) > monitorRight)
-        startPosX := monitorRight - sampleSize
+    ; Move a top-edge taskbar capture farther into the taskbar so its border
+    ; pixels do not reject an otherwise uniform blank taskbar area.
+    if (sampleBoundsTop != "" && initSamplePosY < (sampleTop + sampleSize))
+        initSamplePosY := Min(sampleTop + sampleSize, sampleBottom - sampleSize)
 
-    if (startPosY < monitorTop)
-        startPosY := monitorTop
-    else if ((startPosY + sampleSize) > monitorBottom)
-        startPosY := monitorBottom - sampleSize
+    if (initSamplePosX < sampleLeft)
+        initSamplePosX := sampleLeft
+    else if ((initSamplePosX + sampleSize) > sampleRight)
+        initSamplePosX := sampleRight - sampleSize
+
+    if (initSamplePosY < sampleTop)
+        initSamplePosY := sampleTop
+    else if ((initSamplePosY + sampleSize) > sampleBottom)
+        initSamplePosY := sampleBottom - sampleSize
 
     ; Get a DC for the full screen.
     screenDc := DllCall("user32\GetDC", "Ptr", 0, "Ptr")
@@ -21314,8 +21351,8 @@ AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 
         , "Int", sampleSize
         , "Int", sampleSize
         , "Ptr", screenDc
-        , "Int", startPosX
-        , "Int", startPosY
+        , "Int", initSamplePosX
+        , "Int", initSamplePosY
         , "UInt", 0x00CC0020) ; SRCCOPY
 
     if (!copySucceeded) {
@@ -21332,8 +21369,12 @@ AreaLooksUniformFast(centerPosX, centerPosY, targetColor := "", sampleRadius := 
     ; If no target color was provided, use the requested point as the reference.
     ; Its offset changes when the capture square is shifted away from an edge.
     if (targetColor = "") {
-        referenceCol := centerPosX - startPosX
-        referenceRow := centerPosY - startPosY
+        referenceCol := centerPosX - initSamplePosX
+        referenceRow := centerPosY - initSamplePosY
+        ; The downward shift can place the pointer above the capture, so use
+        ; the sample's middle row as its stable interior color reference.
+        if (referenceRow < 0)
+            referenceRow := Floor(sampleSize / 2)
         centerOffset := (referenceRow * rowStride) + (referenceCol * 4)
         targetBlue   := NumGet(pixelBuffer + 0, centerOffset + 0, "UChar")
         targetGreen  := NumGet(pixelBuffer + 0, centerOffset + 1, "UChar")
