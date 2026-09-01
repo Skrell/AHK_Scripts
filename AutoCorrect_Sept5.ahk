@@ -8287,6 +8287,31 @@ _ResolveCabinetItemsViewFromNativeControl(explorerHwnd
     return true
 }
 
+; Trace one #32770 native Items View failure for each changed dialog resolver state.
+_TraceDialogItemsViewResolverFailure(dlgHwnd, candidateCtrlNN, candidateHwnd, candidateClass
+                                   , candidateCount, attemptedCount, failureStage, rootSnapshot) {
+    global k_debugLogExplorerCtrlAddEnabled
+    static lastFailureSignatureByDialog := {}
+
+    ; Avoid creating diagnostic state or formatting trace text when detailed tracing is disabled.
+    if (!k_debugLogExplorerCtrlAddEnabled)
+        return
+
+    ; Include each resolving input and UIA outcome so repeated identical probe failures are logged only once.
+    failureSignature := candidateCtrlNN . "|" . candidateHwnd . "|" . candidateClass
+        . "|" . candidateCount . "|" . attemptedCount . "|" . failureStage . "|" . rootSnapshot
+    if (lastFailureSignatureByDialog.HasKey(dlgHwnd)
+     && lastFailureSignatureByDialog[dlgHwnd] = failureSignature)
+        return
+
+    lastFailureSignatureByDialog[dlgHwnd] := failureSignature
+    _TraceExplorerCtrlAdd("dialog_native_items_view_failure"
+        , "candidateCtrlNN=[" . candidateCtrlNN . "] candidateHwnd=" . candidateHwnd
+        . " nativeClass=[" . candidateClass . "] candidateCount=" . candidateCount
+        . " attempted=" . attemptedCount . " failureStage=" . failureStage
+        . " rootSnapshot=[" . rootSnapshot . "]")
+}
+
 ; Resolve a #32770 file dialog's Items View below its most likely native file-
 ; panel controls. At most two candidates share a short sub-budget so the point
 ; fallback retains time when a provider does not expose the native subtree.
@@ -8395,7 +8420,10 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd
 
         attemptedCount++
         ; Search below this HWND to avoid the slower and less precise dialog-wide UIA traversal.
-        items := FindExplorerItemsViewElement(candidateHwnd, transactionTimeout, nativeDeadlineTick)
+        failureStage := ""
+        rootSnapshot := ""
+        items := FindExplorerItemsViewElement(candidateHwnd, transactionTimeout, nativeDeadlineTick
+                                            , failureStage, rootSnapshot)
         if IsObject(items) {
             ; Return the resolved element plus its native source so later traces can explain the successful path.
             itemsEl          := items
@@ -8405,10 +8433,13 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd
             return true
         }
 
+        _TraceDialogItemsViewResolverFailure(dlgHwnd, candidateCtrlNN, candidateHwnd
+            , candidateClass, candidateCount, attemptedCount, failureStage, rootSnapshot)
+
         ; Stop immediately when the native sub-budget expires so the caller retains its fallback opportunity.
         if (A_TickCount >= nativeDeadlineTick)
             break
-            }
+    }
 
     ; Preserve counts and timeout state so logs distinguish absent UIA content from an exhausted budget.
     resolutionReason := "candidate_count="
@@ -8534,7 +8565,11 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
                 ? Min(uiaDeadlineTick, A_TickCount + preferredLookupBudgetMs)
                 : A_TickCount + preferredLookupBudgetMs
 
-            itemsEl := FindExplorerItemsViewElement(preferredTarget.hwnd, preferredLookupBudgetMs, preferredLookupDeadlineTick)
+            preferredFailureStage := ""
+            preferredRootSnapshot := ""
+            itemsEl := FindExplorerItemsViewElement(preferredTarget.hwnd
+                , preferredLookupBudgetMs, preferredLookupDeadlineTick
+                , preferredFailureStage, preferredRootSnapshot)
             preferredLookupElapsedMs := A_TickCount - preferredLookupStartTick
             if IsObject(itemsEl) {
                 preferredTargetState := "hit"
@@ -8545,6 +8580,11 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
                 resolutionReason     := "control=" . resolvedCtrlNN . " hwnd=" . resolvedCtrlHwnd . " lookupMs=" . preferredLookupElapsedMs
                 return true
             }
+
+            preferredCtrlClass := GetClassName(preferredTarget.hwnd)
+            _TraceDialogItemsViewResolverFailure(targetHwndID, validatedPreferredCtrlNN
+                , preferredTarget.hwnd + 0, preferredCtrlClass, 1, 1
+                , preferredFailureStage, preferredRootSnapshot)
         }
     }
 
@@ -12137,11 +12177,19 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
 ; transactionTimeout requests each lookup's timeout when no shared deadline is supplied.
 ; uiaDeadlineTick instead derives each requested timeout from one shared remaining-time
 ; budget and prevents another root or descendant lookup after that deadline expires.
-FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadlineTick := 0)
+; failureStage and rootSnapshot are optional trace outputs that explain why a failed native lookup did not locate an Items View.
+FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadlineTick := 0
+                           , ByRef failureStage := "", ByRef rootSnapshot := "")
 {
+    ; Clear diagnostics so a failed lookup cannot expose the preceding candidate's UIA state.
+    failureStage := ""
+    rootSnapshot := "unavailable"
+
     effectiveTimeoutMs := _ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)
-    if (!effectiveTimeoutMs)
+    if (!effectiveTimeoutMs) {
+        failureStage := "budget_before_root"
         return ""
+    }
 
     if (uiaDeadlineTick)
         exEl := SafeUIA_ElementFromHandle(targetHwndID, "", False
@@ -12149,14 +12197,19 @@ FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadli
     else
         exEl := SafeUIA_ElementFromHandle(targetHwndID, "", False
             , effectiveTimeoutMs)
-    if !IsObject(exEl)
+    if !IsObject(exEl) {
+        failureStage := "element_from_handle"
         return ""
+    }
 
     ; A native-scoped SysListView32 can itself be the UIA List. Accepting that
     ; root avoids searching below the exact file-panel control we just resolved.
-    if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout))
+    if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+        failureStage := "budget_before_root_snapshot"
         return ""
+    }
     rootInfo := SafeUIA_GetElementSnapshot(exEl, "className|controlType|name")
+    rootSnapshot := "className=[" . rootInfo.className . "] controlType=" . rootInfo.controlType . " name=[" . rootInfo.name . "]"
     if (rootInfo.className = "UIItemsView"
      || rootInfo.controlType = 50008
      || rootInfo.controlType = 50028
@@ -12167,8 +12220,10 @@ FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadli
     ; resolves them inside FindFirstBy("ControlType=...") just like the
     ; equivalent numeric IDs, which keeps this search readable.
     for controlTypeIndex, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId"] {
-        if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout))
+        if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+            failureStage := "budget_before_descendant_" . ctlType
             return ""
+        }
 
         itemsEl := ""
         try
@@ -12180,9 +12235,14 @@ FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadli
             return itemsEl
     }
 
-    if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout))
+    if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+        failureStage := "budget_before_items_view_name"
         return ""
-    return SafeUIA_FindFirstByNameFast(exEl, "Items View")
+    }
+    itemsEl := SafeUIA_FindFirstByNameFast(exEl, "Items View")
+    if !IsObject(itemsEl)
+        failureStage := "items_view_name_not_found"
+    return itemsEl
 }
 
 ; Return true when the resolved #32770 Items View exposes Details-mode evidence:
@@ -26252,6 +26312,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::recordproducer::record producer
 ::recurrance::recurrence
 ::rediculous::ridiculous
+::redudently::redundantly
 ::reedeming::redeeming
 ::reenforced::reinforced
 ::refedendum::referendum
