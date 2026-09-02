@@ -586,16 +586,17 @@ Global g_MonitorCount                                        := 0
         ; this.workArea      := workArea
     ; }
 ; }
+; Cache key #1 is always the primary monitor; remaining monitors use #2 onward.
 Global g_MonitorsByDisplayNumber                           := [] ; : MonitorInfo
-; Cached SysGet monitor number of the primary monitor.
+; Cached display number of the primary monitor; always 1 after startup cache construction.
 Global g_PrimaryDisplayNumber                              := 0
 ; Height of the monitor most recently matched by GetMouseDisplayNumber().
 Global currMonHeight                                       := 0
 ; Width of the monitor most recently matched by GetMouseDisplayNumber().
 Global currMonWidth                                        := 0
-; Cached SysGet monitor number currently targeted by monitor-aware window flows.
+; Cached display number currently targeted by monitor-aware window flows.
 Global currentMon                                          := 0
-; Previously targeted cached SysGet monitor number for cross-monitor transitions.
+; Previously targeted cached display number for cross-monitor transitions.
 Global previousMon                                         := 0
 ; Current Explorer path snapshot used by folder-aware actions.
 Global currentPath                                         := ""
@@ -818,7 +819,7 @@ OnMessage(0x404, "HandleTrayIconMessage")
 
 _BuildMonitorDimensions()
 
-; Return the cached monitor record for a SysGet monitor number.
+; Return the cached monitor record for a display number whose primary monitor is #1.
 _GetMonitorRecordByDisplayNumber(displayNumber) {
     global g_MonitorsByDisplayNumber
 
@@ -879,7 +880,7 @@ _GetMonitorRectangleByDisplayNumber(displayNumber, useWorkArea, ByRef left, ByRe
     return true
 }
 
-; Build startup monitor and work-area records keyed by SysGet monitor number.
+; Build startup monitor and work-area records with the primary monitor at display #1.
 _BuildMonitorDimensions() {
     global g_MonitorCount
     global g_MonitorsByDisplayNumber, g_PrimaryDisplayNumber
@@ -895,7 +896,14 @@ _BuildMonitorDimensions() {
         SysGet, monitorName, MonitorName, %sysGetNumber%
         SysGet, workArea, MonitorWorkArea, %sysGetNumber%
 
-        displayNumber := sysGetNumber
+        ; Reserve cache key #1 for the primary monitor. Shift any earlier SysGet
+        ; monitor number forward so secondary cache keys remain unique and ordered.
+        if (sysGetNumber = primarySysGetNumber)
+            displayNumber := 1
+        else if (sysGetNumber < primarySysGetNumber)
+            displayNumber := sysGetNumber + 1
+        else
+            displayNumber := sysGetNumber
 
         ; Cache the native monitor handle with the geometry so window-to-monitor
         ; lookups can compare handles without rebuilding every monitor RECT.
@@ -13772,7 +13780,7 @@ ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ; Show popup menu by handle o
 }
 
 
-; Return the cached SysGet monitor number for the monitor containing the mouse.
+; Return the cached display number for the monitor containing the mouse.
 GetCurrentDisplayNumber(){
     CoordMode, Mouse, Screen
     MouseGetPos, mx, my
@@ -17061,7 +17069,7 @@ IsWindowOnDisplayNumber(thisWindowHwnd, targetDisplayNumber := 0) {
     Return (overlapRatio > 0.50)
 }
 
-; Return the cached SysGet monitor number for a window's current or restored monitor.
+; Return the cached display number for a window's current or restored monitor.
 GetWindowDisplayNumber(windowHwnd) {
     global g_MonitorsByDisplayNumber
     static monitorDefaultToNearest := 2  ; MONITOR_DEFAULTTONEAREST
@@ -17110,7 +17118,7 @@ GetWindowDisplayNumber(windowHwnd) {
     return 0
 }
 
-; Return the cached SysGet monitor number for the monitor containing the mouse.
+; Return the cached display number for the monitor containing the mouse.
 GetMouseDisplayNumber(buffer := 0)
 {
     global currMonHeight, currMonWidth, g_MonitorsByDisplayNumber
