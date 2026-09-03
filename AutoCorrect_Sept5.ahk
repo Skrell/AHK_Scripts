@@ -573,13 +573,30 @@ Global k_useNativeSysListViewColumnAutoFit                 := True
 ; | Retains the monitor selection, virtual desktop context, and Explorer paths |
 ; | shared by window activation and shell-navigation flows.                    |
 ; +----------------------------------------------------------------------------+
-; Height of the monitor most recently matched by MWAGetMonitorMouseIsIn().
+; Number of monitors currently stored in g_MonitorsByDisplayNumber.
+Global g_MonitorCount                                        := 0
+; class MonitorInfo {
+    ; __New(displayNumber, fullArea, isPrimary, monitorHandle, monitorName, sysGetNumber, workArea) {
+        ; this.displayNumber := displayNumber
+        ; this.fullArea      := fullArea
+        ; this.isPrimary     := isPrimary
+        ; this.monitorHandle := monitorHandle
+        ; this.monitorName   := monitorName
+        ; this.sysGetNumber  := sysGetNumber
+        ; this.workArea      := workArea
+    ; }
+; }
+; Cache key #1 is always the primary monitor; remaining monitors use #2 onward.
+Global g_MonitorsByDisplayNumber                           := [] ; : MonitorInfo
+; Cached display number of the primary monitor; always 1 after startup cache construction.
+Global g_PrimaryDisplayNumber                              := 0
+; Height of the monitor most recently matched by GetMouseDisplayNumber().
 Global currMonHeight                                       := 0
-; Width of the monitor most recently matched by MWAGetMonitorMouseIsIn().
+; Width of the monitor most recently matched by GetMouseDisplayNumber().
 Global currMonWidth                                        := 0
-; Monitor index currently targeted by monitor-aware window flows.
+; Cached display number currently targeted by monitor-aware window flows.
 Global currentMon                                          := 0
-; Previously targeted monitor index for cross-monitor transitions.
+; Previously targeted cached display number for cross-monitor transitions.
 Global previousMon                                         := 0
 ; Current Explorer path snapshot used by folder-aware actions.
 Global currentPath                                         := ""
@@ -800,56 +817,149 @@ OnMessage(0x0014, "_EraseLButtonResizeSyncGhostCardBackground")
 ; - from your script's tray icon registration
 OnMessage(0x404, "HandleTrayIconMessage")
 
-SysGet, MonNum, MonitorPrimary
-SysGet, MonitorWorkArea, MonitorWorkArea, %MonNum%
-SysGet, MonCount, MonitorCount
+_BuildMonitorDimensions()
 
-leftArrow  := Chr(0x2190)  ; ←
-rightArrow := Chr(0x2192)  ; →
-upArrow    := Chr(0x2191)  ; ↑
-downArrow  := Chr(0x2193)  ; ↓
+; Return the cached monitor record for a display number whose primary monitor is #1.
+_GetMonitorRecordByDisplayNumber(displayNumber) {
+    global g_MonitorsByDisplayNumber
 
-GetDesktopEdges(ByRef leftEdge, ByRef topEdge, ByRef rightEdge, ByRef bottomEdge) {
-    SysGet, monCount, MonitorCount
+    if (!g_MonitorsByDisplayNumber.HasKey(displayNumber))
+        return ""
 
-    leftEdge  := ""
-    topEdge   := ""
-    rightEdge := ""
-    bottomEdge:= ""
+    return g_MonitorsByDisplayNumber[displayNumber]
+}
 
-    Loop, %monCount% {
-        ; "mon" is the prefix; SysGet will set monLeft, monTop, monRight, monBottom
-        SysGet, mon, Monitor, %A_Index%
+; Return the monitor containing a point, or the nearest monitor when requested.
+_GetMonitorRecordForPoint(mx, my, useWorkArea := false, useNearestFallback := false) {
+    global g_MonitorsByDisplayNumber, g_PrimaryDisplayNumber
 
-        if (A_Index = 1) {
-            leftEdge   := monLeft
-            topEdge    := monTop
-            rightEdge  := monRight
-            bottomEdge := monBottom
-        } else {
-            if (monLeft < leftEdge)
-                leftEdge := monLeft
-            if (monTop < topEdge)
-                topEdge := monTop
-            if (monRight > rightEdge)
-                rightEdge := monRight
-            if (monBottom > bottomEdge)
-                bottomEdge := monBottom
+    bestDistanceSquared := 0x7FFFFFFF
+    bestMonitor         := ""
+
+    for displayNumber, monitorInfo in g_MonitorsByDisplayNumber {
+        rectangle := useWorkArea ? monitorInfo.workArea : monitorInfo.fullArea
+        if (mx >= rectangle.left && mx < rectangle.right && my >= rectangle.top && my < rectangle.bottom)
+            return monitorInfo
+
+        clampedX := (mx < rectangle.left) ? rectangle.left : (mx > rectangle.right ? rectangle.right : mx)
+        clampedY := (my < rectangle.top) ? rectangle.top : (my > rectangle.bottom ? rectangle.bottom : my)
+        deltaX   := mx - clampedX
+        deltaY   := my - clampedY
+        distanceSquared := deltaX * deltaX + deltaY * deltaY
+        if (distanceSquared < bestDistanceSquared) {
+            bestDistanceSquared := distanceSquared
+            bestMonitor         := monitorInfo
         }
     }
+
+    if (useNearestFallback && IsObject(bestMonitor))
+        return bestMonitor
+
+    if (useNearestFallback)
+        return _GetMonitorRecordByDisplayNumber(g_PrimaryDisplayNumber)
+
+    return ""
+}
+
+; Copy cached full-monitor or work-area bounds into scalar output variables.
+_GetMonitorRectangleByDisplayNumber(displayNumber, useWorkArea, ByRef left, ByRef top, ByRef right, ByRef bottom) {
+    monitorInfo := _GetMonitorRecordByDisplayNumber(displayNumber)
+    if (!IsObject(monitorInfo)) {
+        bottom := 0
+        left   := 0
+        right  := 0
+        top    := 0
+        return false
+    }
+
+    rectangle := useWorkArea ? monitorInfo.workArea : monitorInfo.fullArea
+    bottom    := rectangle.bottom
+    left      := rectangle.left
+    right     := rectangle.right
+    top       := rectangle.top
+    return true
+}
+
+; Build startup monitor and work-area records with the primary monitor at display #1.
+_BuildMonitorDimensions() {
+    global g_MonitorCount
+    global g_MonitorsByDisplayNumber, g_PrimaryDisplayNumber
+
+    SysGet, primarySysGetNumber, MonitorPrimary
+    SysGet, monitorCount, MonitorCount
+    monitorsByDisplayNumber := []
+    primaryDisplayNumber    := 0
+
+    Loop, %monitorCount% {
+        sysGetNumber := A_Index
+        SysGet, fullArea, Monitor, %sysGetNumber%
+        SysGet, monitorName, MonitorName, %sysGetNumber%
+        SysGet, workArea, MonitorWorkArea, %sysGetNumber%
+
+        ; Reserve cache key #1 for the primary monitor. Shift any earlier SysGet
+        ; monitor number forward so secondary cache keys remain unique and ordered.
+        if (sysGetNumber = primarySysGetNumber)
+            displayNumber := 1
+        else if (sysGetNumber < primarySysGetNumber)
+            displayNumber := sysGetNumber + 1
+        else
+            displayNumber := sysGetNumber
+
+        ; Cache the native monitor handle with the geometry so window-to-monitor
+        ; lookups can compare handles without rebuilding every monitor RECT.
+        VarSetCapacity(monitorRect, 16, 0)
+        NumPut(fullAreaLeft,   monitorRect, 0,  "Int")
+        NumPut(fullAreaTop,    monitorRect, 4,  "Int")
+        NumPut(fullAreaRight,  monitorRect, 8,  "Int")
+        NumPut(fullAreaBottom, monitorRect, 12, "Int")
+        monitorHandle := DllCall("MonitorFromRect", "Ptr", &monitorRect, "UInt", 2, "Ptr")
+
+        ; Create the monitor object described beside g_MonitorsByDisplayNumber.
+        monitorInfo := { displayNumber: displayNumber
+                        , fullArea: { bottom: fullAreaBottom
+                                    , height: fullAreaBottom - fullAreaTop
+                                    , left: fullAreaLeft
+                                    , right: fullAreaRight
+                                    , top: fullAreaTop
+                                    , width: fullAreaRight - fullAreaLeft }
+                        , isPrimary: (sysGetNumber = primarySysGetNumber)
+                        , monitorHandle: monitorHandle
+                        , monitorName: monitorName
+                        , sysGetNumber: sysGetNumber
+                        , workArea: { bottom: workAreaBottom
+                                    , height: workAreaBottom - workAreaTop
+                                    , left: workAreaLeft
+                                    , right: workAreaRight
+                                    , top: workAreaTop
+                                    , width: workAreaRight - workAreaLeft } }
+        monitorsByDisplayNumber[displayNumber] := monitorInfo
+
+        if (sysGetNumber = primarySysGetNumber)
+            primaryDisplayNumber := displayNumber
+    }
+
+    g_MonitorCount              := monitorCount
+    g_MonitorsByDisplayNumber   := monitorsByDisplayNumber
+    g_PrimaryDisplayNumber      := primaryDisplayNumber
+}
+
+; Return the monitor count captured during script startup.
+GetMonitorCount() {
+    global g_MonitorCount
+
+    return g_MonitorCount
 }
 
 totalVirtualDesktops := getTotalDesktops()
-GetDesktopEdges(G_DisplayLeftEdge, G_DisplayTopEdge, G_DisplayRightEdge, G_DisplayBottomEdge)
+currentMon           := GetMouseDisplayNumber()
 
-line1  := "Total Number of Monitors is " MonCount " with Primary being " MonNum
-line1a := "Desktop edges: " leftArrow . "(" . G_DisplayLeftEdge . "," . G_DisplayRightEdge . ")" . rightArrow
-line1b := "Desktop edges: " upArrow . "(" . G_DisplayTopEdge . "," . G_DisplayBottomEdge . ")" . downArrow
-line2  := "Current Mon is     " GetCurrentMonitorIndex()
+line1  := "Total Number of Monitors is " GetMonitorCount() " with Primary being " g_PrimaryDisplayNumber
+line2  := "Current Mon is     " currentMon
+line2a := "Current Mon size   " currMonWidth " x " currMonHeight
 line3  := "Win11 is           " k_isWin11
 line4  := "Modern Explorer is " k_isModernExplorerInReg
 line5  := "Total # of Desktops " totalVirtualDesktops
-Tooltip, % line1 "`n" line1a "`n" line1b "`n" line2 "`n" line3 "`n" line4 "`n" line5
+Tooltip, % line1 "`n" line2 "`n" line2a "`n" line3 "`n" line4 "`n" line5
 Sleep 5000
 Tooltip
 ; MsgBox % "A_PtrSize=" A_PtrSize "`n(dll must match: 8=64-bit, 4=32-bit)"
@@ -1044,8 +1154,8 @@ sleep, 50
 
 WinGetPos, , , , TaskBarHeight, ahk_class Shell_TrayWnd
 
-If (MonCount > 1) {
-    currentMon := MWAGetMonitorMouseIsIn()
+If (GetMonitorCount() > 1) {
+    currentMon := GetMouseDisplayNumber()
     previousMon := currentMon
 }
 
@@ -2580,45 +2690,23 @@ KillOtherAutoHotkeyU64_NotThisScript(terminateUnknownTitle := false) {
 ; (rLeft, rBottom) ------------- (rRight, rBottom)
 
 GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) {
-    SysGet, count, MonitorCount
-    bestDist := 0x7FFFFFFF, found := false
-
-    Loop, %count%
-    {
-        idx := A_Index
-        ; Switch between full monitor bounds and the work area that excludes taskbars/docked bars.
-        if (useWorkArea)
-            SysGet, r, MonitorWorkArea, %idx%
-        else
-            SysGet, r, Monitor, %idx%
-
-        ; Fast path: return immediately when the mouse is already inside this monitor rectangle.
-        if (mx >= rLeft && mx < rRight && my >= rTop && my < rBottom) {
-            L := rLeft, T := rTop, R := rRight, B := rBottom
-            return
-        }
-
-        ; Clamp the mouse point to the nearest point on this rectangle, then compare squared distance.
-        ; Using squared distance avoids the cost of Sqrt while still preserving the ordering.
-        cx := (mx < rLeft) ? rLeft : (mx > rRight ? rRight : mx)
-        cy := (my < rTop)  ? rTop  : (my > rBottom ? rBottom : my)
-        dx := mx - cx, dy := my - cy
-        dist2 := dx*dx + dy*dy
-        if (dist2 < bestDist) {
-            ; Keep the closest monitor as a fallback when the mouse is between or just outside monitors.
-            bestDist := dist2
-            L := rLeft, T := rTop, R := rRight, B := rBottom
-            found := true
-        }
+    ; Select by full monitor bounds so a cursor over a taskbar still maps to
+    ; that monitor before the caller requests its smaller work area.
+    monitorInfo := _GetMonitorRecordForPoint(mx, my, false, true)
+    if (!IsObject(monitorInfo)) {
+        B := 0
+        L := 0
+        R := 0
+        T := 0
+        return 0
     }
-    if (!found) {
-        ; Fallback to primary
-        if (useWorkArea)
-            SysGet, r, MonitorWorkArea, 1
-        else
-            SysGet, r, Monitor, 1
-        L := rLeft, T := rTop, R := rRight, B := rBottom
-    }
+
+    rectangle := useWorkArea ? monitorInfo.workArea : monitorInfo.fullArea
+    B := rectangle.bottom
+    L := rectangle.left
+    R := rectangle.right
+    T := rectangle.top
+    return monitorInfo.displayNumber
 }
 
 ;------------------------------------------------------------------------------
@@ -2814,9 +2902,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 taskbarExplorerMoveMade := _MoveTaskbarExplorerSpawn(hWnd, taskbarExplorerClickX, taskbarExplorerClickY)
             }
 
-            If (!taskbarExplorerMoveMade && vWinTitle != "" && MonCount > 1) {
-                currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnMonNum(hWnd, currentMon)
+            If (!taskbarExplorerMoveMade && vWinTitle != "" && GetMonitorCount() > 1) {
+                currentMon := GetMouseDisplayNumber()
+                currentMonHasActWin := IsWindowOnDisplayNumber(hWnd, currentMon)
                 If !currentMonHasActWin {
                     WinActivate, ahk_id %hWnd%
                     Send, #+{Left}
@@ -3952,8 +4040,8 @@ IsWindowScrollable() {
 }
 
 ForceRedrawWindow(hwnd) {
-    static RDW_INVALIDATE := 0x0001
-    static RDW_UPDATENOW  := 0x0100
+    static RDW_INVALIDATE  := 0x0001
+    static RDW_UPDATENOW   := 0x0100
     static RDW_ALLCHILDREN := 0x0080
 
     return DllCall("user32\RedrawWindow"
@@ -4076,14 +4164,35 @@ $*MButton::
     If !startedAlwaysOnTop
         WinSet, Transparent, 255, ahk_id %hWnd%
 
+    ; Track processed input so unchanged drag-loop passes can yield without
+    ; repeating window queries or applying the same window rectangle.
+    lastInputMouseX := ""
+    lastInputMouseY := ""
+    lastInputRButton := ""
+
     Critical, On
     while GetKeyState("MButton", "P") {
 
-        If (A_TickCount - initTime < k_SingleClickTime && !GetKeyState("LShift","P"))
+        If (A_TickCount - initTime < k_SingleClickTime && !GetKeyState("LShift","P")) {
+            Sleep, 1
             continue
+        }
 
         DraggingWindow := True
         isRbutton := GetKeyState("Rbutton","P")
+        MouseGetPos, mx, my,
+
+        ; Yield while physical drag input is unchanged. New cursor movement or
+        ; an RButton transition reaches the existing drag logic on the next poll.
+        If (isRbutton == lastInputRButton && mx == lastInputMouseX && my == lastInputMouseY) {
+            Sleep, 1
+            continue
+        }
+
+        lastInputMouseX := mx
+        lastInputMouseY := my
+        lastInputRButton := isRbutton
+
         if (isRbutton)
             swallowNextRButtonUpFromMButtonDrag := true
         If (!isRbutton && isRbutton_last) {
@@ -4104,8 +4213,6 @@ $*MButton::
         isRbutton_last := isRbutton
 
         windowSnapped := False
-
-        MouseGetPos, mx, my,
 
         If switchingBackToMove {
             mx0 := mx
@@ -4142,7 +4249,7 @@ $*MButton::
             WinMove, ahk_id %hWnd%,, %moveToX%, %moveToY%
             WaitForStableWindow(hWnd)
 
-            isMax == 0
+            isMax := 0
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
             MouseGetPos, mx, my,
             BlockInput, MouseMoveOff
@@ -4450,7 +4557,7 @@ $*MButton::
     Critical, Off
 
     rlsTime := A_TickCount
-    stopMon := MWAGetMonitorMouseIsIn()
+    stopMon := GetMouseDisplayNumber()
     If (!startedAlwaysOnTop)
         ForceRedrawWindow(hWnd)
 
@@ -4535,23 +4642,21 @@ ConfineMouseToCurrentMonitorArea(area := "work", x := 0, y := 0, w := 0, h := 0)
     ; Get current mouse position
     MouseGetPos, mx, my
 
-    ; Get monitor handle under cursor
-    hMon := DllCall("user32\MonitorFromPoint", "int64", (my << 32) | (mx & 0xFFFFFFFF), "uint", 2, "ptr")
-    if !hMon
+    ; Read both areas from the Windows DISPLAYn-indexed monitor cache.
+    monitorRecord := _GetMonitorRecordForPoint(mx, my, false, true)
+    if (!IsObject(monitorRecord))
         return 0
 
-    ; Prepare MONITORINFO structure
-    VarSetCapacity(mi, 40, 0)
-    NumPut(40, mi, 0, "UInt")
-
-    if !DllCall("user32\GetMonitorInfo", "ptr", hMon, "ptr", &mi)
-        return 0
-
-    ; rcMonitor (offset 4), rcWork (offset 20)
-    monL  := NumGet(mi,  4, "Int"), monT  := NumGet(mi,  8, "Int")
-    monR  := NumGet(mi, 12, "Int"), monB  := NumGet(mi, 16, "Int")
-    workL := NumGet(mi, 20, "Int"), workT := NumGet(mi, 24, "Int")
-    workR := NumGet(mi, 28, "Int"), workB := NumGet(mi, 32, "Int")
+    fullArea := monitorRecord.fullArea
+    workArea := monitorRecord.workArea
+    monB     := fullArea.bottom
+    monL     := fullArea.left
+    monR     := fullArea.right
+    monT     := fullArea.top
+    workB    := workArea.bottom
+    workL    := workArea.left
+    workR    := workArea.right
+    workT    := workArea.top
 
     ; Determine which area to use
     area := (area = "MONITOR" || area = "monitor") ? "monitor" : "work"
@@ -5718,9 +5823,9 @@ Return
         {
             hwndID := allWindows%A_Index%
 
-            If (MonCount > 1) {
-                currentMon := MWAGetMonitorMouseIsIn()
-                currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
+            If (GetMonitorCount() > 1) {
+                currentMon := GetMouseDisplayNumber()
+                currentMonHasActWin := IsWindowOnDisplayNumber(hwndID, currentMon)
             }
             Else {
                 currentMonHasActWin := True
@@ -5943,7 +6048,7 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
 }
 
 Cycle() {
-    global ValidWindows, GroupedWindows, MonCount, LclickSelected, CanceledWinSwap, k_Opacity, bufferedCycleAdvance
+    global ValidWindows, GroupedWindows, LclickSelected, CanceledWinSwap, k_Opacity, bufferedCycleAdvance
 
     cycleCount           := 1
     ; Start each Alt+Tab session with an empty buffer. DrawWindowTitlePopup() will set
@@ -5953,7 +6058,7 @@ Cycle() {
     DetectHiddenWindows, Off
     failedSwitch := False
     why := ""
-    currentMon := MWAGetMonitorMouseIsIn()
+    currentMon := GetMouseDisplayNumber()
     WinGet, actId, ID, A
     WinGet, allWindows, List
 
@@ -5962,8 +6067,8 @@ Cycle() {
         Critical On
         hwndID := allWindows%A_Index%
 
-        If (MonCount > 1) {
-            currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
+        If (GetMonitorCount() > 1) {
+            currentMonHasActWin := IsWindowOnDisplayNumber(hwndID, currentMon)
         }
         Else {
             currentMonHasActWin := True
@@ -6092,7 +6197,7 @@ Cycle() {
 ; Switch "App" open windows based on the same process and class
 CycleAppWindows(activeProcessName, activeClass) {
 
-    global MonCount, GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, k_Opacity, bufferedCycleAdvance
+    global GroupedWindows, MinimizedWindows, LclickSelected, startHighlight, k_Opacity, bufferedCycleAdvance
 
     activeCurrentMonitorWindowIndex := 0
     CurrentMonitorMinimizedWindows  := []
@@ -6101,7 +6206,7 @@ CycleAppWindows(activeProcessName, activeClass) {
     windowsToMinimize               := []
     ; Same buffering idea as Cycle(): Alt+` can miss a fast repeat while the popup GUI is drawing.
     bufferedCycleAdvance            := False
-    currentMon                      := MWAGetMonitorMouseIsIn()
+    currentMon                      := GetMouseDisplayNumber()
     cycleCount                      := 2
     GroupedWindows                  := [] ; GroupedWindows = [active visible, other visible, current-monitor minimized, other-monitor minimized]
     MinimizedWindows                := []
@@ -6127,7 +6232,7 @@ CycleAppWindows(activeProcessName, activeClass) {
         If (mmState == -1) {
             ; Minimized windows are classified by the monitor they would restore
             ; onto, not by their current minimized icon state.
-            restoredMon := GetWindowMonitorNumber(hwndID)
+            restoredMon := GetWindowDisplayNumber(hwndID)
             If (restoredMon = currentMon)
                 CurrentMonitorMinimizedWindows.Push(hwndID)
             Else
@@ -6135,8 +6240,8 @@ CycleAppWindows(activeProcessName, activeClass) {
             continue
         }
 
-        If (MonCount > 1) {
-            currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+        If (GetMonitorCount() > 1) {
+            currentMonHasActWin := IsWindowOnDisplayNumber(hwndId, currentMon)
         }
         Else {
             currentMonHasActWin := True
@@ -6202,7 +6307,7 @@ CycleAppWindows(activeProcessName, activeClass) {
     gwHwndId := GroupedWindows[cycleCount] ; get ready to activate next window
 
     WinGet, mmState, MinMax, ahk_id %gwHwndId%
-    If (MonCount > 1 && mmState == -1) {
+    If (GetMonitorCount() > 1 && mmState == -1) {
         windowsToMinimize.push(GroupedWindows[cycleCount])
     }
     WinActivate, ahk_id %gwHwndId%
@@ -6242,7 +6347,7 @@ CycleAppWindows(activeProcessName, activeClass) {
         If (bufferedAdvance || !ErrorLevel)
         {
             WinGet, mmState, MinMax, ahk_id %gwHwndId%
-            If (MonCount > 1 && mmState == -1) {
+            If (GetMonitorCount() > 1 && mmState == -1) {
                 windowsToMinimize.push(gwHwndId)
             }
             WinActivate, ahk_id %gwHwndId%
@@ -6270,7 +6375,7 @@ CycleAppWindows(activeProcessName, activeClass) {
                 ; Flattening the three phases into GroupedWindows means phase 3 can
                 ; legally contain minimized windows restored to another monitor.
                 ; Only visible windows are still constrained to the current monitor.
-                If (mmState > -1 && !IsWindowOnMonNum(gwHwndId, currentMon)) {
+                If (mmState > -1 && !IsWindowOnDisplayNumber(gwHwndId, currentMon)) {
                     cycleCount++
                     If (cycleCount > numWindows)
                         cycleCount := 1
@@ -6291,7 +6396,7 @@ CycleAppWindows(activeProcessName, activeClass) {
             sleep, 100
         }
         Else {
-            If !IsWindowOnMonNum(tempId, currentMon) {
+            If !IsWindowOnDisplayNumber(tempId, currentMon) {
                 WinActivate, ahk_id %tempId%
                 Send, #+{Left}
             }
@@ -6924,23 +7029,11 @@ Overlay_FadeTo(overlayHwnd, alphaTarget, fadeMs := 100, alphaStart := "", allowM
     }
 }
 
-Overlay_GetWorkArea(monNum, ByRef areaLeft, ByRef areaTop, ByRef areaRight, ByRef areaBottom) {
-    ; SysGet MonitorWorkArea returns variables: MonLeft/Top/Right/Bottom
-    SysGet, monArea, MonitorWorkArea, %monNum%
-    areaLeft   := monAreaLeft
-    areaTop    := monAreaTop
-    areaRight  := monAreaRight
-    areaBottom := monAreaBottom
+Overlay_GetWorkArea(displayNumber, ByRef areaLeft, ByRef areaTop, ByRef areaRight, ByRef areaBottom) {
+    if !_GetMonitorRectangleByDisplayNumber(displayNumber, true, areaLeft, areaTop, areaRight, areaBottom)
+        return false
 
-    ; SysGet, monFull, Monitor, %monNum%
-    ; MsgBox, % "Full Left: " monFullLeft
-        ; . "`nFull Top: " monFullTop
-        ; . "`nFull Right: " monFullRight
-        ; . "`nFull Bottom: " monFullBottom
-        ; . "`nWork Left: " monAreaLeft
-        ; . "`nWork Top: " monAreaTop
-        ; . "`nWork Right: " monAreaRight
-        ; . "`nWork Bottom: " monAreaBottom
+    return true
 }
 
 Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, clickThrough := True, fadeMs := 100) {
@@ -6969,8 +7062,8 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
         WinSet, ExStyle, -0x20, ahk_id %overlayHwnd%
 
     ; Pick the monitor from the mouse position.
-    monNum := MWAGetMonitorMouseIsIn()
-    Overlay_GetWorkArea(monNum, areaLeft, areaTop, areaRight, areaBottom)
+    displayNumber := GetMouseDisplayNumber()
+    Overlay_GetWorkArea(displayNumber, areaLeft, areaTop, areaRight, areaBottom)
 
     areaWidth  := areaRight  - areaLeft
     areaHeight := areaBottom - areaTop
@@ -7186,8 +7279,8 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     }
 
     ; Pick the monitor from the mouse position.
-    monNum := MWAGetMonitorMouseIsIn()
-    Overlay_GetWorkArea(monNum, areaLeft, areaTop, areaRight, areaBottom)
+    displayNumber := GetMouseDisplayNumber()
+    Overlay_GetWorkArea(displayNumber, areaLeft, areaTop, areaRight, areaBottom)
 
     areaWidth    := areaRight - areaLeft
     areaHeight   := areaBottom - areaTop
@@ -7337,18 +7430,21 @@ GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
     cx := round((wx + ww)/2)
     cy := round((wy + wh)/2)
 
-    SysGet, MonCount, MonitorCount
-    Loop, %MonCount%
-    {
-        SysGet, Mon,  Monitor,         %A_Index% ; MonLeft/MonTop/MonRight/MonBottom
-        SysGet, Work, MonitorWorkArea, %A_Index% ; WorkLeft/WorkTop/WorkRight/WorkBottom
-        if (cx >= MonLeft && cx < MonRight && cy >= MonTop && cy < MonBottom) {
-            monX  := MonLeft,   monY := MonTop,   monW := MonRight - MonLeft,    monH := MonBottom - MonTop
-            workX := WorkLeft, workY := WorkTop, workW := WorkRight - WorkLeft, workH := WorkBottom - WorkTop
-            return true
-        }
-    }
-    Return false
+    monitorInfo := _GetMonitorRecordForPoint(cx, cy)
+    if (!IsObject(monitorInfo))
+        return false
+
+    fullArea := monitorInfo.fullArea
+    workArea := monitorInfo.workArea
+    monH     := fullArea.height
+    monW     := fullArea.width
+    monX     := fullArea.left
+    monY     := fullArea.top
+    workH    := workArea.height
+    workW    := workArea.width
+    workX    := workArea.left
+    workY    := workArea.top
+    return true
 }
 
 Max(a,b) {
@@ -7367,7 +7463,6 @@ $^Lbutton Up::
     StopRecursion := True
     DetectHiddenWindows, Off
     CoordMode, Mouse, Screen
-    SysGet, MonCount, MonitorCount
     MouseGetPos, vPosX, vPosY, hWnd
 
     WinGet, targetProcess, ProcessName, ahk_id %hWnd%
@@ -7381,12 +7476,12 @@ $^Lbutton Up::
     If (InStr(vName,"close",false)) {
         tooltip, Closing all windows...
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-        currentMon := MWAGetMonitorMouseIsIn()
+        currentMon := GetMouseDisplayNumber()
         loop % windowsFromProc
         {
             hwndID := windowsFromProc%A_Index%
-            If (MonCount > 1) {
-                currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+            If (GetMonitorCount() > 1) {
+                currentMonHasActWin := IsWindowOnDisplayNumber(hwndId, currentMon)
                 If currentMonHasActWin {
                     WinClose, ahk_id %hwndID%
                     sleep, 100
@@ -7401,12 +7496,12 @@ $^Lbutton Up::
     If (InStr(vName,"minimize",false)) {
         tooltip, Minimizing all windows...
         WinGet, windowsFromProc, list, ahk_exe %targetProcess% ahk_class %targetClass%
-        currentMon := MWAGetMonitorMouseIsIn()
+        currentMon := GetMouseDisplayNumber()
         loop % windowsFromProc
         {
             hwndID := windowsFromProc%A_Index%
-            If (MonCount > 1) {
-                currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+            If (GetMonitorCount() > 1) {
+                currentMonHasActWin := IsWindowOnDisplayNumber(hwndId, currentMon)
                 If currentMonHasActWin {
                     WinMinimize, ahk_id %hwndId%
                     sleep, 100
@@ -7451,12 +7546,10 @@ Return
 
 #If MouseIsOverTaskbarWidgets()
 $~^LButton::
-    global MonCount
     Thread, NoTimers, True
     StopRecursion := True
 
     DetectHiddenWindows, Off
-    SysGet, MonCount, MonitorCount
 
     Send, {Ctrl UP}
 
@@ -7482,23 +7575,23 @@ $~^LButton::
             Tooltip,
         }
         else {
-            currentMon := MWAGetMonitorMouseIsIn()
+            currentMon := GetMouseDisplayNumber()
             Loop, %windowList%
             {
                 windowID := windowList%A_Index%
                 WinGet, windowState, MinMax, ahk_id %windowID%
 
                 if (windowState == -1) {
-                    winMonNum := GetWindowMonitorNumber(windowID)
+                    winDisplayNumber := GetWindowDisplayNumber(windowID)
 
-                    If (winMonNum == currentMon) {
+                    If (winDisplayNumber == currentMon) {
                         WinRestore, ahk_id %windowID%
                         sleep, 100
                     }
                 }
                     else if (windowState == 0) {
-                    if (MonCount > 1) {
-                        currentMonHasActWin := IsWindowOnMonNum(windowID, currentMon)
+                    if (GetMonitorCount() > 1) {
+                        currentMonHasActWin := IsWindowOnDisplayNumber(windowID, currentMon)
                         if currentMonHasActWin
                             ; WinActivate, ahk_id %windowID%
                             WinSet, AlwaysOnTop, On,  ahk_id %windowID%
@@ -7534,7 +7627,7 @@ $^LButton::
     WinActivate, ahk_id %targetID%
     WinGetClass, targetClass, ahk_id %targetID%
     WinGet, targetProcess, ProcessName, ahk_id %targetID%
-    currentMon := MWAGetMonitorMouseIsIn()
+    currentMon := GetMouseDisplayNumber()
 
     BringAppWindowsOnMonitorToTop(targetProcess, targetClass, currentMon, targetID)
 
@@ -7551,7 +7644,7 @@ $^+LButton::
     Measure_Begin()
 return
 
-BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) {
+BringAppWindowsOnMonitorToTop(targetProcess, targetClass, displayNumber, targetID) {
     DetectHiddenWindows, Off
 
     WinGet, windowList, List, ahk_exe %targetProcess% ahk_class %targetClass%
@@ -7565,7 +7658,7 @@ BringAppWindowsOnMonitorToTop(targetProcess, targetClass, monitorNum, targetID) 
         if (windowState != 0)
             continue
 
-        currentMonHasActWin := IsWindowOnMonNum(windowID, monitorNum)
+        currentMonHasActWin := IsWindowOnDisplayNumber(windowID, displayNumber)
         if !currentMonHasActWin
             continue
 
@@ -7729,7 +7822,7 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
         completionCallback := Func("_MaximizeTaskbarExplorerAfterMove").Bind(hWnd)
 
     ; Let this animation own placement; False leaves OnWinActiveChange() responsible for its fallback.
-    moveStarted := MoveWindow(hWnd, targetX, targetY, windowWidth, windowHeight, 180, completionCallback)
+    moveStarted := MoveWindow(hWnd, targetX, targetY, windowWidth, windowHeight, 280, completionCallback)
     if (!moveStarted && wasMaximized)
         WinMaximize, ahk_id %hWnd%
     return moveStarted
@@ -8289,6 +8382,31 @@ _ResolveCabinetItemsViewFromNativeControl(explorerHwnd
     return true
 }
 
+; Trace one #32770 native Items View failure for each changed dialog resolver state.
+_TraceDialogItemsViewResolverFailure(dlgHwnd, candidateCtrlNN, candidateHwnd, candidateClass
+                                   , candidateCount, attemptedCount, failureStage, rootSnapshot) {
+    global k_debugLogExplorerCtrlAddEnabled
+    static lastFailureSignatureByDialog := {}
+
+    ; Avoid creating diagnostic state or formatting trace text when detailed tracing is disabled.
+    if (!k_debugLogExplorerCtrlAddEnabled)
+        return
+
+    ; Include each resolving input and UIA outcome so repeated identical probe failures are logged only once.
+    failureSignature := candidateCtrlNN . "|" . candidateHwnd . "|" . candidateClass
+        . "|" . candidateCount . "|" . attemptedCount . "|" . failureStage . "|" . rootSnapshot
+    if (lastFailureSignatureByDialog.HasKey(dlgHwnd)
+     && lastFailureSignatureByDialog[dlgHwnd] = failureSignature)
+        return
+
+    lastFailureSignatureByDialog[dlgHwnd] := failureSignature
+    _TraceExplorerCtrlAdd("dialog_native_items_view_failure"
+        , "candidateCtrlNN=[" . candidateCtrlNN . "] candidateHwnd=" . candidateHwnd
+        . " nativeClass=[" . candidateClass . "] candidateCount=" . candidateCount
+        . " attempted=" . attemptedCount . " failureStage=" . failureStage
+        . " rootSnapshot=[" . rootSnapshot . "]")
+}
+
 ; Resolve a #32770 file dialog's Items View below its most likely native file-
 ; panel controls. At most two candidates share a short sub-budget so the point
 ; fallback retains time when a provider does not expose the native subtree.
@@ -8397,7 +8515,10 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd
 
         attemptedCount++
         ; Search below this HWND to avoid the slower and less precise dialog-wide UIA traversal.
-        items := FindExplorerItemsViewElement(candidateHwnd, transactionTimeout, nativeDeadlineTick)
+        failureStage := ""
+        rootSnapshot := ""
+        items := FindExplorerItemsViewElement(candidateHwnd, transactionTimeout, nativeDeadlineTick
+                                            , failureStage, rootSnapshot)
         if IsObject(items) {
             ; Return the resolved element plus its native source so later traces can explain the successful path.
             itemsEl          := items
@@ -8407,10 +8528,13 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd
             return true
         }
 
+        _TraceDialogItemsViewResolverFailure(dlgHwnd, candidateCtrlNN, candidateHwnd
+            , candidateClass, candidateCount, attemptedCount, failureStage, rootSnapshot)
+
         ; Stop immediately when the native sub-budget expires so the caller retains its fallback opportunity.
         if (A_TickCount >= nativeDeadlineTick)
             break
-            }
+    }
 
     ; Preserve counts and timeout state so logs distinguish absent UIA content from an exhausted budget.
     resolutionReason := "candidate_count="
@@ -8536,7 +8660,11 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
                 ? Min(uiaDeadlineTick, A_TickCount + preferredLookupBudgetMs)
                 : A_TickCount + preferredLookupBudgetMs
 
-            itemsEl := FindExplorerItemsViewElement(preferredTarget.hwnd, preferredLookupBudgetMs, preferredLookupDeadlineTick)
+            preferredFailureStage := ""
+            preferredRootSnapshot := ""
+            itemsEl := FindExplorerItemsViewElement(preferredTarget.hwnd
+                , preferredLookupBudgetMs, preferredLookupDeadlineTick
+                , preferredFailureStage, preferredRootSnapshot)
             preferredLookupElapsedMs := A_TickCount - preferredLookupStartTick
             if IsObject(itemsEl) {
                 preferredTargetState := "hit"
@@ -8547,6 +8675,11 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
                 resolutionReason     := "control=" . resolvedCtrlNN . " hwnd=" . resolvedCtrlHwnd . " lookupMs=" . preferredLookupElapsedMs
                 return true
             }
+
+            preferredCtrlClass := GetClassName(preferredTarget.hwnd)
+            _TraceDialogItemsViewResolverFailure(targetHwndID, validatedPreferredCtrlNN
+                , preferredTarget.hwnd + 0, preferredCtrlClass, 1, 1
+                , preferredFailureStage, preferredRootSnapshot)
         }
     }
 
@@ -12139,11 +12272,19 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
 ; transactionTimeout requests each lookup's timeout when no shared deadline is supplied.
 ; uiaDeadlineTick instead derives each requested timeout from one shared remaining-time
 ; budget and prevents another root or descendant lookup after that deadline expires.
-FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadlineTick := 0)
+; failureStage and rootSnapshot are optional trace outputs that explain why a failed native lookup did not locate an Items View.
+FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadlineTick := 0
+                           , ByRef failureStage := "", ByRef rootSnapshot := "")
 {
+    ; Clear diagnostics so a failed lookup cannot expose the preceding candidate's UIA state.
+    failureStage := ""
+    rootSnapshot := "unavailable"
+
     effectiveTimeoutMs := _ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)
-    if (!effectiveTimeoutMs)
+    if (!effectiveTimeoutMs) {
+        failureStage := "budget_before_root"
         return ""
+    }
 
     if (uiaDeadlineTick)
         exEl := SafeUIA_ElementFromHandle(targetHwndID, "", False
@@ -12151,14 +12292,19 @@ FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadli
     else
         exEl := SafeUIA_ElementFromHandle(targetHwndID, "", False
             , effectiveTimeoutMs)
-    if !IsObject(exEl)
+    if !IsObject(exEl) {
+        failureStage := "element_from_handle"
         return ""
+    }
 
     ; A native-scoped SysListView32 can itself be the UIA List. Accepting that
     ; root avoids searching below the exact file-panel control we just resolved.
-    if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout))
+    if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+        failureStage := "budget_before_root_snapshot"
         return ""
+    }
     rootInfo := SafeUIA_GetElementSnapshot(exEl, "className|controlType|name")
+    rootSnapshot := "className=[" . rootInfo.className . "] controlType=" . rootInfo.controlType . " name=[" . rootInfo.name . "]"
     if (rootInfo.className = "UIItemsView"
      || rootInfo.controlType = 50008
      || rootInfo.controlType = 50028
@@ -12169,8 +12315,10 @@ FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadli
     ; resolves them inside FindFirstBy("ControlType=...") just like the
     ; equivalent numeric IDs, which keeps this search readable.
     for controlTypeIndex, ctlType in ["UIA_ListControlTypeId", "UIA_DataGridControlTypeId", "UIA_TableControlTypeId"] {
-        if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout))
+        if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+            failureStage := "budget_before_descendant_" . ctlType
             return ""
+        }
 
         itemsEl := ""
         try
@@ -12182,9 +12330,14 @@ FindExplorerItemsViewElement(targetHwndID, transactionTimeout := 2000, uiaDeadli
             return itemsEl
     }
 
-    if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout))
+    if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+        failureStage := "budget_before_items_view_name"
         return ""
-    return SafeUIA_FindFirstByNameFast(exEl, "Items View")
+    }
+    itemsEl := SafeUIA_FindFirstByNameFast(exEl, "Items View")
+    if !IsObject(itemsEl)
+        failureStage := "items_view_name_not_found"
+    return itemsEl
 }
 
 ; Return true when the resolved #32770 Items View exposes Details-mode evidence:
@@ -13630,33 +13783,31 @@ ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ; Show popup menu by handle o
 }
 
 
-; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=31716
-GetCurrentMonitorIndex(){
+; Return the cached display number for the monitor containing the mouse.
+GetCurrentDisplayNumber(){
     CoordMode, Mouse, Screen
     MouseGetPos, mx, my
-    SysGet, monitorsCount, 80
 
-    Loop, %monitorsCount% {
-        SysGet, monitor, Monitor, %A_Index%
-        If (monitorLeft <= mx && mx <= monitorRight && monitorTop <= my && my <= monitorBottom){
-            Return A_Index
-        }
-    }
-    Return 0
+    monitorInfo := _GetMonitorRecordForPoint(mx, my)
+    return IsObject(monitorInfo) ? monitorInfo.displayNumber : 0
 }
 
 CoordXCenterScreen()
 {
-    ScreenNumber := GetCurrentMonitorIndex()
-    SysGet, Mon1, Monitor, %ScreenNumber%
-    Return (( Mon1Right-Mon1Left ) / 2) + Mon1Left
+    displayNumber := GetCurrentDisplayNumber()
+    if !_GetMonitorRectangleByDisplayNumber(displayNumber, false, monitorLeft, monitorTop, monitorRight, monitorBottom)
+        return 0
+
+    return ((monitorRight - monitorLeft) / 2) + monitorLeft
 }
 
 CoordYCenterScreen()
 {
-    ScreenNumber := GetCurrentMonitorIndex()
-    SysGet, Mon1, Monitor, %ScreenNumber%
-    Return ((Mon1Bottom-Mon1Top - 30) / 2) + Mon1Top
+    displayNumber := GetCurrentDisplayNumber()
+    if !_GetMonitorRectangleByDisplayNumber(displayNumber, false, monitorLeft, monitorTop, monitorRight, monitorBottom)
+        return 0
+
+    return ((monitorBottom - monitorTop - 30) / 2) + monitorTop
 }
 
 ; https://www.autohotkey.com/boards/viewtopic.php?t=37184
@@ -14300,9 +14451,9 @@ findDesktopWindowIsOn(hwnd)
 *****************************
 */
 UpdateValidWindows() {
-    global ValidWindows, MonCount
+    global ValidWindows
 
-    currentMon := MWAGetMonitorMouseIsIn()
+    currentMon := GetMouseDisplayNumber()
     WinGet, allWindows, List
     Loop, %allWindows%
     {
@@ -14310,8 +14461,8 @@ UpdateValidWindows() {
 
         If (IsAltTabWindow(hwndID)) {
             WinGet, state, MinMax, ahk_id %hwndID%
-            If (MonCount > 1 && state > -1) {
-                currentMonHasActWin := IsWindowOnMonNum(hwndId, currentMon)
+            If (GetMonitorCount() > 1 && state > -1) {
+                currentMonHasActWin := IsWindowOnDisplayNumber(hwndId, currentMon)
             }
             Else If (state > -1) {
                 currentMonHasActWin := True
@@ -14873,13 +15024,13 @@ Return
 }
 
 MouseTrack() {
-    global MonCount, currentMon, previousMon, StopRecursion, TaskBarHeight
+    global currentMon, previousMon, StopRecursion, TaskBarHeight
     static x, y, lastX, lastY, taskview
     static timeOfLastMove
 
     ListLines Off
-    If (MonCount > 1 && !GetKeyState("LButton","P")) {
-        currentMon := MWAGetMonitorMouseIsIn(TaskBarHeight)
+    If (GetMonitorCount() > 1 && !GetKeyState("LButton","P")) {
+        currentMon := GetMouseDisplayNumber(TaskBarHeight)
         If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
             StopRecursion := True
             DetectHiddenWindows, Off
@@ -15297,19 +15448,21 @@ _GetLiveResizeSyncFixedEdge(targetX, targetY, targetW, targetH, edgeHit, targetR
 ; bottom within a strict 3px monitor-edge dock tolerance, so vertical live
 ; cluster resize can suppress it while still allowing horizontal cluster
 ; behavior.
-_IsFullMonitorHeightWindow(hwndID, monitorNum) {
+_IsFullMonitorHeightWindow(hwndID, displayNumber) {
     strictDockEdgeTolerance := 3
 
-    if (!hwndID || monitorNum < 1)
+    if (!hwndID || displayNumber < 1)
         return false
 
-    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+    if !_GetMonitorRectangleByDisplayNumber(displayNumber, true, workAreaLeft, workAreaTop, workAreaRight, workAreaBottom)
+        return false
+
     if !WinGetPosEx(hwndID, winX, winY, winW, winH, null, null)
         return false
 
     winBottomEdge := winY + winH
-    return (   Abs(winY - monInfoTop) <= strictDockEdgeTolerance
-            && Abs(winBottomEdge - monInfoBottom) <= strictDockEdgeTolerance)
+    return (   Abs(winY - workAreaTop) <= strictDockEdgeTolerance
+            && Abs(winBottomEdge - workAreaBottom) <= strictDockEdgeTolerance)
 }
 
 ; Return true only when an opposite-side live-resize partner is directly
@@ -15428,8 +15581,8 @@ _IsLiveResizePeerMatch(anchorX, anchorY, anchorW, anchorH, candidateX, candidate
 ; This grouping is geometry-based rather than z-order-based so stacked peers
 ; such as windows #1 and #2 can resize together while also driving the opposite
 ; partner window #3.
-_BuildLiveResizePeerHwndIDs(draggedHwndID, monitorNum, edgeHit, sharedEdgeTolerance := 25, peerGapTolerance := 100) {
-    SysGet, MonCount, MonitorCount
+_BuildLiveResizePeerHwndIDs(draggedHwndID, displayNumber, edgeHit, sharedEdgeTolerance := 25, peerGapTolerance := 100) {
+    monitorCount := GetMonitorCount()
     DetectHiddenWindows, Off
 
     peerHwndIDs := []
@@ -15463,11 +15616,11 @@ _BuildLiveResizePeerHwndIDs(draggedHwndID, monitorNum, edgeHit, sharedEdgeTolera
             if (mmState <= -1)
                 continue
 
-            if (MonCount > 1 && !IsWindowOnMonNum(candidateHwndID, monitorNum))
+            if (monitorCount > 1 && !IsWindowOnDisplayNumber(candidateHwndID, displayNumber))
                 continue
 
             if (   (edgeHit = HTTOP || edgeHit = HTBOTTOM)
-                && _IsFullMonitorHeightWindow(candidateHwndID, monitorNum))
+                && _IsFullMonitorHeightWindow(candidateHwndID, displayNumber))
                 continue
 
             if !WinGetPosEx(candidateHwndID, candidateX, candidateY, candidateW, candidateH, null, null)
@@ -15673,9 +15826,8 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH, usePrevi
     tbcMoves          := []
     validPartners     := []
 
-    monitorNum := GetWindowMonitorNumber(lButtonResizeSyncDraggedHwnd)
-    if (monitorNum >= 1) {
-        SysGet, monInfo, MonitorWorkArea, %monitorNum%
+    displayNumber := GetWindowDisplayNumber(lButtonResizeSyncDraggedHwnd)
+    if _GetMonitorRectangleByDisplayNumber(displayNumber, true, monInfoLeft, monInfoTop, monInfoRight, monInfoBottom) {
         haveMonitorWorkArea := true
     }
 
@@ -16516,21 +16668,17 @@ TryStartBottomResizeCursorClamp(xPos := "", yPos := "", hwnd := "") {
     if (edgeHit != HTBOTTOM && edgeHit != HTBOTTOMLEFT && edgeHit != HTBOTTOMRIGHT)
         return false
 
-    pointValue := (xPos & 0xFFFFFFFF) | ((yPos & 0xFFFFFFFF) << 32)
-    monitorHandle := DllCall("user32\MonitorFromPoint", "Int64", pointValue, "UInt", 2, "Ptr")  ; MONITOR_DEFAULTTONEAREST = 2
-    if (!monitorHandle)
+    monitorRecord := _GetMonitorRecordForPoint(xPos, yPos, false, true)
+    if (!IsObject(monitorRecord))
         return false
 
-    VarSetCapacity(monitorInfo, 40, 0)
-    NumPut(40, monitorInfo, 0, "UInt")
-    if !DllCall("user32\GetMonitorInfo", "Ptr", monitorHandle, "Ptr", &monitorInfo)
-        return false
-
-    monitorLeft   := NumGet(monitorInfo,  4, "Int")
-    monitorTop    := NumGet(monitorInfo,  8, "Int")
-    monitorRight  := NumGet(monitorInfo, 12, "Int")
-    monitorBottom := NumGet(monitorInfo, 16, "Int")
-    workBottom    := NumGet(monitorInfo, 32, "Int")
+    fullArea      := monitorRecord.fullArea
+    workArea      := monitorRecord.workArea
+    monitorBottom := fullArea.bottom
+    monitorLeft   := fullArea.left
+    monitorRight  := fullArea.right
+    monitorTop    := fullArea.top
+    workBottom    := workArea.bottom
 
     ; A lower work-area boundary proves that a taskbar or another reserved
     ; appbar occupies the bottom of this monitor. Otherwise no clamp is needed.
@@ -16604,12 +16752,12 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     if (edgeHit != HTLEFT && edgeHit != HTRIGHT && edgeHit != HTTOP && edgeHit != HTBOTTOM)
         return false
 
-    monitorNum := GetWindowMonitorNumber(draggedHwndID)
-    if (monitorNum < 1)
+    displayNumber := GetWindowDisplayNumber(draggedHwndID)
+    if (displayNumber < 1)
         return false
 
     draggedIsFullHeight := (   (edgeHit = HTLEFT || edgeHit = HTRIGHT)
-                            && _IsFullMonitorHeightWindow(draggedHwndID, monitorNum))
+                            && _IsFullMonitorHeightWindow(draggedHwndID, displayNumber))
 
     ; Live resize-sync should only arm when the partner already looks flush to
     ; the dragged edge, so use tighter edge/gap tolerances than the broader
@@ -16621,7 +16769,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     suppressVerticalFullHeightCluster := (edgeHit = HTTOP || edgeHit = HTBOTTOM)
 
     if (   suppressVerticalFullHeightCluster
-        && _IsFullMonitorHeightWindow(draggedHwndID, monitorNum))
+        && _IsFullMonitorHeightWindow(draggedHwndID, displayNumber))
         return false
 
     partnerSearchMode := ""
@@ -16636,7 +16784,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
 
     lButtonResizeSyncPartners := []
     resizeTargetHwndMap := {}
-    sameSidePeerHwndIDs := _BuildLiveResizePeerHwndIDs(draggedHwndID, monitorNum, edgeHit, liveResizePeerEdgeTolerance, liveResizePeerGapTolerance)
+    sameSidePeerHwndIDs := _BuildLiveResizePeerHwndIDs(draggedHwndID, displayNumber, edgeHit, liveResizePeerEdgeTolerance, liveResizePeerGapTolerance)
     if (!IsObject(sameSidePeerHwndIDs) || !sameSidePeerHwndIDs.MaxIndex())
         sameSidePeerHwndIDs := [draggedHwndID]
 
@@ -16666,7 +16814,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
         if !WinGetPosEx(sameSidePeerHwndID, sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH, null, null)
             continue
 
-        partnerHwndIDs := Find2DEdgePartnerWindows(sameSidePeerHwndID, monitorNum, liveResizeEdgeTouchTolerance, 1, 100, 100, partnerSearchMode, liveResizeEdgeGapTolerance, sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH)
+        partnerHwndIDs := Find2DEdgePartnerWindows(sameSidePeerHwndID, displayNumber, liveResizeEdgeTouchTolerance, 1, 100, 100, partnerSearchMode, liveResizeEdgeGapTolerance, sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH)
         if (!IsObject(partnerHwndIDs) || !partnerHwndIDs.MaxIndex())
             continue
 
@@ -16675,7 +16823,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
                 continue
             if (partnerHwndID = draggedHwndID)
                 continue
-            partnerIsFullHeight := _IsFullMonitorHeightWindow(partnerHwndID, monitorNum)
+            partnerIsFullHeight := _IsFullMonitorHeightWindow(partnerHwndID, displayNumber)
             if (   suppressVerticalFullHeightCluster
                 && partnerIsFullHeight)
                 continue
@@ -16893,39 +17041,42 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
         Return False
 }
 
-;https://stackoverflow.com/questions/59883798/determine-which-monitor-the-focus-window-is-on
-IsWindowOnMonNum(thisWindowHwnd, targetMonNum := 0) {
+; Return true when a window is mostly inside the requested Windows display number.
+IsWindowOnDisplayNumber(thisWindowHwnd, targetDisplayNumber := 0) {
     X := Y := W := H := 0
     WinGet, state, MinMax, ahk_id %thisWindowHwnd%
 
-    if (targetMonNum < 1)
+    if (targetDisplayNumber < 1)
         Return False
 
     ; Minimized windows do not have a meaningful current on-screen rect, so use
     ; their restored placement monitor instead of claiming they belong to every
     ; monitor.
     If (state == -1)
-        Return (GetWindowMonitorNumber(thisWindowHwnd) = targetMonNum)
+        Return (GetWindowDisplayNumber(thisWindowHwnd) = targetDisplayNumber)
 
     ; WinGetPos, X, Y, W, H, ahk_id %thisWindowHwnd%
     WinGetPosEx(thisWindowHwnd, X, Y, W, H)
     if (W <= 0 || H <= 0)
         Return False
 
+    if !_GetMonitorRectangleByDisplayNumber(targetDisplayNumber, false, monitorLeft, monitorTop, monitorRight, monitorBottom)
+        return false
+
     Critical, On
-    SysGet, workArea, Monitor, %targetMonNum%
 
     ;Check If the focus window in on the requested monitor index
     ; https://math.stackexchange.com/questions/2449221/calculating-percentage-of-overlap-between-two-rectangles
-    overlapRatio := ((max(X, workAreaLeft) - min(X+W, workAreaRight)) * (max(Y, workAreaTop) - min(Y+H, workAreaBottom))) / (W * H)
+    overlapRatio := ((max(X, monitorLeft) - min(X+W, monitorRight)) * (max(Y, monitorTop) - min(Y+H, monitorBottom))) / (W * H)
     Critical, Off
     Return (overlapRatio > 0.50)
 }
 
-GetWindowMonitorNumber(windowHwnd) {
+; Return the cached display number for a window's current or restored monitor.
+GetWindowDisplayNumber(windowHwnd) {
+    global g_MonitorsByDisplayNumber
     static monitorDefaultToNearest := 2  ; MONITOR_DEFAULTTONEAREST
     static windowPlacementSize := 44
-    static rectSize := 16
     static swShowMinimized := 2
 
     if !windowHwnd
@@ -16939,7 +17090,7 @@ GetWindowMonitorNumber(windowHwnd) {
 
     showCmd := NumGet(windowPlacement, 8, "UInt")
 
-    VarSetCapacity(targetRect, rectSize, 0)
+    VarSetCapacity(targetRect, 16, 0)
 
     if (showCmd = swShowMinimized) {
         ; Use restored position for minimized windows.
@@ -16962,61 +17113,33 @@ GetWindowMonitorNumber(windowHwnd) {
     if !targetMonitorHandle
         return 0
 
-    SysGet, monitorCount, MonitorCount
-    Loop, %monitorCount% {
-        SysGet, monitorArea, Monitor, %A_Index%
-
-        VarSetCapacity(monitorRect, rectSize, 0)
-        NumPut(monitorAreaLeft,   monitorRect, 0,  "Int")
-        NumPut(monitorAreaTop,    monitorRect, 4,  "Int")
-        NumPut(monitorAreaRight,  monitorRect, 8,  "Int")
-        NumPut(monitorAreaBottom, monitorRect, 12, "Int")
-
-        currentMonitorHandle := DllCall("MonitorFromRect", "Ptr", &monitorRect, "UInt", monitorDefaultToNearest, "Ptr")
-        if (currentMonitorHandle = targetMonitorHandle)
-            return A_Index
+    for displayNumber, monitorInfo in g_MonitorsByDisplayNumber {
+        if (monitorInfo.monitorHandle = targetMonitorHandle)
+            return displayNumber
     }
 
     return 0
 }
 
-;https://www.autohotkey.com/boards/viewtopic.php?f=6&t=54557
-MWAGetMonitorMouseIsIn(buffer := 0) ; we didn't actually need the "Monitor = 0"
+; Return the cached display number for the monitor containing the mouse.
+GetMouseDisplayNumber(buffer := 0)
 {
-    global currMonWidth, currMonHeight
-    static cachedMonitorCount := 0
-    static cachedMonitors := []
-    ; get the mouse coordinates first
-    Coordmode, Mouse, Screen    ; use Screen, so we can compare the coords with the sysget information`
-    MouseGetPos, Mx, My
-    ActiveMon := 0
+    global currMonHeight, currMonWidth, g_MonitorsByDisplayNumber
 
-    SysGet, MonitorCount, 80    ; monitorcount, so we know how many monitors there are, and the number of loops we need to do
-    if (MonitorCount != cachedMonitorCount || cachedMonitors.MaxIndex() != MonitorCount) {
-        cachedMonitors := []
-        Loop, %MonitorCount%
-        {
-            SysGet, mon, Monitor, %A_Index%    ; "Monitor" will get the total desktop space of the monitor, including taskbars
-            cachedMonitors[A_Index] := { "left": monLeft
-                , "top": monTop
-                , "right": monRight
-                , "bottom": monBottom }
-        }
-        cachedMonitorCount := MonitorCount
-    }
+    Coordmode, Mouse, Screen
+    MouseGetPos, mouseX, mouseY
 
-    Loop, %MonitorCount%
-    {
-        mon := cachedMonitors[A_Index]
-        If ( Mx >= (mon.left + buffer) ) && ( Mx < (mon.right - buffer) ) && ( My >= (mon.top + buffer) ) && ( My < (mon.bottom - buffer) )
+    for displayNumber, monitorInfo in g_MonitorsByDisplayNumber {
+        fullArea := monitorInfo.fullArea
+        If ( mouseX >= (fullArea.left + buffer) ) && ( mouseX < (fullArea.right - buffer) ) && ( mouseY >= (fullArea.top + buffer) ) && ( mouseY < (fullArea.bottom - buffer) )
         {
-            currMonHeight := abs(mon.bottom - mon.top)
-            currMonWidth  := abs(mon.right  - mon.left)
-            ActiveMon := A_Index
-            break
+            currMonHeight := fullArea.height
+            currMonWidth  := fullArea.width
+            return displayNumber
         }
     }
-    Return ActiveMon
+
+    return 0
 }
 
 ; Returns the shared registry of non-blocking window-move animations keyed by HWND.
@@ -17654,7 +17777,7 @@ ActivateTopMostWindow() {
 }
 
 FindTopMostWindow() {
-    SysGet, MonCount, MonitorCount
+    monitorCount := GetMonitorCount()
     DetectHiddenWindows, Off
     Critical, On
 
@@ -17672,9 +17795,9 @@ FindTopMostWindow() {
                 ; continue
 
             If (mmState > -1) {
-                If (MonCount > 1) {
-                    currentMon          := MWAGetMonitorMouseIsIn()
-                    currentMonHasActWin := IsWindowOnMonNum(hwndID, currentMon)
+                If (monitorCount > 1) {
+                    currentMon          := GetMouseDisplayNumber()
+                    currentMonHasActWin := IsWindowOnDisplayNumber(hwndID, currentMon)
                 }
                 Else
                     currentMonHasActWin := True
@@ -17690,16 +17813,16 @@ FindTopMostWindow() {
     Return targetID
 }
 
-FindSecondMostWindow(ref_hwndID := "", monitorNum := 0) {
-    SysGet, MonCount, MonitorCount
+FindSecondMostWindow(ref_hwndID := "", displayNumber := 0) {
+    monitorCount := GetMonitorCount()
     DetectHiddenWindows, Off
 
     firstFound := False
     targetID   := 0
 
     WinGet, winList, List,
-    if (!monitorNum)
-        monitorNum := MWAGetMonitorMouseIsIn()
+    if (!displayNumber)
+        displayNumber := GetMouseDisplayNumber()
 
     Loop, %winList%
     {
@@ -17712,8 +17835,8 @@ FindSecondMostWindow(ref_hwndID := "", monitorNum := 0) {
                 ; continue
 
             If (mmState > -1) {
-                If (MonCount > 1) {
-                    currentMonHasActWin := IsWindowOnMonNum(hwndId, monitorNum)
+                If (monitorCount > 1) {
+                    currentMonHasActWin := IsWindowOnDisplayNumber(hwndId, displayNumber)
                 }
                 Else {
                     currentMonHasActWin := True
@@ -17747,19 +17870,20 @@ FindSecondMostWindow(ref_hwndID := "", monitorNum := 0) {
 ; Count how many work-area edges of the target monitor a window touches within a
 ; strict 3px tolerance. Edge-partner searches use this to distinguish docked
 ; windows from arbitrary floating candidates.
-_GetWindowMonitorEdgeTouchCount(windowHwnd, monitorNum := 0) {
+_GetWindowMonitorEdgeTouchCount(windowHwnd, displayNumber := 0) {
     strictDockEdgeTolerance := 3
 
     if (!windowHwnd)
         return 0
 
-    if (!monitorNum)
-        monitorNum := GetWindowMonitorNumber(windowHwnd)
+    if (!displayNumber)
+        displayNumber := GetWindowDisplayNumber(windowHwnd)
 
-    if (monitorNum < 1)
+    if (displayNumber < 1)
         return 0
 
-    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+    if !_GetMonitorRectangleByDisplayNumber(displayNumber, true, workAreaLeft, workAreaTop, workAreaRight, workAreaBottom)
+        return 0
 
     if !WinGetPosEx(windowHwnd, windowX, windowY, windowW, windowH, null, null)
         return 0
@@ -17768,13 +17892,13 @@ _GetWindowMonitorEdgeTouchCount(windowHwnd, monitorNum := 0) {
     windowBottomEdge := windowY + windowH
     edgeTouchCount   := 0
 
-    if (Abs(windowX - monInfoLeft) <= strictDockEdgeTolerance)
+    if (Abs(windowX - workAreaLeft) <= strictDockEdgeTolerance)
         edgeTouchCount++
-    if (Abs(windowRightEdge - monInfoRight) <= strictDockEdgeTolerance)
+    if (Abs(windowRightEdge - workAreaRight) <= strictDockEdgeTolerance)
         edgeTouchCount++
-    if (Abs(windowY - monInfoTop) <= strictDockEdgeTolerance)
+    if (Abs(windowY - workAreaTop) <= strictDockEdgeTolerance)
         edgeTouchCount++
-    if (Abs(windowBottomEdge - monInfoBottom) <= strictDockEdgeTolerance)
+    if (Abs(windowBottomEdge - workAreaBottom) <= strictDockEdgeTolerance)
         edgeTouchCount++
 
     return edgeTouchCount
@@ -17910,8 +18034,8 @@ _HasVisibleExposedAreaWindow(candidateHwndID, candidateX := "", candidateY := ""
 ; Scan every visible window except the reference window, applying the shared
 ; monitor, docking, overlap/gap, and exposed-area filters. Callers either rank
 ; the returned candidates or use the complete geometric set.
-_FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", collectDebugTrace := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
-    SysGet, MonCount, MonitorCount
+_FindVisibleEdgeTouchingWindowsCore(refHwndID, displayNumber := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", collectDebugTrace := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
+    monitorCount := GetMonitorCount()
     DetectHiddenWindows, Off
 
     result := { debugText: "", matches: [] }
@@ -17919,10 +18043,10 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
     if (!refHwndID)
         return result
 
-    if (!monitorNum)
-        monitorNum := GetWindowMonitorNumber(refHwndID)
+    if (!displayNumber)
+        displayNumber := GetWindowDisplayNumber(refHwndID)
 
-    if (monitorNum < 1)
+    if (displayNumber < 1)
         return result
 
     ; Default to the live reference window rect, but allow the caller to pin the
@@ -17976,8 +18100,8 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
         if (rejectReason = "" && mmState <= -1)
             rejectReason := "minimized"
 
-        if (rejectReason = "" && MonCount > 1) {
-            sameMonitor := IsWindowOnMonNum(hwndID, monitorNum)
+        if (rejectReason = "" && monitorCount > 1) {
+            sameMonitor := IsWindowOnDisplayNumber(hwndID, displayNumber)
             if (!sameMonitor)
                 rejectReason := "wrong-monitor"
         }
@@ -17988,7 +18112,7 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
         if (rejectReason = "") {
             ; Require the candidate to feel anchored to the monitor rather than
             ; being an arbitrary floating window in the middle of the desktop.
-            edgeTouchCount := _GetWindowMonitorEdgeTouchCount(hwndID, monitorNum)
+            edgeTouchCount := _GetWindowMonitorEdgeTouchCount(hwndID, displayNumber)
             if (edgeTouchCount < minEdgesTouched)
                 rejectReason := "edges=" edgeTouchCount
         }
@@ -18089,10 +18213,10 @@ _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum := 0, edgeTouchToleran
 ; Prefer the nearest eligible lower-z-order window; if none qualifies, use the
 ; best higher-z-order match. Break equal z-order preference by the smallest
 ; absolute gap and then the largest overlap in the active dimension.
-_FindBestVisibleEdgeTouchingWindow(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 0, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", collectDebugTrace := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
+_FindBestVisibleEdgeTouchingWindow(refHwndID, displayNumber := 0, edgeTouchTolerance := 50, minEdgesTouched := 0, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", collectDebugTrace := false, requiredVisiblePercent := 20, visibilityGridSize := 5) {
     global lastDockPartnerSearchDebug
 
-    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, collectDebugTrace, requiredVisiblePercent, visibilityGridSize)
+    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, displayNumber, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, collectDebugTrace, requiredVisiblePercent, visibilityGridSize)
     if (collectDebugTrace)
         lastDockPartnerSearchDebug := scanResult.debugText
     else
@@ -18218,18 +18342,18 @@ _GetEdgeTouchingWindowScore(refX, refY, refW, refH, candidateHwndID, candidateTa
 ; Unlike the edge-touching finders, this fallback helper does not require any
 ; directional edge-gap relationship or exposed visible area up front.
 ; The caller applies the per-axis edge-pair tolerance checks afterward.
-_FindFirstDockedWindowBelowInZOrder(refHwndID, monitorNum := 0, minEdgesTouched := 2, collectDebugTrace := false) {
+_FindFirstDockedWindowBelowInZOrder(refHwndID, displayNumber := 0, minEdgesTouched := 2, collectDebugTrace := false) {
     global lastDockPartnerSearchDebug
-    SysGet, MonCount, MonitorCount
+    monitorCount := GetMonitorCount()
     DetectHiddenWindows, Off
 
     if (!refHwndID)
         return 0
 
-    if (!monitorNum)
-        monitorNum := GetWindowMonitorNumber(refHwndID)
+    if (!displayNumber)
+        displayNumber := GetWindowDisplayNumber(refHwndID)
 
-    if (monitorNum < 1)
+    if (displayNumber < 1)
         return 0
 
     if !WinGetPosEx(refHwndID, refX, refY, refW, refH, null, null)
@@ -18276,8 +18400,8 @@ _FindFirstDockedWindowBelowInZOrder(refHwndID, monitorNum := 0, minEdgesTouched 
         if (rejectReason = "" && mmState <= -1)
             rejectReason := "minimized"
 
-        if (rejectReason = "" && MonCount > 1) {
-            sameMonitor := IsWindowOnMonNum(hwndID, monitorNum)
+        if (rejectReason = "" && monitorCount > 1) {
+            sameMonitor := IsWindowOnDisplayNumber(hwndID, displayNumber)
             if (!sameMonitor)
                 rejectReason := "wrong-monitor"
         }
@@ -18295,7 +18419,7 @@ _FindFirstDockedWindowBelowInZOrder(refHwndID, monitorNum := 0, minEdgesTouched 
         }
 
         if (rejectReason = "") {
-            edgeTouchCount := _GetWindowMonitorEdgeTouchCount(hwndID, monitorNum)
+            edgeTouchCount := _GetWindowMonitorEdgeTouchCount(hwndID, displayNumber)
             if (edgeTouchCount < minEdgesTouched)
                 rejectReason := "edges=" edgeTouchCount
         }
@@ -18323,8 +18447,8 @@ _FindFirstDockedWindowBelowInZOrder(refHwndID, monitorNum := 0, minEdgesTouched 
 
 ; Collect every visible 2D edge-partner candidate that passes the same geometry
 ; and visibility checks, without restricting the candidate pool by z-order.
-Find2DEdgePartnerWindows(refHwndID, monitorNum := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
-    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, monitorNum, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, false, requiredVisiblePercent, visibilityGridSize)
+Find2DEdgePartnerWindows(refHwndID, displayNumber := 0, edgeTouchTolerance := 50, minEdgesTouched := 2, minHorizontalOverlap := 100, minVerticalOverlap := 100, candidateTargetEdge := "", edgeGapTolerance := 100, refX := "", refY := "", refW := "", refH := "", requiredVisiblePercent := 20, visibilityGridSize := 5) {
+    scanResult := _FindVisibleEdgeTouchingWindowsCore(refHwndID, displayNumber, edgeTouchTolerance, minEdgesTouched, minHorizontalOverlap, minVerticalOverlap, candidateTargetEdge, edgeGapTolerance, refX, refY, refW, refH, false, requiredVisiblePercent, visibilityGridSize)
     return scanResult.matches
 }
 
@@ -18600,17 +18724,18 @@ return
 ; 3. Then compare released edge alignment using edgeTouchTolerance
 ; 4. If those edge pairs are already close enough, copy that size
 ; ```
-FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50, collectDebugTrace := false) {
+FitMovedWindowAgainstOthers(movedHwndID, displayNumber := 0, edgeGapTolerance := 100, edgeTouchTolerance := 50, collectDebugTrace := false) {
     global lastDockPartnerSearchDebug
     if (!movedHwndID)
         return false
 
-    if (!monitorNum)
-        monitorNum := MWAGetMonitorMouseIsIn()
+    if (!displayNumber)
+        displayNumber := GetMouseDisplayNumber()
 
     ; Use the monitor work area so "touching the edge" means touching the usable
     ; desktop edge rather than the monitor's raw pixel bounds.
-    SysGet, monInfo, MonitorWorkArea, %monitorNum%
+    if !_GetMonitorRectangleByDisplayNumber(displayNumber, true, monInfoLeft, monInfoTop, monInfoRight, monInfoBottom)
+        return false
 
     if !WinGetPosEx(movedHwndID, movedX, movedY, movedW, movedH, movedOffsetX, movedOffsetY)
         return false
@@ -18631,7 +18756,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; True when the released bottom edge counts as docked to the monitor work area.
     movedDocksToBottom         := Abs(c_movedBottomEdge - monInfoBottom) <= strictDockEdgeTolerance
     ; True when the moved window spans the monitor's full work-area height.
-    isFullHeightWindow         := _IsFullMonitorHeightWindow(movedHwndID, monitorNum)
+    isFullHeightWindow         := _IsFullMonitorHeightWindow(movedHwndID, displayNumber)
     ; True when the moved window is docked to both left and right monitor edges.
     isFullWidthWindow          := (movedDocksToLeft && movedDocksToRight)
     ; Selects the CASE 3A / CASE 4A special full-height side-fit branch.
@@ -18738,7 +18863,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; CASE 1 / CASE 2:
     ; top-docked or bottom-docked moved window searches for one vertical partner.
     if (verticalPartnerEdgeToMatch != "") {
-        adjacentVerticalHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 2, 100, 100, verticalPartnerEdgeToMatch, edgeGapTolerance, movedX, movedY, movedW, movedH, collectDebugTrace)
+        adjacentVerticalHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, displayNumber, edgeTouchTolerance, 2, 100, 100, verticalPartnerEdgeToMatch, edgeGapTolerance, movedX, movedY, movedW, movedH, collectDebugTrace)
         if (collectDebugTrace) {
             if (verticalPartnerEdgeToMatch = "top")
                 verticalDebugText := "Top-edge adjacent fit candidate:`n" lastDockPartnerSearchDebug
@@ -18748,13 +18873,13 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         }
     }
     else if ((movedDocksToLeft || movedDocksToRight) && !fullHeightSideFitMode) {
-        topSideCandidateHwndID    := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "bottom", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
+        topSideCandidateHwndID    := _FindBestVisibleEdgeTouchingWindow(movedHwndID, displayNumber, edgeTouchTolerance, 1, 60, 60, "bottom", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
             topSideDebugText := "Top-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
             topSideDebugText := ""
 
-        bottomSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "top", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
+        bottomSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, displayNumber, edgeTouchTolerance, 1, 60, 60, "top", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
             bottomSideDebugText := "Bottom-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
@@ -18809,7 +18934,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; CASE 3 / CASE 4:
     ; normal left-docked or right-docked moved window searches for one side partner.
     if (horizontalPartnerEdgeToMatch != "") {
-        adjacentSideHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 100, 100, horizontalPartnerEdgeToMatch, edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
+        adjacentSideHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, displayNumber, edgeTouchTolerance, 1, 100, 100, horizontalPartnerEdgeToMatch, edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace) {
             sideDebugText := sideFitLabel " adjacent fit candidate:`n" lastDockPartnerSearchDebug
             if (fitDebugText = "")
@@ -18827,13 +18952,13 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         l_edgeGapTolerance   := 50
         l_edgeTouchTolerance := 50
 
-        leftSideCandidateHwndID  := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, l_edgeTouchTolerance, 1, minHorizontalOverlap, minVerticalOverlap, "right", l_edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
+        leftSideCandidateHwndID  := _FindBestVisibleEdgeTouchingWindow(movedHwndID, displayNumber, l_edgeTouchTolerance, 1, minHorizontalOverlap, minVerticalOverlap, "right", l_edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
             leftSideDebugText := "Full-height left-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
             leftSideDebugText := ""
 
-        rightSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, l_edgeTouchTolerance, 1, minHorizontalOverlap, minVerticalOverlap,  "left", l_edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
+        rightSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, displayNumber, l_edgeTouchTolerance, 1, minHorizontalOverlap, minVerticalOverlap,  "left", l_edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
             rightSideDebugText := "Full-height right-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
@@ -18885,13 +19010,13 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
         }
     }
     else if (movedDocksToTop || movedDocksToBottom) {
-        leftSideCandidateHwndID  := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "right", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
+        leftSideCandidateHwndID  := _FindBestVisibleEdgeTouchingWindow(movedHwndID, displayNumber, edgeTouchTolerance, 1, 60, 60, "right", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
             leftSideDebugText := "Left-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
             leftSideDebugText := ""
 
-        rightSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, monitorNum, edgeTouchTolerance, 1, 60, 60, "left", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
+        rightSideCandidateHwndID := _FindBestVisibleEdgeTouchingWindow(movedHwndID, displayNumber, edgeTouchTolerance, 1, 60, 60, "left", edgeGapTolerance, movedX, movedY, c_originalMovedW, c_originalMovedH, collectDebugTrace)
         if (collectDebugTrace)
             rightSideDebugText := "Right-side adjacent fit candidate:`n" lastDockPartnerSearchDebug
         else
@@ -18958,7 +19083,7 @@ FitMovedWindowAgainstOthers(movedHwndID, monitorNum := 0, edgeGapTolerance := 10
     ; if no adjacent partner matched, inspect the first docked lower-z-order
     ; template window and only borrow width/height when edge pairs already align.
     if (!didFindAdjacentPartner) {
-        fallbackTemplateHwndID := _FindFirstDockedWindowBelowInZOrder(movedHwndID, monitorNum, 2, collectDebugTrace)
+        fallbackTemplateHwndID := _FindFirstDockedWindowBelowInZOrder(movedHwndID, displayNumber, 2, collectDebugTrace)
         if (collectDebugTrace) {
             fallbackDebugText := "Lower-z-order docked fallback candidate:`n" lastDockPartnerSearchDebug
             if (fitDebugText = "")
@@ -25154,6 +25279,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::hasbeen::has been
 ::havebeen::have been
 ::haveing::having
+::avhe::have
 ::haviest::heaviest
 ::headquater::headquarter
 ::headquatered::headquartered
@@ -26254,6 +26380,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::recordproducer::record producer
 ::recurrance::recurrence
 ::rediculous::ridiculous
+::redudently::redundantly
 ::reedeming::redeeming
 ::reenforced::reinforced
 ::refedendum::referendum
