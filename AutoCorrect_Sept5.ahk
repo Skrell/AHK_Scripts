@@ -2895,9 +2895,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         prevActiveWindows.push(hWnd)
         Critical, Off
 
+        taskbarExplorerMoveMade := False
         WinGet, state, MinMax, ahk_id %hWnd%
         If (state > -1) {
-            taskbarExplorerMoveMade := False
             if (isTaskbarExplorerSpawn) {
                 taskbarExplorerMoveMade := _MoveTaskbarExplorerSpawn(hWnd, taskbarExplorerClickX, taskbarExplorerClickY)
             }
@@ -2930,11 +2930,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
 
         sendCtrlAddTargetScan := ""
-        if (vWinClass == "#32770" || vWinClass == "CabinetWClass")
+        if (!taskbarExplorerMoveMade && (vWinClass == "#32770" || vWinClass == "CabinetWClass"))
             sendCtrlAddTargetScan := GetSendCtrlAddTargetScan(hWnd, vWinClass)
 
         initFocusedCtrl := initFocusedCtrlForWait
-        if (initFocusedCtrl == "") {
+        if (!taskbarExplorerMoveMade && initFocusedCtrl == "") {
             Loop, 99 {
                 sleep, 1
                 ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
@@ -2953,7 +2953,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True
                 , 0, True, False, True)
         }
-        else if (vWinClass == "CabinetWClass" && isFirstTrackedActivation) {
+        else if (vWinClass == "CabinetWClass" && isFirstTrackedActivation && !taskbarExplorerMoveMade) {
+            ; A successful taskbar placement starts this request from its completion
+            ; callback so Explorer readiness polling cannot interrupt its animation.
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True)
         }
         else {
@@ -4064,30 +4066,33 @@ $*MButton::
     SetTimer, WatchMButtonOverrideState, 25
 
     MouseGetPos, mx0, my0, hWnd, ctrlNN, 2
-    isOverTitleBar        := MouseIsOverTitleBar(mx0, my0)
-    checkClickMx          := mx0
-    checkClickMy          := my0
-    wx0                   := 0
-    wy0                   := 0
-    ww                    := 0
-    wh                    := 0
-    virtwx0               := 0
-    virtwy0               := 0
-    offsetX               := 0
-    offsetY               := 0
-    deltaPxTrig           := 5
-    windowSnapped         := False
-    TL                    := False
-    TR                    := False
-    BL                    := False
-    BR                    := False
-    snapShotX             := 0
-    snapShotY             := 0
-    adjustSize            := False
-    isRbutton             := False
-    switchingBackToMove   := False
-    switchingBacktoResize := False
-    startedAlwaysOnTop    := False
+    checkClickMx            := mx0
+    checkClickMy            := my0
+    wx0                     := 0
+    wy0                     := 0
+    ww                      := 0
+    wh                      := 0
+    virtwx0                 := 0
+    virtwy0                 := 0
+    offsetX                 := 0
+    offsetY                 := 0
+    deltaPxTrig             := 5
+    windowSnapped           := False
+    TL                      := False
+    TR                      := False
+    BL                      := False
+    BR                      := False
+    snapShotX               := 0
+    snapShotY               := 0
+    adjustSize              := False
+    isRbutton               := False
+    switchingBackToMove     := False
+    switchingBacktoResize   := False
+    startedAlwaysOnTop      := False
+    ; Track effects that need to happen only once during this MButton gesture.
+    cursorIsConfined        := False
+    dragTopmostApplied      := False
+    dragTransparencyApplied := False
 
     If (!hWnd || !JEE_WinHasAltTabIcon(hWnd)) {
         ; Nothing draggable here, so release the temporary RButton suppression immediately.
@@ -4097,9 +4102,6 @@ $*MButton::
         return
     }
 
-    initTime := A_TickCount
-
-    WinGet, isMax, MinMax, ahk_id %hWnd%
     WinGetClass, cls, ahk_id %hWnd%
     If (k_skipClasses.HasKey(cls)) {
         ; For excluded classes, fall back to a normal MButton click and tear down the
@@ -4111,6 +4113,12 @@ $*MButton::
         SetTimer, WatchMButtonOverrideState, Off
         return
     }
+
+    ; Reuse this press-time target snapshot instead of querying the same window again.
+    isOverTitleBar := MouseIsOverTitleBar(mx0, my0, True, hWnd, ctrlNN, cls)
+    initTime       := A_TickCount
+
+    WinGet, isMax, MinMax, ahk_id %hWnd%
 
     BlockInput, MouseMove
     WinGetPosEx(hWnd, wx0, wy0, ww, wh, offsetX, offsetY)
@@ -4142,7 +4150,10 @@ $*MButton::
     ; compare the window's current left/right edges against monL/monR to see
     ; whether the drag started already docked near the monitor edge.
     ; msgbox, % leftWinEdge "," rightWinEdge "-" topWinEdge "," bottomWinEdge ":" offsetX " & " offsetY
-    GetMonitorRectForMouse(mx0, my0, k_UseWorkArea, monL, monT, monR, monB)
+    activeMonitorDisplayNumber := GetMonitorRectForMouse(mx0, my0, k_UseWorkArea, monL, monT, monR, monB)
+    ; Retain the startup monitor record so later drag updates can avoid scanning
+    ; every cached monitor while the cursor remains inside this full monitor area.
+    activeMonitorRecord := _GetMonitorRecordByDisplayNumber(activeMonitorDisplayNumber)
     If ((leftWinEdge - monL) <= k_SnapRange && (leftWinEdge - monL) >= 0) {
         snapState := "left"
     } Else If ((rightWinEdge - monR) <= k_SnapRange && (rightWinEdge - monR) >= 0) {
@@ -4161,14 +4172,22 @@ $*MButton::
     BlockInput, MouseMoveOff
 
     startedAlwaysOnTop := IsAlwaysOnTop(hWnd)
+    ; An already-topmost window does not need the temporary drag topmost state.
+    dragTopmostApplied := startedAlwaysOnTop
     If !startedAlwaysOnTop
         WinSet, Transparent, 255, ahk_id %hWnd%
 
     ; Track processed input so unchanged drag-loop passes can yield without
     ; repeating window queries or applying the same window rectangle.
-    lastInputMouseX := ""
-    lastInputMouseY := ""
+    lastInputMouseX  := ""
+    lastInputMouseY  := ""
     lastInputRButton := ""
+    ; Track the calculated WinMove arguments for this gesture. An identical
+    ; argument set has already been applied and does not need another WinMove.
+    lastAppliedWindowH := ""
+    lastAppliedWindowW := ""
+    lastAppliedWindowX := ""
+    lastAppliedWindowY := ""
 
     Critical, On
     while GetKeyState("MButton", "P") {
@@ -4185,7 +4204,7 @@ $*MButton::
         ; Yield while physical drag input is unchanged. New cursor movement or
         ; an RButton transition reaches the existing drag logic on the next poll.
         If (isRbutton == lastInputRButton && mx == lastInputMouseX && my == lastInputMouseY) {
-            Sleep, 1
+            Sleep, 8
             continue
         }
 
@@ -4218,11 +4237,23 @@ $*MButton::
             mx0 := mx
             my0 := my
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+            ; The origin and drag mode changed, so the next calculated
+            ; rectangle must be applied even if it resembles the prior one.
+            lastAppliedWindowH := ""
+            lastAppliedWindowW := ""
+            lastAppliedWindowX := ""
+            lastAppliedWindowY := ""
         }
         Else If switchingBacktoResize {
             mx0 := mx
             my0 := my
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+            ; The origin and drag mode changed, so the next calculated
+            ; rectangle must be applied even if it resembles the prior one.
+            lastAppliedWindowH := ""
+            lastAppliedWindowW := ""
+            lastAppliedWindowX := ""
+            lastAppliedWindowY := ""
         }
 
         If (isMax == 1 && (abs(mx - mx0) > deltaPxTrig || abs(my - my0) > deltaPxTrig)) {
@@ -4251,6 +4282,12 @@ $*MButton::
 
             isMax := 0
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+            ; Restoring changes the window frame and the drag origin, so do
+            ; not compare subsequent WinMove arguments with the old frame.
+            lastAppliedWindowH := ""
+            lastAppliedWindowW := ""
+            lastAppliedWindowX := ""
+            lastAppliedWindowY := ""
             MouseGetPos, mx, my,
             BlockInput, MouseMoveOff
         }
@@ -4277,6 +4314,12 @@ $*MButton::
             mx0 := mx
             my0 := my
             WinGetPosEx(hWnd, wx0, wy0, ww, wh, null, null)
+            ; Re-anchoring reverses the drag direction, making the prior
+            ; WinMove argument set inapplicable to this new origin.
+            lastAppliedWindowH := ""
+            lastAppliedWindowW := ""
+            lastAppliedWindowX := ""
+            lastAppliedWindowY := ""
         }
 
         tooltipHwnd := WinExist("ahk_class tooltips_class32")
@@ -4292,20 +4335,33 @@ $*MButton::
         dx := mx - mx0
         dy := my - my0
 
-        If !startedAlwaysOnTop {
-            WinGet, trans, Transparent, ahk_id %hWnd%
-            If (trans == 255 && (abs(dx) > deltaPxTrig || abs(dy) > deltaPxTrig)) {
-                targetTrans := 170
-                WinSet, Transparent, %targetTrans%, ahk_id %hWnd%
-            }
+        ; The window starts this gesture at transparency 255, so apply the
+        ; drag transparency once after the movement threshold is crossed.
+        If (!startedAlwaysOnTop
+            && !dragTransparencyApplied
+            && (abs(dx) > deltaPxTrig || abs(dy) > deltaPxTrig)) {
+            targetTrans := 170
+            WinSet, Transparent, %targetTrans%, ahk_id %hWnd%
+            dragTransparencyApplied := True
         }
 
-        ; Re-resolve the monitor/work-area rectangle under the current mouse
-        ; position. During a cross-monitor drag, monL/monT/monR/monB can change
-        ; from one loop iteration to the next, so all snap thresholds, max
-        ; travel distances, and confinement math below stay tied to the monitor
-        ; the cursor is currently in rather than the one where the drag started.
-        GetMonitorRectForMouse(mx, my, k_UseWorkArea, monL, monT, monR, monB)
+        ; First test the retained monitor's full area. Only a cross-monitor
+        ; drag needs the cached-monitor search to locate a replacement record.
+        If (!IsObject(activeMonitorRecord)
+            || mx < activeMonitorRecord.fullArea.left
+            || mx >= activeMonitorRecord.fullArea.right
+            || my < activeMonitorRecord.fullArea.top
+            || my >= activeMonitorRecord.fullArea.bottom) {
+            activeMonitorRecord := _GetMonitorRecordForPoint(mx, my, false, true)
+        }
+
+        ; Read the requested area from the active record. These bounds can
+        ; change during a cross-monitor drag but need no array scan otherwise.
+        activeMonitorArea := k_UseWorkArea ? activeMonitorRecord.workArea : activeMonitorRecord.fullArea
+        monB := activeMonitorArea.bottom
+        monL := activeMonitorArea.left
+        monR := activeMonitorArea.right
+        monT := activeMonitorArea.top
         ; monW/monH are the active monitor dimensions used by the near-full-
         ; height heuristic and the later mouse-confinement calls.
         monW  := monR-monL
@@ -4356,10 +4412,17 @@ $*MButton::
         virtwy0 := wy0 + dy
 
         If !isRbutton {
-            If !GetKeyState("LShift","P")
+            If (!GetKeyState("LShift","P") && !dragTopmostApplied) {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
+                dragTopmostApplied := True
+            }
 
-            UnclipCursor()
+            ; Only release the cursor after a resize-edge branch successfully
+            ; confined it. Normal move passes otherwise make a no-op native call.
+            If cursorIsConfined {
+                UnclipCursor()
+                cursorIsConfined := False
+            }
             ; --- One-way vertical clamp (top/bottom) ---
             If (virtwy0 < minY)
                 newY := minY
@@ -4417,7 +4480,14 @@ $*MButton::
             ; correct for windows' shadows
             newX := newX + offsetX
             ; No horizontal clamping otherwise: allow off-screen left/right
-            WinMove, ahk_id %hWnd%, , %newX%, %newY%
+            If (newX != lastAppliedWindowX || newY != lastAppliedWindowY
+                || ww != lastAppliedWindowW || wh != lastAppliedWindowH) {
+                WinMove, ahk_id %hWnd%, , %newX%, %newY%
+                lastAppliedWindowH := wh
+                lastAppliedWindowW := ww
+                lastAppliedWindowX := newX
+                lastAppliedWindowY := newY
+            }
         }
         Else {
             gridSize := k_SnapRange
@@ -4431,7 +4501,8 @@ $*MButton::
                     adjustSize := False
                     BlockInput, MouseMove
                     MouseMove, mx, my
-                    ConfineMouseToCurrentMonitorArea( "work", 0, my, monW, monH-my)
+                    If ConfineMouseToCurrentMonitorArea( "work", 0, my, monW, monH-my)
+                        cursorIsConfined := True
                     sleep, 250
                     BlockInput, MouseMoveOff
                 }
@@ -4461,7 +4532,8 @@ $*MButton::
                     adjustSize := False
                     BlockInput, MouseMove
                     MouseMove, mx, my
-                    ConfineMouseToCurrentMonitorArea( "work", 0, 0, monW, my)
+                    If ConfineMouseToCurrentMonitorArea( "work", 0, 0, monW, my)
+                        cursorIsConfined := True
                     sleep, 250
                     BlockInput, MouseMoveOff
                 }
@@ -4489,7 +4561,8 @@ $*MButton::
                     adjustSize := False
                     BlockInput, MouseMove
                     MouseMove, mx, my
-                    ConfineMouseToCurrentMonitorArea( "work", mx, 0, monW-mx, monH)
+                    If ConfineMouseToCurrentMonitorArea( "work", mx, 0, monW-mx, monH)
+                        cursorIsConfined := True
                     sleep, 250
                     BlockInput, MouseMoveOff
                 }
@@ -4519,7 +4592,8 @@ $*MButton::
                     adjustSize := False
                     BlockInput, MouseMove
                     MouseMove, mx, my
-                    ConfineMouseToCurrentMonitorArea( "work", 0, 0, mx, monH)
+                    If ConfineMouseToCurrentMonitorArea( "work", 0, 0, mx, monH)
+                        cursorIsConfined := True
                     sleep, 250
                     BlockInput, MouseMoveOff
                 }
@@ -4544,7 +4618,14 @@ $*MButton::
 
             ; correct for windows' shadows
             If adjustSize {
-                WinMove, ahk_id %hWnd%, , %newX%, %newY%, %newW%, %newH%
+                If (newX != lastAppliedWindowX || newY != lastAppliedWindowY
+                    || newW != lastAppliedWindowW || newH != lastAppliedWindowH) {
+                    WinMove, ahk_id %hWnd%, , %newX%, %newY%, %newW%, %newH%
+                    lastAppliedWindowH := newH
+                    lastAppliedWindowW := newW
+                    lastAppliedWindowX := newX
+                    lastAppliedWindowY := newY
+                }
             }
         }
 
@@ -4555,6 +4636,13 @@ $*MButton::
         }
     }
     Critical, Off
+
+    ; If MButton is released while resizing at an edge, release the cursor
+    ; confinement that was successfully applied during this gesture.
+    If cursorIsConfined {
+        UnclipCursor()
+        cursorIsConfined := False
+    }
 
     rlsTime := A_TickCount
     stopMon := GetMouseDisplayNumber()
@@ -7728,6 +7816,19 @@ _ClaimTaskbarExplorerSpawn(hWnd, windowClass, ByRef clickX, ByRef clickY) {
     return True
 }
 
+; Complete taskbar Explorer placement before starting its readiness request.
+_CompleteTaskbarExplorerSpawn(hWnd, wasMaximized) {
+    if !DllCall("IsWindow", "Ptr", hWnd)
+        return
+
+    if (wasMaximized)
+        _MaximizeTaskbarExplorerAfterMove(hWnd)
+
+    sourceCtrlNN := ""
+    ControlGetFocus, sourceCtrlNN, ahk_id %hWnd%
+    _RequestExplorerCtrlAdd(hWnd, "CabinetWClass", sourceCtrlNN, 0, "", False, True)
+}
+
 ; Reapply a taskbar-launched Explorer window's maximized state after its move finishes.
 _MaximizeTaskbarExplorerAfterMove(hWnd) {
     if DllCall("IsWindow", "Ptr", hWnd)
@@ -7815,12 +7916,10 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
         targetY := Max(safeTop, Min(clickY - Floor(windowHeight / 2), safeBottom - windowHeight))
     }
 
-    completionCallback := ""
-    if (wasMaximized)
-        completionCallback := Func("_MaximizeTaskbarExplorerAfterMove").Bind(hWnd)
+    completionCallback := Func("_CompleteTaskbarExplorerSpawn").Bind(hWnd, wasMaximized)
 
     ; Let this animation own placement; False leaves OnWinActiveChange() responsible for its fallback.
-    moveStarted := MoveWindow(hWnd, targetX, targetY, windowWidth, windowHeight, 280, completionCallback)
+    moveStarted := MoveWindow(hWnd, targetX, targetY, windowWidth, windowHeight, 380, completionCallback)
     if (!moveStarted && wasMaximized)
         WinMaximize, ahk_id %hWnd%
     return moveStarted
@@ -15150,18 +15249,20 @@ MouseIsOverTitleBarFast(xPos := "", yPos := "", excludeCaptions := True) {
     return (_GetTitleBarProbeState(xPos, yPos, excludeCaptions) == "caption")
 }
 
-MouseIsOverTitleBar(xPos := "", yPos := "", excludeCaptions := True) {
+MouseIsOverTitleBar(xPos := "", yPos := "", excludeCaptions := True, WindowUnderMouseID := "", ctrlnnUnderMouse := "", mClass := "") {
     CoordMode, Mouse, Screen
-    If (xPos != "" && yPos != "")
+    If (xPos != "" && yPos != "" && WindowUnderMouseID == "")
         MouseGetPos, , , WindowUnderMouseID, ctrlnnUnderMouse
-    Else
+    Else If (xPos == "" || yPos == "")
         MouseGetPos, xPos, yPos, WindowUnderMouseID, ctrlnnUnderMouse
 
     if (!WindowUnderMouseID || !IsAltTabWindow(WindowUnderMouseID))
         return False
 
-    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
-    if (   MouseIsOverTaskbar()
+    If (mClass == "")
+        WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+
+    if (   MouseIsOverTaskbar(WindowUnderMouseID, ctrlnnUnderMouse, mClass)
         || (mClass == "WorkerW")
         || (mClass == "ProgMan")
         || (mClass == "TaskListThumbnailWnd")
@@ -15267,7 +15368,7 @@ _GetTitleBarProbeState(xPos := "", yPos := "", excludeCaptions := True, windowUn
     if (mClass == "")
         WinGetClass, mClass, ahk_id %windowUnderMouseID%
 
-    if (   MouseIsOverTaskbar()
+    if (   MouseIsOverTaskbar(windowUnderMouseID, ctrlnnUnderMouse, mClass)
         || (mClass == "WorkerW")
         || (mClass == "ProgMan")
         || (mClass == "TaskListThumbnailWnd")
@@ -17282,28 +17383,24 @@ _MoveWindowFrame(animation) {
     ;             |                      |                  |               |                  |
     ;          +-----+                +-----+            +-----+         +-----+            +-----+
     ;          |  W  |--------------->|  W  |----------> |  W  |-------->|  W  |-- ... ---->|  W  |
-    ;          +-----+     138 px      +-----+  115 px   +-----+ 94 px   +-----+            +-----+
-    ;          X=100                  X=238              X=353           X=447              X=700
+    ;          +-----+      12 px      +-----+  32 px   +-----+ 50 px   +-----+            +-----+
+    ;          X=100                  X=112              X=144           X=194              X=700
     ;             |                      ^
     ;             |                      |
     ;             +-- frame 1 calculation:
     ;                 progress                    = 15 / 180 = 0.0833 elapsed-time fraction
-    ;                 inverseProgress             = 1 - 0.0833 = 0.9167 remaining-time fraction
-    ;                 remaining-distance fraction = 0.9167^3 = 0.7703
-    ;                 easedProgress               = 1 - 0.7703 = 0.2297 covered-distance fraction
-    ;                 frameX[1]                   = 100 + (600 * 0.2297) = 238
-    ;                 frameDeltaX[1]              = 238 - 100 = 138 px
+    ;                 easedProgress               = 0.0833^2 * (3 - (2 * 0.0833)) = 0.0197 covered-distance fraction
+    ;                 frameX[1]                   = 100 + (600 * 0.0197) = 112
+    ;                 frameDeltaX[1]              = 112 - 100 = 12 px
     ;
-    ; Cubic ease-out makes successive gaps shrink as the window approaches targetX.
+    ; Cubic ease-in-out starts and ends with smaller gaps, accelerating through the midpoint.
     ; A larger targetX - startX over the same durationMs scales every gap upward.
     ; Y follows the same calculation; 2D frame distance is not separately stored.
 
     ; Divide elapsed time by duration and cap it to obtain the elapsed-time fraction.
-    progress        := Min(1, elapsedMs / animation.durationMs)
-    ; Subtract the elapsed-time fraction from one to obtain the remaining-time fraction.
-    inverseProgress := 1 - progress
-    ; Cube the remaining-time fraction, then subtract it from one to obtain the covered-distance fraction.
-    easedProgress   := 1 - (inverseProgress * inverseProgress * inverseProgress)
+    progress      := Min(1, elapsedMs / animation.durationMs)
+    ; Apply cubic ease-in-out so the motion starts and ends slowly around a faster midpoint.
+    easedProgress := progress * progress * (3 - (2 * progress))
 
     ; Scale the height delta by eased progress and round it for WinMove.
     frameHeight     := Round(animation.startHeight + ((animation.targetHeight - animation.startHeight) * easedProgress))
@@ -21361,11 +21458,13 @@ MouseIsOverTaskbarTray() {
     Return (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId == "TrayNotifyWnd1")
 }
 
-MouseIsOverTaskbar() {
+MouseIsOverTaskbar(WindowUnderMouseID := "", CtrlUnderMouseId := "", mClass := "") {
     CoordMode, Mouse, Screen
-    MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
+    if (!WindowUnderMouseID)
+        MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
 
-    WinGetClass, mClass, ahk_id %WindowUnderMouseID%
+    If (mClass == "")
+        WinGetClass, mClass, ahk_id %WindowUnderMouseID%
 
     Return (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId != "ToolbarWindow323")
 }
