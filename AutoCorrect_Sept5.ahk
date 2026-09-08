@@ -1,4 +1,4 @@
-﻿; c = case sensitive
+; c = case sensitive
 ; c1 = ignore the case that was typed, always use the same case for output
 ; * = immediate change (no need for space, period, or enter)
 ; ? = triggered even when the character typed immediately before it is alphanumeric
@@ -4758,8 +4758,7 @@ Return
         EndBlockKeys()
         StopAutoFix := False
         try {
-            SyncModifierSidesToPhys("Shift Alt Ctrl", ctrlShiftDModifierTargetHwnd)
-            ScheduleModifierSync("Shift Alt Ctrl", 6, ctrlShiftDModifierTargetHwnd)
+            ManagedModifierCleanup("Shift Alt Ctrl", ctrlShiftDModifierTargetHwnd, 6)
         } finally {
             Critical, Off
         }
@@ -4805,7 +4804,7 @@ Return
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
         Send, {Ctrl Up}{Home}{Home}{Shift Down}{End}{Shift Up}
         EndBlockKeys()
-        SyncModifierSidesToPhys("Ctrl", ctrlDModifierTargetHwnd)
+        ManagedModifierCleanup("Ctrl", ctrlDModifierTargetHwnd, 0)
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
 
         ; 2) Copy the line text via your clipboard-safe helper
@@ -4824,7 +4823,7 @@ Return
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
         Send, {Ctrl Up}{End}{Enter}{Shift Down}{Home}{Shift Up}
         EndBlockKeys()
-        SyncModifierSidesToPhys("Ctrl", ctrlDModifierTargetHwnd)
+        ManagedModifierCleanup("Ctrl", ctrlDModifierTargetHwnd, 0)
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
         if (fastInsertControlHwnd)
@@ -4858,7 +4857,7 @@ Return
             GetActiveCaretRectKey(caretRectKeyBeforeMove)
             Send, {Ctrl Up}{Up} ; {Home}{Home}
             EndBlockKeys()
-            SyncModifierSidesToPhys("Ctrl", ctrlDModifierTargetHwnd)
+            ManagedModifierCleanup("Ctrl", ctrlDModifierTargetHwnd, 0)
             WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 60, 2, 100)
         }
         ; Optional                  : if you prefer immediate clipboard restore instead of the ~700ms timer, uncomment:
@@ -4872,8 +4871,7 @@ Return
         EndBlockKeys()
         StopAutoFix := False
         try {
-            SyncModifierSidesToPhys("Shift Alt Ctrl", ctrlDModifierTargetHwnd)
-            ScheduleModifierSync("Shift Alt Ctrl", 6, ctrlDModifierTargetHwnd)
+            ManagedModifierCleanup("Shift Alt Ctrl", ctrlDModifierTargetHwnd, 6)
         } finally {
             Critical, Off
         }
@@ -5620,7 +5618,7 @@ Return
     StopRecursion := True
     SwitchToDesktop(0)
     StopRecursion := False
-    SyncModifierSidesToPhys("Ctrl Win")
+    ManagedModifierCleanup("Ctrl Win", 0, 0)
     Critical, Off
 Return
 
@@ -5629,7 +5627,7 @@ Return
     StopRecursion := True
     SwitchToDesktop(1)
     StopRecursion := False
-    SyncModifierSidesToPhys("Ctrl Win")
+    ManagedModifierCleanup("Ctrl Win", 0, 0)
     Critical, Off
 Return
 
@@ -5637,7 +5635,7 @@ Return
     Critical, On
     StopRecursion := True
     SwitchToDesktop(2)
-    SyncModifierSidesToPhys("Ctrl Win")
+    ManagedModifierCleanup("Ctrl Win", 0, 0)
     StopRecursion := False
     Critical, Off
 Return
@@ -5647,7 +5645,7 @@ Return
     StopRecursion := True
     SwitchToDesktop(3)
     StopRecursion := False
-    SyncModifierSidesToPhys("Ctrl Win")
+    ManagedModifierCleanup("Ctrl Win", 0, 0)
     Critical, Off
 Return
 
@@ -5798,7 +5796,7 @@ $!+Tab::
 
         GoSub, AltupCleanup
 
-        SyncModifierSidesToPhys("Alt")
+        ManagedModifierCleanup("Alt", 0, 0)
     }
 Return
 
@@ -5860,7 +5858,7 @@ Return
 
         GoSub, AltupCleanup
 
-        SyncModifierSidesToPhys("Alt")
+        ManagedModifierCleanup("Alt", 0, 0)
     }
 Return
 
@@ -5880,7 +5878,7 @@ $!x::
     tooltip,
     GoSub, Altup
     GoSub, AltupCleanup
-    SyncModifierSidesToPhys("Alt")
+    ManagedModifierCleanup("Alt", 0, 0)
 Return
 #If
 
@@ -5912,7 +5910,7 @@ $!Lbutton::
 
                 GoSub, AltupCleanup
 
-                SyncModifierSidesToPhys("Alt")
+                ManagedModifierCleanup("Alt", 0, 0)
                 break
             }
             sleep, 5
@@ -7609,7 +7607,7 @@ $~^LButton::
     }
 
     KeyWait, Ctrl, U
-    SyncModifierSidesToPhys("Ctrl")
+    ManagedModifierCleanup("Ctrl", 0, 0)
 
     StopRecursion := False
     Thread, NoTimers, False
@@ -7632,7 +7630,7 @@ $^LButton::
     BringAppWindowsOnMonitorToTop(targetProcess, targetClass, currentMon, targetID)
 
     KeyWait, Ctrl, U
-    SyncModifierSidesToPhys("Ctrl")
+    ManagedModifierCleanup("Ctrl", 0, 0)
     StopRecursion := False
     Thread, NoTimers, False
 return
@@ -12732,7 +12730,11 @@ GetCtrlNNsByPrefix(hwndTop, classPrefix)
             continue
 
         cls := GetClassName(hCtl)
-        if (SubStr(cls, 1, prefixLen) != classPrefix)
+        if (classPrefix = "SysListView32") {
+            if (!IsSysListViewClassName(cls))
+                continue
+        }
+        else if (SubStr(cls, 1, prefixLen) != classPrefix)
             continue
 
         ctrlNN := (A_Index <= ctrlNNs.Length()) ? ctrlNNs[A_Index] : ""
@@ -12798,7 +12800,11 @@ GetCtrlNNsByPrefixMinSize(hwndTop, classPrefix, minWidth := 400, minHeight := 18
         ; Filter first by the real runtime class name from the child HWND
         ; rather than trusting the CtrlNN text alone.
         cls := GetClassName(hCtl)
-        if (SubStr(cls, 1, prefixLen) != classPrefix)
+        if (classPrefix = "SysListView32") {
+            if (!IsSysListViewClassName(cls))
+                continue
+        }
+        else if (SubStr(cls, 1, prefixLen) != classPrefix)
             continue
 
         ; Map the matching HWND back to its CtrlNN name from the parallel list.
@@ -12818,6 +12824,11 @@ GetCtrlNNsByPrefixMinSize(hwndTop, classPrefix, minWidth := 400, minHeight := 18
     out := RTrim(out, " ")
     cache[cacheKey] := { tick: A_TickCount, value: out }
     return out
+}
+
+IsSysListViewClassName(className) {
+    return (className = "SysListView32"
+        || InStr(className, ".SysListView32.", True))
 }
 
 ; Capture the DirectUI/ListView child-control snapshot once so multiple callers
@@ -12909,7 +12920,7 @@ ChooseSendCtrlAddTarget(hwndTop, topClass := "", focusedCtrlNN := "", targetScan
         return ""
 
     if (targetScan.hasSysList)
-        return "SysListView321"
+        return StrSplit(targetScan.sysListCtrls, A_Space)[1]
 
     if (isShellLike
      && targetScan.hasDirect2
@@ -13032,6 +13043,19 @@ _TryAutoFitResolvedSysListView(hwndTop, targetCtrlNN, mode := "header_no_fill") 
     return AutoFitSysListViewColumns(listViewHwnd, mode)
 }
 
+; Auto-fit Everything's native results ListView without changing keyboard focus
+; or injecting Ctrl+NumpadAdd into the live search-box typing stream.
+_TryAutoFitEverythingResultsColumns(everythingHwnd, mode := "header_no_fill") {
+    if (!everythingHwnd || !IsForegroundWindow(everythingHwnd))
+        return False
+
+    ControlGet, listViewHwnd, Hwnd,, SysListView321, ahk_id %everythingHwnd%
+    if (!listViewHwnd || !DllCall("user32\IsChild", "Ptr", everythingHwnd, "Ptr", listViewHwnd, "Int"))
+        return False
+
+    return AutoFitSysListViewColumns(listViewHwnd, mode)
+}
+
 ; Revalidate a UIA-resolved Details target immediately before SendCtrlAdd()
 ; uses it. The CtrlNN must still name the same live child HWND and that child
 ; must still be a supported native file-view host.
@@ -13071,7 +13095,7 @@ _ValidateResolvedCtrlAddTarget(hwndTop, resolvedTarget) {
     }
 
     targetClass := GetClassName(targetCtrlHwnd)
-    if (targetClass != "SysListView32" && targetClass != "DirectUIHWND") {
+    if (!IsSysListViewClassName(targetClass) && targetClass != "DirectUIHWND") {
         _TraceExplorerCtrlAdd("resolved_target_invalid"
             , "reason=unsupported_class targetCtrl=[" . targetCtrlNN . "]"
             . " targetClass=" . targetClass
@@ -13517,8 +13541,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 ; focus restoration exits early after the synthetic chord.
                 modifierCleanupStartTick := A_TickCount
                 EndBlockKeys()
-                SyncModifierSidesToPhys("Ctrl", initTargetHwnd)
-                ScheduleModifierSync("Ctrl", 6, initTargetHwnd)
+                ManagedModifierCleanup("Ctrl", initTargetHwnd, 6)
                 if traceThisCall {
                     _TraceExplorerCtrlAdd("modifier_cleanup_complete"
                         , "elapsedMs=" . (A_TickCount - modifierCleanupStartTick)
@@ -14559,54 +14582,120 @@ SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, gu
 
         ; Keep wheel events suppressed until the application's logical Ctrl state
         ; matches the physical keyboard, then cover a short post-send delivery gap.
-        SyncModifierSidesToPhys("Ctrl", targetWindowId)
+        ManagedModifierCleanup("Ctrl", targetWindowId, 0)
         Sleep, %k_tbcAdjustColumnsPostSendWheelGuardMs%
     } finally {
         EndBlockWheel()
     }
 
-    ScheduleModifierSync("Ctrl", syncPassCount, targetWindowId)
+    ManagedModifierCleanup("Ctrl", targetWindowId, syncPassCount)
     return true
 }
 
-; Send a clean synthetic Ctrl chord without losing the user's physically held
-; modifiers. Sending {Ctrl Up}, {Shift Up}, and similar events changes the
-; modifier state seen by the target application even if the user still holds
-; the physical key. Because that key never physically transitions up and down,
-; Windows does not send a replacement key-down event. Without sync,
-; a later D press while Ctrl is still physically held can arrive as plain D
-; instead of Ctrl+D.
+; ManagedSend(): generic managed SendInput wrapper.
 ;
-; The inverse race can leave a modifier logically stuck: the script restores a
-; synthetic modifier-down, then the user releases the real key just after the
-; sequence. The immediate and deferred sync passes make the target
-; application's modifier state match the physical keyboard state again.
-_SendManagedCtrlChord(chordKey, syncPassCount := 6, explicitCtrlPath := False, modifiersToSync := "Shift Alt Ctrl Win", expectedWindowId := 0) {
-    targetWindowId := expectedWindowId ? expectedWindowId : DllCall("user32\GetForegroundWindow", "Ptr")
-
-    ; Recheck immediately before injection. Clipboard preparation can take long
-    ; enough for a different application to become foreground in the meantime.
-    if (!IsForegroundWindow(targetWindowId))
+; Use when the caller must provide the full sequence:
+;     - multi-key actions
+;     - navigation or selection sends
+;     - literal modifier down/up pairs
+;
+; What it adds around the send:
+;     - optional modifier pre-release before SendInput
+;     - foreground-window guard via expectedWindowId
+;     - immediate and deferred modifier resync afterward
+;
+; Prefer ManagedCtrlChord() for plain Ctrl+one-key shortcuts.
+ManagedSend(sendSequence, modifiersToPreRelease := "Shift Alt Ctrl Win", modifiersToSync := "Shift Alt Ctrl Win", expectedWindowId := 0, syncPassCount := 6) {
+    if (sendSequence = "")
         return false
 
-    SendInput, {Blind}{sc02A up}{sc036 up}{sc01D up}{sc11D up}{sc038 up}{sc138 up}{sc15B up}{sc15C up}
-    if (explicitCtrlPath)
-        SendInput, {Ctrl Down}%chordKey%{Ctrl Up}
-    else
-        SendInput, ^%chordKey%
+    targetWindowId := expectedWindowId ? expectedWindowId : DllCall("user32\GetForegroundWindow", "Ptr")
+    if (!targetWindowId || !IsForegroundWindow(targetWindowId))
+        return false
 
-    ; A modifier pressed while SendInput runs can be physically down before
-    ; the target application receives its real key-down event. Live sync can
-    ; then send one duplicate down event in that tiny buffered-input window.
-    ; This is an intentional tradeoff for the simpler, live-state behavior.
-    ;
-    ; Callers whose hotkey itself holds Alt or Shift can pass an empty set so
-    ; those modifiers stay logically up instead of activating app menu shortcuts.
-    if (modifiersToSync != "") {
-        SyncModifierSidesToPhys(modifiersToSync, targetWindowId)
-        ScheduleModifierSync(modifiersToSync, syncPassCount, targetWindowId)
+    sendSucceeded := false
+    try {
+        if (modifiersToPreRelease != "") {
+            preReleaseSequence := "{Blind}"
+            if (InStr(modifiersToPreRelease, "Shift"))
+                preReleaseSequence .= "{sc02A up}{sc036 up}"
+            if (InStr(modifiersToPreRelease, "Ctrl"))
+                preReleaseSequence .= "{sc01D up}{sc11D up}"
+            if (InStr(modifiersToPreRelease, "Alt"))
+                preReleaseSequence .= "{sc038 up}{sc138 up}"
+            if (InStr(modifiersToPreRelease, "Win"))
+                preReleaseSequence .= "{sc15B up}{sc15C up}"
+
+            if (preReleaseSequence != "{Blind}") {
+                if (expectedWindowId && !IsForegroundWindow(targetWindowId))
+                    return false
+                SendInput, %preReleaseSequence%
+            }
+        }
+
+        ; Recheck immediately before the main injection. Clipboard preparation or
+        ; earlier cleanup can take long enough for foreground ownership to change.
+        if (expectedWindowId && !IsForegroundWindow(targetWindowId))
+            return false
+
+        SendInput, %sendSequence%
+        sendSucceeded := true
+    } finally {
+        ; A modifier pressed or released while SendInput runs can land just before
+        ; the target application observes the corresponding real transition. The
+        ; immediate and deferred sync passes make logical state converge back to
+        ; physical state for the selected modifier families.
+        if (modifiersToSync != "") {
+            ManagedModifierCleanup(modifiersToSync, targetWindowId, syncPassCount)
+        }
     }
-    return true
+    return sendSucceeded
+}
+
+; ManagedCtrlChord(): standard helper for Ctrl+one-key shortcuts.
+;
+; Use for Ctrl+C, Ctrl+V, Ctrl+A, Ctrl+NumpadAdd, etc.
+; Default path sends compact AHK Ctrl syntax: ^c / ^v / ^a.
+;
+; Use explicitCtrlPath := True only when a target requires literal
+; {Ctrl Down}<key>{Ctrl Up} sequencing.
+;
+; Internally this calls ManagedSend(), so it keeps the same foreground
+; guard, modifier pre-release, and modifier cleanup behavior.
+ManagedCtrlChord(chordKey, syncPassCount := 6, explicitCtrlPath := False, modifiersToSync := "Shift Alt Ctrl Win", expectedWindowId := 0) {
+    if (chordKey = "")
+        return false
+
+    sendSequence := explicitCtrlPath
+        ? "{Ctrl Down}" . chordKey . "{Ctrl Up}"
+        : "^" . chordKey
+
+    return ManagedSend(sendSequence, "Shift Alt Ctrl Win", modifiersToSync, expectedWindowId, syncPassCount)
+}
+
+; ManagedModifierCleanup(): repair modifier state without sending a shortcut.
+;
+; Use after raw Send commands, window/focus work, or native control work that may
+; have left Ctrl/Shift/Alt/Win logically out of sync with the physical keyboard.
+;
+; Set syncPassCount := 0 for immediate-only cleanup inside a timing-sensitive
+; sequence. Use the default deferred passes at final cleanup boundaries.
+;
+; Do not call after ManagedSend() or ManagedCtrlChord(); they already clean up.
+ManagedModifierCleanup(modifiers := "Shift Alt Ctrl Win", expectedWindowId := 0, syncPassCount := 6) {
+    if (modifiers = "")
+        return true
+
+    targetWindowId := expectedWindowId ? expectedWindowId : DllCall("user32\GetForegroundWindow", "Ptr")
+    if (!targetWindowId || !IsForegroundWindow(targetWindowId)) {
+        _ClearDeferredModifierSync()
+        return false
+    }
+
+    cleanupSucceeded := SyncModifierSidesToPhys(modifiers, targetWindowId)
+    if (syncPassCount > 0)
+        return ScheduleModifierSync(modifiers, syncPassCount, targetWindowId) && cleanupSucceeded
+    return cleanupSucceeded
 }
 
 ; Synchronize named modifier sides with the physical keyboard state. Every
@@ -14765,7 +14854,7 @@ ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6, targetWin
 
 ; Clears the queued Everything Edit1 auto-fit state so context changes or a
 ; completed send do not leave a stale deferred Ctrl+NumpadAdd request behind.
-_ClearTbcEverythingEditAdjustState() {
+_ClearTbcEverythingEditAdjustState(preserveSourceTick := False) {
     global tbcEverythingAdjustCtrlNN
     global tbcEverythingAdjustCtrlClass
     global tbcEverythingAdjustCtrlHwnd
@@ -14780,7 +14869,8 @@ _ClearTbcEverythingEditAdjustState() {
     tbcEverythingAdjustHwnd       := 0
     tbcEverythingAdjustId         := 0
     tbcEverythingAdjustRequestedTick := 0
-    tbcEverythingAdjustSourceTick := 0
+    if (!preserveSourceTick)
+        tbcEverythingAdjustSourceTick := 0
 }
 
 ; Queues a deferred Everything Edit1 column auto-fit request:
@@ -14931,9 +15021,9 @@ _SendCtrlNumpadAddIfStillValid(syncPassCount := 6, guardRequestId := 0, guardQui
     return SendCtrlNumpadAdd(syncPassCount, guardRequestId, guardQuietMs, guardHwnd)
 }
 
-; Deferred Everything Edit1 Ctrl+NumpadAdd flush:
+; Deferred Everything Edit1 native column auto-fit flush:
 ; wait for a stronger post-typing idle window, confirm the same search field
-; still owns focus, then send the column auto-fit chord as late as possible.
+; still owns focus, then resize the results ListView without keyboard injection.
 FlushTbcEverythingEditAdjust:
     currentRequestId := tbcEverythingAdjustId
     ; Stop when no deferred request or target window remains because a previously armed timer may fire after state was cleared.
@@ -14961,12 +15051,12 @@ FlushTbcEverythingEditAdjust:
         Return
     }
 
-    ; Attempt the fully guarded chord and finish this callback once column alignment has actually been dispatched.
-    if (_SendCtrlNumpadAddIfStillValid(6, 0, 0, tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrlNN, k_tbcEverythingAdjustTypingQuietMs, currentRequestId, tbcEverythingAdjustId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs))
+    ; Resize the native results ListView directly so the search Edit1 never receives NumpadAdd as typed text.
+    if (_TryAutoFitEverythingResultsColumns(tbcEverythingAdjustHwnd))
     {
         ; Clear completed state only while this callback still owns the request slot so a newer request remains pending.
         if (currentRequestId = tbcEverythingAdjustId)
-            _ClearTbcEverythingEditAdjustState()
+            _ClearTbcEverythingEditAdjustState(True)
         Return
     }
 
@@ -14974,7 +15064,7 @@ FlushTbcEverythingEditAdjust:
     if (currentRequestId != tbcEverythingAdjustId)
         Return
 
-    ; Revalidate after the failed send because its guarded checks may have outlived the original focus or request lifetime.
+    ; Revalidate after the failed direct resize because its guarded checks may have outlived the original focus or request lifetime.
     if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
     {
         _ClearTbcEverythingEditAdjustState()
@@ -14987,7 +15077,12 @@ FlushTbcEverythingEditAdjust:
                           ? GetRemainingQuietDelayMs(A_TimeIdlePhysical, k_tbcEverythingAdjustTypingQuietMs, False)
                           : k_tbcEverythingAdjustRetryMs
         SetTimer, FlushTbcEverythingEditAdjust, % -remainingQuietMs
+        Return
     }
+
+    ; A valid, quiet Everything window without a native results ListView should not fall back to
+    ; Ctrl+NumpadAdd while Edit1 is focused, because that can type a literal "+" into search.
+    _ClearTbcEverythingEditAdjustState(True)
 Return
 
 KeyTrack() {
@@ -17536,7 +17631,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
                 return ""
             }
 
-            if !_SendManagedCtrlChord("c", 6, False, modifiersToSync, expectedWindowId) {
+            if !ManagedCtrlChord("c", 6, False, modifiersToSync, expectedWindowId) {
                 Clip("", "", "RESTORE")
                 return ""
             }
@@ -17563,9 +17658,9 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
             if (clipPreferExplicitCtrlV)
                 ; Some modern editors misread {Blind}v and occasionally type
                 ; a literal v, so use an explicit managed Ctrl+V chord.
-                didPaste := _SendManagedCtrlChord("v", 6, True, modifiersToSync, expectedWindowId)
+                didPaste := ManagedCtrlChord("v", 6, True, modifiersToSync, expectedWindowId)
             else
-                didPaste := _SendManagedCtrlChord("v", 6, False, modifiersToSync, expectedWindowId)
+                didPaste := ManagedCtrlChord("v", 6, False, modifiersToSync, expectedWindowId)
             if !didPaste {
                 Clip("", "", "RESTORE")
                 return ""
