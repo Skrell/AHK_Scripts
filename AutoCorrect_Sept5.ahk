@@ -1,4 +1,4 @@
-﻿; c = case sensitive
+; c = case sensitive
 ; c1 = ignore the case that was typed, always use the same case for output
 ; * = immediate change (no need for space, period, or enter)
 ; ? = triggered even when the character typed immediately before it is alphanumeric
@@ -31,164 +31,164 @@ SetControlDelay,  1 ;
 ; +----------------------------------------------------------------------------+
 ; | Window Enumeration And Cycle State                                         |
 ; | Tracks the live window lists and retained selection state shared by the    |
-; | Alt+Tab-style window-cycling flows.                                         |
+; | Alt+Tab-style window-cycling flows.                                        |
 ; +----------------------------------------------------------------------------+
-Global CurrentDesktop                                      := 1
-Global CanceledWinSwap                                     := False
-Global ValidWindows                                        := []
-Global GroupedWindows                                      := []
-Global MinimizedWindows                                    := []
-Global PrevActiveWindows                                   := []
-Global allWinArray                                         := []
-Global cycleCount                                          := 1
+Global CurrentDesktop                                        := 1
+Global CanceledWinSwap                                       := False
+Global ValidWindows                                          := []
+Global GroupedWindows                                        := []
+Global MinimizedWindows                                      := []
+Global PrevActiveWindows                                     := []
+Global allWinArray                                           := []
+Global cycleCount                                            := 1
 ; Alt+Tab/Alt+` can receive the next cycle key while DrawWindowTitlePopup() is still
 ; building the GUI. Buffer that press here so the loop consumes it instead of losing it.
-Global bufferedCycleAdvance                                := False
-Global startHighlight                                      := False
-Global hitTAB                                              := False
-Global hitTilde                                            := False
-Global LclickSelected                                      := False
+Global bufferedCycleAdvance                                  := False
+Global startHighlight                                        := False
+Global hitTAB                                                := False
+Global hitTilde                                              := False
+Global LclickSelected                                        := False
 ; HWND of the last active window retained by the window-cycle selection flow.
-Global lastActWinID                                        :=
+Global lastActWinID                                          :=
 ; +----------------------------------------------------------------------------+
 ; | Window Search State                                                        |
 ; | Stores the query, result counts, and selection flags used while searching  |
 ; | the current window collection.                                             |
 ; +----------------------------------------------------------------------------+
-Global SearchingWindows                                    := False
-Global UserInputTrimmed                                    := ""
-Global memotext                                            := ""
-Global totalMenuItemCount                                  := 0
-Global onlyTitleFound                                      := ""
-Global CancelClose                                         := False
+Global SearchingWindows                                      := False
+Global UserInputTrimmed                                      := ""
+Global memotext                                              := ""
+Global totalMenuItemCount                                    := 0
+Global onlyTitleFound                                        := ""
+Global CancelClose                                           := False
 ; +----------------------------------------------------------------------------+
 ; | Window Highlight Overlay State                                             |
 ; | Configures and tracks the reusable outline and dimming surfaces used to    |
 ; | emphasize a selected window.                                               |
 ; +----------------------------------------------------------------------------+
-Global k_border_thickness                                  := 4
-Global k_border_color                                      := 0xFF00FF
-Global k_Opacity                                           := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
-Global DrawingRect                                         := False
+Global k_border_thickness                                    := 4
+Global k_border_color                                        := 0xFF00FF
+Global k_Opacity                                             := 220     ; 255=opaque black; try 200 to "dim" instead of fully black
+Global DrawingRect                                           := False
 ; +----------------------------------------------------------------------------+
 ; | Measurement Overlay State                                                  |
 ; | Backs the temporary pixel-measure tool so one drag can reuse lightweight   |
 ; | GUI overlays instead of rebuilding them on every mouse move.               |
 ; +----------------------------------------------------------------------------+
 ; True while the pixel-measure drag tool owns the current LButton hold.
-Global measureActive                                       := False
+Global measureActive                                         := False
 ; Tracks whether the three lightweight measurement GUIs have already been created.
-Global measureGuiReady                                     := False
+Global measureGuiReady                                       := False
 ; GUI control variable backing the live X/Y pixel readout.
-Global MeasureText                                         := ""
+Global MeasureText                                           := ""
 ; Screen-space mouse-down origin for the current measurement drag.
-Global measureStartX                                       := 0
+Global measureStartX                                         := 0
 ; Screen-space mouse-down origin for the current measurement drag.
-Global measureStartY                                       := 0
+Global measureStartY                                         := 0
 ; Thickness in pixels for the horizontal and vertical measurement guides.
-Global k_measureThickness                                  := 3
+Global k_measureThickness                                    := 3
 ; +----------------------------------------------------------------------------+
 ; | Typing Auto-Fix Gate And Cache State                                       |
 ; | Caches whether typing fixes are allowed so most keystrokes can reuse the   |
 ; | latest focus and editability decision.                                     |
 ; +----------------------------------------------------------------------------+
-Global StopAutoFix                                         := False
+Global StopAutoFix                                           := False
 ; Cache the typing-auto-fix eligibility decision so most keystrokes avoid the
 ; slower UIA/MSAA focus probes.
 ; Last allow/deny result returned by the typing-auto-fix gate.
-Global c_typingAutoFixAllowed                              := False
+Global c_typingAutoFixAllowed                                := False
 ; Exact focused control handle associated with the cached decision. ClassNN can
 ; be reused after a custom control is recreated, so it is not a sufficient key.
-Global c_typingAutoFixCtrlHwnd                             := 0
+Global c_typingAutoFixCtrlHwnd                               := 0
 ; Focused control name used to decide whether the cached result still applies.
-Global c_typingAutoFixCtrlNN                               := ""
+Global c_typingAutoFixCtrlNN                                 := ""
 ; Active window handle associated with the cached focus/editability decision.
-Global c_typingAutoFixHwnd                                 := 0
+Global c_typingAutoFixHwnd                                   := 0
 ; Short reason string describing why the current cache entry passed or failed.
-Global c_typingAutoFixReason                               := ""
+Global c_typingAutoFixReason                                 := ""
 ; Tick count when the cache entry was last refreshed.
-Global c_typingAutoFixTick                                 := 0
+Global c_typingAutoFixTick                                   := 0
 ; Maximum age for a same-window/same-control fast cache hit.
-Global k_typingAutoFixFastTtlMs                            := 125
+Global k_typingAutoFixFastTtlMs                              := 125
 ; Minimum gap before repeating slower UIA/MSAA probes for unchanged focus.
-Global k_typingAutoFixSlowPathMs                           := 400
+Global k_typingAutoFixSlowPathMs                             := 400
 ; Tick count of the last slow UIA/MSAA probe attempt.
-Global typingAutoFixSlowProbeTick                          := 0
+Global typingAutoFixSlowProbeTick                            := 0
 ; +----------------------------------------------------------------------------+
 ; | Typing Auto-Fix Refresh And Prewarm State                                  |
 ; | Retains the target and sequence snapshots used by deferred editability     |
 ; | probes after focus, activation, or click changes settle.                   |
 ; +----------------------------------------------------------------------------+
 ; Focused control class captured with an async editability-refresh request.
-Global typingAutoFixRefreshCtrlClass                       := ""
+Global typingAutoFixRefreshCtrlClass                         := ""
 ; Exact focused control handle captured with an async refresh request.
-Global typingAutoFixRefreshCtrlHwnd                        := 0
+Global typingAutoFixRefreshCtrlHwnd                          := 0
 ; Focused control name captured when an async editability refresh is queued so
 ; the timer can confirm the same target still owns focus before probing.
-Global typingAutoFixRefreshCtrlNN                          := ""
+Global typingAutoFixRefreshCtrlNN                            := ""
 ; Physical typing sequence captured when an async editability probe is queued.
-Global typingAutoFixRefreshStartTypingSeq                  := 0
+Global typingAutoFixRefreshStartTypingSeq                    := 0
 ; Hotstring boundary sequence captured with the async editability probe.
-Global typingAutoFixRefreshStartHotstringBoundarySeq       := 0
+Global typingAutoFixRefreshStartHotstringBoundarySeq         := 0
 ; True when a positive async result must protect against activation mid-word.
-Global typingAutoFixRefreshProtectPartialWord              := False
+Global typingAutoFixRefreshProtectPartialWord                := False
 ; Short one-shot delay before the async editability refresh runs. This keeps the
 ; first keypath cheap and spaces the slow probe slightly away from the triggering
 ; keystroke, while the later A_TimeIdlePhysical retry is what usually keeps the
 ; refresh from competing with nearby deferred text-rewrite timers.
-Global k_typingAutoFixRefreshDelayMs                       := 25
+Global k_typingAutoFixRefreshDelayMs                         := 25
 ; Active window captured when the async editability refresh is queued.
-Global typingAutoFixRefreshHwnd                            := 0
+Global typingAutoFixRefreshHwnd                              := 0
 ; Monotonic token incremented whenever a newer async editability refresh
 ; replaces an older queued request.
-Global typingAutoFixRefreshId                              := 0
+Global typingAutoFixRefreshId                                := 0
 ; Tick count recorded when the async editability refresh is queued so the flow
 ; can be reasoned about against nearby deferred typing timers.
-Global typingAutoFixRefreshRequestedTick                   := 0
+Global typingAutoFixRefreshRequestedTick                     := 0
 ; Hotstring boundary sequence captured when the current startup/focus/click prewarm was
 ; scheduled, before a user can begin typing into the newly focused target.
-Global typingAutoFixPrewarmStartHotstringBoundarySeq       := 0
+Global typingAutoFixPrewarmStartHotstringBoundarySeq         := 0
 ; Physical typing sequence captured with the current prewarm request.
-Global typingAutoFixPrewarmStartTypingSeq                  := 0
+Global typingAutoFixPrewarmStartTypingSeq                    := 0
 ; Short delay that lets a click or activation finish assigning keyboard focus.
-Global k_typingAutoFixPrewarmDelayMs                       := 25
+Global k_typingAutoFixPrewarmDelayMs                         := 25
 ; +----------------------------------------------------------------------------+
 ; | Typing Sequence And Deferred Rewrite State                                 |
 ; | Coordinates physical typing boundaries and short-lived rewrite callbacks   |
 ; | so stale corrections cannot land in a newer text context.                  |
 ; +----------------------------------------------------------------------------+
-Global X_PriorPriorHotKey                                  :=
+Global X_PriorPriorHotKey                                    :=
 ; True while the post-boundary hotstring-buffer reset timer is pending.
-Global hotstringResetTimerPending                          := False
+Global hotstringResetTimerPending                            := False
 ; Target hotstringBoundarySeq that schedules a post-boundary Hotstring("Reset").
 ; Zero means no deferred buffer reset is pending.
-Global hotstringResetAtBoundarySeq                         := 0
+Global hotstringResetAtBoundarySeq                           := 0
 ; Monotonic count of physical text-input key-downs. Async editability probes
 ; compare this with their queued snapshot to detect typing during the probe.
-Global physicalTypingSeq                                   := 0
+Global physicalTypingSeq                                     := 0
 ; Monotonic count of physical keys that exactly match #HotString EndChars.
-Global hotstringBoundarySeq                                := 0
+Global hotstringBoundarySeq                                  := 0
 ; Shared sequence token for deferred typing rewrites so older timer callbacks can
 ; detect that a newer key event already replaced their context and should win.
-Global typingFixSeq                                        := 0
+Global typingFixSeq                                          := 0
 ; Maximum lifetime for a deferred typing rewrite before it is discarded. Once a
 ; queued fix has been tbc longer than this limit, it is assumed the user may
 ; already be typing in a newer text context, so the delayed Send is skipped.
-Global k_tbcTypingFixMaxAgeMs                              := 250
+Global k_tbcTypingFixMaxAgeMs                                := 250
 ; Let specific call sites opt into a more explicit paste chord when SendInput, ^v
 ; is occasionally interpreted as a literal v by the target editor.
-Global clipPreferExplicitCtrlV                             := False
+Global clipPreferExplicitCtrlV                               := False
 ; Restricts temporary paste-result logging to Ctrl+D's fallback Ctrl+V attempt.
-Global clipTraceCtrlDPasteActive                           := False
+Global clipTraceCtrlDPasteActive                             := False
 ; Temporary slash-fix Enter interception flag. After a qualifying letter + "/",
 ; this diverts the next Enter into the custom $Enter handler so slash+Enter can
 ; either commit "{BS}{?}{ENTER}" inline or fall back to one normal Enter, but
 ; never let both the raw key and the rewrite path fire.
-Global disableEnter                                        := False
+Global disableEnter                                          := False
 ; Name of the most recently triggered hotkey for repeat-sensitive logic.
-Global lastHotkeyTyped                                     := ""
+Global lastHotkeyTyped                                       := ""
 ; Tick count of the most recent hotkey-triggered send used by typing heuristics.
-Global TimeOfLastHotkeyTyped                               := A_TickCount
+Global TimeOfLastHotkeyTyped                                 := A_TickCount
 ; +----------------------------------------------------------------------------+
 ; | Everything Edit1 Deferred Column Auto-Fit State                            |
 ; | Queues Ctrl+NumpadAdd for Everything's search box so the send runs only    |
@@ -196,50 +196,50 @@ Global TimeOfLastHotkeyTyped                               := A_TickCount
 ; +----------------------------------------------------------------------------+
 ; Results-window startup state keeps direct native sizing separate from the
 ; Edit1 typing path so initial alignment never needs to move keyboard focus.
-Global everythingActivationAutoFitDeadlineTick              := 0
+Global everythingActivationAutoFitDeadlineTick               := 0
 ; Results-window handle whose native SysListView32 is awaiting readiness.
-Global everythingActivationAutoFitHwnd                      := 0
+Global everythingActivationAutoFitHwnd                       := 0
 ; Monotonic token prevents an older startup timer from acting on a newer window.
-Global everythingActivationAutoFitId                        := 0
+Global everythingActivationAutoFitId                         := 0
 ; Tick count records when this startup wait began for its bounded lifetime.
-Global everythingActivationAutoFitStartTick                 := 0
+Global everythingActivationAutoFitStartTick                  := 0
 ; Optional trace identity keeps startup diagnostics separate from Explorer requests.
-Global everythingActivationAutoFitTraceRequestId            := ""
+Global everythingActivationAutoFitTraceRequestId             := ""
 ; Small initial pause lets Everything create its results ListView before probing it.
-Global k_everythingActivationAutoFitInitialDelayMs          := 15
+Global k_everythingActivationAutoFitInitialDelayMs           := 15
 ; Short native-header retry interval minimizes the visible startup alignment delay.
-Global k_everythingActivationAutoFitRetryMs                 := 25
+Global k_everythingActivationAutoFitRetryMs                  := 25
 ; Bounded startup wait avoids retaining a request for an unresponsive Everything window.
-Global k_everythingActivationAutoFitTimeoutMs               := 750
+Global k_everythingActivationAutoFitTimeoutMs                := 750
 
 ; Focused control name captured when Everything Edit1 auto-fit is queued so
 ; the deferred send can require the same search field before firing.
-Global tbcEverythingAdjustCtrlNN                           := ""
+Global tbcEverythingAdjustCtrlNN                             := ""
 ; Focused control class captured with the queued Everything auto-fit so the
 ; flush step can require the same concrete control identity when available.
-Global tbcEverythingAdjustCtrlClass                        := ""
+Global tbcEverythingAdjustCtrlClass                          := ""
 ; Focused control HWND captured when Everything auto-fit is queued so the flush
 ; step can reject a later Edit1 from a different control instance.
-Global tbcEverythingAdjustCtrlHwnd                         := 0
+Global tbcEverythingAdjustCtrlHwnd                           := 0
 ; Active Everything window captured for the deferred search-box auto-fit send.
-Global tbcEverythingAdjustHwnd                             := 0
+Global tbcEverythingAdjustHwnd                               := 0
 ; Monotonic token incremented for each newer Everything Edit1 auto-fit request
 ; so older timer callbacks can detect that typing already superseded them.
-Global tbcEverythingAdjustId                               := 0
+Global tbcEverythingAdjustId                                 := 0
 ; Tick count recorded when the Everything Edit1 auto-fit request was queued.
-Global tbcEverythingAdjustRequestedTick                    := 0
+Global tbcEverythingAdjustRequestedTick                      := 0
 ; Source typing tick associated with the current Everything auto-fit request so
 ; KeyTrack queues at most one deferred send per physical keypress burst update.
-Global tbcEverythingAdjustSourceTick                       := 0
+Global tbcEverythingAdjustSourceTick                         := 0
 ; Maximum lifetime for a deferred Everything Edit1 auto-fit request before it
 ; is dropped as stale rather than sent into a newer typing context.
-Global k_tbcEverythingAdjustMaxAgeMs                       := 750
+Global k_tbcEverythingAdjustMaxAgeMs                         := 750
 ; Fallback retry delay used only when StopAutoFix, rather than insufficient
 ; physical idle time, temporarily prevents Everything's typing-quiet gate.
-Global k_tbcEverythingAdjustRetryMs                        := 40
+Global k_tbcEverythingAdjustRetryMs                          := 40
 ; Minimum physical-idle gap required before Everything Edit1 is allowed to
 ; receive the deferred Ctrl+NumpadAdd column auto-fit chord.
-Global k_tbcEverythingAdjustTypingQuietMs                  := 180
+Global k_tbcEverythingAdjustTypingQuietMs                    := 180
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -247,76 +247,76 @@ Global k_tbcEverythingAdjustTypingQuietMs                  := 180
 ; +----------------------------------------------------------------------------+
 ; Window class for the most recent Explorer/file-dialog wheel target so the
 ; deferred adjust step can confirm the queued request still points at the same shell UI.
-Global tbcAdjustColumnsClass                               := ""
+Global tbcAdjustColumnsClass                                 := ""
 ; Control under the mouse when the wheel event was queued; used as a hint before
 ; resolving the final DirectUI/ListView target at send time.
-Global tbcAdjustColumnsCtrlNN                              := ""
+Global tbcAdjustColumnsCtrlNN                                := ""
 ; Top-level Explorer or #32770 dialog HWND that should receive the deferred
 ; Ctrl+NumpadAdd once scrolling has gone quiet.
-Global tbcAdjustColumnsHwnd                                := 0
+Global tbcAdjustColumnsHwnd                                  := 0
 ; Tick count of the most recent qualifying wheel event so WheelSendCtrlAdd can defer
 ; work until the user pauses scrolling and cancel if wheel activity resumes.
-Global tbcAdjustColumnsLastWheelTick                       := 0
+Global tbcAdjustColumnsLastWheelTick                         := 0
 ; Minimum quiet period after the last wheel event before attempting Explorer
 ; column auto-fit; this avoids interrupting fast continuous scrolling.
-Global k_tbcAdjustColumnsQuietMs                           := 240
+Global k_tbcAdjustColumnsQuietMs                             := 240
 ; Dialog-specific quiet period for #32770 file dialogs; it remains independently
 ; configurable if their DirectUI scroll activity later requires a longer delay.
-Global k_tbcAdjustColumnsDialogQuietMs                     := 240
+Global k_tbcAdjustColumnsDialogQuietMs                       := 240
 ; Monotonic request token incremented on each qualifying wheel event so older
 ; deferred timers can detect they were superseded and exit without sending.
-Global tbcAdjustColumnsRequestId                           := 0
+Global tbcAdjustColumnsRequestId                             := 0
 ; Brief final hold just before injecting Ctrl+NumpadAdd so a last-moment wheel event
 ; can update the tbc request state and cause the send to abort cleanly.
-Global k_tbcAdjustColumnsSendGuardMs                       := 20
+Global k_tbcAdjustColumnsSendGuardMs                         := 20
 ; Keep wheel suppression active briefly after Ctrl+NumpadAdd and immediate Ctrl
 ; synchronization so delayed physical wheel input cannot escape as Ctrl+Wheel.
-Global k_tbcAdjustColumnsPostSendWheelGuardMs              := 20
+Global k_tbcAdjustColumnsPostSendWheelGuardMs                := 20
 ; Cached final Explorer target ClassNN for the most recent wheel-adjust window so
 ; repeated pause/resume cycles can skip DirectUI/ListView rediscovery work.
-Global c_tbcAdjustColumnsTargetCtrl                        := ""
+Global c_tbcAdjustColumnsTargetCtrl                          := ""
 ; Top-level window HWND that owns the cached Explorer target ClassNN; the cache is
 ; only valid when a later wheel-adjust request points at this same shell window.
-Global c_tbcAdjustColumnsTargetHwnd                        := 0
+Global c_tbcAdjustColumnsTargetHwnd                          := 0
 ; Tick count when the cached Explorer target was last confirmed, limiting reuse to
 ; a short burst where the folder view structure is unlikely to have changed.
-Global c_tbcAdjustColumnsTargetTick                        := 0
+Global c_tbcAdjustColumnsTargetTick                          := 0
 ; Maximum age for the cached Explorer target before WheelSendCtrlAdd falls back to
 ; full target resolution to avoid using a stale DirectUI/ListView guess.
-Global k_tbcAdjustColumnsTargetTtlMs                       := 350
+Global k_tbcAdjustColumnsTargetTtlMs                         := 350
 ; +----------------------------------------------------------------------------+
 ; | Deferred Slash Correction State                                            |
 ; | Retains one slash rewrite until the live keypress settles and verifies the |
-; | same window, control, string, and typing sequence still own the request.    |
+; | same window, control, string, and typing sequence still own the request.   |
 ; +----------------------------------------------------------------------------+
 ; True when the latest physical slash follows another slash in the current
 ; whitespace-delimited string, so every FixSlash path can reject path-like input.
-Global fixSlashCandidateHasPriorSlash                      := False
+Global fixSlashCandidateHasPriorSlash                        := False
 ; Whitespace-delimited string sequence in which the last physical slash occurred.
-Global fixSlashLastSlashStringSeq                          := -1
+Global fixSlashLastSlashStringSeq                            := -1
 ; Advances on physical Tab, Enter, or Space so slash history cannot cross strings.
-Global fixSlashStringBoundarySeq                           := 0
-Global tbcFixSlashAction                                   := ""
+Global fixSlashStringBoundarySeq                             := 0
+Global tbcFixSlashAction                                     := ""
 ; Focused control name captured when the "/ " fix is queued so the timer can
 ; cancel instead of rewriting text after focus moves to another control.
-Global tbcFixSlashCtrlNN                                   := ""
+Global tbcFixSlashCtrlNN                                     := ""
 ; Focused control class captured with the deferred slash-space fix so classic
 ; Edit/RichEdit targets can use the same safer message-based phase-2 rewrite
 ; path that Hoty now uses.
-Global tbcFixSlashCtrlClass                                := ""
+Global tbcFixSlashCtrlClass                                  := ""
 ; Focused control HWND captured when the slash-space fix is queued so the flush
 ; step can require the exact same control instance instead of trusting only the
 ; ClassNN string.
-Global tbcFixSlashCtrlHwnd                                 := 0
+Global tbcFixSlashCtrlHwnd                                   := 0
 ; Active top-level window captured when the deferred slash-space rewrite is armed;
 ; the flush step requires this same window to still be active before sending.
-Global tbcFixSlashHwnd                                     := 0
+Global tbcFixSlashHwnd                                       := 0
 ; Sequence token assigned when the slash-space rewrite is queued so older timer
 ; callbacks can detect that a newer typing event already superseded the work.
-Global tbcFixSlashId                                       := 0
+Global tbcFixSlashId                                         := 0
 ; Tick count recorded when the slash-space rewrite is queued, used to drop the
 ; request once it has been tbc longer than k_tbcTypingFixMaxAgeMs.
-Global tbcFixSlashRequestedTick                            := 0
+Global tbcFixSlashRequestedTick                              := 0
 ; +----------------------------------------------------------------------------+
 ; | Deferred Hoty Correction State                                             |
 ; | Retains one capitalization rewrite until the live keypress settles and     |
@@ -324,65 +324,65 @@ Global tbcFixSlashRequestedTick                            := 0
 ; +----------------------------------------------------------------------------+
 ; Focused control name captured when the deferred Hoty capitalization fix is queued
 ; so the timer only rewrites if the same edit target still owns focus.
-Global tbcHotyCtrlNN                                       := ""
+Global tbcHotyCtrlNN                                         := ""
 ; Focused control class captured with the deferred Hoty fix so the flush step can
 ; choose the safer message-based rewrite path for classic Edit/RichEdit targets.
-Global tbcHotyCtrlClass                                    := ""
+Global tbcHotyCtrlClass                                      := ""
 ; Focused control HWND captured when the Hoty fix is queued so the flush step can
 ; require the exact same control instance, not just the same ClassNN string.
-Global tbcHotyCtrlHwnd                                     := 0
+Global tbcHotyCtrlHwnd                                       := 0
 ; Active top-level window captured for the deferred Hoty fix, preventing the timer
 ; from replaying a capitalization rewrite into whichever window became active later.
-Global tbcHotyHwnd                                         := 0
+Global tbcHotyHwnd                                           := 0
 ; Sequence token assigned to the deferred Hoty fix so only the newest queued
 ; typing rewrite can fire and any older timer callbacks self-cancel.
-Global tbcHotyId                                           := 0
+Global tbcHotyId                                             := 0
 ; Tick count captured when the Hoty fix is queued, allowing old capitalization fixes
 ; to expire quickly instead of landing after the surrounding typing context changed.
-Global tbcHotyRequestedTick                                := 0
+Global tbcHotyRequestedTick                                  := 0
 ; Replacement character captured from the prior capital hotkey so the deferred Hoty
 ; flush can send the intended rewrite only after the live key cycle has settled.
-Global tbcHotyReplacement                                  := ""
+Global tbcHotyReplacement                                    := ""
 ; Current lowercase trigger character captured when the Hoty fix is queued so a
 ; later classic-control flush can confirm the exact prior-capital + current-letter
 ; text context before replacing anything.
-Global tbcHotyTriggerChar                                  := ""
+Global tbcHotyTriggerChar                                    := ""
 ; +----------------------------------------------------------------------------+
 ; | Post-Activation Explorer Click Recovery                                    |
 ; | Captures the first click into an inactive Explorer/file-dialog window so a |
 ; | short timer can re-check that now-active shell target and recover the      |
-; | expected Ctrl+NumpadAdd behavior without slowing the activation click path. |
+; | expected Ctrl+NumpadAdd behavior without slowing the activation click path.|
 ; +----------------------------------------------------------------------------+
 ; Top-level window HWND that received the activation click. The timer requires
 ; this same window to become active before attempting any delayed shell action.
-Global postActivationLButtonHwnd                           := 0
+Global postActivationLButtonHwnd                             := 0
 ; Header action identified at mouse-down so the deferred activation path can
 ; reuse the completed click's classification without another UIA lookup.
-Global postActivationLButtonHeaderKind                     := ""
+Global postActivationLButtonHeaderKind                       := ""
 ; Directory reported when the activation click began. Deferred tree/header
 ; navigation must advance beyond this value before columns are adjusted.
-Global postActivationLButtonInitialPath                    := ""
+Global postActivationLButtonInitialPath                      := ""
 ; ClassNN under the pointer when the activation click happened, used to limit
 ; the recovery path to shell headers and shell-view controls only.
-Global postActivationLButtonCtrlNN                         := ""
+Global postActivationLButtonCtrlNN                           := ""
 ; Screen X coordinate of the activation click so the timer can re-run title-bar
 ; and blank-space checks against the original click location.
-Global postActivationLButtonX                              := 0
+Global postActivationLButtonX                                := 0
 ; Screen Y coordinate of the activation click so the deferred recovery inspects
 ; the same area the user originally clicked.
-Global postActivationLButtonY                              := 0
+Global postActivationLButtonY                                := 0
 ; Monotonic token incremented for each pending activation click so an older timer
 ; can detect it was superseded by a newer click and exit safely.
-Global postActivationLButtonId                             := 0
+Global postActivationLButtonId                               := 0
 ; Deadline for waiting non-blockingly until the clicked window is active and
 ; LButton has been released.
-Global postActivationLButtonDeadlineTick                   := 0
+Global postActivationLButtonDeadlineTick                     := 0
 ; Initial delay that gives Windows time to begin activation/focus transfer.
-Global k_postActivationLButtonDelayMs                      := 35
+Global k_postActivationLButtonDelayMs                        := 35
 ; Retry interval while activation or physical mouse release is still pending.
-Global k_postActivationLButtonPollMs                       := 15
+Global k_postActivationLButtonPollMs                         := 15
 ; Maximum lifetime of one deferred inactive-window click snapshot.
-Global k_postActivationLButtonTimeoutMs                    := 1000
+Global k_postActivationLButtonTimeoutMs                      := 1000
 ; +----------------------------------------------------------------------------+
 ; | Explorer CtrlAdd Active Request State                                      |
 ; | Coordinates guarded header attempts and timer-verified readiness sends     |
@@ -390,108 +390,110 @@ Global k_postActivationLButtonTimeoutMs                    := 1000
 ; +----------------------------------------------------------------------------+
 ; True only for header-button requests. These requests may make a guarded send
 ; before UIA and one final guarded send when UIA cannot prove readiness.
-Global explorerCtrlAddRequestAllowBestEffortSend           := False
+Global explorerCtrlAddRequestAllowBestEffortSend             := False
 ; True only for confirmed #32770 activation requests. If every folder-identity
 ; backend returns empty, Details mode plus visible UIA content may authorize alignment.
-Global explorerCtrlAddRequestAllowPathlessContentReady     := False
+Global explorerCtrlAddRequestAllowPathlessContentReady       := False
 ; Class of the Explorer or file-dialog window that owns the pending request.
-Global explorerCtrlAddRequestClass                         := ""
+Global explorerCtrlAddRequestClass                           := ""
 ; Latest tick at which the pending request may call SendCtrlAdd().
-Global explorerCtrlAddRequestDeadlineTick                  := 0
+Global explorerCtrlAddRequestDeadlineTick                    := 0
 ; True after CabinetWClass proves Details mode for this request. Later retries
 ; reuse only this positive result while still resolving current UIA content.
-Global explorerCtrlAddRequestDetailsConfirmed              := False
+Global explorerCtrlAddRequestDetailsConfirmed                := False
 ; Diagnostic reason returned by the successful CabinetWClass Details check.
-Global explorerCtrlAddRequestDetailsReason                 := ""
+Global explorerCtrlAddRequestDetailsReason                   := ""
 ; True after a #32770 startup/navigation request aligned a confirmed Details
 ; view before UIA exposed a visible item or recognized empty-folder message.
-Global explorerCtrlAddRequestDetailsOnlySendMade           := False
+Global explorerCtrlAddRequestDetailsOnlySendMade             := False
 ; True until that request claims its one early Details-confirmed alignment.
-Global explorerCtrlAddRequestDetailsOnlySendPending        := False
+Global explorerCtrlAddRequestDetailsOnlySendPending          := False
 ; Earliest tick when a startup or Refresh Details/content probe may begin.
-Global explorerCtrlAddRequestEarliestContentProbeTick      := 0
+Global explorerCtrlAddRequestEarliestContentProbeTick        := 0
 ; Shorter directory-path polling interval used during every changed-path
 ; request's bounded fast-start window.
-Global explorerCtrlAddRequestFastPathPollIntervalMs        := 0
+Global explorerCtrlAddRequestFastPathPollIntervalMs          := 0
 ; Tick when the current changed-path request's fast polling window ends.
-Global explorerCtrlAddRequestFastPathPollUntilTick         := 0
+Global explorerCtrlAddRequestFastPathPollUntilTick           := 0
 ; Top-level Explorer or file-dialog HWND that owns the pending request.
-Global explorerCtrlAddRequestHwnd                          := 0
+Global explorerCtrlAddRequestHwnd                            := 0
 ; Monotonic token incremented for every request so an earlier timer
 ; callback exits when a newer navigation request supersedes it.
-Global explorerCtrlAddRequestId                            := 0
+Global explorerCtrlAddRequestId                              := 0
 ; Directory reported before a path-changing navigation click. The timer requires
 ; GetExplorerPath() to return a different nonempty directory before sampling UIA.
-Global explorerCtrlAddRequestInitialPath                   := ""
+Global explorerCtrlAddRequestInitialPath                     := ""
 ; Directory source that most recently succeeded for this request. A #32770 timer
 ; retries that source first instead of repeating a known-failing native/message probe.
-Global explorerCtrlAddRequestLocationResolver              := ""
+Global explorerCtrlAddRequestLocationResolver                := ""
 ; Last Explorer NavigateComplete2 generation consumed by this request's PIDL
 ; read. A newer generation wakes changed-path checking without periodic COM reads.
-Global explorerCtrlAddRequestNavigationGeneration          := 0
+Global explorerCtrlAddRequestNavigationGeneration            := 0
 ; Next watchdog tick when an event-backed Explorer request may re-read its PIDL
 ; even if Explorer's navigation event was missed.
-Global explorerCtrlAddRequestNextNavigationFallbackTick    := 0
+Global explorerCtrlAddRequestNextNavigationFallbackTick      := 0
 ; True after GetExplorerPath() confirms that the pending path-changing request
 ; reached a different directory from explorerCtrlAddRequestInitialPath.
-Global explorerCtrlAddRequestPathChangeConfirmed           := False
+Global explorerCtrlAddRequestPathChangeConfirmed             := False
 ; True after a permitted #32770 activation could not obtain a path and switched
 ; to its bounded Details-mode plus visible-content readiness proof.
-Global explorerCtrlAddRequestPathlessContentFallbackActive := False
+Global explorerCtrlAddRequestPathlessContentFallbackActive   := False
 ; True until a path-changing header request makes its one pre-UIA alignment.
 ; UIA still runs afterward so a verified send can correct a rebuilt file view.
-Global explorerCtrlAddRequestPreProbeSendPending           := False
+Global explorerCtrlAddRequestPreProbeSendPending             := False
 ; Request-scoped #32770 native file-panel HWND/ClassNN hint. Every retry
 ; revalidates it and resolves a fresh UIA element; no UIA object is retained.
-Global explorerCtrlAddRequestPreferredTarget               := ""
+Global explorerCtrlAddRequestPreferredTarget                 := ""
 ; Latest startup directory sample, retained after confirmation across UIA retries
 ; for final pre-send validation.
-Global explorerCtrlAddRequestPreviousPath                  := ""
+Global explorerCtrlAddRequestPreviousPath                    := ""
 ; Whether this request must prove a directory change before adjusting columns.
 ; Refresh requests leave this false because Refresh keeps the same directory.
-Global explorerCtrlAddRequestRequirePathChange             := False
+Global explorerCtrlAddRequestRequirePathChange               := False
 ; Whether this request must observe the same nonempty directory twice before
 ; authorizing its Details/content result. Startup Explorer/file-dialog requests
 ; use this condition.
-Global explorerCtrlAddRequestRequireStablePath             := False
+Global explorerCtrlAddRequestRequireStablePath               := False
 ; False only for header-navigation requests, whose completed column adjustment
 ; must not restore a previously focused SysTreeView32 control.
-Global explorerCtrlAddRequestRestoreTreeFocus              := True
+Global explorerCtrlAddRequestRestoreTreeFocus                := True
 ; Tick when the current request was published, used only to report elapsed
 ; request timing in the buffered Explorer CtrlAdd trace.
-Global explorerCtrlAddRequestStartTick                     := 0
+Global explorerCtrlAddRequestStartTick                       := 0
 ; Focused source control captured for a tree click; SendCtrlAdd restores it
 ; after adjusting the Details columns when it is still appropriate.
-Global explorerCtrlAddRequestSourceCtrlNN                  := ""
+Global explorerCtrlAddRequestSourceCtrlNN                    := ""
 ; True after a startup request observes the same nonempty directory twice.
-Global explorerCtrlAddRequestStablePathConfirmed           := False
+Global explorerCtrlAddRequestStablePathConfirmed             := False
 ; Number of consecutive startup samples returning the same nonempty directory.
-Global explorerCtrlAddRequestStablePathHitCount            := 0
+Global explorerCtrlAddRequestStablePathHitCount              := 0
 ; Counts repeated unchanged #32770 toolbar-path samples before one trace-only
 ; comparison with the dialog's native folder-path sources.
-Global explorerCtrlAddRequestToolbarBaselineUnchangedHits  := 0
+Global explorerCtrlAddRequestToolbarBaselineUnchangedHits    := 0
 ; Prevents repeated native-path comparisons for the same unchanged toolbar
 ; baseline; this exists only to keep diagnostic tracing bounded per request.
-Global explorerCtrlAddRequestToolbarBaselineCrosscheckMade := False
-; True only while the current request lacks a terminal trace event. This
-; trace-only flag distinguishes a replacement from a request that already ended.
-Global explorerCtrlAddRequestTracePending                  := False
+Global explorerCtrlAddRequestToolbarBaselineCrosscheckMade   := False
+; Before _RequestExplorerCtrlAdd() overwrites the shared explorerCtrlAddRequest*
+; values with a new request, it saves this flag. If the prior request was still open,
+; it then records request_superseded for that prior request, so its unfinished work
+; is explicitly documented
+Global debugTraceExplorerCtrlAddRequestOpen                  := False
 ; True only while an event-backed changed-path request is sleeping until either
 ; NavigateComplete2 or its low-frequency watchdog wakes the readiness timer.
-Global explorerCtrlAddRequestWaitingForNavigationEvent     := False
+Global explorerCtrlAddRequestWaitingForNavigationEvent       := False
 ; True when the current CabinetWClass request has a connected Explorer event sink.
-Global explorerCtrlAddRequestUsesNavigationEvents          := False
+Global explorerCtrlAddRequestUsesNavigationEvents            := False
 ; +----------------------------------------------------------------------------+
 ; | Explorer Navigation Observer State                                         |
 ; | Retains per-window COM event sinks and the navigation generations consumed |
 ; | by active Explorer CtrlAdd requests.                                        |
 ; +----------------------------------------------------------------------------+
 ; Retained per-tab COM objects keep NavigateComplete2 event sinks alive.
-Global explorerNavigationObservers                         := {}
+Global explorerNavigationObservers                           := {}
 ; Per-Explorer generations distinguish navigation events already consumed by a
 ; request. A matching active-tab event may also retain a normalized filesystem
 ; path so changed-path CabinetWClass requests can avoid a slower PIDL read.
-Global explorerNavigationStates                            := {}
+Global explorerNavigationStates                              := {}
 ; +----------------------------------------------------------------------------+
 ; | Explorer CtrlAdd Timing And Trace Configuration                            |
 ; | Defines readiness polling, navigation fallbacks, trace buffering, and the  |
@@ -499,66 +501,70 @@ Global explorerNavigationStates                            := {}
 ; +----------------------------------------------------------------------------+
 ; Buffered Explorer CtrlAdd trace text. Terminal outcomes flush this buffer so
 ; ordinary timer probes do not add a disk write to every readiness check.
-Global explorerCtrlAddTraceBuffer                          := ""
+Global explorerCtrlAddTraceBuffer                            := ""
 ; Fast fallback polling used by changed-path requests without Explorer navigation
 ; events, including confirmed #32770 file dialogs.
-Global k_explorerCtrlAddFastPathPollMs                     := 15
+Global k_explorerCtrlAddFastPathPollMs                       := 15
 ; After this bounded fast window, directory-change polling uses
 ; k_explorerCtrlAddPollMs.
-Global k_explorerCtrlAddFastPathWindowMs                   := 300
+Global k_explorerCtrlAddFastPathWindowMs                     := 300
 ; Maximum non-blocking wait for a startup request to expose a stable path.
-Global k_newExplorerCtrlAddTimeoutMs                       := 5000
+Global k_newExplorerCtrlAddTimeoutMs                         := 5000
 ; Timer interval for non-blocking Details/content readiness probes.
-Global k_explorerCtrlAddPollMs                             := 50
+Global k_explorerCtrlAddPollMs                               := 50
 ; Shared UIA transaction budget for each Details/content readiness probe.
-Global k_explorerCtrlAddPollUIATimeoutMs                   := 150
+Global k_explorerCtrlAddPollUIATimeoutMs                     := 150
 ; Low-frequency safety read for event-backed Explorer navigation in case COM does
 ; not publish NavigateComplete2 for a particular shell transition.
-Global k_explorerCtrlAddNavigationFallbackMs               := 250
+Global k_explorerCtrlAddNavigationFallbackMs                 := 250
 ; Maximum wait for Details mode and UIA item/empty-result evidence after path
 ; readiness or an applicable minimum settling delay.
-Global k_explorerCtrlAddTimeoutMs                          := 1200
+Global k_explorerCtrlAddTimeoutMs                            := 1200
 ; Maximum buffered trace characters before a safety flush. Normal requests
 ; flush at their terminal outcome, keeping file I/O out of readiness timing.
-Global k_explorerCtrlAddTraceBufferChars                   := 65536
+Global k_explorerCtrlAddTraceBufferChars                     := 65536
 ; Minimum delay before Refresh begins its verified Details/content probe.
-Global k_explorerCtrlAddRefreshMinimumWaitMs               := 300
+Global k_explorerCtrlAddRefreshMinimumWaitMs                 := 300
 ; Shared UIA evidence accepted as proof that an Items View exposes either an
 ; item or a recognized empty-result message.
-Global k_explorerItemsViewContentEvidenceCondition         := "ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search."
+Global k_explorerItemsViewContentEvidenceCondition           := "ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search."
 ; +----------------------------------------------------------------------------+
-; | Debug Logging Configuration                                                |
-; | Enables diagnostic logs and defines their output files.                    |
+; | Debug Trace Configuration                                                  |
+; | Enables diagnostic traces and defines their output files.                  |
 ; +----------------------------------------------------------------------------+
 ; Enables the focused Ctrl+D fallback-paste trace without enabling general logging.
-Global k_debugLogCtrlDPasteEnabled                         := False
+Global k_debugTraceCtrlDPasteEnabled                         := False
 ; Stores Ctrl+D fallback-paste results beside the script for direct inspection.
-Global k_debugLogCtrlDPasteFile                            := A_ScriptDir . "\AutoCorrect_CtrlDPasteTrace.log"
+Global k_debugTraceCtrlDPasteFile                            := A_ScriptDir . "\AutoCorrect_CtrlDPasteTrace.log"
 ; Enables the detailed Explorer/file-dialog CtrlAdd timing trace.
-Global k_debugLogExplorerCtrlAddEnabled                    := True
+Global k_debugTraceExplorerCtrlAddEnabled                    := True
 ; Persistent trace location beside this script so it is easy to find.
-Global k_debugLogExplorerCtrlAddFile                       := A_ScriptDir . "\AutoCorrect_ExplorerCtrlAddTrace.log"
+Global k_debugTraceExplorerCtrlAddFile                       := A_ScriptDir . "\AutoCorrect_ExplorerCtrlAddTrace.log"
 ; Enables general virtual-desktop, session, and DWM diagnostic logging.
-Global k_debugLogGeneralEnabled                            := False
+Global k_debugTraceGeneralEnabled                            := False
 ; Persistent general diagnostic location beside this script.
-Global k_debugLogGeneralFile                               := A_ScriptDir . "\AutoCorrect_Debug.log"
+Global k_debugTraceGeneralFile                               := A_ScriptDir . "\AutoCorrect_Debug.log"
+; Controls the per-frame taskbar Explorer trace; keep disabled because synchronous file writes distort frame cadence.
+Global k_debugTraceTaskbarExplorerMoveEnabled                := False
+; Stores taskbar Explorer placement and generic timer-driven move traces beside the script.
+Global k_debugTraceTaskbarExplorerMoveFile                   := A_ScriptDir . "\AutoCorrect_TaskbarExplorerMoveTrace.log"
 ; +----------------------------------------------------------------------------+
 ; | Platform And Input Constants                                               |
 ; | Caches OS feature flags, click timing thresholds, and character sets used  |
 ; | across input and window-management flows.                                  |
 ; +----------------------------------------------------------------------------+
 ; Platform/runtime flags cached once for OS-specific behavior.
-Global k_isWin11                                           := DetectWin11()
+Global k_isWin11                                             := DetectWin11()
 ; True when Explorer is using the modern Windows 11 implementation.
-Global k_isModernExplorerInReg                             := IsExplorerModern()
+Global k_isModernExplorerInReg                               := IsExplorerModern()
 ; System double-click interval cached once for click timing logic.
-Global k_DoubleClickTime                                   := DllCall("GetDoubleClickTime")
+Global k_DoubleClickTime                                     := DllCall("GetDoubleClickTime")
 ; Half-double-click interval used as the script's single-click timing threshold.
-Global k_SingleClickTime                                   := floor(DllCall("GetDoubleClickTime") * 0.5)
+Global k_SingleClickTime                                     := floor(DllCall("GetDoubleClickTime") * 0.5)
 ; Lowercase alphabet characters used by text and hotstring helpers.
-Global k_keys                                              := "abcdefghijklmnopqrstuvwxyz"
+Global k_keys                                                := "abcdefghijklmnopqrstuvwxyz"
 ; Decimal digit characters used by text and hotstring helpers.
-Global k_numbers                                           := "0123456789"
+Global k_numbers                                             := "0123456789"
 ; +----------------------------------------------------------------------------+
 ; | Native List-View Auto-Fit Configuration                                    |
 ; | Configures the direct SysListView32 column-width path and its fallback     |
@@ -566,13 +572,13 @@ Global k_numbers                                           := "0123456789"
 ; +----------------------------------------------------------------------------+
 ; Selects whether native SysListView32 columns fit their item content or header
 ; text while the direct-message auto-fit experiment is enabled.
-Global k_nativeSysListViewColumnAutoFitMode                := "header_no_fill"
+Global k_nativeSysListViewColumnAutoFitMode                  := "header_no_fill"
 ; Maximum time SendCtrlAdd() waits for MouseGetPos to identify a specific child
 ; when Explorer initially reports the generic ShellTabWindowClass1 host.
-Global k_sendCtrlAddShellTabProbeTimeoutMs                 := 50
+Global k_sendCtrlAddShellTabProbeTimeoutMs                   := 50
 ; Enables direct LVM_SETCOLUMNWIDTH auto-fit for native SysListView32 targets.
 ; False restores the existing focus plus Ctrl+NumpadAdd behavior unchanged.
-Global k_useNativeSysListViewColumnAutoFit                 := True
+Global k_useNativeSysListViewColumnAutoFit                   := True
 ; +----------------------------------------------------------------------------+
 ; | Monitor, Desktop, And Explorer Path Context                                |
 ; | Retains the monitor selection, virtual desktop context, and Explorer paths |
@@ -614,6 +620,14 @@ Global TaskBarHeight                                       := 0
 ; | Retains one blank-taskbar double-click until the newly activated Explorer  |
 ; | window claims that click-relative placement request or it expires.         |
 ; +----------------------------------------------------------------------------+
+; Sets the delay between taskbar-spawn animation frames so shorter delays update the window position more often.
+Global k_taskbarExplorerSpawnMoveFrameIntervalMs           := 8
+; Maximum normal-window travel time prevents a very distant taskbar launch from feeling sluggish.
+Global k_taskbarExplorerSpawnMoveMaxDurationMs             := 550
+; Minimum normal-window travel time keeps nearby taskbar launches visibly deliberate.
+Global k_taskbarExplorerSpawnMoveMinDurationMs             := 250
+; Converts normal-window travel distance into duration so each animation frame covers a modest distance.
+Global k_taskbarExplorerSpawnMoveMsPerPixel                := 0.30
 ; Maximum time a taskbar-launched Explorer window may claim the saved click context.
 Global k_taskbarExplorerSpawnTimeoutMs                     := 5000
 ; Screen X coordinate of the blank-taskbar double-click that launched Explorer.
@@ -733,7 +747,8 @@ Global k_SnapRange                                         := 20     ; px: dista
 Global k_BreakAway                                         := 80     ; px: while snapped, drag this far further TOWARD the outside to push past edge
 Global k_ReleaseAway                                       := 24     ; px: while snapped, drag this far AWAY from the edge to release the snap
 
-; Skip dragging these classes (taskbar/desktop)
+; Skip dragging these classes - no native set type, so this associative object uses
+; each window class as a key, allowing k_skipClasses.HasKey(mButtonTargetClass) to test membership directly
 Global k_skipClasses                                       := { "Shell_TrayWnd":1, "Shell_SecondaryTrayWnd":1, "Progman":1, "WorkerW":1 }
 
 ; +----------------------------------------------------------------------------+
@@ -2583,7 +2598,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 {
     ; These variables deliberately share activation state with the hotkey and
     ; cleanup paths, so they must remain global rather than shadowing globals locally.
-    global hitTAB, k_debugLogExplorerCtrlAddEnabled, LbuttonEnabled, prevActiveWindows, StopRecursion
+    global hitTAB, k_debugTraceExplorerCtrlAddEnabled, LbuttonEnabled, prevActiveWindows, StopRecursion
 
     if (StopRecursion || hitTab || !hWnd)
         return
@@ -2645,12 +2660,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     initFocusedCtrlForWait := ""
     ControlGetFocus, initFocusedCtrlForWait, ahk_id %hWnd%
-    ; Taskbar-spawned Explorer windows skip this synchronous fade wait so their
-    ; placement animation can start immediately; their Ctrl+Add readiness remains deferred.
+    ; Wait for taskbar-spawned Explorer's visible fade before moving; other targets
+    ; wait only when their focused control requires Ctrl+Add setup.
     ; New Everything windows use the native-header timer below, so they also skip
     ; this focus-dependent wait before direct SysListView32 sizing begins.
     if (isFirstTrackedActivation && vWinProc != "Everything.exe"
-     && !isTaskbarExplorerSpawn && NeedsSendCtrlAddFadeWait(hWnd, initFocusedCtrlForWait)) {
+     && (isTaskbarExplorerSpawn || NeedsSendCtrlAddFadeWait(hWnd, initFocusedCtrlForWait))) {
         WaitForFadeInStop(hWnd)
     }
 
@@ -2722,18 +2737,17 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True , 0, True, False, True)
         }
         else if (vWinClass == "CabinetWClass" && isFirstTrackedActivation && !taskbarExplorerMoveMade) {
-            ; A successful taskbar placement starts this request from its completion
-            ; callback so Explorer readiness polling cannot interrupt its animation.
+            ; Use the normal readiness request only when taskbar placement did not claim this new Explorer window.
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True)
         }
         else if (isFirstTrackedActivation && vWinProc == "Everything.exe") {
             ; Everything creates its results ListView asynchronously. Wait for the
             ; native header and size it directly so Edit1 never loses keyboard focus.
-            everythingActivationTraceRequestId := k_debugLogExplorerCtrlAddEnabled
+            everythingActivationTraceRequestId := k_debugTraceExplorerCtrlAddEnabled
                 ? "everything_activation_" . hWnd . "_" . A_TickCount
                 : ""
             _RequestEverythingActivationAutoFit(hWnd, everythingActivationTraceRequestId)
-        } else {
+        } else if (!taskbarExplorerMoveMade) {
             ; tooltip, sent to %initFocusedCtrl%
             SendCtrlAdd(hWnd, vWinClass, initFocusedCtrl
                 , _ShouldForceExplorerLoadOnActivate(vWinClass, sendCtrlAddTargetScan, vWinProc, vWinTitle)
@@ -4583,7 +4597,7 @@ Return
     ; Capture the hotkey start time so the trace can identify slow Ctrl+D stages.
     ctrlDStartTick              := A_TickCount
     ; Record Ctrl+D entry so an absent trace identifies a non-running source or failed file write.
-    WriteCtrlDPasteTrace("Ctrl+D: started; foregroundHwnd=" . ctrlDModifierTargetHwnd)
+    _DebugTrace_AppendCtrlDPaste("Ctrl+D: started; foregroundHwnd=" . ctrlDModifierTargetHwnd)
     Critical, On
     StopAutoFix                 := True
     caretRectKeyBeforeMove      := ""
@@ -4622,12 +4636,12 @@ Return
         ManagedModifierCleanup("Ctrl", ctrlDModifierTargetHwnd, 0)
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
         ; Record when selection is ready without exposing its text content.
-        WriteCtrlDPasteTrace("Ctrl+D timing: selection-ready; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: selection-ready; elapsedMs=" . (A_TickCount - ctrlDStartTick))
 
         ; 2) Copy the line text via your clipboard-safe helper
         lineText                    := Clip("", "", "", "Shift Alt Ctrl Win", fastInsertWindowId)   ; returns the copied text, clipboard will auto-restore later
         ; Record the copy duration before checking whether it produced any text.
-        WriteCtrlDPasteTrace("Ctrl+D timing: copy-complete; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: copy-complete; elapsedMs=" . (A_TickCount - ctrlDStartTick))
         if (lineText = "")
         {
             ; Abort before the Enter step if selection/copy failed so this hotkey
@@ -4645,7 +4659,7 @@ Return
         ManagedModifierCleanup("Ctrl", ctrlDModifierTargetHwnd, 0)
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
         ; Record when the inserted blank line is ready to receive the duplicate.
-        WriteCtrlDPasteTrace("Ctrl+D timing: paste-target-ready; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: paste-target-ready; elapsedMs=" . (A_TickCount - ctrlDStartTick))
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
         if (fastInsertTargetState = "classic_edit")
             fastInsertResult := _FastInsertWrappedTextIntoClassicControl(fastInsertWindowId, fastInsertControlHwnd, lineText)
@@ -4653,7 +4667,7 @@ Return
             fastInsertResult := fastInsertTargetState
 
         ; Record the direct-control result so we know whether Ctrl+D bypassed clipboard paste.
-        WriteCtrlDPasteTrace("Ctrl+D: fast-insert result=" . fastInsertResult . "; controlHwnd=" . fastInsertControlHwnd)
+        _DebugTrace_AppendCtrlDPaste("Ctrl+D: fast-insert result=" . fastInsertResult . "; controlHwnd=" . fastInsertControlHwnd)
         didFastInsert := (fastInsertResult = "inserted")
         if (!didFastInsert && fastInsertResult != "message_uncertain" && IsForegroundWindow(fastInsertWindowId))
         {
@@ -4673,7 +4687,7 @@ Return
         }
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 30)
         ; Record when either direct insertion or clipboard paste has settled.
-        WriteCtrlDPasteTrace("Ctrl+D timing: paste-complete; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: paste-complete; elapsedMs=" . (A_TickCount - ctrlDStartTick))
         if (didFastInsert && originalFastInsertLineStartIdx >= 0)
             ; After a fast EM_REPLACESEL insert, restore directly to the saved line
             ; start instead of trying to infer the original position by keystrokes.
@@ -4690,7 +4704,7 @@ Return
             WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 60, 2, 30)
         }
         ; Record total hotkey time after the original-line caret restoration.
-        WriteCtrlDPasteTrace("Ctrl+D timing: completed; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: completed; elapsedMs=" . (A_TickCount - ctrlDStartTick))
         ; Optional                  : if you prefer immediate clipboard restore instead of the ~700ms timer, uncomment:
         ; Clip("", "", "RESTORE")
 
@@ -4756,7 +4770,7 @@ _FastInsertWrappedTextIntoClassicControl(windowId, controlHwnd, text) {
         , "Int")
 
     ; Record the target's pre-insert state to confirm the blank line remains selected.
-    WriteCtrlDPasteTrace("Ctrl+D: fast-insert before; class=" . GetWindowClassName(controlHwnd)
+    _DebugTrace_AppendCtrlDPaste("Ctrl+D: fast-insert before; class=" . GetWindowClassName(controlHwnd)
         . "; selection=" . NumGet(selectionStartBefore, 0, "UInt") . "-" . NumGet(selectionEndBefore, 0, "UInt")
         . "; textLength=" . textLengthBefore . "; replacementLength=" . StrLen(replacementText))
 
@@ -4791,7 +4805,7 @@ _FastInsertWrappedTextIntoClassicControl(windowId, controlHwnd, text) {
         , "Int")
 
     ; Record the post-insert state without exposing the copied line's contents.
-    WriteCtrlDPasteTrace("Ctrl+D: fast-insert after; sent=" . sendSucceeded
+    _DebugTrace_AppendCtrlDPaste("Ctrl+D: fast-insert after; sent=" . sendSucceeded
         . "; selection=" . NumGet(selectionStartAfter, 0, "UInt") . "-" . NumGet(selectionEndAfter, 0, "UInt")
         . "; textLength=" . textLengthAfter)
     return sendSucceeded ? "inserted" : "message_uncertain"
@@ -7405,7 +7419,7 @@ _ClaimTaskbarExplorerSpawn(hWnd, windowClass, ByRef clickX, ByRef clickY) {
     return True
 }
 
-; Complete taskbar Explorer placement before starting its readiness request.
+; Complete taskbar Explorer placement after its final animation frame.
 _CompleteTaskbarExplorerSpawn(hWnd, wasMaximized) {
 
     if !DllCall("IsWindow", "Ptr", hWnd)
@@ -7413,10 +7427,6 @@ _CompleteTaskbarExplorerSpawn(hWnd, wasMaximized) {
 
     if (wasMaximized)
         _MaximizeTaskbarExplorerAfterMove(hWnd)
-
-    sourceCtrlNN := ""
-    ControlGetFocus, sourceCtrlNN, ahk_id %hWnd%
-    _RequestExplorerCtrlAdd(hWnd, "CabinetWClass", sourceCtrlNN, 0, "", False, True)
 }
 
 ; Reapply a taskbar-launched Explorer window's maximized state after its move finishes.
@@ -7428,12 +7438,23 @@ _MaximizeTaskbarExplorerAfterMove(hWnd) {
 ; Move a claimed Explorer window against the clicked taskbar edge without crossing it.
 ; Declare the placement helper so the activation callback has one owner for taskbar-relative movement.
 _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
+    global k_taskbarExplorerSpawnMoveFrameIntervalMs
+    global k_taskbarExplorerSpawnMoveMaxDurationMs
+    global k_taskbarExplorerSpawnMoveMinDurationMs
+    global k_taskbarExplorerSpawnMoveMsPerPixel
+
+    ; Record entry so the trace distinguishes an uncalled placement helper from an animation failure.
+    _DebugTrace_AppendTaskbarExplorerMove("placement entered hWnd=" . hWnd . " clickX=" . clickX . " clickY=" . clickY)
+
     ; Use full bounds to classify the taskbar and the work area for safe placement.
     GetMonitorRectForMouse(clickX, clickY, False, monitorLeft, monitorTop, monitorRight, monitorBottom)
     GetMonitorRectForMouse(clickX, clickY, True, safeLeft, safeTop, safeRight, safeBottom)
 
-    if (safeRight <= safeLeft || safeBottom <= safeTop)
+    if (safeRight <= safeLeft || safeBottom <= safeTop) {
+        ; Record invalid work-area geometry because it prevents this helper from requesting any animation.
+        _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=invalid_initial_safe_bounds")
         return False
+    }
 
     ; Only use the clicked monitor's taskbar when excluding its strip from the destination.
     taskbarEdge := ""
@@ -7472,11 +7493,17 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
         }
     }
 
-    if (taskbarEdge == "")
+    if (taskbarEdge == "") {
+        ; Record an unclassified taskbar because no edge-specific destination can be calculated.
+        _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=taskbar_edge_not_found")
         return False
+    }
 
-    if (safeRight <= safeLeft || safeBottom <= safeTop)
+    if (safeRight <= safeLeft || safeBottom <= safeTop) {
+        ; Record a taskbar-constrained work area with no usable space for the claimed Explorer window.
+        _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=invalid_taskbar_safe_bounds")
         return False
+    }
 
     ; Restore before measuring movable geometry, then re-maximize after the move if needed.
     WinGet, windowState, MinMax, ahk_id %hWnd%
@@ -7485,8 +7512,11 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
         WinRestore, ahk_id %hWnd%
 
     WinGetPos, windowX, windowY, windowWidth, windowHeight, ahk_id %hWnd%
-    if (windowWidth <= 0 || windowHeight <= 0)
+    if (windowWidth <= 0 || windowHeight <= 0) {
+        ; Record missing Explorer dimensions because animation cannot operate on a zero-sized window.
+        _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=invalid_window_bounds")
         return False
+    }
 
     ; Clamp the width to the safe area's calculated horizontal capacity.
     windowWidth  := Min(windowWidth, safeRight - safeLeft)
@@ -7506,13 +7536,66 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
         targetY := Max(safeTop, Min(clickY - Floor(windowHeight / 2), safeBottom - windowHeight))
     }
 
-    completionCallback := Func("_CompleteTaskbarExplorerSpawn").Bind(hWnd, wasMaximized)
+    ; A restored maximized window is already running Explorer's own transition. Place it once,
+    ; then re-maximize so a second scripted animation does not compete with that transition.
+    if (wasMaximized) {
+        if !DllCall("IsWindow", "Ptr", hWnd) {
+            ; Record a closed Explorer window because it cannot be placed or re-maximized.
+            _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=maximized_window_closed")
+            return False
+        }
+        WinMove, ahk_id %hWnd%, , %targetX%, %targetY%, %windowWidth%, %windowHeight%
+        _CompleteTaskbarExplorerSpawn(hWnd, True)
+        ; Record the direct placement path used only after restoring a maximized Explorer window.
+        _DebugTrace_AppendTaskbarExplorerMove("placement completed hWnd=" . hWnd . " mode=maximized_direct")
+        return True
+    }
 
-    ; Let this animation own placement; False leaves OnWinActiveChange() responsible for its fallback.
-    moveStarted := MoveWindow(hWnd, targetX, targetY, windowWidth, windowHeight, 380, completionCallback)
-    if (!moveStarted && wasMaximized)
-        WinMaximize, ahk_id %hWnd%
-    return moveStarted
+    ; Taskbar-spawn duration:
+    ; current point (windowX, windowY)
+    ;     +-------------------------> horizontal change: dx = targetX - windowX
+    ;     |\
+    ;     | \
+    ;     |  \ diagonal: Euclidean distance = Sqrt(dx ** 2 + dy ** 2)
+    ;     |   \
+    ;     v    + target point (targetX, targetY)
+    ; vertical change: dy = targetY - windowY
+    ;
+    ; Euclidean distance in pixels
+    ;     x k_taskbarExplorerSpawnMoveMsPerPixel (milliseconds per pixel)
+    ;     v
+    ; rounded raw duration (milliseconds)
+    ;     | below k_taskbarExplorerSpawnMoveMinDurationMs -> use minimum
+    ;     | above k_taskbarExplorerSpawnMoveMaxDurationMs -> use maximum
+    ;     | otherwise -> use the rounded raw duration
+    ;     v
+    ; moveDurationMs, passed to _MoveWindowExclusively()
+    ; Scale normal-window duration by Euclidean travel distance so long moves retain enough visual frames.
+    moveDistancePixels := Sqrt((targetX - windowX) ** 2 + (targetY - windowY) ** 2)
+    ; Clamp the calculated duration to keep short moves visible and exceptionally long moves responsive.
+    moveDurationMs := Max(k_taskbarExplorerSpawnMoveMinDurationMs
+        , Min(k_taskbarExplorerSpawnMoveMaxDurationMs, Round(moveDistancePixels * k_taskbarExplorerSpawnMoveMsPerPixel)))
+    completionCallback := Func("_CompleteTaskbarExplorerSpawn").Bind(hWnd, False)
+
+    ; Record the fully calculated animation request before beginning the exclusive taskbar movement.
+    _DebugTrace_AppendTaskbarExplorerMove("placement request hWnd=" . hWnd . " start=(" . windowX
+        . "," . windowY . "," . windowWidth . "," . windowHeight . ") target=(" . targetX
+        . "," . targetY . "," . windowWidth . "," . windowHeight . ") durationMs=" . moveDurationMs
+        . " frameIntervalMs=" . k_taskbarExplorerSpawnMoveFrameIntervalMs)
+
+    ; Run taskbar motion on this thread so unrelated AHK timers cannot delay individual visible frames.
+    moveAccepted := _MoveWindowExclusively(hWnd
+                                            , targetX
+                                            , targetY
+                                            , windowWidth
+                                            , windowHeight
+                                            , moveDurationMs
+                                            , completionCallback
+                                            , "smoothstep"
+                                            , k_taskbarExplorerSpawnMoveFrameIntervalMs)
+    ; Record whether the exclusive move accepted the request so a failed placement is not mistaken for a completed animation.
+    _DebugTrace_AppendTaskbarExplorerMove("placement registration hWnd=" . hWnd . " accepted=" . moveAccepted)
+    return moveAccepted
 }
 
 ; Snapshot existing Explorer HWNDs and launch one while activation callbacks are deferred.
@@ -8059,13 +8142,13 @@ _ResolveCabinetItemsViewFromNativeControl(explorerHwnd
 }
 
 ; Trace one #32770 native Items View failure for each changed dialog resolver state.
-_TraceDialogItemsViewResolverFailure(dlgHwnd, candidateCtrlNN, candidateHwnd, candidateClass
+_DebugTrace_RecordDialogItemsViewResolverFailure(dlgHwnd, candidateCtrlNN, candidateHwnd, candidateClass
                                    , candidateCount, attemptedCount, failureStage, rootSnapshot) {
-    global k_debugLogExplorerCtrlAddEnabled
+    global k_debugTraceExplorerCtrlAddEnabled
     static lastFailureSignatureByDialog := {}
 
     ; Avoid creating diagnostic state or formatting trace text when detailed tracing is disabled.
-    if (!k_debugLogExplorerCtrlAddEnabled)
+    if (!k_debugTraceExplorerCtrlAddEnabled)
         return
 
     ; Include each resolving input and UIA outcome so repeated identical probe failures are logged only once.
@@ -8075,7 +8158,7 @@ _TraceDialogItemsViewResolverFailure(dlgHwnd, candidateCtrlNN, candidateHwnd, ca
         return
 
     lastFailureSignatureByDialog[dlgHwnd] := failureSignature
-    _TraceExplorerCtrlAdd("dialog_native_items_view_failure"
+    _DebugTrace_ExplorerCtrlAdd("dialog_native_items_view_failure"
         , "candidateCtrlNN=[" . candidateCtrlNN . "] candidateHwnd=" . candidateHwnd
         . " nativeClass=[" . candidateClass . "] candidateCount=" . candidateCount
         . " attempted=" . attemptedCount . " failureStage=" . failureStage
@@ -8201,7 +8284,7 @@ _ResolveDialogItemsViewFromNativeControls(dlgHwnd
             return true
         }
 
-        _TraceDialogItemsViewResolverFailure(dlgHwnd, candidateCtrlNN, candidateHwnd
+        _DebugTrace_RecordDialogItemsViewResolverFailure(dlgHwnd, candidateCtrlNN, candidateHwnd
             , candidateClass, candidateCount, attemptedCount, failureStage, rootSnapshot)
 
         ; Stop immediately when the native sub-budget expires so the caller retains its fallback opportunity.
@@ -8349,7 +8432,7 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
             }
 
             preferredCtrlClass := GetClassName(preferredTarget.hwnd)
-            _TraceDialogItemsViewResolverFailure(targetHwndID, validatedPreferredCtrlNN
+            _DebugTrace_RecordDialogItemsViewResolverFailure(targetHwndID, validatedPreferredCtrlNN
                 , preferredTarget.hwnd + 0, preferredCtrlClass, 1, 1
                 , preferredFailureStage, preferredRootSnapshot)
         }
@@ -9300,16 +9383,16 @@ EnsureFocusedCtrlTarget(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, to
     return EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
 }
 
-; Capture the first click on an Explorer/file-dialog DirectUI Items View and
-; return that immutable snapshot only when the next physical click matches the
-; same HWND and CtrlNN within Windows' double-click time and distance limits.
-; Because initialPath is captured before UIA classification, a slow or unknown
-; UIA result cannot prevent the later before/after path proof.
-_CaptureExplorerDirectUIDoubleClick(hwnd, windowClass, ctrlNN, x, y, initialPath) {
+; Capture the first non-header click on an Explorer/file-dialog DirectUI Items
+; View and return that immutable snapshot only when the next physical click
+; matches the same HWND and CtrlNN within Windows' double-click limits.
+_CaptureExplorerDirectUIDoubleClick(hwnd, windowClass, ctrlNN, x, y, initialPath, isColumnHeader := False) {
     global k_DoubleClickTime
     static firstClick := ""
 
-    isEligible := (windowClass == "CabinetWClass" || windowClass == "#32770") && InStr(ctrlNN, "DirectUIHWND", True)
+    isEligible := !isColumnHeader
+               && (windowClass == "CabinetWClass" || windowClass == "#32770")
+               && InStr(ctrlNN, "DirectUIHWND", True)
     if (!isEligible) {
         firstClick := ""
         return ""
@@ -9419,12 +9502,12 @@ _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := 
 ; Flush buffered Explorer CtrlAdd trace lines to the configured file. The
 ; buffer is detached while Critical is active so another AHK thread can append
 ; new events without losing them during the disk write.
-_FlushExplorerCtrlAddTrace() {
+_DebugTrace_FlushExplorerCtrlAdd() {
     global explorerCtrlAddTraceBuffer
-    global k_debugLogExplorerCtrlAddEnabled
-    global k_debugLogExplorerCtrlAddFile
+    global k_debugTraceExplorerCtrlAddEnabled
+    global k_debugTraceExplorerCtrlAddFile
 
-    if (!k_debugLogExplorerCtrlAddEnabled || explorerCtrlAddTraceBuffer = "")
+    if (!k_debugTraceExplorerCtrlAddEnabled || explorerCtrlAddTraceBuffer = "")
         return
 
     Critical, On
@@ -9432,7 +9515,7 @@ _FlushExplorerCtrlAddTrace() {
     explorerCtrlAddTraceBuffer := ""
     Critical, Off
 
-    FileAppend, %traceChunk%, %k_debugLogExplorerCtrlAddFile%, UTF-8
+    FileAppend, %traceChunk%, %k_debugTraceExplorerCtrlAddFile%, UTF-8
     if ErrorLevel {
         ; Preserve the unwritten lines for the next flush attempt rather than
         ; silently losing the evidence when the file is temporarily unavailable.
@@ -9444,11 +9527,11 @@ _FlushExplorerCtrlAddTrace() {
 
 ; Add one timestamped event to the low-overhead Explorer CtrlAdd trace. Events
 ; remain in memory until a terminal outcome or the safety limit requests a flush.
-_TraceExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := "") {
+_DebugTrace_ExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := "") {
     global explorerCtrlAddRequestId
-    global explorerCtrlAddRequestTracePending
+    global debugTraceExplorerCtrlAddRequestOpen
     global explorerCtrlAddTraceBuffer
-    global k_debugLogExplorerCtrlAddEnabled
+    global k_debugTraceExplorerCtrlAddEnabled
     global k_explorerCtrlAddTraceBufferChars
 
     static sessionHeaderWritten := False
@@ -9460,16 +9543,16 @@ _TraceExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := 
     ; its replacement can be logged as debouncing rather than disappearing.
     if (requestId = explorerCtrlAddRequestId) {
         if (eventName = "request_started")
-            explorerCtrlAddRequestTracePending := True
+            debugTraceExplorerCtrlAddRequestOpen := True
         else if (eventName = "request_aborted"
               || eventName = "request_completed"
               || eventName = "request_superseded"
               || eventName = "sendctrladd_best_effort_dispatch"
               || eventName = "sendctrladd_dispatch")
-            explorerCtrlAddRequestTracePending := False
+            debugTraceExplorerCtrlAddRequestOpen := False
     }
 
-    if !k_debugLogExplorerCtrlAddEnabled
+    if !k_debugTraceExplorerCtrlAddEnabled
         return
 
     ; A_Now avoids a FormatTime call on every probe, keeping trace overhead out
@@ -9492,7 +9575,7 @@ _TraceExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := 
     Critical, Off
 
     if shouldFlush
-        _FlushExplorerCtrlAddTrace()
+        _DebugTrace_FlushExplorerCtrlAdd()
 }
 
 ; Schedule another callback only while requestId still identifies the current
@@ -9509,7 +9592,7 @@ _ScheduleExplorerCtrlAddRetry(requestId, delayMs) {
     Critical, Off
 
     if !requestIsCurrent {
-        _TraceExplorerCtrlAdd("request_aborted"
+        _DebugTrace_ExplorerCtrlAdd("request_aborted"
             , "reason=superseded_before_retry_schedule currentRequestId="
             . explorerCtrlAddRequestId, True, requestId)
     }
@@ -9654,7 +9737,7 @@ _ScheduleExplorerCtrlAddNavigationWait(requestId, delayMs) {
     Critical, Off
 
     if !requestIsCurrent {
-        _TraceExplorerCtrlAdd("request_aborted"
+        _DebugTrace_ExplorerCtrlAdd("request_aborted"
             , "reason=superseded_before_navigation_wait currentRequestId="
             . explorerCtrlAddRequestId, True, requestId)
     }
@@ -9824,7 +9907,7 @@ ExplorerNavigationEvent_NavigateComplete2(pDisp, url) {
     Critical, Off
 
     if traceMatchingRequest
-        _TraceExplorerCtrlAdd("navigation_event"
+        _DebugTrace_ExplorerCtrlAdd("navigation_event"
             , "hwnd=" . eventHwnd . " generation=" . eventGeneration
             . " requestKind=" . traceRequestKind
             . " requestAgeMs=" . traceRequestAgeMs
@@ -9868,10 +9951,10 @@ _GetExplorerCtrlAddRequestPath(targetHwnd, windowClass, requestId, ByRef request
 ; folder sources for diagnostics only. This never changes readiness, retry, or
 ; alignment decisions; it reveals whether the toolbar text is stale or native
 ; folder identity becomes available after the normal resolver returned it.
-_TraceDialogToolbarBaselineCrosscheck(hwndDlg, initialPath, toolbarPath, unchangedHits, traceRequestId) {
-    global k_debugLogExplorerCtrlAddEnabled
+_DebugTrace_RecordDialogToolbarBaselineCrosscheck(hwndDlg, initialPath, toolbarPath, unchangedHits, traceRequestId) {
+    global k_debugTraceExplorerCtrlAddEnabled
 
-    if !k_debugLogExplorerCtrlAddEnabled
+    if !k_debugTraceExplorerCtrlAddEnabled
         return
 
     dialogPathStartTick := A_TickCount
@@ -9884,7 +9967,7 @@ _TraceDialogToolbarBaselineCrosscheck(hwndDlg, initialPath, toolbarPath, unchang
 
     dialogPathChanged := (dialogPath != "" && dialogPath != initialPath)
     dialogIdListChanged := (dialogIdListPath != "" && dialogIdListPath != initialPath)
-    _TraceExplorerCtrlAdd("dialog_toolbar_baseline_crosscheck"
+    _DebugTrace_ExplorerCtrlAdd("dialog_toolbar_baseline_crosscheck"
         , "unchangedHits=" . unchangedHits
         . " initialPath=[" . initialPath . "]"
         . " toolbarPath=[" . toolbarPath . "]"
@@ -9955,7 +10038,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     global explorerCtrlAddRequestStablePathHitCount
     global explorerCtrlAddRequestToolbarBaselineUnchangedHits
     global explorerCtrlAddRequestToolbarBaselineCrosscheckMade
-    global explorerCtrlAddRequestTracePending
+    global debugTraceExplorerCtrlAddRequestOpen
     global explorerCtrlAddRequestWaitingForNavigationEvent
     global explorerCtrlAddRequestUsesNavigationEvents
     global k_explorerCtrlAddFastPathPollMs
@@ -9965,9 +10048,9 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     global k_explorerCtrlAddTimeoutMs
     global k_newExplorerCtrlAddTimeoutMs
 
-    activeRequestId := explorerCtrlAddRequestTracePending ? explorerCtrlAddRequestId : 0
+    activeRequestId := debugTraceExplorerCtrlAddRequestOpen ? explorerCtrlAddRequestId : 0
     if (!hwnd || !(windowClass == "CabinetWClass" || windowClass == "#32770")) {
-        _TraceExplorerCtrlAdd("request_rejected"
+        _DebugTrace_ExplorerCtrlAdd("request_rejected"
             , "reason=invalid_window hwnd=" . hwnd . " class=[" . windowClass . "]"
             . " activeReq=" . activeRequestId, True, 0)
         return
@@ -9977,7 +10060,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     ; wrapper converts only a confirmed header hit without a baseline into a
     ; guarded request before it reaches this validation.
     if (requirePathChange && initialPath = "") {
-        _TraceExplorerCtrlAdd("request_rejected"
+        _DebugTrace_ExplorerCtrlAdd("request_rejected"
             , "reason=missing_initial_path hwnd=" . hwnd . " class=" . windowClass
             . " sourceCtrlNN=[" . sourceCtrlNN . "]"
             . " activeReq=" . activeRequestId, True, 0)
@@ -9987,7 +10070,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     ; A request must either prove a changed path or establish a stable startup
     ; path; requiring both would give the timer contradictory completion rules.
     if (requirePathChange && requireStablePath) {
-        _TraceExplorerCtrlAdd("request_rejected"
+        _DebugTrace_ExplorerCtrlAdd("request_rejected"
             , "reason=contradictory_path_gates hwnd=" . hwnd . " class=" . windowClass
             . " activeReq=" . activeRequestId, True, 0)
         return
@@ -10027,7 +10110,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     ; prevents a timer callback from pairing a new ID with partially replaced fields.
     Critical, On
     supersededRequestId                                   := explorerCtrlAddRequestId
-    supersededRequestPending                              := explorerCtrlAddRequestTracePending
+    supersededRequestPending                              := debugTraceExplorerCtrlAddRequestOpen
     replacementRequestId                                  := explorerCtrlAddRequestId + 1
     explorerCtrlAddRequestAllowBestEffortSend           := allowBestEffortSend
     explorerCtrlAddRequestAllowPathlessContentReady     := allowPathlessContentReady
@@ -10068,7 +10151,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     ; Trace a still-pending predecessor after its callbacks have been made stale,
     ; distinguishing an intentional replacement from lost work.
     if supersededRequestPending {
-        _TraceExplorerCtrlAdd("request_superseded"
+        _DebugTrace_ExplorerCtrlAdd("request_superseded"
             , "reason=replaced_by_new_request replacementRequestId=" . replacementRequestId
             . " replacementHwnd=" . hwnd
             . " replacementClass=" . windowClass
@@ -10080,7 +10163,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     ; the shared poll interval and schedule exact remaining minimum-gate delays.
     initialPollMs := useFastPathPolling ? 1 : k_explorerCtrlAddPollMs
     timerDelay    := (delayMs > 0) ? -delayMs : -initialPollMs
-    _TraceExplorerCtrlAdd("request_started"
+    _DebugTrace_ExplorerCtrlAdd("request_started"
         , "hwnd=" . hwnd
         . " class=" . windowClass
         . " sourceCtrlNN=[" . sourceCtrlNN . "]"
@@ -10110,15 +10193,15 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
 ; Refresh skips unverified sends and waits for its timed Details/content probe.
 _RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePathChange := False, minimumContentProbeDelayMs := 0) {
     global explorerCtrlAddRequestId
-    global explorerCtrlAddRequestTracePending
+    global debugTraceExplorerCtrlAddRequestOpen
 
-    activeRequestId          := explorerCtrlAddRequestTracePending ? explorerCtrlAddRequestId : 0
+    activeRequestId          := debugTraceExplorerCtrlAddRequestOpen ? explorerCtrlAddRequestId : 0
     headerWithoutBaseline      := requirePathChange && initialPath = ""
     effectiveRequirePathChange := requirePathChange && !headerWithoutBaseline
     headerKind                 := headerWithoutBaseline
         ? "path_change_no_baseline"
         : (requirePathChange ? "path_change" : "refresh")
-    _TraceExplorerCtrlAdd("header_request_prepare"
+    _DebugTrace_ExplorerCtrlAdd("header_request_prepare"
         , "hwnd=" . hwnd
         . " class=" . windowClass
         . " headerKind=" . headerKind
@@ -10134,10 +10217,30 @@ _RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePat
 
 ; Focus and verify the supplied ClassNN, then use the shared immediate
 ; Ctrl+NumpadAdd path so click handlers reuse the same modifier cleanup.
-_SendFocusedCtrlAdd(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, syncPassCount := 6) {
-    if !EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
+; A nonempty traceContext identifies a column-header send that bypasses the
+; deferred Explorer request flow.
+_SendFocusedCtrlAdd(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, syncPassCount := 6, traceContext := "") {
+    if (traceContext != "")
+        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_attempt"
+            , "source=" . traceContext . " hwnd=" . hwndTop . " ctrlNN=[" . ctrlNN . "]"
+            , False, 0)
+
+    focusSucceeded := EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
+    if !focusSucceeded {
+        if (traceContext != "")
+            _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+                , "source=" . traceContext . " hwnd=" . hwndTop . " ctrlNN=[" . ctrlNN . "] result=focus_failed"
+                , True, 0)
         return False
-    return SendCtrlNumpadAdd(syncPassCount)
+    }
+
+    sendSucceeded := SendCtrlNumpadAdd(syncPassCount)
+    if (traceContext != "")
+        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+            , "source=" . traceContext . " hwnd=" . hwndTop . " ctrlNN=[" . ctrlNN . "]"
+            . " result=" . (sendSucceeded ? "sent" : "send_failed")
+            , True, 0)
+    return sendSucceeded
 }
 
 ; Return true only for header-region UIA hits that match known Explorer/file-dialog
@@ -10225,7 +10328,7 @@ RunExplorerCtrlAddWhenReady:
     waitingForSecondStartupPathSample := False
 
     requestElapsedMs := A_TickCount - requestStartTick
-    _TraceExplorerCtrlAdd("timer_enter"
+    _DebugTrace_ExplorerCtrlAdd("timer_enter"
         , "elapsedMs=" . requestElapsedMs
         . " deadlineRemainingMs=" . (requestDeadlineTick - A_TickCount)
         . " pathConfirmed=" . explorerCtrlAddRequestPathChangeConfirmed
@@ -10239,7 +10342,7 @@ RunExplorerCtrlAddWhenReady:
     targetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
     activeHwnd   := WinExist("A")
     if (!requestTargetHwnd || !targetExists || activeHwnd != requestTargetHwnd) {
-        _TraceExplorerCtrlAdd("request_aborted"
+        _DebugTrace_ExplorerCtrlAdd("request_aborted"
             , "reason=target_not_foreground_or_gone targetHwnd=" . requestTargetHwnd
             . " targetExists=" . (targetExists ? 1 : 0) . " activeHwnd=" . activeHwnd
             , True, requestId)
@@ -10247,7 +10350,7 @@ RunExplorerCtrlAddWhenReady:
     }
 
     if (requestId != explorerCtrlAddRequestId) {
-        _TraceExplorerCtrlAdd("request_aborted"
+        _DebugTrace_ExplorerCtrlAdd("request_aborted"
             , "reason=superseded currentRequestId=" . explorerCtrlAddRequestId
             , True, requestId)
         Return
@@ -10261,17 +10364,17 @@ RunExplorerCtrlAddWhenReady:
             lButtonPollMs := (requestFastPathPollMs > 0 && A_TickCount < requestFastPathUntilTick)
                 ? requestFastPathPollMs
                 : k_explorerCtrlAddPollMs
-            _TraceExplorerCtrlAdd("request_wait" , "reason=lbutton_held nextTimerMs=" . lButtonPollMs , False, requestId)
+            _DebugTrace_ExplorerCtrlAdd("request_wait" , "reason=lbutton_held nextTimerMs=" . lButtonPollMs , False, requestId)
             _ScheduleExplorerCtrlAddRetry(requestId, lButtonPollMs)
         }
         else
-            _TraceExplorerCtrlAdd("request_aborted" , "reason=lbutton_held_at_deadline", True, requestId)
+            _DebugTrace_ExplorerCtrlAdd("request_aborted" , "reason=lbutton_held_at_deadline", True, requestId)
         Return
     }
 
     WinGetClass, currentClass, ahk_id %requestTargetHwnd%
     if (currentClass != requestWindowClass || !(currentClass == "CabinetWClass" || currentClass == "#32770")) {
-        _TraceExplorerCtrlAdd("request_aborted"
+        _DebugTrace_ExplorerCtrlAdd("request_aborted"
             , "reason=window_class_changed expected=" . requestWindowClass
             . " actual=" . currentClass, True, requestId)
         Return
@@ -10284,7 +10387,7 @@ RunExplorerCtrlAddWhenReady:
      && !explorerCtrlAddRequestPathlessContentFallbackActive) {
         if (A_TickCount < requestEarliestContentProbeTick) {
             remainingContentProbeDelayMs := Max(1, requestEarliestContentProbeTick - A_TickCount)
-            _TraceExplorerCtrlAdd("request_wait"
+            _DebugTrace_ExplorerCtrlAdd("request_wait"
                 , "reason=startup_minimum_delay nextTimerMs=" . remainingContentProbeDelayMs
                 , False, requestId)
             _ScheduleExplorerCtrlAddRetry(requestId, remainingContentProbeDelayMs)
@@ -10296,12 +10399,12 @@ RunExplorerCtrlAddWhenReady:
         currentPath := _GetExplorerCtrlAddRequestPath(requestTargetHwnd , requestWindowClass, requestId, pathProbeRequestIsCurrent)
         pathProbeElapsedMs := A_TickCount - pathProbeStartTick
         if !pathProbeRequestIsCurrent {
-            _TraceExplorerCtrlAdd("request_aborted"
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
                 , "reason=superseded_during_startup_path_probe currentRequestId="
                 . explorerCtrlAddRequestId, True, requestId)
             Return
         }
-        _TraceExplorerCtrlAdd("path_probe"
+        _DebugTrace_ExplorerCtrlAdd("path_probe"
             , "scenario=startup elapsedMs=" . pathProbeElapsedMs
             . " path=[" . currentPath . "]", False, requestId)
 
@@ -10315,18 +10418,18 @@ RunExplorerCtrlAddWhenReady:
                 explorerCtrlAddRequestPathlessContentFallbackActive := True
                 explorerCtrlAddRequestDeadlineTick := A_TickCount + k_explorerCtrlAddTimeoutMs
                 requestDeadlineTick                := explorerCtrlAddRequestDeadlineTick
-                _TraceExplorerCtrlAdd("startup_pathless_content_fallback"
+                _DebugTrace_ExplorerCtrlAdd("startup_pathless_content_fallback"
                     , "newContentDeadlineMs=" . k_explorerCtrlAddTimeoutMs
                     , False, requestId)
             }
             else if (A_TickCount < requestDeadlineTick) {
-                _TraceExplorerCtrlAdd("request_wait"
+                _DebugTrace_ExplorerCtrlAdd("request_wait"
                     , "reason=startup_path_empty nextTimerMs=" . k_explorerCtrlAddPollMs
                     , False, requestId)
                 _ScheduleExplorerCtrlAddRetry(requestId, k_explorerCtrlAddPollMs)
             }
             else
-                _TraceExplorerCtrlAdd("request_aborted" , "reason=startup_path_empty_at_deadline", True, requestId)
+                _DebugTrace_ExplorerCtrlAdd("request_aborted" , "reason=startup_path_empty_at_deadline", True, requestId)
             if (!explorerCtrlAddRequestPathlessContentFallbackActive)
                 Return
         }
@@ -10341,7 +10444,7 @@ RunExplorerCtrlAddWhenReady:
         if !explorerCtrlAddRequestPathlessContentFallbackActive {
             if (explorerCtrlAddRequestStablePathHitCount < 2) {
                 waitingForSecondStartupPathSample := True
-                _TraceExplorerCtrlAdd("startup_path_sampled"
+                _DebugTrace_ExplorerCtrlAdd("startup_path_sampled"
                     , "hits=" . explorerCtrlAddRequestStablePathHitCount
                     . " path=[" . currentPath . "]", False, requestId)
             }
@@ -10351,7 +10454,7 @@ RunExplorerCtrlAddWhenReady:
                 explorerCtrlAddRequestDeadlineTick        := A_TickCount + k_explorerCtrlAddTimeoutMs
                 requestDeadlineTick                       := explorerCtrlAddRequestDeadlineTick
                 explorerCtrlAddRequestStablePathConfirmed := True
-                _TraceExplorerCtrlAdd("startup_path_confirmed"
+                _DebugTrace_ExplorerCtrlAdd("startup_path_confirmed"
                     , "path=[" . currentPath . "] newContentDeadlineMs="
                     . k_explorerCtrlAddTimeoutMs, False, requestId)
             }
@@ -10368,14 +10471,14 @@ RunExplorerCtrlAddWhenReady:
             navigationFallbackRemainingMs := requestNextNavigationFallbackTick - A_TickCount
             if (!navigationEventPending && navigationFallbackRemainingMs > 0 && A_TickCount < requestDeadlineTick) {
                 navigationWaitMs := Min(navigationFallbackRemainingMs , Max(1, requestDeadlineTick - A_TickCount))
-                _TraceExplorerCtrlAdd("request_wait"
+                _DebugTrace_ExplorerCtrlAdd("request_wait"
                     , "reason=navigation_event_or_watchdog nextTimerMs=" . navigationWaitMs
                     . " generation=" . currentNavigationGeneration
                     , False, requestId)
                 _ScheduleExplorerCtrlAddNavigationWait(requestId, navigationWaitMs)
                 Return
             }
-            _TraceExplorerCtrlAdd("navigation_path_probe_triggered"
+            _DebugTrace_ExplorerCtrlAdd("navigation_path_probe_triggered"
                 , "source=" . (navigationEventPending ? "event" : "watchdog")
                 . " generation=" . currentNavigationGeneration
                 . " previousGeneration=" . requestNavigationGeneration
@@ -10407,7 +10510,7 @@ RunExplorerCtrlAddWhenReady:
         }
         pathProbeElapsedMs := A_TickCount - pathProbeStartTick
         if !pathProbeRequestIsCurrent {
-            _TraceExplorerCtrlAdd("request_aborted"
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
                 , "reason=superseded_during_navigation_path_probe currentRequestId="
                 . explorerCtrlAddRequestId, True, requestId)
             Return
@@ -10423,7 +10526,7 @@ RunExplorerCtrlAddWhenReady:
             requestNavigationGeneration := explorerCtrlAddRequestNavigationGeneration
             requestNextNavigationFallbackTick := explorerCtrlAddRequestNextNavigationFallbackTick
         }
-        _TraceExplorerCtrlAdd("path_probe"
+        _DebugTrace_ExplorerCtrlAdd("path_probe"
             , "scenario=navigation elapsedMs=" . pathProbeElapsedMs
             . " source=" . pathProbeSource
             . " initialPath=[" . requestInitialPath . "]"
@@ -10444,7 +10547,7 @@ RunExplorerCtrlAddWhenReady:
         toolbarBaselineUnchangedHits    := 0
         Critical, On
         if (requestId = explorerCtrlAddRequestId) {
-            if (k_debugLogExplorerCtrlAddEnabled
+            if (k_debugTraceExplorerCtrlAddEnabled
              && requestWindowClass == "#32770"
              && navigationPathState == "unchanged"
              && explorerCtrlAddRequestLocationResolver == "dialog_toolbar_text") {
@@ -10461,13 +10564,13 @@ RunExplorerCtrlAddWhenReady:
         Critical, Off
 
         if (toolbarBaselineCrosscheckNeeded) {
-            _TraceDialogToolbarBaselineCrosscheck(requestTargetHwnd, requestInitialPath
+            _DebugTrace_RecordDialogToolbarBaselineCrosscheck(requestTargetHwnd, requestInitialPath
                 , currentPath, toolbarBaselineUnchangedHits, requestId)
             Critical, On
             toolbarBaselineCrosscheckRequestIsCurrent := (requestId = explorerCtrlAddRequestId)
             Critical, Off
             if !toolbarBaselineCrosscheckRequestIsCurrent {
-                _TraceExplorerCtrlAdd("request_aborted"
+                _DebugTrace_ExplorerCtrlAdd("request_aborted"
                     , "reason=superseded_during_dialog_toolbar_baseline_crosscheck currentRequestId="
                     . explorerCtrlAddRequestId, True, requestId)
                 Return
@@ -10482,7 +10585,7 @@ RunExplorerCtrlAddWhenReady:
             ; not add an unnecessary timer interval to this short safety guard.
             unavailablePathGuardRemainingMs := k_explorerCtrlAddPollMs - (A_TickCount - requestStartTick)
             if (unavailablePathGuardRemainingMs > 0) {
-                _TraceExplorerCtrlAdd("request_wait"
+                _DebugTrace_ExplorerCtrlAdd("request_wait"
                     , "reason=unavailable_path_view_state_guard nextTimerMs="
                     . unavailablePathGuardRemainingMs, False, requestId)
                 _ScheduleExplorerCtrlAddRetry(requestId, unavailablePathGuardRemainingMs)
@@ -10498,7 +10601,7 @@ RunExplorerCtrlAddWhenReady:
             explorerCtrlAddRequestRequirePathChange            := False
             requestDeadlineTick                                := explorerCtrlAddRequestDeadlineTick
             requestRequiresPathChange                          := False
-            _TraceExplorerCtrlAdd("navigation_pathless_view_state_fallback"
+            _DebugTrace_ExplorerCtrlAdd("navigation_pathless_view_state_fallback"
                 , "initialPath=[" . requestInitialPath . "] newContentDeadlineMs="
                 . k_explorerCtrlAddTimeoutMs, False, requestId)
         }
@@ -10512,7 +10615,7 @@ RunExplorerCtrlAddWhenReady:
                         ? requestFastPathPollMs
                         : k_explorerCtrlAddPollMs
                 }
-                _TraceExplorerCtrlAdd("request_wait"
+                _DebugTrace_ExplorerCtrlAdd("request_wait"
                     , "reason=" . (navigationPathState == "unavailable"
                         ? "path_unavailable"
                         : (requestUsesNavigationEvents
@@ -10526,7 +10629,7 @@ RunExplorerCtrlAddWhenReady:
                     _ScheduleExplorerCtrlAddRetry(requestId, pathPollMs)
             }
             else
-                _TraceExplorerCtrlAdd("request_aborted"
+                _DebugTrace_ExplorerCtrlAdd("request_aborted"
                     , "reason=path_" . navigationPathState . "_at_deadline initialPath=["
                     . requestInitialPath . "] currentPath=[" . currentPath . "]"
                     , True, requestId)
@@ -10539,7 +10642,7 @@ RunExplorerCtrlAddWhenReady:
             explorerCtrlAddRequestDeadlineTick        := A_TickCount + k_explorerCtrlAddTimeoutMs
             requestDeadlineTick                       := explorerCtrlAddRequestDeadlineTick
             explorerCtrlAddRequestPathChangeConfirmed := True
-            _TraceExplorerCtrlAdd("path_change_confirmed"
+            _DebugTrace_ExplorerCtrlAdd("path_change_confirmed"
                 , "currentPath=[" . currentPath . "] newContentDeadlineMs="
                 . k_explorerCtrlAddTimeoutMs, False, requestId)
         }
@@ -10560,13 +10663,13 @@ RunExplorerCtrlAddWhenReady:
     }
     Critical, Off
     if !contentProbeGateIsCurrent {
-        _TraceExplorerCtrlAdd("request_aborted"
+        _DebugTrace_ExplorerCtrlAdd("request_aborted"
             , "reason=superseded_before_content_probe_gate currentRequestId="
             . explorerCtrlAddRequestId, True, requestId)
         Return
     }
     if contentProbeGateClosed {
-        _TraceExplorerCtrlAdd("request_wait"
+        _DebugTrace_ExplorerCtrlAdd("request_wait"
             , "reason=minimum_content_probe_delay nextTimerMs=" . remainingContentProbeDelayMs
             , False, requestId)
         Return
@@ -10577,11 +10680,11 @@ RunExplorerCtrlAddWhenReady:
     if (waitingForSecondStartupPathSample) {
         if (A_TickCount < requestDeadlineTick) {
             nextPollMs := Min(k_explorerCtrlAddPollMs , Max(1, requestDeadlineTick - A_TickCount))
-            _TraceExplorerCtrlAdd("request_wait" , "reason=second_startup_path_sample nextTimerMs=" . nextPollMs, False, requestId)
+            _DebugTrace_ExplorerCtrlAdd("request_wait" , "reason=second_startup_path_sample nextTimerMs=" . nextPollMs, False, requestId)
             _ScheduleExplorerCtrlAddRetry(requestId, nextPollMs)
         }
         else
-            _TraceExplorerCtrlAdd("request_aborted" , "reason=second_startup_path_sample_missed_deadline" , True, requestId)
+            _DebugTrace_ExplorerCtrlAdd("request_aborted" , "reason=second_startup_path_sample_missed_deadline" , True, requestId)
         Return
     }
 
@@ -10594,7 +10697,7 @@ RunExplorerCtrlAddWhenReady:
         preProbeTargetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
         preProbeActiveHwnd   := WinExist("A")
         if (!preProbeTargetExists || preProbeActiveHwnd != requestTargetHwnd) {
-            _TraceExplorerCtrlAdd("request_aborted"
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
                 , "reason=pre_probe_target_not_foreground_or_gone targetHwnd="
                 . requestTargetHwnd . " targetExists=" . (preProbeTargetExists ? 1 : 0)
                 . " activeHwnd=" . preProbeActiveHwnd, True, requestId)
@@ -10602,13 +10705,13 @@ RunExplorerCtrlAddWhenReady:
         }
         if GetKeyState("LButton", "P") {
             if (A_TickCount < requestDeadlineTick) {
-                _TraceExplorerCtrlAdd("request_wait"
+                _DebugTrace_ExplorerCtrlAdd("request_wait"
                     , "reason=pre_probe_lbutton_held nextTimerMs=" . k_explorerCtrlAddPollMs
                     , False, requestId)
                 _ScheduleExplorerCtrlAddRetry(requestId, k_explorerCtrlAddPollMs)
             }
             else
-                _TraceExplorerCtrlAdd("request_aborted" , "reason=pre_probe_lbutton_held_at_deadline", True, requestId)
+                _DebugTrace_ExplorerCtrlAdd("request_aborted" , "reason=pre_probe_lbutton_held_at_deadline", True, requestId)
             Return
         }
 
@@ -10620,14 +10723,14 @@ RunExplorerCtrlAddWhenReady:
 
         if (preProbeSendClaimed) {
             preProbeResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd , currentClass, requestSourceCtrlNN, requestId)
-            _TraceExplorerCtrlAdd("sendctrladd_pre_probe"
+            _DebugTrace_ExplorerCtrlAdd("sendctrladd_pre_probe"
                 , "elapsedMs=" . (A_TickCount - requestStartTick)
                 . " hasResolvedTarget=" . IsObject(preProbeResolvedTarget)
                 , False, requestId)
             SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrlNN, False, ""
                 , requestRestoreTreeFocus, preProbeResolvedTarget, requestId)
             if (requestId != explorerCtrlAddRequestId) {
-                _TraceExplorerCtrlAdd("request_aborted"
+                _DebugTrace_ExplorerCtrlAdd("request_aborted"
                     , "reason=superseded_during_pre_probe_send currentRequestId="
                     . explorerCtrlAddRequestId, True, requestId)
                 Return
@@ -10697,7 +10800,7 @@ RunExplorerCtrlAddWhenReady:
     ; UIA may finish after another click replaces this request. Recheck its ID
     ; before the probe result can update shared state or authorize alignment.
     if (requestId != explorerCtrlAddRequestId) {
-        _TraceExplorerCtrlAdd("request_aborted"
+        _DebugTrace_ExplorerCtrlAdd("request_aborted"
             , "reason=superseded_during_content_probe currentRequestId="
             . explorerCtrlAddRequestId
             . " probeElapsedMs=" . contentProbeElapsedMs
@@ -10729,7 +10832,7 @@ RunExplorerCtrlAddWhenReady:
         }
         Critical, Off
     }
-    _TraceExplorerCtrlAdd("details_content_probe"
+    _DebugTrace_ExplorerCtrlAdd("details_content_probe"
         , "elapsedMs=" . contentProbeElapsedMs
         . " timeoutMs=" . k_explorerCtrlAddPollUIATimeoutMs
         . " overBudgetMs=" . contentProbeOverBudgetMs
@@ -10759,12 +10862,12 @@ RunExplorerCtrlAddWhenReady:
         currentPath := _GetExplorerCtrlAddRequestPath(requestTargetHwnd , requestWindowClass, requestId, pathProbeRequestIsCurrent)
         pathProbeElapsedMs := A_TickCount - pathProbeStartTick
         if !pathProbeRequestIsCurrent {
-            _TraceExplorerCtrlAdd("request_aborted"
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
                 , "reason=superseded_during_startup_pre_send_revalidation currentRequestId="
                 . explorerCtrlAddRequestId, True, requestId)
             Return
         }
-        _TraceExplorerCtrlAdd("path_probe"
+        _DebugTrace_ExplorerCtrlAdd("path_probe"
             , "scenario=startup_pre_send_revalidate elapsedMs=" . pathProbeElapsedMs
             . " confirmedPath=[" . explorerCtrlAddRequestPreviousPath . "]"
             . " currentPath=[" . currentPath . "]", False, requestId)
@@ -10775,7 +10878,7 @@ RunExplorerCtrlAddWhenReady:
             ; Details state and let the same pathless view-state fallback authorize
             ; the send instead of restarting an unobtainable path sequence forever.
             explorerCtrlAddRequestPathlessContentFallbackActive := True
-            _TraceExplorerCtrlAdd("startup_pre_send_pathless_view_state_fallback"
+            _DebugTrace_ExplorerCtrlAdd("startup_pre_send_pathless_view_state_fallback"
                 , "confirmedPath=[" . explorerCtrlAddRequestPreviousPath . "]"
                 , False, requestId)
         }
@@ -10789,7 +10892,7 @@ RunExplorerCtrlAddWhenReady:
             explorerCtrlAddRequestPreviousPath             := currentPath
             explorerCtrlAddRequestStablePathConfirmed      := False
             explorerCtrlAddRequestStablePathHitCount       := (currentPath = "") ? 0 : 1
-            _TraceExplorerCtrlAdd("startup_path_reset"
+            _DebugTrace_ExplorerCtrlAdd("startup_path_reset"
                 , "reason=pre_send_path_changed path=[" . currentPath . "] nextTimerMs="
                 . k_explorerCtrlAddPollMs, False, requestId)
             _ScheduleExplorerCtrlAddRetry(requestId, k_explorerCtrlAddPollMs)
@@ -10807,7 +10910,7 @@ RunExplorerCtrlAddWhenReady:
         WinGetClass, detailsOnlyClass, ahk_id %requestTargetHwnd%
         if (!detailsOnlyTargetExists || detailsOnlyActiveHwnd != requestTargetHwnd
          || detailsOnlyClass != requestWindowClass) {
-            _TraceExplorerCtrlAdd("request_aborted"
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
                 , "reason=details_only_guard_failed targetExists="
                 . (detailsOnlyTargetExists ? 1 : 0)
                 . " activeHwnd=" . detailsOnlyActiveHwnd
@@ -10817,13 +10920,13 @@ RunExplorerCtrlAddWhenReady:
         }
         if GetKeyState("LButton", "P") {
             if (A_TickCount < requestDeadlineTick) {
-                _TraceExplorerCtrlAdd("request_wait"
+                _DebugTrace_ExplorerCtrlAdd("request_wait"
                     , "reason=details_only_lbutton_held nextTimerMs="
                     . k_explorerCtrlAddPollMs, False, requestId)
                 _ScheduleExplorerCtrlAddRetry(requestId, k_explorerCtrlAddPollMs)
             }
             else
-                _TraceExplorerCtrlAdd("request_aborted" , "reason=details_only_lbutton_held_at_deadline", True, requestId)
+                _DebugTrace_ExplorerCtrlAdd("request_aborted" , "reason=details_only_lbutton_held_at_deadline", True, requestId)
             Return
         }
 
@@ -10840,7 +10943,7 @@ RunExplorerCtrlAddWhenReady:
                 , detailsOnlyClass, requestSourceCtrlNN, requestId, contentProbeResolvedTarget)
             detailsOnlyDispatchElapsedMs := A_TickCount - requestStartTick
             detailsOnlySendStartTick := A_TickCount
-            _TraceExplorerCtrlAdd("sendctrladd_details_only"
+            _DebugTrace_ExplorerCtrlAdd("sendctrladd_details_only"
                 , "elapsedMs=" . detailsOnlyDispatchElapsedMs
                 . " probeReason=" . contentProbe.reason
                 . " detailsReason=[" . contentProbeDetailsReason . "]"
@@ -10849,7 +10952,7 @@ RunExplorerCtrlAddWhenReady:
             SendCtrlAdd(requestTargetHwnd, detailsOnlyClass, requestSourceCtrlNN, False, ""
                 , requestRestoreTreeFocus, detailsOnlyResolvedTarget, requestId)
             if (requestId != explorerCtrlAddRequestId) {
-                _TraceExplorerCtrlAdd("request_aborted"
+                _DebugTrace_ExplorerCtrlAdd("request_aborted"
                     , "reason=superseded_during_details_only_send currentRequestId="
                     . explorerCtrlAddRequestId, True, requestId)
                 Return
@@ -10861,14 +10964,14 @@ RunExplorerCtrlAddWhenReady:
                 pollIntervalRemainingMs := Max(1 , k_explorerCtrlAddPollMs - contentProbeElapsedMs)
                 deadlineRemainingMs := Max(1, requestDeadlineTick - A_TickCount)
                 nextPollMs := Min(pollIntervalRemainingMs, deadlineRemainingMs)
-                _TraceExplorerCtrlAdd("request_wait"
+                _DebugTrace_ExplorerCtrlAdd("request_wait"
                     , "reason=details_only_send_followup nextTimerMs=" . nextPollMs
                     . " sendElapsedMs=" . (A_TickCount - detailsOnlySendStartTick)
                     , False, requestId)
                 _ScheduleExplorerCtrlAddRetry(requestId, nextPollMs)
             }
             else
-                _TraceExplorerCtrlAdd("request_completed"
+                _DebugTrace_ExplorerCtrlAdd("request_completed"
                     , "reason=details_only_send_made_content_not_confirmed"
                     . " sendElapsedMs=" . (A_TickCount - detailsOnlySendStartTick)
                     , True, requestId)
@@ -10882,7 +10985,7 @@ RunExplorerCtrlAddWhenReady:
         pollIntervalRemainingMs := Max(1 , k_explorerCtrlAddPollMs - contentProbeElapsedMs)
         deadlineRemainingMs := Max(1, requestDeadlineTick - A_TickCount)
         nextPollMs := Min(pollIntervalRemainingMs, deadlineRemainingMs)
-        _TraceExplorerCtrlAdd("request_wait"
+        _DebugTrace_ExplorerCtrlAdd("request_wait"
             , "reason=details_content_not_ready nextTimerMs=" . nextPollMs
             . " probeReason=" . contentProbe.reason
             . " detailsReason=[" . contentProbeDetailsReason . "]"
@@ -10893,7 +10996,7 @@ RunExplorerCtrlAddWhenReady:
 
     if (contentProbe.state != "ready") {
         if (requestDetailsOnlySendMade) {
-            _TraceExplorerCtrlAdd("request_completed"
+            _DebugTrace_ExplorerCtrlAdd("request_completed"
                 , "reason=details_only_send_made_content_not_confirmed"
                 . " probeReason=" . contentProbe.reason
                 . " detailsReason=[" . contentProbeDetailsReason . "]"
@@ -10901,7 +11004,7 @@ RunExplorerCtrlAddWhenReady:
             Return
         }
         if !requestAllowBestEffortSend {
-            _TraceExplorerCtrlAdd("request_aborted"
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
                 , "reason=details_or_content_not_ready_at_deadline probeReason="
                 . contentProbe.reason
                 . " detailsReason=[" . contentProbeDetailsReason . "]"
@@ -10921,7 +11024,7 @@ RunExplorerCtrlAddWhenReady:
         WinGetClass, finalClass, ahk_id %requestTargetHwnd%
         if (!finalTargetExists || finalActiveHwnd != requestTargetHwnd
          || finalClass != requestWindowClass || GetKeyState("LButton", "P")) {
-            _TraceExplorerCtrlAdd("request_aborted"
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
                 , "reason=best_effort_guard_failed targetExists="
                 . (finalTargetExists ? 1 : 0)
                 . " activeHwnd=" . finalActiveHwnd
@@ -10937,7 +11040,7 @@ RunExplorerCtrlAddWhenReady:
         bestEffortSendStartTick := A_TickCount
         bestEffortResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
             , finalClass, requestSourceCtrlNN, requestId, contentProbeResolvedTarget)
-        _TraceExplorerCtrlAdd("sendctrladd_best_effort"
+        _DebugTrace_ExplorerCtrlAdd("sendctrladd_best_effort"
             , "elapsedMs=" . bestEffortDispatchElapsedMs
             . " probeReason=" . contentProbe.reason
             . " detailsReason=[" . contentProbeDetailsReason . "]"
@@ -10945,7 +11048,7 @@ RunExplorerCtrlAddWhenReady:
             , False, requestId)
         SendCtrlAdd(requestTargetHwnd, finalClass, requestSourceCtrlNN, False, ""
             , requestRestoreTreeFocus, bestEffortResolvedTarget, requestId)
-        _TraceExplorerCtrlAdd("sendctrladd_best_effort_dispatch"
+        _DebugTrace_ExplorerCtrlAdd("sendctrladd_best_effort_dispatch"
             , "elapsedMs=" . bestEffortDispatchElapsedMs
             . " sendElapsedMs=" . (A_TickCount - bestEffortSendStartTick)
             . " probeReason=" . contentProbe.reason
@@ -10955,7 +11058,7 @@ RunExplorerCtrlAddWhenReady:
     }
 
     if (requestId != explorerCtrlAddRequestId) {
-        _TraceExplorerCtrlAdd("request_aborted"
+        _DebugTrace_ExplorerCtrlAdd("request_aborted"
             , "reason=superseded_after_details_content_probe currentRequestId="
             . explorerCtrlAddRequestId, True, requestId)
         Return
@@ -10970,7 +11073,7 @@ RunExplorerCtrlAddWhenReady:
     sendCtrlAddStartTick := A_TickCount
     SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrlNN, False, ""
         , requestRestoreTreeFocus, verifiedResolvedTarget, requestId)
-    _TraceExplorerCtrlAdd("sendctrladd_dispatch"
+    _DebugTrace_ExplorerCtrlAdd("sendctrladd_dispatch"
         , "elapsedMs=" . sendCtrlAddDispatchElapsedMs
         . " sendElapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
         . " readyReason=" . contentProbe.reason
@@ -11059,8 +11162,8 @@ PostActivationLButtonCheck:
 
         if !(headerKind = "refresh" || headerKind = "path_change") {
             rejectionReason := (headerKind = "unavailable") ? "header_kind_unavailable" : "header_kind_not_navigation"
-            activeRequestId := explorerCtrlAddRequestTracePending ? explorerCtrlAddRequestId : 0
-            _TraceExplorerCtrlAdd("header_request_rejected"
+            activeRequestId := debugTraceExplorerCtrlAddRequestOpen ? explorerCtrlAddRequestId : 0
+            _DebugTrace_ExplorerCtrlAdd("header_request_rejected"
                 , "hwnd=" . targetHwnd
                 . " class=" . targetClass
                     . " sourceCtrlNN=[" . targetCtrl . "]"
@@ -11083,7 +11186,7 @@ PostActivationLButtonCheck:
     ; Header clicks are the clearest safe case: once the target is active, focus
     ; the captured header control and send the normal auto-fit command.
     if (InStr(targetCtrl, "SysHeader32", True)) {
-        _SendFocusedCtrlAdd(targetHwnd, targetCtrl)
+        _SendFocusedCtrlAdd(targetHwnd, targetCtrl, 60, 15, 6, "post_activation_sysheader")
         Return
     }
 
@@ -11098,7 +11201,7 @@ PostActivationLButtonCheck:
             clickKind := ExplorerClickClassify(clickX, clickY, targetCtrl)
 
         if (clickKind == "header") {
-            _SendFocusedCtrlAdd(targetHwnd, targetCtrl)
+            _SendFocusedCtrlAdd(targetHwnd, targetCtrl, 60, 15, 6, "post_activation_directui_header")
             Return
         }
         else if (clickKind == "blank")
@@ -11199,10 +11302,21 @@ $~LButton::
     if (shouldCaptureNavigationPath)
         navigationStartPath := GetExplorerPath(_winIdD)
 
-    ; Match DirectUI double-clicks from immutable first-click identity and path
-    ; data. UIA below may refine blank/item/header behavior, but it no longer
-    ; decides whether a native folder navigation receives a path-change watcher.
-    explorerDirectUIDoubleClick := _CaptureExplorerDirectUIDoubleClick(_winIdD, _winClassD, _winCtrlD, lbX1, lbY1, navigationStartPath)
+    ; Keep the mouse-down folder path above UIA classification so a slow lookup
+    ; cannot change the path snapshot used to prove later folder navigation.
+    directUIClickKind := ""
+    if (isExplorerDirectUIClick) {
+        if (_winClassD == "#32770")
+            directUIClickKind := DialogClickClassify(lbX1, lbY1, _winCtrlD)
+        else
+            directUIClickKind := ExplorerClickClassify(lbX1, lbY1, _winCtrlD)
+    }
+
+    ; A confirmed column header can sort or resize a column, but never opens a
+    ; folder, so exclude it from DirectUI double-click navigation detection.
+    isExplorerDirectUIColumnHeader := (directUIClickKind == "header")
+    explorerDirectUIDoubleClick := _CaptureExplorerDirectUIDoubleClick(_winIdD, _winClassD, _winCtrlD
+        , lbX1, lbY1, navigationStartPath, isExplorerDirectUIColumnHeader)
 
     ; If this press is aimed at a different top-level window, defer all UIA hit
     ; testing and column work until Windows completes the focus change.
@@ -11349,10 +11463,9 @@ $~LButton::
         }
         Else {
             If (InStr(_winCtrlD, "DirectUIHWND", True)) {
-                if (_winClassD == "#32770")
-                    result := DialogClickClassify(lbX1, lbY1, _winCtrlD)
-                else
-                    result := ExplorerClickClassify(lbX1, lbY1, _winCtrlD)
+                ; Reuse the mouse-down classification so header detection and
+                ; DirectUI double-click exclusion use the same UIA result.
+                result := directUIClickKind
 
                 if (result == "header") {
                     isColumnHeader := True
@@ -11441,7 +11554,7 @@ $~LButton::
 
             If (_winClassD == "CabinetWClass" && k_isWin11 && k_isModernExplorerInReg) {
 
-                _SendFocusedCtrlAdd(_winIdU, _winCtrlU)
+                _SendFocusedCtrlAdd(_winIdU, _winCtrlU, 60, 15, 6, "active_modern_explorer_header")
             }
             Else {
                 ; Get UIA element
@@ -11456,28 +11569,55 @@ $~LButton::
                  && k_isModernExplorerInReg
                  && InStr(_winCtrlU, "DirectUIHWND", True)
                  && ctype == 50026) {
-                    EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
+                    _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_attempt"
+                        , "source=active_header_uia_controltype_50026 hwnd=" . _winIdU . " ctrlNN=[" . _winCtrlU . "]"
+                        , False, 0)
+                    directHeaderFocusSucceeded := EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
                     Sleep, 75
-                    SendCtrlNumpadAdd()
+                    directHeaderSendSucceeded := SendCtrlNumpadAdd()
+                    _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+                        , "source=active_header_uia_controltype_50026 hwnd=" . _winIdU . " ctrlNN=[" . _winCtrlU . "]"
+                        . " focus=" . directHeaderFocusSucceeded
+                        . " result=" . (directHeaderSendSucceeded ? "sent" : "send_failed")
+                        , True, 0)
                     return
                 }
 
                 If (ctype == "" || ctype > 50035 || (ctype > 50008 && ctype < 50031)) {
                     ; DO NOTHING
-                }
-                Else {
-                    If (ctype  == 50031 || ctype  == 50008) && (_winClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
-                        _SendFocusedCtrlAdd(_winIdU, _winCtrlU)
+                    }
+                    Else {
+                        If (ctype  == 50031 || ctype  == 50008) && (_winClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
+                        _SendFocusedCtrlAdd(_winIdU, _winCtrlU, 60, 15, 6
+                            , "active_header_uia_controltype_50031_or_50008")
                     }
                     Else If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
                         If !k_isWin11
                             Send, {F5}
 
-                        SendCtrlNumpadAdd()
+                        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_attempt"
+                            , "source=active_header_uia_controltype_50035 hwnd=" . _winIdU
+                            . " ctrlNN=[" . _winCtrlU . "]"
+                            , False, 0)
+                        directHeaderSendSucceeded := SendCtrlNumpadAdd()
+                        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+                            , "source=active_header_uia_controltype_50035 hwnd=" . _winIdU
+                            . " ctrlNN=[" . _winCtrlU . "]"
+                            . " result=" . (directHeaderSendSucceeded ? "sent" : "send_failed")
+                            , True, 0)
                     }
                     Else If ((ctype == 50033) && (InStr(_winCtrlU, "DirectUIHWND", True))) {
 
-                        SendCtrlNumpadAdd()
+                        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_attempt"
+                            , "source=active_header_uia_controltype_50033 hwnd=" . _winIdU
+                            . " ctrlNN=[" . _winCtrlU . "]"
+                            , False, 0)
+                        directHeaderSendSucceeded := SendCtrlNumpadAdd()
+                        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+                            , "source=active_header_uia_controltype_50033 hwnd=" . _winIdU
+                            . " ctrlNN=[" . _winCtrlU . "]"
+                            . " result=" . (directHeaderSendSucceeded ? "sent" : "send_failed")
+                            , True, 0)
                     }
                 }
             }
@@ -11497,8 +11637,8 @@ $~LButton::
                         : _GetExplorerHeaderNavigationKind(lbX2, lbY2, 2000)
             if !(headerKind = "refresh" || headerKind = "path_change") {
                 rejectionReason := (headerKind = "unavailable") ? "header_kind_unavailable" : "header_kind_not_navigation"
-                activeRequestId := explorerCtrlAddRequestTracePending ? explorerCtrlAddRequestId : 0
-                _TraceExplorerCtrlAdd("header_request_rejected"
+                activeRequestId := debugTraceExplorerCtrlAddRequestOpen ? explorerCtrlAddRequestId : 0
+                _DebugTrace_ExplorerCtrlAdd("header_request_rejected"
                     , "hwnd=" . _winIdU
                     . " class=" . _winClassD
                     . " sourceCtrlNN=[" . _winCtrlU . "]"
@@ -12698,7 +12838,7 @@ _RequestEverythingActivationAutoFit(everythingHwnd, traceRequestId := "") {
     Critical, Off
 
     if (traceRequestId != "")
-        _TraceExplorerCtrlAdd("everything_activation_started"
+        _DebugTrace_ExplorerCtrlAdd("everything_activation_started"
             , "hwnd=" . everythingHwnd . " timeoutMs=" . k_everythingActivationAutoFitTimeoutMs
             , False, traceRequestId)
     return True
@@ -12739,7 +12879,7 @@ _TryAutoFitEverythingResultsColumns(everythingHwnd, mode := "header_no_fill", By
 _ValidateResolvedCtrlAddTarget(hwndTop, resolvedTarget) {
     traceRequestId := IsObject(resolvedTarget) ? resolvedTarget.requestId : ""
     if (!hwndTop || !IsObject(resolvedTarget)) {
-        _TraceExplorerCtrlAdd("resolved_target_invalid"
+        _DebugTrace_ExplorerCtrlAdd("resolved_target_invalid"
             , "reason=missing_top_or_target hwnd=" . hwndTop
             , False, traceRequestId)
         return ""
@@ -12750,7 +12890,7 @@ _ValidateResolvedCtrlAddTarget(hwndTop, resolvedTarget) {
     targetExists   := targetCtrlHwnd && DllCall("user32\IsWindow", "Ptr", targetCtrlHwnd, "Int")
     targetIsChild  := targetExists && DllCall("user32\IsChild", "Ptr", hwndTop, "Ptr", targetCtrlHwnd, "Int")
     if (targetCtrlNN = "" || !targetCtrlHwnd || !targetExists || !targetIsChild) {
-        _TraceExplorerCtrlAdd("resolved_target_invalid"
+        _DebugTrace_ExplorerCtrlAdd("resolved_target_invalid"
             , "reason=target_gone_or_not_child targetCtrl=[" . targetCtrlNN . "]"
             . " targetHwnd=" . targetCtrlHwnd
             . " targetExists=" . targetExists
@@ -12761,7 +12901,7 @@ _ValidateResolvedCtrlAddTarget(hwndTop, resolvedTarget) {
 
     ControlGet, currentCtrlHwnd, Hwnd,, %targetCtrlNN%, ahk_id %hwndTop%
     if (currentCtrlHwnd != targetCtrlHwnd) {
-        _TraceExplorerCtrlAdd("resolved_target_invalid"
+        _DebugTrace_ExplorerCtrlAdd("resolved_target_invalid"
             , "reason=classnn_rebound targetCtrl=[" . targetCtrlNN . "]"
             . " expectedHwnd=" . targetCtrlHwnd
             . " actualHwnd=" . currentCtrlHwnd
@@ -12771,14 +12911,14 @@ _ValidateResolvedCtrlAddTarget(hwndTop, resolvedTarget) {
 
     targetClass := GetClassName(targetCtrlHwnd)
     if (!IsSysListViewClassName(targetClass) && targetClass != "DirectUIHWND") {
-        _TraceExplorerCtrlAdd("resolved_target_invalid"
+        _DebugTrace_ExplorerCtrlAdd("resolved_target_invalid"
             , "reason=unsupported_class targetCtrl=[" . targetCtrlNN . "]"
             . " targetClass=" . targetClass
             , False, traceRequestId)
         return ""
     }
 
-    _TraceExplorerCtrlAdd("resolved_target_valid"
+    _DebugTrace_ExplorerCtrlAdd("resolved_target_valid"
         , "targetCtrl=[" . targetCtrlNN . "] targetHwnd=" . targetCtrlHwnd
         . " targetClass=" . targetClass
         , False, traceRequestId)
@@ -12790,7 +12930,7 @@ _ValidateResolvedCtrlAddTarget(hwndTop, resolvedTarget) {
 ; supplies a pre-resolved control; traceRequestId only enables diagnostic timing
 ; and must never influence target selection or validation.
 SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := "", waitForExplorerLoad := False, targetScan := "", restoreTreeFocus := True, resolvedTarget := "", traceRequestId := "") {
-    global k_debugLogExplorerCtrlAddEnabled, k_nativeSysListViewColumnAutoFitMode
+    global k_debugTraceExplorerCtrlAddEnabled, k_nativeSysListViewColumnAutoFitMode
     global k_sendCtrlAddShellTabProbeTimeoutMs, k_useNativeSysListViewColumnAutoFit
 
     sendCtrlAddStartTick      := A_TickCount
@@ -12799,13 +12939,13 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
     if (traceRequestId = "" && hasResolvedTarget)
         traceRequestId        := resolvedTarget.requestId
 
-    traceThisCall             := k_debugLogExplorerCtrlAddEnabled && traceRequestId != ""
+    traceThisCall             := k_debugTraceExplorerCtrlAddEnabled && traceRequestId != ""
     traceEverythingActivation := traceThisCall && (SubStr(traceRequestId, 1, 22) == "everything_activation_")
     resolvedCtrl              := hasResolvedTarget ? resolvedTarget.ctrlNN : ""
     resolvedHwnd              := hasResolvedTarget ? resolvedTarget.hwnd : 0
 
     if traceThisCall
-        _TraceExplorerCtrlAdd("sendctrladd_enter"
+        _DebugTrace_ExplorerCtrlAdd("sendctrladd_enter"
                             , "targetHwnd=" . initTargetHwnd
                             . " targetClass=" . initTargetClass
                             . " sourceCtrlNN=[" . initFocusedCtrlNN . "]"
@@ -12819,7 +12959,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
 
     TargetControl     := hasResolvedTarget ? _ValidateResolvedCtrlAddTarget(initTargetHwnd, resolvedTarget) : ""
     if (hasResolvedTarget && TargetControl = "") {
-        _TraceExplorerCtrlAdd("sendctrladd_aborted"
+        _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                             , "reason=resolved_target_validation_failed totalElapsedMs="
                             . (A_TickCount - sendCtrlAddStartTick), False, traceRequestId)
         Return
@@ -12834,7 +12974,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
     initFocusedHwnd := initTargetTid ? GetThreadFocusHwnd(initTargetTid) : 0
 
     if traceThisCall
-        _TraceExplorerCtrlAdd("sendctrladd_context_resolved"
+        _DebugTrace_ExplorerCtrlAdd("sendctrladd_context_resolved"
                             , "elapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
                             . " targetClass=" . lClassCheck
                             . " targetTid=" . initTargetTid
@@ -12846,7 +12986,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
         if traceThisCall
-            _TraceExplorerCtrlAdd("sendctrladd_aborted"
+            _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                                 , "reason=target_not_foreground_or_gone activeHwnd=" . quickCheckID
                                 . " targetHwnd=" . initTargetHwnd
                                 . " totalElapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
@@ -12855,7 +12995,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
     }
     if (GetKeyState("LShift", "P")) {
         if traceThisCall
-            _TraceExplorerCtrlAdd("sendctrladd_aborted"
+            _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                                 , "reason=physical_lshift_held totalElapsedMs="
                                 . (A_TickCount - sendCtrlAddStartTick), False, traceRequestId)
         Return
@@ -12890,7 +13030,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
             }
         }
         if traceThisCall
-            _TraceExplorerCtrlAdd("sendctrladd_focus_discovery"
+            _DebugTrace_ExplorerCtrlAdd("sendctrladd_focus_discovery"
                                 , "elapsedMs=" . (A_TickCount - focusDiscoveryStartTick)
                                 . " focusedCtrl=[" . initFocusedCtrlNN . "]"
                                 . " targetAlreadyResolved=" . (TargetControl != "")
@@ -12899,7 +13039,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
         {
             if traceThisCall
-                _TraceExplorerCtrlAdd("sendctrladd_aborted"
+                _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                                     , "reason=pre_target_resolution_guard lbutton="
                                     . GetKeyState("LButton", "P")
                                     . " activeHwnd=" . WinExist("A")
@@ -12912,7 +13052,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         if (TargetControl = "")
             TargetControl := GetSendCtrlAddTargetCtrl(initTargetHwnd, initFocusedCtrlNN, lClassCheck, targetScan)
         if traceThisCall
-            _TraceExplorerCtrlAdd("sendctrladd_target_resolution"
+            _DebugTrace_ExplorerCtrlAdd("sendctrladd_target_resolution"
                                 , "elapsedMs=" . (A_TickCount - targetResolutionStartTick)
                                 . " source=" . (hasResolvedTarget ? "pre_resolved" : "runtime")
                                 . " targetCtrl=[" . TargetControl . "]"
@@ -12921,7 +13061,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
         {
             if traceThisCall
-                _TraceExplorerCtrlAdd("sendctrladd_aborted"
+                _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                                     , "reason=post_target_resolution_guard lbutton="
                                     . GetKeyState("LButton", "P")
                                     . " activeHwnd=" . WinExist("A")
@@ -12933,7 +13073,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
         {
             if traceThisCall
-                _TraceExplorerCtrlAdd("sendctrladd_aborted"
+                _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                                     , "reason=missing_or_invalid_target targetCtrl=[" . TargetControl . "]"
                                     . " lbutton=" . GetKeyState("LButton", "P")
                                     . " activeHwnd=" . WinExist("A")
@@ -12945,7 +13085,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         targetCtrlHwnd := 0
         if traceEverythingActivation {
             ControlGet, targetCtrlHwnd, Hwnd,, %TargetControl%, ahk_id %initTargetHwnd%
-            _TraceExplorerCtrlAdd("everything_activation_target_resolved"
+            _DebugTrace_ExplorerCtrlAdd("everything_activation_target_resolved"
                                 , "targetCtrlNN=[" . TargetControl . "]"
                                 . " targetCtrlHwnd=" . targetCtrlHwnd
                                 . " targetResolutionElapsedMs=" . (A_TickCount - targetResolutionStartTick)
@@ -12963,7 +13103,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 explorerLoadStartTick := A_TickCount
                 WaitForExplorerLoad(initTargetHwnd, (TargetControl == initFocusedCtrlNN), False)
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("sendctrladd_explorer_load_wait"
+                    _DebugTrace_ExplorerCtrlAdd("sendctrladd_explorer_load_wait"
                                         , "elapsedMs=" . (A_TickCount - explorerLoadStartTick)
                                         . " branch=native_syslist targetCtrl=[" . TargetControl . "]"
                                         , False, traceRequestId)
@@ -12986,7 +13126,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                     }
                 }
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("native_autofit_result"
+                    _DebugTrace_ExplorerCtrlAdd("native_autofit_result"
                                         , "elapsedMs=" . (A_TickCount - nativeAutoFitStartTick)
                                         . " succeeded=" . nativeAutoFitSucceeded
                                         . " mode=" . k_nativeSysListViewColumnAutoFitMode
@@ -12994,7 +13134,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                         . nativeAutoFitFailureTrace
                                         , False, traceRequestId)
                 if traceEverythingActivation
-                    _TraceExplorerCtrlAdd("everything_activation_native_autofit"
+                    _DebugTrace_ExplorerCtrlAdd("everything_activation_native_autofit"
                                         , "succeeded=" . nativeAutoFitSucceeded
                                         . " elapsedMs=" . (A_TickCount - nativeAutoFitStartTick)
                                         . " mode=" . k_nativeSysListViewColumnAutoFitMode
@@ -13004,11 +13144,11 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                         , False, traceRequestId)
             if nativeAutoFitSucceeded {
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("sendctrladd_complete"
+                    _DebugTrace_ExplorerCtrlAdd("sendctrladd_complete"
                                         , "outcome=native_autofit totalElapsedMs="
                                         . (A_TickCount - sendCtrlAddStartTick), False, traceRequestId)
                 if traceEverythingActivation
-                    _TraceExplorerCtrlAdd("everything_activation_complete"
+                    _DebugTrace_ExplorerCtrlAdd("everything_activation_complete"
                                         , "outcome=native_autofit"
                                         . " targetCtrlNN=[" . TargetControl . "]"
                                         . " targetCtrlHwnd=" . targetCtrlHwnd
@@ -13024,7 +13164,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 : (InStr(TargetControl, "SysListView32", True)
                     ? "native_autofit_failed"
                     : "target_not_syslistview32")
-            _TraceExplorerCtrlAdd("everything_activation_focus_fallback"
+            _DebugTrace_ExplorerCtrlAdd("everything_activation_focus_fallback"
                                 , "reason=" . nativeFallbackReason
                                 . " targetCtrlNN=[" . TargetControl . "]"
                                 . " targetCtrlHwnd=" . targetCtrlHwnd
@@ -13037,7 +13177,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 explorerLoadStartTick := A_TickCount
                 WaitForExplorerLoad(initTargetHwnd, False, True)
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("sendctrladd_explorer_load_wait"
+                    _DebugTrace_ExplorerCtrlAdd("sendctrladd_explorer_load_wait"
                                         , "elapsedMs=" . (A_TickCount - explorerLoadStartTick)
                                         . " branch=DirectUIHWND3 targetCtrl=[" . TargetControl . "]"
                                         , False, traceRequestId)
@@ -13047,14 +13187,14 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 focusStartTick := A_TickCount
                 focusSucceeded := _EnsureFocusedCtrlAddTarget(initTargetHwnd, TargetControl , resolvedHwnd, hasResolvedTarget, 60, 15, lClassCheck)
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("sendctrladd_focus_result"
+                    _DebugTrace_ExplorerCtrlAdd("sendctrladd_focus_result"
                                         , "elapsedMs=" . (A_TickCount - focusStartTick)
                                         . " succeeded=" . focusSucceeded
                                         . " branch=DirectUIHWND3 targetCtrl=[" . TargetControl . "]"
                                         , False, traceRequestId)
                 if !focusSucceeded {
                     if traceThisCall
-                        _TraceExplorerCtrlAdd("sendctrladd_aborted"
+                        _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                                             , "reason=focus_failed branch=DirectUIHWND3"
                                             . " elapsedMs=" . (A_TickCount - focusStartTick)
                                             . " targetCtrl=[" . TargetControl . "]"
@@ -13069,7 +13209,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 explorerLoadStartTick := A_TickCount
                 WaitForExplorerLoad(initTargetHwnd, True, False)
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("sendctrladd_explorer_load_wait"
+                    _DebugTrace_ExplorerCtrlAdd("sendctrladd_explorer_load_wait"
                                         , "elapsedMs=" . (A_TickCount - explorerLoadStartTick)
                                         . " branch=DirectUIHWND2 targetCtrl=[" . TargetControl . "]"
                                         , False, traceRequestId)
@@ -13079,14 +13219,14 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 focusStartTick := A_TickCount
                 focusSucceeded := _EnsureFocusedCtrlAddTarget(initTargetHwnd, TargetControl , resolvedHwnd, hasResolvedTarget, 60, 15, lClassCheck)
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("sendctrladd_focus_result"
+                    _DebugTrace_ExplorerCtrlAdd("sendctrladd_focus_result"
                                         , "elapsedMs=" . (A_TickCount - focusStartTick)
                                         . " succeeded=" . focusSucceeded
                                         . " branch=DirectUIHWND2 targetCtrl=[" . TargetControl . "]"
                                         , False, traceRequestId)
                 if !focusSucceeded {
                     if traceThisCall
-                        _TraceExplorerCtrlAdd("sendctrladd_aborted"
+                        _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                                             , "reason=focus_failed branch=DirectUIHWND2"
                                             . " elapsedMs=" . (A_TickCount - focusStartTick)
                                             . " targetCtrl=[" . TargetControl . "]"
@@ -13104,7 +13244,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 explorerLoadStartTick := A_TickCount
                 WaitForExplorerLoad(initTargetHwnd, (TargetControl == initFocusedCtrlNN), False)
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("sendctrladd_explorer_load_wait"
+                    _DebugTrace_ExplorerCtrlAdd("sendctrladd_explorer_load_wait"
                         , "elapsedMs=" . (A_TickCount - explorerLoadStartTick)
                         . " branch=shell_fallback targetCtrl=[" . TargetControl . "]"
                         , False, traceRequestId)
@@ -13114,14 +13254,14 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 focusStartTick := A_TickCount
                 focusSucceeded := _EnsureFocusedCtrlAddTarget(initTargetHwnd, TargetControl , resolvedHwnd, hasResolvedTarget, 60, 15, lClassCheck)
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("sendctrladd_focus_result"
+                    _DebugTrace_ExplorerCtrlAdd("sendctrladd_focus_result"
                         , "elapsedMs=" . (A_TickCount - focusStartTick)
                         . " succeeded=" . focusSucceeded
                         . " branch=shell_fallback targetCtrl=[" . TargetControl . "]"
                         , False, traceRequestId)
                 if !focusSucceeded {
                     if traceThisCall
-                        _TraceExplorerCtrlAdd("sendctrladd_aborted"
+                        _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                             , "reason=focus_failed branch=shell_fallback"
                             . " elapsedMs=" . (A_TickCount - focusStartTick)
                             . " targetCtrl=[" . TargetControl . "]"
@@ -13136,7 +13276,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 focusStartTick := A_TickCount
                 focusSucceeded := _EnsureFocusedCtrlAddTarget(initTargetHwnd, TargetControl , resolvedHwnd, hasResolvedTarget, 60, 15, lClassCheck)
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("sendctrladd_focus_result"
+                    _DebugTrace_ExplorerCtrlAdd("sendctrladd_focus_result"
                         , "elapsedMs=" . (A_TickCount - focusStartTick)
                         . " succeeded=" . focusSucceeded
                         . " branch=non_shell targetCtrl=[" . TargetControl . "]"
@@ -13146,7 +13286,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                     WinGet, focusFailureProcess, ProcessName, ahk_id %initTargetHwnd%
                     if (focusFailureProcess != "Everything.exe") {
                         if traceThisCall
-                            _TraceExplorerCtrlAdd("sendctrladd_aborted"
+                            _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                                 , "reason=focus_failed branch=non_shell"
                                 . " process=" . focusFailureProcess
                                 . " targetCtrl=[" . TargetControl . "]"
@@ -13155,7 +13295,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                         Return
                     }
                     if traceThisCall
-                        _TraceExplorerCtrlAdd("sendctrladd_focus_failure_tolerated"
+                        _DebugTrace_ExplorerCtrlAdd("sendctrladd_focus_failure_tolerated"
                             , "process=" . focusFailureProcess
                             . " targetCtrl=[" . TargetControl . "]"
                             , False, traceRequestId)
@@ -13166,7 +13306,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
         {
             if traceThisCall
-                _TraceExplorerCtrlAdd("sendctrladd_aborted"
+                _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                     , "reason=final_pre_send_guard targetCtrl=[" . TargetControl . "]"
                     . " lbutton=" . GetKeyState("LButton", "P")
                     . " activeHwnd=" . WinExist("A")
@@ -13180,13 +13320,13 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
             try {
                 ctrlNumpadAddStartTick := A_TickCount
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("ctrl_numpadadd_send"
+                    _DebugTrace_ExplorerCtrlAdd("ctrl_numpadadd_send"
                         , "targetCtrl=[" . TargetControl . "]"
                         . " initialFocus=[" . initFocusedCtrlNN . "]"
                         , False, traceRequestId)
                 Send, ^{NumpadAdd}
                 if traceThisCall
-                    _TraceExplorerCtrlAdd("ctrl_numpadadd_sent"
+                    _DebugTrace_ExplorerCtrlAdd("ctrl_numpadadd_sent"
                         , "elapsedMs=" . (A_TickCount - ctrlNumpadAddStartTick)
                         . " targetCtrl=[" . TargetControl . "]"
                         , False, traceRequestId)
@@ -13211,7 +13351,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                             restoreNeeded := False
                     }
                     if traceThisCall
-                        _TraceExplorerCtrlAdd("focus_restore_decision"
+                        _DebugTrace_ExplorerCtrlAdd("focus_restore_decision"
                             , "elapsedMs=" . (A_TickCount - focusRestoreDecisionStartTick)
                             . " needed=" . restoreNeeded
                             . " initialFocusHwnd=" . initFocusedHwnd
@@ -13225,13 +13365,13 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                         sleep, 125
                         EndBlockKeys()
                         if traceThisCall
-                            _TraceExplorerCtrlAdd("focus_restore_delay"
+                            _DebugTrace_ExplorerCtrlAdd("focus_restore_delay"
                                 , "elapsedMs=" . (A_TickCount - focusRestoreDelayStartTick)
                                 , False, traceRequestId)
 
                         If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd) {
                             if traceThisCall
-                                _TraceExplorerCtrlAdd("focus_restore_skipped"
+                                _DebugTrace_ExplorerCtrlAdd("focus_restore_skipped"
                                     , "reason=lbutton_or_foreground_changed lbutton="
                                     . GetKeyState("LButton", "P")
                                     . " activeHwnd=" . WinExist("A")
@@ -13251,7 +13391,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                             focusRestoreSucceeded := EnsureFocusedCtrlTarget(initTargetHwnd , initFocusedCtrlNN, 120, 15, lClassCheck)
                         }
                         if traceThisCall
-                            _TraceExplorerCtrlAdd("focus_restore_result"
+                            _DebugTrace_ExplorerCtrlAdd("focus_restore_result"
                                 , "elapsedMs=" . (A_TickCount - focusRestoreStartTick)
                                 . " succeeded=" . focusRestoreSucceeded
                                 . " method=" . focusRestoreMethod
@@ -13267,11 +13407,11 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 EndBlockKeys()
                 ManagedModifierCleanup("Ctrl", initTargetHwnd, 6)
                 if traceThisCall {
-                    _TraceExplorerCtrlAdd("modifier_cleanup_complete"
+                    _DebugTrace_ExplorerCtrlAdd("modifier_cleanup_complete"
                         , "elapsedMs=" . (A_TickCount - modifierCleanupStartTick)
                         . " targetHwnd=" . initTargetHwnd
                         , False, traceRequestId)
-                    _TraceExplorerCtrlAdd("ctrl_numpadadd_complete"
+                    _DebugTrace_ExplorerCtrlAdd("ctrl_numpadadd_complete"
                         , "outcome=ctrl_numpadadd targetCtrl=[" . TargetControl . "]"
                         . " focusRestoreCandidate="
                         . ((InStr(initFocusedCtrlNN, "Edit", True)
@@ -13281,7 +13421,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                         , False, traceRequestId)
                 }
                 if traceEverythingActivation
-                    _TraceExplorerCtrlAdd("everything_activation_complete"
+                    _DebugTrace_ExplorerCtrlAdd("everything_activation_complete"
                         , "outcome=ctrl_numpadadd"
                         . " targetCtrlNN=[" . TargetControl . "]"
                         . " targetCtrlHwnd=" . targetCtrlHwnd
@@ -13290,7 +13430,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
             }
         }
         else if traceThisCall
-            _TraceExplorerCtrlAdd("sendctrladd_aborted"
+            _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
                 , "reason=unsupported_target_control targetCtrl=[" . TargetControl . "]"
                 . " totalElapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
                 , False, traceRequestId)
@@ -14503,7 +14643,7 @@ FlushEverythingActivationAutoFit:
     ; Do not resize a window after the user has changed to another application.
     if !IsForegroundWindow(requestHwnd) {
         if (_ClearEverythingActivationAutoFitState(currentRequestId) && traceRequestId != "")
-            _TraceExplorerCtrlAdd("everything_activation_cancelled"
+            _DebugTrace_ExplorerCtrlAdd("everything_activation_cancelled"
                 , "reason=window_not_foreground hwnd=" . requestHwnd
                 , False, traceRequestId)
         Return
@@ -14529,7 +14669,7 @@ FlushEverythingActivationAutoFit:
     if (autoFitSucceeded) {
         totalElapsedMs := A_TickCount - requestStartTick
         if (_ClearEverythingActivationAutoFitState(currentRequestId) && traceRequestId != "")
-            _TraceExplorerCtrlAdd("everything_activation_ready"
+            _DebugTrace_ExplorerCtrlAdd("everything_activation_ready"
                 , "hwnd=" . requestHwnd . " attemptElapsedMs=" . attemptElapsedMs
                 . " totalElapsedMs=" . totalElapsedMs
                 , False, traceRequestId)
@@ -14541,7 +14681,7 @@ FlushEverythingActivationAutoFit:
     if (A_TickCount >= requestDeadlineTick) {
         totalElapsedMs := A_TickCount - requestStartTick
         if (_ClearEverythingActivationAutoFitState(currentRequestId) && traceRequestId != "")
-            _TraceExplorerCtrlAdd("everything_activation_timeout"
+            _DebugTrace_ExplorerCtrlAdd("everything_activation_timeout"
                 , "hwnd=" . requestHwnd . " lastFailure=" . failureStage
                 . " attemptElapsedMs=" . attemptElapsedMs . " totalElapsedMs=" . totalElapsedMs
                 , False, traceRequestId)
@@ -16672,6 +16812,93 @@ _GetWindowMoveAnimations() {
     return animations
 }
 
+; Moves a window on the current thread so an animation can retain its requested
+; cadence even while the script's ordinary timers would otherwise be eligible to run.
+_MoveWindowExclusively(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durationMs := 180
+    , completionCallback := "", easingMode := "smoothstep", frameIntervalMs := 15) {
+    ; Reject a closed window before entering an exclusive section that cannot animate it.
+    if !DllCall("IsWindow", "Ptr", hWnd)
+        return False
+
+    ; Capture the source rectangle once so every frame can interpolate from the same starting geometry.
+    WinGetPos, startX, startY, startWidth, startHeight, ahk_id %hWnd%
+    if (startWidth <= 0 || startHeight <= 0)
+        return False
+
+    ; Use the source dimensions when the caller requests position-only motion.
+    if (targetWidth == "")
+        targetWidth := startWidth
+    if (targetHeight == "")
+        targetHeight := startHeight
+    if (targetWidth <= 0 || targetHeight <= 0)
+        return False
+
+    ; Normalize caller inputs once so each frame has an exact reachable target and a nonzero duration.
+    durationMs      := Max(1, Round(durationMs))
+    frameIntervalMs := Max(1, Round(frameIntervalMs))
+    targetHeight    := Round(targetHeight)
+    targetWidth     := Round(targetWidth)
+    targetX         := Round(targetX)
+    targetY         := Round(targetY)
+
+    ; Preserve the existing two supported interpolation profiles for this reusable animation path.
+    if (easingMode != "linear")
+        easingMode := "smoothstep"
+
+    ; Start timing before the exclusive section so each frame follows elapsed wall-clock time rather than loop count.
+    startTick          := A_TickCount
+    nextFrameElapsedMs := 0
+    ; Keep ordinary timers from interrupting the frame loop; the taskbar caller uses this only for a short placement animation.
+    Critical, On
+    Loop {
+        ; Stop immediately if Explorer closes while its taskbar-spawn placement is in progress.
+        if !DllCall("IsWindow", "Ptr", hWnd) {
+            Critical, Off
+            return False
+        }
+
+        ; Calculate unsigned elapsed time so the animation remains valid across the A_TickCount wraparound.
+        elapsedMs := A_TickCount - startTick
+        if (elapsedMs < 0)
+            elapsedMs += 0x100000000
+
+        ; Convert elapsed time into a bounded fraction of the requested animation duration.
+        progress := Min(1, elapsedMs / durationMs)
+        ; Keep taskbar movement constant-speed when its caller explicitly requests linear motion.
+        easedProgress := (easingMode == "linear") ? progress : progress * progress * (3 - (2 * progress))
+
+        ; Interpolate every rectangle edge from the captured source toward the exact destination.
+        frameHeight := Round(startHeight + ((targetHeight - startHeight) * easedProgress))
+        frameWidth  := Round(startWidth + ((targetWidth - startWidth) * easedProgress))
+        frameX      := Round(startX + ((targetX - startX) * easedProgress))
+        frameY      := Round(startY + ((targetY - startY) * easedProgress))
+        WinMove, ahk_id %hWnd%, , %frameX%, %frameY%, %frameWidth%, %frameHeight%
+
+        ; Finish only after applying the exact target rectangle, then let the existing caller decide its follow-up work.
+        if (frameHeight == targetHeight && frameWidth == targetWidth && frameX == targetX && frameY == targetY)
+            break
+
+        ; Measure after WinMove so its native cost is included before selecting the next frame deadline.
+        afterFrameElapsedMs := A_TickCount - startTick
+        if (afterFrameElapsedMs < 0)
+            afterFrameElapsedMs += 0x100000000
+        ; Schedule from the current frame when the prior deadline was missed instead of accumulating a burst of catch-up frames.
+        nextFrameElapsedMs := Max(nextFrameElapsedMs + frameIntervalMs, afterFrameElapsedMs + frameIntervalMs)
+        remainingWaitMs    := nextFrameElapsedMs - afterFrameElapsedMs
+        ; Yield only until the next requested frame so Explorer can paint while this script retains frame ownership.
+        if (remainingWaitMs > 1)
+            Sleep, %remainingWaitMs%
+        else
+            Sleep, 1
+    }
+    ; Restore normal interruptibility before beginning the completion callback's Explorer readiness work.
+    Critical, Off
+
+    if IsObject(completionCallback)
+        completionCallback.Call()
+    return True
+}
+
 ; Advances one window-move animation frame and completes its optional callback.
 _MoveWindowFrame(animation) {
     ; Stop stale timers when the window disappears or a newer request owns its animation.
@@ -16679,10 +16906,21 @@ _MoveWindowFrame(animation) {
     targetHwnd := animation.hWnd
     timerCallback                  := animation.timerCallback
     currentAnimation               := animations[targetHwnd]
+    targetWindowExists             := DllCall("IsWindow", "Ptr", targetHwnd)
 
     if (!IsObject(currentAnimation)
         || currentAnimation.requestId != animation.requestId
-        || !DllCall("IsWindow", "Ptr", targetHwnd)) {
+        || !targetWindowExists) {
+        ; Identify the rejected ownership or window-state condition before deleting this callback's timer.
+        if !IsObject(currentAnimation)
+            abortReason := "registry_missing"
+        else if (currentAnimation.requestId != animation.requestId)
+            abortReason := "superseded_request"
+        else
+            abortReason := "window_closed"
+        ; Record a rejected callback so the trace distinguishes it from a callback that applied no visible frame.
+        _DebugTrace_AppendTaskbarExplorerMove("frame aborted requestId=" . animation.requestId . " hWnd=" . targetHwnd
+            . " reason=" . abortReason)
         if IsObject(timerCallback)
             SetTimer, % timerCallback, Delete
         animation.timerCallback := ""
@@ -16691,6 +16929,9 @@ _MoveWindowFrame(animation) {
         }
         return
     }
+
+    ; Record a valid timer callback before computing its target rectangle.
+    _DebugTrace_AppendTaskbarExplorerMove("frame entered requestId=" . animation.requestId . " hWnd=" . targetHwnd)
 
     ; Keep one animation frame uninterruptible while checking messages every 5 ms so its calculation and WinMove stay together.
     Critical, On
@@ -16720,14 +16961,18 @@ _MoveWindowFrame(animation) {
     ;                 frameX[1]                   = 100 + (600 * 0.0197) = 112
     ;                 frameDeltaX[1]              = 112 - 100 = 12 px
     ;
-    ; Cubic ease-in-out starts and ends with smaller gaps, accelerating through the midpoint.
+    ; The default cubic ease-in-out starts and ends with smaller gaps, accelerating through the midpoint.
     ; A larger targetX - startX over the same durationMs scales every gap upward.
     ; Y follows the same calculation; 2D frame distance is not separately stored.
 
     ; Divide elapsed time by duration and cap it to obtain the elapsed-time fraction.
     progress      := Min(1, elapsedMs / animation.durationMs)
-    ; Apply cubic ease-in-out so the motion starts and ends slowly around a faster midpoint.
-    easedProgress := progress * progress * (3 - (2 * progress))
+    ; Use constant-speed frames only when the caller explicitly requested linear movement.
+    if (animation.easingMode == "linear")
+        easedProgress := progress
+    ; Preserve cubic ease-in-out for every caller that did not request a different motion profile.
+    else
+        easedProgress := progress * progress * (3 - (2 * progress))
 
     ; Scale the height delta by eased progress and round it for WinMove.
     frameHeight     := Round(animation.startHeight + ((animation.targetHeight - animation.startHeight) * easedProgress))
@@ -16738,13 +16983,47 @@ _MoveWindowFrame(animation) {
     ; Scale the vertical delta by eased progress and round it for WinMove.
     frameY          := Round(animation.startY + ((animation.targetY - animation.startY) * easedProgress))
 
+    ; Limit delayed timer frames when the caller supplied a maximum visible rectangle change.
+    if (animation.maxFrameDeltaPx != "") {
+        ; Start with the larger size difference because AutoHotkey v1 Max() accepts exactly two values.
+        largestFrameDeltaPx := Max(Abs(frameHeight - animation.lastFrameHeight), Abs(frameWidth - animation.lastFrameWidth))
+        ; Include the horizontal difference so the common scale ratio also limits X movement.
+        largestFrameDeltaPx := Max(largestFrameDeltaPx, Abs(frameX - animation.lastFrameX))
+        ; Include the vertical difference so the common scale ratio also limits Y movement.
+        largestFrameDeltaPx := Max(largestFrameDeltaPx, Abs(frameY - animation.lastFrameY))
+        if (largestFrameDeltaPx > animation.maxFrameDeltaPx) {
+            ; Scale the ideal frame back toward the last rendered rectangle so a delayed timer cannot visibly jump ahead.
+            frameDeltaRatio := animation.maxFrameDeltaPx / largestFrameDeltaPx
+            ; Limit the height change while retaining its direction toward the elapsed-time target.
+            frameHeight := Round(animation.lastFrameHeight + ((frameHeight - animation.lastFrameHeight) * frameDeltaRatio))
+            ; Limit the width change while retaining its direction toward the elapsed-time target.
+            frameWidth := Round(animation.lastFrameWidth + ((frameWidth - animation.lastFrameWidth) * frameDeltaRatio))
+            ; Limit the horizontal movement while retaining its direction toward the elapsed-time target.
+            frameX := Round(animation.lastFrameX + ((frameX - animation.lastFrameX) * frameDeltaRatio))
+            ; Limit the vertical movement while retaining its direction toward the elapsed-time target.
+            frameY := Round(animation.lastFrameY + ((frameY - animation.lastFrameY) * frameDeltaRatio))
+        }
+    }
+
     WinMove, ahk_id %targetHwnd%, , %frameX%, %frameY%, %frameWidth%, %frameHeight%
+
+    ; Retain the exact rectangle applied by WinMove so the next frame limits movement from what was visibly rendered.
+    animation.lastFrameHeight := frameHeight
+    animation.lastFrameWidth  := frameWidth
+    animation.lastFrameX      := frameX
+    animation.lastFrameY      := frameY
 
     ; Restore normal thread interruption after the complete frame has been applied.
     Critical, Off
 
-    ; Finalize only after the target frame, clearing ownership before callback re-entry.
-    if (progress < 1)
+    ; Record the applied rectangle without logging window content, so delayed or capped movement is measurable.
+    _DebugTrace_AppendTaskbarExplorerMove("frame applied requestId=" . animation.requestId . " hWnd=" . targetHwnd
+        . " elapsedMs=" . elapsedMs . " progress=" . Round(progress, 3)
+        . " rect=(" . frameX . "," . frameY . "," . frameWidth . "," . frameHeight . ")")
+
+    ; A frame-capped animation can outlast its nominal duration; finalize only when the exact target rectangle was rendered.
+    if (frameHeight != animation.targetHeight || frameWidth != animation.targetWidth
+        || frameX != animation.targetX || frameY != animation.targetY)
         return
 
     if IsObject(timerCallback)
@@ -16752,32 +17031,52 @@ _MoveWindowFrame(animation) {
     completionCallback := animation.completionCallback
     animations.Delete(targetHwnd)
     animation.timerCallback := ""
+    ; Record completion so the final-frame trace can be separated from a timer that remains active.
+    _DebugTrace_AppendTaskbarExplorerMove("frame completed requestId=" . animation.requestId . " hWnd=" . targetHwnd)
     if IsObject(completionCallback)
         completionCallback.Call()
 }
 
 ; Animates a window to exact screen bounds without blocking the calling thread.
-MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durationMs := 180, completionCallback := "") {
+MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durationMs := 180, completionCallback := "", easingMode := "smoothstep", frameIntervalMs := 15, maxFrameDeltaPx := "") {
     static nextRequestId := 0
 
     ; Validate the window and its current bounds before creating timer-owned animation state.
-    if !DllCall("IsWindow", "Ptr", hWnd)
+    if !DllCall("IsWindow", "Ptr", hWnd) {
+        ; Record a rejected request because an invalid HWND cannot receive a timer-owned WinMove.
+        _DebugTrace_AppendTaskbarExplorerMove("registration rejected hWnd=" . hWnd . " reason=window_closed")
         return False
+    }
 
     WinGetPos, startX, startY, startWidth, startHeight, ahk_id %hWnd%
-    if (startWidth <= 0 || startHeight <= 0)
+    if (startWidth <= 0 || startHeight <= 0) {
+        ; Record unusable current bounds because a timer cannot interpolate from a zero-sized rectangle.
+        _DebugTrace_AppendTaskbarExplorerMove("registration rejected hWnd=" . hWnd . " reason=invalid_start_bounds")
         return False
+    }
 
     ; Default omitted dimensions to the current size so callers can animate position only.
     if (targetWidth == "")
         targetWidth := startWidth
     if (targetHeight == "")
         targetHeight := startHeight
-    if (targetWidth <= 0 || targetHeight <= 0)
+    if (targetWidth <= 0 || targetHeight <= 0) {
+        ; Record unusable destination bounds because WinMove requires a positive target rectangle.
+        _DebugTrace_AppendTaskbarExplorerMove("registration rejected hWnd=" . hWnd . " reason=invalid_target_bounds")
         return False
+    }
+
+    ; Preserve a caller-requested linear mode; use smoothstep for every other request.
+    if (easingMode != "linear")
+        easingMode := "smoothstep"
 
     ; Clamp duration to at least one millisecond so frame progress never divides by zero.
     durationMs   := Max(1, Round(durationMs))
+    ; Retain the established 15 ms timer cadence unless a caller requests a shorter or longer animation frame interval.
+    frameIntervalMs := Max(1, Round(frameIntervalMs))
+    ; Keep uncapped elapsed-time movement by default; a supplied limit prevents a delayed timer from creating a large visible jump.
+    if (maxFrameDeltaPx != "")
+        maxFrameDeltaPx := Max(1, Round(maxFrameDeltaPx))
     ; Round the target height once so every frame converges on an exact WinMove value.
     targetHeight := Round(targetHeight)
     ; Round the target width once so every frame converges on an exact WinMove value.
@@ -16803,28 +17102,41 @@ MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durati
         WinMove, ahk_id %hWnd%, , %targetX%, %targetY%, %targetWidth%, %targetHeight%
         if IsObject(completionCallback)
             completionCallback.Call()
+        ; Record immediate completion so no timer frame is expected for an already-positioned window.
+        _DebugTrace_AppendTaskbarExplorerMove("registration completed hWnd=" . hWnd . " mode=already_at_target")
         return True
     }
 
     ; Store one uniquely identified request and animate by timer so the caller remains non-blocking.
     nextRequestId++
     animation := { completionCallback: completionCallback
-        , durationMs: durationMs
-        , hWnd: hWnd
-        , requestId: nextRequestId
-        , startHeight: startHeight
-        , startTick: A_TickCount
-        , startWidth: startWidth
-        , startX: startX
-        , startY: startY
-        , targetHeight: targetHeight
-        , targetWidth: targetWidth
-        , targetX: targetX
-        , targetY: targetY }
+                    , durationMs: durationMs
+                    , easingMode: easingMode
+                    , frameIntervalMs: frameIntervalMs
+                    , hWnd: hWnd
+                    , lastFrameHeight: startHeight
+                    , lastFrameWidth: startWidth
+                    , lastFrameX: startX
+                    , lastFrameY: startY
+                    , maxFrameDeltaPx: maxFrameDeltaPx
+                    , requestId: nextRequestId
+                    , startHeight: startHeight
+                    , startTick: A_TickCount
+                    , startWidth: startWidth
+                    , startX: startX
+                    , startY: startY
+                    , targetHeight: targetHeight
+                    , targetWidth: targetWidth
+                    , targetX: targetX
+                    , targetY: targetY }
     timerCallback           := Func("_MoveWindowFrame").Bind(animation)
     animation.timerCallback := timerCallback
     animations[hWnd]        := animation
-    SetTimer, % timerCallback, 15
+    ; Use the caller's requested frame cadence while the default retains the prior 15 ms timer interval.
+    SetTimer, % timerCallback, %frameIntervalMs%
+    ; Record timer registration with all cadence inputs needed to explain the following frame sequence.
+    _DebugTrace_AppendTaskbarExplorerMove("timer registered requestId=" . nextRequestId . " hWnd=" . hWnd
+        . " durationMs=" . durationMs . " frameIntervalMs=" . frameIntervalMs . " maxFrameDeltaPx=" . maxFrameDeltaPx)
     return True
 }
 
@@ -17072,7 +17384,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
                     traceMessage := "Ctrl+D: clipboard write failed; no Ctrl+V was sent"
                     traceMessage .= "; expectedHwnd=" . expectedWindowId
                     traceMessage .= "; foregroundHwnd=" . traceForegroundHwnd
-                    WriteCtrlDPasteTrace(traceMessage)
+                    _DebugTrace_AppendCtrlDPaste(traceMessage)
                 }
                 Clip("", "", "RESTORE")
                 return ""
@@ -17087,7 +17399,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
                     traceMessage := "Ctrl+D: focus changed before Ctrl+V; no Ctrl+V was sent"
                     traceMessage .= "; expectedHwnd=" . expectedWindowId
                     traceMessage .= "; foregroundHwnd=" . traceForegroundHwnd
-                    WriteCtrlDPasteTrace(traceMessage)
+                    _DebugTrace_AppendCtrlDPaste(traceMessage)
                 }
                 Clip("", "", "RESTORE")
                 return ""
@@ -17105,7 +17417,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
                 traceMessage .= " returned " . (didPaste ? "True" : "False")
                 traceMessage .= "; expectedHwnd=" . expectedWindowId
                 traceMessage .= "; foregroundHwnd=" . traceForegroundHwnd
-                WriteCtrlDPasteTrace(traceMessage)
+                _DebugTrace_AppendCtrlDPaste(traceMessage)
             }
             if !didPaste {
                 Clip("", "", "RESTORE")
@@ -17195,13 +17507,13 @@ mapDesktopsFromRegistry()
     while (CurrentDesktopId and i < DesktopCount) {
         StartPos := (i * IdLength) + 1
         DesktopIter := SubStr(DesktopList, StartPos, IdLength)
-        WriteGeneralDebugLog("The iterator is pointing at " . DesktopIter . " and count is " . i . ".")
+        _DebugTrace_AppendGeneral("The iterator is pointing at " . DesktopIter . " and count is " . i . ".")
 
         ; Break out If we find a match in the list. If we didn't find anything, keep the
         ; old guess and pray we're still correct :-D.
         If (DesktopIter = CurrentDesktopId) {
             CurrentDesktop := i + 1
-            WriteGeneralDebugLog("Current desktop number is " . CurrentDesktop . " with an ID of " . DesktopIter . ".")
+            _DebugTrace_AppendGeneral("Current desktop number is " . CurrentDesktop . " with an ID of " . DesktopIter . ".")
             break
         }
         i++
@@ -17215,46 +17527,60 @@ getSessionId()
 {
     ProcessId := DllCall("GetCurrentProcessId", "UInt")
     If ErrorLevel {
-        WriteGeneralDebugLog("Error getting current process id: " . ErrorLevel)
+        _DebugTrace_AppendGeneral("Error getting current process id: " . ErrorLevel)
         Return
     }
-    WriteGeneralDebugLog("Current Process Id: " . ProcessId)
+    _DebugTrace_AppendGeneral("Current Process Id: " . ProcessId)
 
     SessionId := 0
     sessionIdResult := DllCall("ProcessIdToSessionId", "UInt", ProcessId, "UInt*", SessionId)
     If (ErrorLevel || !sessionIdResult) {
-        WriteGeneralDebugLog("Error getting session id: " . (ErrorLevel ? ErrorLevel : A_LastError))
+        _DebugTrace_AppendGeneral("Error getting session id: " . (ErrorLevel ? ErrorLevel : A_LastError))
         Return
     }
-    WriteGeneralDebugLog("Current Session Id: " . SessionId)
+    _DebugTrace_AppendGeneral("Current Session Id: " . SessionId)
     Return SessionId
 }
 
 ; Append one timestamped Ctrl+D paste result without enabling general diagnostic logging.
-WriteCtrlDPasteTrace(message)
+_DebugTrace_AppendCtrlDPaste(message)
 {
-    global k_debugLogCtrlDPasteEnabled
-    global k_debugLogCtrlDPasteFile
+    global k_debugTraceCtrlDPasteEnabled
+    global k_debugTraceCtrlDPasteFile
 
-    if !k_debugLogCtrlDPasteEnabled
+    if !k_debugTraceCtrlDPasteEnabled
         return False
 
     logLine := A_Now . "." . A_MSec . " " . message . "`r`n"
-    FileAppend, %logLine%, %k_debugLogCtrlDPasteFile%, UTF-8
+    FileAppend, %logLine%, %k_debugTraceCtrlDPasteFile%, UTF-8
     return !ErrorLevel
 }
 
-; Append one timestamped general diagnostic message when its debug-log switch is enabled.
-WriteGeneralDebugLog(message)
+; Append one timestamped general diagnostic message when its debug-trace switch is enabled.
+_DebugTrace_AppendGeneral(message)
 {
-    global k_debugLogGeneralEnabled
-    global k_debugLogGeneralFile
+    global k_debugTraceGeneralEnabled
+    global k_debugTraceGeneralFile
 
-    if !k_debugLogGeneralEnabled
+    if !k_debugTraceGeneralEnabled
         return False
 
     logLine := A_Now . "." . A_MSec . " " . message . "`r`n"
-    FileAppend, %logLine%, %k_debugLogGeneralFile%, UTF-8
+    FileAppend, %logLine%, %k_debugTraceGeneralFile%, UTF-8
+    return !ErrorLevel
+}
+
+; Append one timestamped taskbar Explorer move diagnostic while its focused trace is temporarily enabled.
+_DebugTrace_AppendTaskbarExplorerMove(message)
+{
+    global k_debugTraceTaskbarExplorerMoveEnabled
+    global k_debugTraceTaskbarExplorerMoveFile
+
+    if !k_debugTraceTaskbarExplorerMoveEnabled
+        return False
+
+    logLine := A_Now . "." . A_MSec . " " . message . "`r`n"
+    FileAppend, %logLine%, %k_debugTraceTaskbarExplorerMoveFile%, UTF-8
     return !ErrorLevel
 }
 
@@ -19449,7 +19775,7 @@ _ResolveDialogFolderLocation(hwndDlg, preferredResolver := "", traceRequestId :=
         }
 
         if (traceRequestId != "")
-            _TraceExplorerCtrlAdd("dialog_location_probe"
+            _DebugTrace_ExplorerCtrlAdd("dialog_location_probe"
                 , "resolver=" . resolverName
                 . " elapsedMs=" . resolverElapsedMs
                 . " found=" . (dialogPath != "")
@@ -19536,14 +19862,14 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
             ; Clear a failed COM object so a later call can retry after Explorer or COM recovers.
             shellApp := ""
             if (traceRequestId != "")
-                _TraceExplorerCtrlAdd("explorer_path_shell_app_create"
+                _DebugTrace_ExplorerCtrlAdd("explorer_path_shell_app_create"
                     , "elapsedMs=" . (A_TickCount - shellAppStartTick)
                     . " success=0", False, traceRequestId)
             ; Return no path because continuing without Shell.Application would make the primary lookup invalid.
             return ""
         }
         if (traceRequestId != "")
-            _TraceExplorerCtrlAdd("explorer_path_shell_app_create"
+            _DebugTrace_ExplorerCtrlAdd("explorer_path_shell_app_create"
                 , "elapsedMs=" . (A_TickCount - shellAppStartTick)
                 . " success=1", False, traceRequestId)
     }
@@ -19554,7 +19880,7 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
     activeTabStartTick := A_TickCount
     ControlGet, activeTabHwnd, Hwnd,, ShellTabWindowClass1, % "ahk_id " hwnd
     if (traceRequestId != "")
-        _TraceExplorerCtrlAdd("explorer_path_active_tab_lookup"
+        _DebugTrace_ExplorerCtrlAdd("explorer_path_active_tab_lookup"
             , "elapsedMs=" . (A_TickCount - activeTabStartTick)
             . " found=" . !!activeTabHwnd
             . " activeTabHwnd=" . activeTabHwnd, False, traceRequestId)
@@ -19576,7 +19902,7 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
             ; Require the same active tab because a cached path from another tab would report the wrong directory.
             if (cacheItem.activeTabHwnd = activeTabHwnd) {
                 if (traceRequestId != "")
-                    _TraceExplorerCtrlAdd("explorer_path_cache_throttle_hit"
+                    _DebugTrace_ExplorerCtrlAdd("explorer_path_cache_throttle_hit"
                         , "cacheAgeMs=" . (A_TickCount - cacheItem.lastTick)
                         . " path=[" . cacheItem.lastPath . "]", False, traceRequestId)
                 return cacheItem.lastPath
@@ -19604,7 +19930,7 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
             if (cachedShellBrowser)
                 ObjRelease(cachedShellBrowser)
             if (traceRequestId != "")
-                _TraceExplorerCtrlAdd("explorer_path_cached_native_read"
+                _DebugTrace_ExplorerCtrlAdd("explorer_path_cached_native_read"
                     , "elapsedMs=" . (A_TickCount - cachedNativeStartTick)
                     . " found=" . (cachedPath != "")
                     . " failure=" . cachedNativeFailureReason
@@ -19618,7 +19944,7 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
                 catch
                     cachedPath := ""
                 if (traceRequestId != "")
-                    _TraceExplorerCtrlAdd("explorer_path_cached_automation_fallback"
+                    _DebugTrace_ExplorerCtrlAdd("explorer_path_cached_automation_fallback"
                         , "elapsedMs=" . (A_TickCount - cachedAutomationStartTick)
                         . " found=" . (cachedPath != "")
                         . " path=[" . cachedPath . "]", False, traceRequestId)
@@ -19752,7 +20078,7 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
         foundPath := ""
     }
     if (traceRequestId != "")
-        _TraceExplorerCtrlAdd("explorer_path_collection_scan"
+        _DebugTrace_ExplorerCtrlAdd("explorer_path_collection_scan"
             , "elapsedMs=" . (A_TickCount - collectionScanStartTick)
             . " collectionMs=" . collectionElapsedMs
             . " enumerated=" . enumeratedWindowCount
@@ -19818,7 +20144,7 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
     ; Normalize the toolbar fallback so it can be compared with native, automation, and dialog folder identities.
     dirText := _NormalizeExplorerFolderIdentity(dirText)
     if (traceRequestId != "")
-        _TraceExplorerCtrlAdd("explorer_path_toolbar_fallback"
+        _DebugTrace_ExplorerCtrlAdd("explorer_path_toolbar_fallback"
             , "primaryLookupMs=" . primaryToolbarLookupElapsedMs
             . " primaryTextMs=" . primaryToolbarTextElapsedMs
             . " primaryFound=" . !!toolbarHwnd1
