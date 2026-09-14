@@ -239,7 +239,7 @@ Global k_tbcEverythingAdjustMaxAgeMs                         := 750
 Global k_tbcEverythingAdjustRetryMs                          := 40
 ; Debounce interval after an Everything Edit1 typing event before attempting
 ; native results ListView column sizing.
-Global k_tbcEverythingAdjustTypingQuietMs                    := 100
+Global k_tbcEverythingAdjustTypingQuietMs                    := 240
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -528,6 +528,9 @@ Global k_explorerCtrlAddRefreshMinimumWaitMs                 := 300
 ; Shared UIA evidence accepted as proof that an Items View exposes either an
 ; item or a recognized empty-result message.
 Global k_explorerItemsViewContentEvidenceCondition           := "ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search."
+; UIA evidence that Explorer is still rendering a newly selected folder. This
+; is checked before content evidence can authorize column auto-alignment.
+Global k_explorerItemsViewLoadingCondition                   := "Name=Working on it..."
 ; +----------------------------------------------------------------------------+
 ; | Debug Trace Configuration                                                  |
 ; | Enables diagnostic traces and defines their output files.                  |
@@ -5999,6 +6002,7 @@ Cycle() {
                         cycleCount := 3
                         Critical, Off
 
+                        WinGetPosEx(hwndID, wx, wy, ww, wh)
                         Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 30)
 
                         If !GetKeyState("LAlt","P")
@@ -9991,18 +9995,19 @@ _DebugTrace_RecordDialogToolbarBaselineCrosscheck(hwndDlg, initialPath, toolbarP
 ;    file-view double-click navigation normally require a nonempty path different
 ;    from initialPath. A confirmed #32770 request may use Details/content state
 ;    when its post-click path remains unavailable after the short guard.
-; 3. Path-changing header requests make a guarded early alignment after their
-;    path gate, then retain the verified UIA follow-up to correct Explorer rebuilds.
-;    A header click without a pre-click path baseline uses guarded early, verified,
-;    and final attempts without path comparison. Refresh makes no unverified send;
-;    it waits for its minimum gate and verified Details/content evidence.
+; 3. Folder-navigation requests wait for verified Details/content evidence. They
+;    do not make pre-probe, Details-only, or best-effort sends, so visible
+;    "Working on it..." state and stale content cannot authorize alignment.
+;    Refresh makes no unverified send; it waits for its minimum gate and verified
+;    Details/content evidence.
 ; 4. Confirmed #32770 SysTreeView32 navigation uses the same changed-path,
 ;    Details-mode, and UIA item/empty-result proof as other navigation, with the
 ;    same unavailable-path view-state fallback.
 ;
-; Every verified send requires Details mode plus one visible UIA ListItem or a
-; recognized empty-result message. Eligible #32770 startup/navigation may also
-; make one earlier Details-only send and retain the verified corrective attempt.
+; Every verified send requires Details mode, no visible "Working on it..." UIA
+; evidence, plus one visible UIA ListItem or a recognized empty-result message.
+; Eligible #32770 startup requests may also make one earlier Details-only send
+; and retain the verified corrective attempt.
 ; CabinetWClass reuses a positive Details-mode result within the same request,
 ; while resolving the current Items View and visible-content proof on every retry.
 ; Event-backed CabinetWClass path changes wake from NavigateComplete2; a bounded
@@ -10087,9 +10092,13 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
         readinessTimeoutMs := k_explorerCtrlAddTimeoutMs + Max(0, minimumContentProbeDelayMs)
     }
 
-    allowDetailsOnlySend := windowClass == "#32770" && (requirePathChange || requireStablePath) && !allowBestEffortSend
-    useFastPathPolling  := requirePathChange
-    useNavigationEvents := requirePathChange && windowClass == "CabinetWClass" && _HasExplorerNavigationObserver(hwnd)
+    ; A changed-path request is folder navigation. Header navigation without a
+    ; path baseline sets allowBestEffortSend, so it receives the same gate.
+    isFolderNavigation   := requirePathChange || allowBestEffortSend
+    allowBestEffortSend  := allowBestEffortSend && !isFolderNavigation
+    allowDetailsOnlySend := windowClass == "#32770" && (requirePathChange || requireStablePath) && !isFolderNavigation && !allowBestEffortSend
+    useFastPathPolling   := requirePathChange
+    useNavigationEvents  := requirePathChange && windowClass == "CabinetWClass" && _HasExplorerNavigationObserver(hwnd)
 
     ; Capture request creation time so every readiness gate uses the same time origin.
     requestStartTick                     := A_TickCount
@@ -10111,9 +10120,9 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     ; Publish the complete single-slot request atomically. Assigning its ID last
     ; prevents a timer callback from pairing a new ID with partially replaced fields.
     Critical, On
-    supersededRequestId                                   := explorerCtrlAddRequestId
-    supersededRequestPending                              := debugTraceExplorerCtrlAddRequestOpen
-    replacementRequestId                                  := explorerCtrlAddRequestId + 1
+    supersededRequestId                                 := explorerCtrlAddRequestId
+    supersededRequestPending                            := debugTraceExplorerCtrlAddRequestOpen
+    replacementRequestId                                := explorerCtrlAddRequestId + 1
     explorerCtrlAddRequestAllowBestEffortSend           := allowBestEffortSend
     explorerCtrlAddRequestAllowPathlessContentReady     := allowPathlessContentReady
     explorerCtrlAddRequestClass                         := windowClass
@@ -10170,6 +10179,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
         . " class=" . windowClass
         . " sourceCtrlNN=[" . sourceCtrlNN . "]"
         . " initialPath=[" . initialPath . "]"
+        . " isFolderNavigation=" . isFolderNavigation
         . " requirePathChange=" . requirePathChange
         . " requireStablePath=" . requireStablePath
         . " restoreTreeFocus=" . restoreTreeFocus
@@ -10188,10 +10198,10 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
 ; Explorer or file dialog header. Trace the classified command and its baseline
 ; before publishing the request so failures before request creation remain visible.
 ; Directory-changing commands normally advance beyond the path captured before
-; the click. Any header request without a pre-click baseline uses guarded early,
-; verified, and final attempts without a path comparison. When a baseline exists,
-; only confirmed #32770 header navigation may continue if the post-click path is
-; unavailable. A nonempty unchanged path still must change.
+; the click. Every folder-navigation request waits for verified Details/content
+; readiness, including a header request without a pre-click path baseline. When
+; a baseline exists, only confirmed #32770 header navigation may continue if the
+; post-click path is unavailable. A nonempty unchanged path still must change.
 ; Refresh skips unverified sends and waits for its timed Details/content probe.
 _RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePathChange := False, minimumContentProbeDelayMs := 0) {
     global explorerCtrlAddRequestId
@@ -10690,11 +10700,9 @@ RunExplorerCtrlAddWhenReady:
         Return
     }
 
-    ; A header request either proved a changed path, lacked a pre-click baseline,
-    ; or entered through the permitted #32770 post-click path fallback. Align
-    ; once before synchronous UIA so a slow provider cannot delay the user-visible
-    ; result; retain the request for the verified corrective send after the file
-    ; view exposes content.
+    ; Only non-navigation recovery requests may align before the UIA readiness
+    ; probe. Folder navigation clears this flag at request creation so it cannot
+    ; auto-align while Explorer displays "Working on it..." or stale content.
     if (requestPreProbeSendPending) {
         preProbeTargetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
         preProbeActiveHwnd   := WinExist("A")
@@ -10741,8 +10749,8 @@ RunExplorerCtrlAddWhenReady:
     }
 
     ; Report Details mode separately from visible ListItem/empty-result evidence.
-    ; Eligible #32770 startup/navigation requests may align once on Details-only;
-    ; every incomplete content result is still retried until the request deadline.
+    ; Eligible #32770 startup requests may align once on Details-only; every
+    ; incomplete content result is still retried until the request deadline.
     ; Capture the start tick so the complete UIA probe duration can be measured.
     contentProbeStartTick := A_TickCount
     ; Run one shared probe so Details, content, target, and timing results stay correlated.
@@ -10902,9 +10910,9 @@ RunExplorerCtrlAddWhenReady:
         }
     }
 
-    ; A confirmed #32770 Details view is enough for one early alignment even if
-    ; its UIA provider has not exposed a visible item yet. Keep the request alive
-    ; so Details-with-content can authorize a second, corrective alignment.
+    ; A confirmed #32770 startup Details view is enough for one early alignment
+    ; even if its UIA provider has not exposed a visible item yet. Keep the
+    ; request alive so Details-with-content can authorize a corrective alignment.
     if (detailsOnlySendCandidate) {
         detailsOnlyTargetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
         detailsOnlyActiveHwnd := WinExist("A")
@@ -11014,12 +11022,9 @@ RunExplorerCtrlAddWhenReady:
             Return
         }
 
-        ; Header requests already passed button and target classification. Their
-        ; path-changing request either proved the destination changed, lacked a
-        ; usable pre-click path baseline, or entered the #32770 pathless view-state
-        ; fallback. If UIA cannot prove content by the deadline, make one final
-        ; attempt only while that same window is foreground and no physical click
-        ; is active.
+        ; Non-navigation recovery requests may make one final attempt when UIA
+        ; cannot prove readiness. Folder-navigation requests clear this policy at
+        ; creation and instead expire without auto-aligning incomplete content.
         finalTargetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
         finalActiveHwnd   := WinExist("A")
         finalClass        := ""
@@ -11794,6 +11799,7 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
 
     global UIA
     global k_explorerItemsViewContentEvidenceCondition
+    global k_explorerItemsViewLoadingCondition
 
     if (!targetHwndID || !WinExist("ahk_id " . targetHwndID))
         return { state: "not_ready", reason: "target_gone" , detailsReady: False, contentReady: False }
@@ -11943,6 +11949,23 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
 
         if !IsObject(itemsEl) {
             probeResult.reason := "items_view_unavailable"
+            return probeResult
+        }
+
+        if (!_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+            probeResult.reason := "uia_budget_exhausted"
+            return probeResult
+        }
+
+        ; A visible loading message overrides residual ListItem evidence from the
+        ; previous folder, so column sizing waits for Explorer to finish rendering.
+        loadingEvidenceEl := ""
+        try
+            loadingEvidenceEl := itemsEl.FindFirstBy(k_explorerItemsViewLoadingCondition)
+        catch e
+            loadingEvidenceEl := ""
+        if IsObject(loadingEvidenceEl) {
+            probeResult.reason := "working_on_it_visible"
             return probeResult
         }
 
@@ -12447,7 +12470,7 @@ GetCtrlNNsByPrefix(hwndTop, classPrefix)
     WinGet, listC, ControlList,     ahk_id %hwndTop%
     WinGet, listH, ControlListHwnd, ahk_id %hwndTop%
     prefixLen := StrLen(classPrefix)
-    ctrlNNs := StrSplit(RTrim(listC, "`r`n"), "`n", "`r")
+    ctrlNNs   := StrSplit(RTrim(listC, "`r`n"), "`n", "`r")
     ctrlHwnds := StrSplit(RTrim(listH, "`r`n"), "`n", "`r")
 
     out := ""
