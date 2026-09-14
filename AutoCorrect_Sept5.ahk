@@ -191,8 +191,8 @@ Global lastHotkeyTyped                                       := ""
 Global TimeOfLastHotkeyTyped                                 := A_TickCount
 ; +----------------------------------------------------------------------------+
 ; | Everything Edit1 Deferred Column Auto-Fit State                            |
-; | Queues Ctrl+NumpadAdd for Everything's search box so the send runs only    |
-; | after typing has gone quiet and the same Edit1 still owns focus.           |
+; | Debounces native results ListView sizing so it runs after a short pause     |
+; | and only while the same Everything Edit1 still owns focus.                  |
 ; +----------------------------------------------------------------------------+
 ; Results-window startup state keeps direct native sizing separate from the
 ; Edit1 typing path so initial alignment never needs to move keyboard focus.
@@ -234,12 +234,12 @@ Global tbcEverythingAdjustSourceTick                         := 0
 ; Maximum lifetime for a deferred Everything Edit1 auto-fit request before it
 ; is dropped as stale rather than sent into a newer typing context.
 Global k_tbcEverythingAdjustMaxAgeMs                         := 750
-; Fallback retry delay used only when StopAutoFix, rather than insufficient
-; physical idle time, temporarily prevents Everything's typing-quiet gate.
+; Short retry delay for the queued Everything Edit1 auto-fit timer while
+; waiting for Everything's native results ListView/header to settle.
 Global k_tbcEverythingAdjustRetryMs                          := 40
-; Minimum physical-idle gap required before Everything Edit1 is allowed to
-; receive the deferred Ctrl+NumpadAdd column auto-fit chord.
-Global k_tbcEverythingAdjustTypingQuietMs                    := 180
+; Debounce interval after an Everything Edit1 typing event before attempting
+; native results ListView column sizing.
+Global k_tbcEverythingAdjustTypingQuietMs                    := 100
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -5151,7 +5151,9 @@ Return
 
 $!k::
     StopAutoFix := True
-    Send, {Down}
+    SendLevel, 1
+    SendEvent, {Down}
+    SendLevel, 0
     Hotstring("Reset")
     StopAutoFix := False
 Return
@@ -13536,14 +13538,16 @@ IsChromiumContentClick(windowHwnd, windowClass := "", ctrlNN := "") {
 ; callers use their existing keyboard fallback. When supplied, failureInfo identifies
 ; the rejected native operation and, for LVM_SETCOLUMNWIDTH, the affected column.
 AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 75, ByRef failureInfo := "") {
-    static HDM_GETITEMCOUNT           := 0x1200
-    static LVM_GETHEADER              := 0x101F
-    static LVM_SETCOLUMNWIDTH         := 0x101E
+    static HDM_GETITEMCOUNT                 := 0x1200
+    static LVM_GETHEADER                    := 0x101F
+    static LVM_GETCOLUMNWIDTH               := 0x101D
+    static LVM_SETCOLUMNWIDTH               := 0x101E
     ; Size a column to the widest text in its item contents.
-    static LVSCW_AUTOSIZE             := -1
+    static LVSCW_AUTOSIZE                   := -1
     ; Size a column to its header text; the final column may fill remaining space.
-    static LVSCW_AUTOSIZE_USEHEADER   := -2
-    static SMTO_ABORTIFHUNG_AND_BLOCK := 0x0003
+    static LVSCW_AUTOSIZE_USEHEADER         := -2
+    static k_headerNoFillLastColumnMinWidth := 50
+    static SMTO_ABORTIFHUNG_AND_BLOCK       := 0x0003
 
     failureInfo := ""
 
@@ -13605,9 +13609,10 @@ AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 7
     }
 
     Loop, %columnCount% {
-        columnIndex := A_Index - 1
-        columnWidth := (mode = "header_no_fill" && columnIndex = columnCount - 1) ? LVSCW_AUTOSIZE : requestedWidth
-        messageResult := 0
+        columnIndex              := A_Index - 1
+        isHeaderNoFillLastColumn := (mode = "header_no_fill" && columnIndex = columnCount - 1)
+        columnWidth              := isHeaderNoFillLastColumn ? LVSCW_AUTOSIZE : requestedWidth
+        messageResult            := 0
         if !DllCall("user32\SendMessageTimeoutW"
             , "Ptr", listViewHwnd, "UInt", LVM_SETCOLUMNWIDTH
             , "Ptr", columnIndex, "Ptr", columnWidth
@@ -13622,6 +13627,37 @@ AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 7
                 , columnIndex: columnIndex, columnWidth: columnWidth
                 , messageResult: messageResult }
             return False
+        }
+        if (isHeaderNoFillLastColumn) {
+            columnPixelWidth := 0
+            if !DllCall("user32\SendMessageTimeoutW"
+                , "Ptr", listViewHwnd, "UInt", LVM_GETCOLUMNWIDTH
+                , "Ptr", columnIndex, "Ptr", 0
+                , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", columnPixelWidth, "Ptr")
+            {
+                failureInfo := { stage: "lvm_getcolumnwidth_timeout", listViewHwnd: listViewHwnd
+                    , columnIndex: columnIndex, timeoutMs: timeoutMs }
+                return False
+            }
+            if (columnPixelWidth < k_headerNoFillLastColumnMinWidth) {
+                columnWidth := k_headerNoFillLastColumnMinWidth
+                messageResult := 0
+                if !DllCall("user32\SendMessageTimeoutW"
+                    , "Ptr", listViewHwnd, "UInt", LVM_SETCOLUMNWIDTH
+                    , "Ptr", columnIndex, "Ptr", columnWidth
+                    , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", messageResult, "Ptr")
+                {
+                    failureInfo := { stage: "lvm_setcolumnwidth_min_timeout", listViewHwnd: listViewHwnd
+                        , columnIndex: columnIndex, columnWidth: columnWidth, timeoutMs: timeoutMs }
+                    return False
+                }
+                if (!messageResult) {
+                    failureInfo := { stage: "lvm_setcolumnwidth_min_rejected", listViewHwnd: listViewHwnd
+                        , columnIndex: columnIndex, columnWidth: columnWidth
+                        , messageResult: messageResult }
+                    return False
+                }
+            }
         }
     }
 
@@ -14478,8 +14514,7 @@ _ClearTbcEverythingEditAdjustState(preserveSourceTick := False) {
 
 ; Queues a deferred Everything Edit1 column auto-fit request:
 ; capture or accept the current search-box focus context, stamp the latest
-; typing tick, and let a short timer enforce a stronger typing-quiet pause
-; before sending.
+; typing tick, and let a short timer coalesce rapid typing before native sizing.
 _RequestEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
     global k_tbcEverythingAdjustTypingQuietMs
     global tbcEverythingAdjustCtrlNN
@@ -14513,8 +14548,7 @@ _RequestEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := ""
     tbcEverythingAdjustId += 1
     tbcEverythingAdjustRequestedTick := A_TickCount
     tbcEverythingAdjustSourceTick := sourceTick
-    remainingQuietMs := GetRemainingQuietDelayMs(A_TimeIdlePhysical, k_tbcEverythingAdjustTypingQuietMs, False)
-    SetTimer, FlushTbcEverythingEditAdjust, % -remainingQuietMs
+    SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustTypingQuietMs
     return true
 }
 
@@ -14697,8 +14731,8 @@ FlushEverythingActivationAutoFit:
 Return
 
 ; Deferred Everything Edit1 native column auto-fit flush:
-; wait for a stronger post-typing idle window, confirm the same search field
-; still owns focus, then resize the results ListView without keyboard injection.
+; after a short debounce, confirm the same search field still owns focus, then
+; resize the results ListView without keyboard injection.
 FlushTbcEverythingEditAdjust:
     currentRequestId := tbcEverythingAdjustId
     ; Stop when no deferred request or target window remains because a previously armed timer may fire after state was cleared.
@@ -14711,17 +14745,6 @@ FlushTbcEverythingEditAdjust:
         ; Clear invalid state only while this callback still owns the request slot so a newer replacement request is preserved.
         if (currentRequestId = tbcEverythingAdjustId)
             _ClearTbcEverythingEditAdjustState()
-        Return
-    }
-
-    ; Defer the chord until physical typing is quiet so its synthetic Ctrl input cannot interfere with active typing.
-    if (!_IsDeferredTypingQuiet(k_tbcEverythingAdjustTypingQuietMs)) {
-        ; Physical idle time has an exact deadline. The fixed fallback remains
-        ; only for the separate StopAutoFix gate, which has no known end tick.
-        remainingQuietMs := (A_TimeIdlePhysical < k_tbcEverythingAdjustTypingQuietMs)
-                          ? GetRemainingQuietDelayMs(A_TimeIdlePhysical, k_tbcEverythingAdjustTypingQuietMs, False)
-                          : k_tbcEverythingAdjustRetryMs
-        SetTimer, FlushTbcEverythingEditAdjust, % -remainingQuietMs
         Return
     }
 
@@ -14745,16 +14768,13 @@ FlushTbcEverythingEditAdjust:
         Return
     }
 
-    ; Reschedule if typing resumed during the send attempt so the retry waits for a fresh quiet interval.
-    if (!_IsDeferredTypingQuiet(k_tbcEverythingAdjustTypingQuietMs)) {
-        remainingQuietMs := (A_TimeIdlePhysical < k_tbcEverythingAdjustTypingQuietMs)
-                          ? GetRemainingQuietDelayMs(A_TimeIdlePhysical, k_tbcEverythingAdjustTypingQuietMs, False)
-                          : k_tbcEverythingAdjustRetryMs
-        SetTimer, FlushTbcEverythingEditAdjust, % -remainingQuietMs
+    ; Retry briefly while Everything's results ListView/header are still settling.
+    if ((A_TickCount - tbcEverythingAdjustRequestedTick) < k_tbcEverythingAdjustMaxAgeMs) {
+        SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
         Return
     }
 
-    ; A valid, quiet Everything window without a native results ListView should not fall back to
+    ; A valid Everything window without a ready native results ListView should not fall back to
     ; Ctrl+NumpadAdd while Edit1 is focused, because that can type a literal "+" into search.
     _ClearTbcEverythingEditAdjustState(True)
 Return
@@ -14768,10 +14788,10 @@ KeyTrack() {
     WinGetClass, currClass, ahk_id %activeHwnd%
     If (InStr(currClass, "EVERYTHING", True)) {
         StopAutoFix := True
-        ; Everything/Edit1 now follows the same shared deferred-work shape as
-        ; the typing rewrite timers: qualify the key event, capture the exact
-        ; current search-box identity once, queue the work, and let the timer
-        ; handle the stronger quiet-gap revalidation before sending.
+        ; Everything/Edit1 qualifies the key event, captures the exact
+        ; current search-box identity once, and lets the debounce timer resize
+        ; the native results ListView after the search text has had a moment
+        ; to settle.
         if (!_TryRequestEverythingEditAdjust(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd))
         {
             if (!_IsDeferredWorkStillValid(activeHwnd, "Edit1"))
