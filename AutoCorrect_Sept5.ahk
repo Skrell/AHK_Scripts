@@ -10748,6 +10748,16 @@ RunExplorerCtrlAddWhenReady:
         }
     }
 
+    ; Do not start a synchronous UIA probe after the request deadline. The probe
+    ; could overrun the deadline and cannot authorize a timely alignment.
+    if (A_TickCount >= requestDeadlineTick) {
+        _DebugTrace_ExplorerCtrlAdd("request_aborted"
+            , "reason=details_or_content_not_ready_at_deadline_before_probe"
+            . " deadlineElapsedMs=" . (A_TickCount - requestDeadlineTick)
+            , True, requestId)
+        Return
+    }
+
     ; Report Details mode separately from visible ListItem/empty-result evidence.
     ; Eligible #32770 startup requests may align once on Details-only; every
     ; incomplete content result is still retried until the request deadline.
@@ -10971,9 +10981,8 @@ RunExplorerCtrlAddWhenReady:
             requestDetailsOnlySendPending := False
 
             if (A_TickCount < requestDeadlineTick) {
-                pollIntervalRemainingMs := Max(1 , k_explorerCtrlAddPollMs - contentProbeElapsedMs)
                 deadlineRemainingMs := Max(1, requestDeadlineTick - A_TickCount)
-                nextPollMs := Min(pollIntervalRemainingMs, deadlineRemainingMs)
+                nextPollMs := Min(k_explorerCtrlAddPollMs, deadlineRemainingMs)
                 _DebugTrace_ExplorerCtrlAdd("request_wait"
                     , "reason=details_only_send_followup nextTimerMs=" . nextPollMs
                     . " sendElapsedMs=" . (A_TickCount - detailsOnlySendStartTick)
@@ -10990,11 +10999,10 @@ RunExplorerCtrlAddWhenReady:
     }
 
     if (contentProbe.state != "ready" && A_TickCount < requestDeadlineTick) {
-        ; Count time spent inside the UIA probe toward the requested polling
-        ; interval so a slow probe does not add another full delay afterward.
-        pollIntervalRemainingMs := Max(1 , k_explorerCtrlAddPollMs - contentProbeElapsedMs)
+        ; Wait the regular poll interval after a non-ready probe so a slow UIA
+        ; call does not immediately trigger another synchronous lookup.
         deadlineRemainingMs := Max(1, requestDeadlineTick - A_TickCount)
-        nextPollMs := Min(pollIntervalRemainingMs, deadlineRemainingMs)
+        nextPollMs := Min(k_explorerCtrlAddPollMs, deadlineRemainingMs)
         _DebugTrace_ExplorerCtrlAdd("request_wait"
             , "reason=details_content_not_ready nextTimerMs=" . nextPollMs
             . " probeReason=" . contentProbe.reason
