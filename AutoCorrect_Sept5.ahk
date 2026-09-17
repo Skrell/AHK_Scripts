@@ -10284,9 +10284,9 @@ RunExplorerCtrlAddWhenReady:
     ; rechecks before it can reuse or update this captured request's state.
     Critical, On
     ; Copies the best-effort-send policy so this callback preserves the request's allowed recovery behavior.
-    requestAllowBestEffortSend       := explorerCtrlAddRequestAllowBestEffortSend
+    requestAllowBestEffortSend        := explorerCtrlAddRequestAllowBestEffortSend
     ; Copies the pathless-content policy so readiness can be accepted without a confirmed folder path only when requested.
-    requestAllowPathlessContentReady := explorerCtrlAddRequestAllowPathlessContentReady
+    requestAllowPathlessContentReady  := explorerCtrlAddRequestAllowPathlessContentReady
     ; Copies the target window class so class-specific readiness and send behavior stays tied to this request.
     requestWindowClass                := explorerCtrlAddRequestClass
     ; Copies the absolute timeout tick so this callback cannot extend the request's bounded lifetime.
@@ -10478,9 +10478,10 @@ RunExplorerCtrlAddWhenReady:
     ; guard; a nonempty unchanged path remains gated to protect the old view.
     if (requestRequiresPathChange && !explorerCtrlAddRequestPathChangeConfirmed) {
         if (requestUsesNavigationEvents) {
-            currentNavigationGeneration := _GetExplorerNavigationGeneration(requestTargetHwnd)
-            navigationEventPending := currentNavigationGeneration != requestNavigationGeneration
+            currentNavigationGeneration   := _GetExplorerNavigationGeneration(requestTargetHwnd)
+            navigationEventPending        := currentNavigationGeneration != requestNavigationGeneration
             navigationFallbackRemainingMs := requestNextNavigationFallbackTick - A_TickCount
+
             if (!navigationEventPending && navigationFallbackRemainingMs > 0 && A_TickCount < requestDeadlineTick) {
                 navigationWaitMs := Min(navigationFallbackRemainingMs , Max(1, requestDeadlineTick - A_TickCount))
                 _DebugTrace_ExplorerCtrlAdd("request_wait"
@@ -10490,6 +10491,7 @@ RunExplorerCtrlAddWhenReady:
                 _ScheduleExplorerCtrlAddNavigationWait(requestId, navigationWaitMs)
                 Return
             }
+
             _DebugTrace_ExplorerCtrlAdd("navigation_path_probe_triggered"
                 , "source=" . (navigationEventPending ? "event" : "watchdog")
                 . " generation=" . currentNavigationGeneration
@@ -10749,14 +10751,25 @@ RunExplorerCtrlAddWhenReady:
     }
 
     ; Do not start a synchronous UIA probe after the request deadline. The probe
-    ; could overrun the deadline and cannot authorize a timely alignment.
-    if (A_TickCount >= requestDeadlineTick) {
-        _DebugTrace_ExplorerCtrlAdd("request_aborted"
-            , "reason=details_or_content_not_ready_at_deadline_before_probe"
-            . " deadlineElapsedMs=" . (A_TickCount - requestDeadlineTick)
-            , True, requestId)
+    ; could overrun the deadline and cannot authorize a timely alignment. A
+    ; Details-only send already completed its permitted alignment, so preserve
+    ; that outcome rather than reporting a later content-check timeout as an abort.
+    contentProbeTimeoutMs := requestDeadlineTick - A_TickCount
+    if (contentProbeTimeoutMs <= 0) {
+        if (requestDetailsOnlySendMade)
+            _DebugTrace_ExplorerCtrlAdd("request_completed"
+                , "reason=details_only_send_made_content_not_confirmed"
+                . " deadlineElapsedMs=" . (A_TickCount - requestDeadlineTick)
+                , True, requestId)
+        else
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
+                , "reason=details_or_content_not_ready_at_deadline_before_probe"
+                . " deadlineElapsedMs=" . (A_TickCount - requestDeadlineTick)
+                , True, requestId)
         Return
     }
+    ; Never give this probe more time than remains in its parent request.
+    contentProbeTimeoutMs := Min(k_explorerCtrlAddPollUIATimeoutMs, contentProbeTimeoutMs)
 
     ; Report Details mode separately from visible ListItem/empty-result evidence.
     ; Eligible #32770 startup requests may align once on Details-only; every
@@ -10765,60 +10778,20 @@ RunExplorerCtrlAddWhenReady:
     contentProbeStartTick := A_TickCount
     ; Run one shared probe so Details, content, target, and timing results stay correlated.
     contentProbe := _ProbeExplorerDetailsViewState(requestTargetHwnd
-                                                 , k_explorerCtrlAddPollUIATimeoutMs
+                                                 , contentProbeTimeoutMs
                                                  , requestId
                                                  , requestDetailsConfirmed
                                                  , requestDetailsReason
                                                  , requestPreferredTarget)
 
     ; Measure total probe time because an in-flight UIA call can exceed its requested timeout.
-    contentProbeElapsedMs    := A_TickCount - contentProbeStartTick
+    contentProbeElapsedMs                 := A_TickCount - contentProbeStartTick
     ; Record only the timeout overrun so traces expose UIA work beyond the requested budget.
-    contentProbeOverBudgetMs := Max(0, contentProbeElapsedMs - k_explorerCtrlAddPollUIATimeoutMs)
-    ; Extract content-evidence lookup time so ListItem/empty-result latency is isolated in traces.
-    contentProbeContentEvidenceLookupMs := contentProbe.HasKey("contentEvidenceLookupElapsedMs")
-                                            ? contentProbe.contentEvidenceLookupElapsedMs
-                                            : 0
-    ; Preserve the Details verdict reason so readiness failures identify their exact cause.
-    contentProbeDetailsReason := contentProbe.HasKey("detailsReason") ? contentProbe.detailsReason : ""
-    ; Record whether a prior positive Details result was reused to show avoided repeat work.
-    contentProbeDetailsCheckReused := contentProbe.HasKey("detailsCheckReused") && contentProbe.detailsCheckReused
-    ; Extract Details-check time separately so its contribution to probe latency is visible.
-    contentProbeIsDetailsViewMs := contentProbe.HasKey("isDetailsViewElapsedMs")
-                                    ? contentProbe.isDetailsViewElapsedMs
-                                    : 0
-    ; Extract Items View resolution time so target-discovery delays can be distinguished.
-    contentProbeItemsViewResolutionMs := contentProbe.HasKey("itemsViewResolutionElapsedMs")
-                                        ? contentProbe.itemsViewResolutionElapsedMs
-                                        : 0
-    ; Preserve the number of searched native candidates to expose resolver search breadth.
-    contentProbeItemsViewCandidateCount := contentProbe.HasKey("itemsViewCandidateCount")
-                                            ? contentProbe.itemsViewCandidateCount
-                                            : 0
-    ; Preserve the resolution outcome so a fallback or miss has a concrete diagnostic reason.
-    contentProbeItemsViewResolutionReason := contentProbe.HasKey("itemsViewResolutionReason")
-                                            ? contentProbe.itemsViewResolutionReason
-                                            : ""
-    ; Preserve the resolver name so traces show which native-scoped or fallback path ran.
-    contentProbeItemsViewResolver := contentProbe.HasKey("itemsViewResolver") ? contentProbe.itemsViewResolver : ""
-    ; Record how the request-scoped target hint behaved so its optimization can be evaluated.
-    contentProbePreferredTargetState := contentProbe.HasKey("preferredTargetState")
-                                        ? contentProbe.preferredTargetState
-                                        : "unused"
-    ; Retain the validated native target so later alignment and #32770 probes avoid rediscovery.
-    contentProbeResolvedTarget := contentProbe.HasKey("resolvedTarget") ? contentProbe.resolvedTarget : ""
-    ; Convert the optional Details result to a strict Boolean for downstream readiness gates.
-    contentProbeDetailsReady := contentProbe.HasKey("detailsReady") && contentProbe.detailsReady
-    ; Convert the optional visible-content result to a strict Boolean before authorizing alignment.
-    contentProbeContentReady := contentProbe.HasKey("contentReady") && contentProbe.contentReady
-    ; Collapse the two readiness flags into one explicit state for later send and retry branches.
-    contentProbeViewState    := contentProbeContentReady
-                                ? "details_with_content"
-                                : (contentProbeDetailsReady ? "details_only" : "not_details")
-    ; Permit the guarded early send only when Details is proven and that attempt remains pending.
-    detailsOnlySendCandidate := (contentProbeViewState == "details_only" && requestDetailsOnlySendPending)
-    ; UIA may finish after another click replaces this request. Recheck its ID
-    ; before the probe result can update shared state or authorize alignment.
+    contentProbeOverBudgetMs              := Max(0, contentProbeElapsedMs - contentProbeTimeoutMs)
+
+    ; An in-flight UIA call can ignore its requested timeout. Stop here if it
+    ; returned after this request's deadline, before its readiness result can
+    ; authorize either a Details-only or content-confirmed alignment.
     if (requestId != explorerCtrlAddRequestId) {
         _DebugTrace_ExplorerCtrlAdd("request_aborted"
             , "reason=superseded_during_content_probe currentRequestId="
@@ -10827,7 +10800,64 @@ RunExplorerCtrlAddWhenReady:
             , True, requestId)
         Return
     }
+    if (A_TickCount >= requestDeadlineTick) {
+        if (requestDetailsOnlySendMade)
+            _DebugTrace_ExplorerCtrlAdd("request_completed"
+                , "reason=details_only_send_made_deadline_after_content_probe"
+                . " deadlineElapsedMs=" . (A_TickCount - requestDeadlineTick)
+                . " probeElapsedMs=" . contentProbeElapsedMs
+                , True, requestId)
+        else
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
+                , "reason=request_deadline_after_content_probe"
+                . " deadlineElapsedMs=" . (A_TickCount - requestDeadlineTick)
+                . " probeElapsedMs=" . contentProbeElapsedMs
+                , True, requestId)
+        Return
+    }
 
+    ; Extract content-evidence lookup time so ListItem/empty-result latency is isolated in traces.
+    contentProbeContentEvidenceLookupMs   := contentProbe.HasKey("contentEvidenceLookupElapsedMs")
+                                                ? contentProbe.contentEvidenceLookupElapsedMs
+                                                : 0
+    ; Preserve the Details verdict reason so readiness failures identify their exact cause.
+    contentProbeDetailsReason             := contentProbe.HasKey("detailsReason") ? contentProbe.detailsReason : ""
+    ; Record whether a prior positive Details result was reused to show avoided repeat work.
+    contentProbeDetailsCheckReused        := contentProbe.HasKey("detailsCheckReused") && contentProbe.detailsCheckReused
+    ; Extract Details-check time separately so its contribution to probe latency is visible.
+    contentProbeIsDetailsViewMs           := contentProbe.HasKey("isDetailsViewElapsedMs")
+                                                ? contentProbe.isDetailsViewElapsedMs
+                                                : 0
+    ; Extract Items View resolution time so target-discovery delays can be distinguished.
+    contentProbeItemsViewResolutionMs     := contentProbe.HasKey("itemsViewResolutionElapsedMs")
+                                                ? contentProbe.itemsViewResolutionElapsedMs
+                                                : 0
+    ; Preserve the number of searched native candidates to expose resolver search breadth.
+    contentProbeItemsViewCandidateCount   := contentProbe.HasKey("itemsViewCandidateCount")
+                                                ? contentProbe.itemsViewCandidateCount
+                                                : 0
+    ; Preserve the resolution outcome so a fallback or miss has a concrete diagnostic reason.
+    contentProbeItemsViewResolutionReason := contentProbe.HasKey("itemsViewResolutionReason")
+                                                ? contentProbe.itemsViewResolutionReason
+                                                : ""
+    ; Preserve the resolver name so traces show which native-scoped or fallback path ran.
+    contentProbeItemsViewResolver         := contentProbe.HasKey("itemsViewResolver") ? contentProbe.itemsViewResolver : ""
+    ; Record how the request-scoped target hint behaved so its optimization can be evaluated.
+    contentProbePreferredTargetState      := contentProbe.HasKey("preferredTargetState")
+                                                ? contentProbe.preferredTargetState
+                                                : "unused"
+    ; Retain the validated native target so later alignment and #32770 probes avoid rediscovery.
+    contentProbeResolvedTarget            := contentProbe.HasKey("resolvedTarget") ? contentProbe.resolvedTarget : ""
+    ; Convert the optional Details result to a strict Boolean for downstream readiness gates.
+    contentProbeDetailsReady              := contentProbe.HasKey("detailsReady") && contentProbe.detailsReady
+    ; Convert the optional visible-content result to a strict Boolean before authorizing alignment.
+    contentProbeContentReady              := contentProbe.HasKey("contentReady") && contentProbe.contentReady
+    ; Collapse the two readiness flags into one explicit state for later send and retry branches.
+    contentProbeViewState                 := contentProbeContentReady
+                                                ? "details_with_content"
+                                                : (contentProbeDetailsReady ? "details_only" : "not_details")
+    ; Permit the guarded early send only when Details is proven and that attempt remains pending.
+    detailsOnlySendCandidate := (contentProbeViewState == "details_only" && requestDetailsOnlySendPending)
     ; Retain only the current #32770 request's validated native identity. A later
     ; probe resolves a fresh UIA element, and a failed hint falls back to the
     ; complete native candidate scan before this cached identity is replaced.
@@ -10854,7 +10884,7 @@ RunExplorerCtrlAddWhenReady:
     }
     _DebugTrace_ExplorerCtrlAdd("details_content_probe"
         , "elapsedMs=" . contentProbeElapsedMs
-        . " timeoutMs=" . k_explorerCtrlAddPollUIATimeoutMs
+        . " timeoutMs=" . contentProbeTimeoutMs
         . " overBudgetMs=" . contentProbeOverBudgetMs
         . " isDetailsViewMs=" . contentProbeIsDetailsViewMs
         . " detailsCheckReused=" . (contentProbeDetailsCheckReused ? 1 : 0)
@@ -10877,10 +10907,11 @@ RunExplorerCtrlAddWhenReady:
     if ((contentProbe.state == "ready" || detailsOnlySendCandidate)
      && requestRequiresStablePath
      && !explorerCtrlAddRequestPathlessContentFallbackActive) {
-        pathProbeStartTick := A_TickCount
+        pathProbeStartTick        := A_TickCount
         pathProbeRequestIsCurrent := False
-        currentPath := _GetExplorerCtrlAddRequestPath(requestTargetHwnd , requestWindowClass, requestId, pathProbeRequestIsCurrent)
-        pathProbeElapsedMs := A_TickCount - pathProbeStartTick
+        currentPath               := _GetExplorerCtrlAddRequestPath(requestTargetHwnd , requestWindowClass, requestId, pathProbeRequestIsCurrent)
+        pathProbeElapsedMs        := A_TickCount - pathProbeStartTick
+
         if !pathProbeRequestIsCurrent {
             _DebugTrace_ExplorerCtrlAdd("request_aborted"
                 , "reason=superseded_during_startup_pre_send_revalidation currentRequestId="
@@ -10912,6 +10943,7 @@ RunExplorerCtrlAddWhenReady:
             explorerCtrlAddRequestPreviousPath             := currentPath
             explorerCtrlAddRequestStablePathConfirmed      := False
             explorerCtrlAddRequestStablePathHitCount       := (currentPath = "") ? 0 : 1
+
             _DebugTrace_ExplorerCtrlAdd("startup_path_reset"
                 , "reason=pre_send_path_changed path=[" . currentPath . "] nextTimerMs="
                 . k_explorerCtrlAddPollMs, False, requestId)
@@ -10925,9 +10957,10 @@ RunExplorerCtrlAddWhenReady:
     ; request alive so Details-with-content can authorize a corrective alignment.
     if (detailsOnlySendCandidate) {
         detailsOnlyTargetExists := requestTargetHwnd && WinExist("ahk_id " . requestTargetHwnd)
-        detailsOnlyActiveHwnd := WinExist("A")
-        detailsOnlyClass := ""
+        detailsOnlyActiveHwnd   := WinExist("A")
+        detailsOnlyClass        := ""
         WinGetClass, detailsOnlyClass, ahk_id %requestTargetHwnd%
+
         if (!detailsOnlyTargetExists || detailsOnlyActiveHwnd != requestTargetHwnd
          || detailsOnlyClass != requestWindowClass) {
             _DebugTrace_ExplorerCtrlAdd("request_aborted"
@@ -10962,15 +10995,32 @@ RunExplorerCtrlAddWhenReady:
             detailsOnlyResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
                 , detailsOnlyClass, requestSourceCtrlNN, requestId, contentProbeResolvedTarget)
             detailsOnlyDispatchElapsedMs := A_TickCount - requestStartTick
-            detailsOnlySendStartTick := A_TickCount
+            detailsOnlySendStartTick     := A_TickCount
+
             _DebugTrace_ExplorerCtrlAdd("sendctrladd_details_only"
                 , "elapsedMs=" . detailsOnlyDispatchElapsedMs
                 . " probeReason=" . contentProbe.reason
                 . " detailsReason=[" . contentProbeDetailsReason . "]"
                 . " hasResolvedTarget=" . IsObject(detailsOnlyResolvedTarget)
                 , False, requestId)
+
+            ; Resolving the native target can consume the remaining request time.
+            ; Do not issue the claimed Details-only alignment after its deadline.
+            if (A_TickCount >= requestDeadlineTick) {
+                Critical, On
+                if (requestId = explorerCtrlAddRequestId)
+                    explorerCtrlAddRequestDetailsOnlySendMade := False
+                Critical, Off
+                _DebugTrace_ExplorerCtrlAdd("request_aborted"
+                    , "reason=details_only_deadline_before_dispatch"
+                    . " deadlineElapsedMs=" . (A_TickCount - requestDeadlineTick)
+                    , True, requestId)
+                Return
+            }
+
             SendCtrlAdd(requestTargetHwnd, detailsOnlyClass, requestSourceCtrlNN, False, ""
                 , requestRestoreTreeFocus, detailsOnlyResolvedTarget, requestId)
+
             if (requestId != explorerCtrlAddRequestId) {
                 _DebugTrace_ExplorerCtrlAdd("request_aborted"
                     , "reason=superseded_during_details_only_send currentRequestId="
@@ -11052,17 +11102,20 @@ RunExplorerCtrlAddWhenReady:
         }
 
         bestEffortDispatchElapsedMs := A_TickCount - requestStartTick
-        bestEffortSendStartTick := A_TickCount
-        bestEffortResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
+        bestEffortSendStartTick     := A_TickCount
+        bestEffortResolvedTarget    := _ResolveCtrlAddTargetForSend(requestTargetHwnd
             , finalClass, requestSourceCtrlNN, requestId, contentProbeResolvedTarget)
+
         _DebugTrace_ExplorerCtrlAdd("sendctrladd_best_effort"
             , "elapsedMs=" . bestEffortDispatchElapsedMs
             . " probeReason=" . contentProbe.reason
             . " detailsReason=[" . contentProbeDetailsReason . "]"
             . " hasResolvedTarget=" . IsObject(bestEffortResolvedTarget)
             , False, requestId)
+
         SendCtrlAdd(requestTargetHwnd, finalClass, requestSourceCtrlNN, False, ""
             , requestRestoreTreeFocus, bestEffortResolvedTarget, requestId)
+
         _DebugTrace_ExplorerCtrlAdd("sendctrladd_best_effort_dispatch"
             , "elapsedMs=" . bestEffortDispatchElapsedMs
             . " sendElapsedMs=" . (A_TickCount - bestEffortSendStartTick)
@@ -11082,12 +11135,30 @@ RunExplorerCtrlAddWhenReady:
     verifiedResolvedTarget := _ResolveCtrlAddTargetForSend(requestTargetHwnd
         , currentClass, requestSourceCtrlNN, requestId, contentProbeResolvedTarget)
 
+    ; A ready probe is not sufficient once resolving the native send target has
+    ; crossed the request deadline. Preserve a prior Details-only alignment, if
+    ; any, but do not issue a late corrective or first alignment.
+    if (A_TickCount >= requestDeadlineTick) {
+        if (requestDetailsOnlySendMade)
+            _DebugTrace_ExplorerCtrlAdd("request_completed"
+                , "reason=details_only_send_made_deadline_before_corrective_dispatch"
+                . " deadlineElapsedMs=" . (A_TickCount - requestDeadlineTick)
+                , True, requestId)
+        else
+            _DebugTrace_ExplorerCtrlAdd("request_aborted"
+                , "reason=details_content_ready_deadline_before_dispatch"
+                . " deadlineElapsedMs=" . (A_TickCount - requestDeadlineTick)
+                , True, requestId)
+        Return
+    }
+
     ; Issue the alignment before synchronously flushing its terminal trace, so
     ; disk or antivirus latency cannot delay the user-visible column adjustment.
     sendCtrlAddDispatchElapsedMs := A_TickCount - requestStartTick
-    sendCtrlAddStartTick := A_TickCount
+    sendCtrlAddStartTick         := A_TickCount
     SendCtrlAdd(requestTargetHwnd, currentClass, requestSourceCtrlNN, False, ""
         , requestRestoreTreeFocus, verifiedResolvedTarget, requestId)
+
     _DebugTrace_ExplorerCtrlAdd("sendctrladd_dispatch"
         , "elapsedMs=" . sendCtrlAddDispatchElapsedMs
         . " sendElapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
@@ -22086,6 +22157,7 @@ SafeUIA_GetAutoId(el) {
 ::posed::
 ::tier::
 ::tiers::
+::pane::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
