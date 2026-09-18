@@ -24891,6 +24891,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::paralely::parallelly
 ::parallely::parallelly
 ::paranthesis::parenthesis
+::parantheses::parentheses
 ::paraphenalia::paraphernalia
 ::parellels::parallels
 ::parituclar::particular
