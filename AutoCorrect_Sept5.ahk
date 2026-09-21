@@ -50,6 +50,9 @@ Global hitTilde                                              := False
 Global LclickSelected                                        := False
 ; HWND of the last active window retained by the window-cycle selection flow.
 Global lastActWinID                                          :=
+; True uses SetWindowPos to reorder regular windows without intermediate activation.
+; False restores the original WinActivate-based ordering route for every hotkey.
+Global k_useSetWindowPosZOrderReordering                     := True
 ; +----------------------------------------------------------------------------+
 ; | Window Search State                                                        |
 ; | Stores the query, result counts, and selection flags used while searching  |
@@ -5594,6 +5597,12 @@ Return
 SortAllWins:
     Critical, On
 
+    if (k_useSetWindowPosZOrderReordering && _ReorderWindowStackNoActivate(ValidWindows, _winIdD)) {
+        WinActivate, % "ahk_id " _winIdD
+        Critical, Off
+    Return
+    }
+
     WinSet, AlwaysOnTop, Off, ahk_id %_winIdD%
     WinSet, AlwaysOnTop, On,  ahk_id %_winIdD%
 
@@ -5619,6 +5628,14 @@ Return
 
 SortGroupedWins:
     Critical, On
+
+    selectedHwnd := GroupedWindows[cycleCount]
+    if (k_useSetWindowPosZOrderReordering && _ReorderWindowStackNoActivate(ValidWindows, selectedHwnd)) {
+        WinActivate, % "ahk_id " selectedHwnd
+        Critical, Off
+    Return
+    }
+
     WinSet, AlwaysOnTop, Off, % "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, On,  % "ahk_id " GroupedWindows[cycleCount]
 
@@ -5645,10 +5662,15 @@ Return
 ResetWins:
     If MinimizedWindows.length() > 0 {
         Loop, % MinimizedWindows.length()
-        {
-            minHwndID := MinimizedWindows[A_Index]
-            WinMinimize, ahk_id %minHwndID%
-        }
+    {
+        minHwndID := MinimizedWindows[A_Index]
+        WinMinimize, ahk_id %minHwndID%
+    }
+}
+    validWindowCount := ValidWindows.MaxIndex()
+    if (k_useSetWindowPosZOrderReordering && validWindowCount && _ReorderWindowStackNoActivate(ValidWindows)) {
+        WinActivate, % "ahk_id " ValidWindows[1]
+    Return
     }
     If (ValidWindows.MaxIndex() >= 4)
         WinActivate, % "ahk_id " ValidWindows[4]
@@ -5659,6 +5681,70 @@ ResetWins:
     If (ValidWindows.MaxIndex() >= 1)
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
+
+; Reorder up to the four windows handled by the cycle labels without changing
+; focus between candidates. False leaves callers on the legacy WinActivate path.
+_ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
+    static HWND_TOP            := 0
+    static SWP_NOACTIVATE      := 0x0010
+    static SWP_NOMOVE          := 0x0002
+    static SWP_NOOWNERZORDER   := 0x0200
+    static SWP_NOSIZE          := 0x0001
+
+    reorderCount := windows.MaxIndex()
+    if (!reorderCount)
+        return False
+
+    if (reorderCount > 4)
+        reorderCount := 4
+
+    ; Do not alter the topmost band or begin a native reorder with a stale HWND.
+    ; The caller retains the original activation route whenever this preflight fails.
+    if (selectedHwnd && (!DllCall("user32\IsWindow", "ptr", selectedHwnd, "int") || IsAlwaysOnTop(selectedHwnd)))
+        return False
+
+    Loop, %reorderCount%
+    {
+        candidateHwnd := windows[A_Index]
+        if (!candidateHwnd || !DllCall("user32\IsWindow", "ptr", candidateHwnd, "int") || IsAlwaysOnTop(candidateHwnd))
+            return False
+    }
+
+    swpFlags := SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOOWNERZORDER | SWP_NOSIZE
+    Loop, %reorderCount%
+    {
+        candidateIndex := reorderCount - A_Index + 1
+        candidateHwnd  := windows[candidateIndex]
+        if (selectedHwnd && candidateHwnd = selectedHwnd)
+            continue
+
+        if !DllCall("user32\SetWindowPos"
+            , "ptr", candidateHwnd
+            , "ptr", HWND_TOP
+            , "int", 0
+            , "int", 0
+            , "int", 0
+            , "int", 0
+            , "uint", swpFlags)
+        {
+            return False
+        }
+    }
+
+    if (selectedHwnd && !DllCall("user32\SetWindowPos"
+        , "ptr", selectedHwnd
+        , "ptr", HWND_TOP
+        , "int", 0
+        , "int", 0
+        , "int", 0
+        , "int", 0
+        , "uint", swpFlags))
+    {
+        return False
+    }
+
+    return True
+}
 
 $!Tab::
 $!+Tab::
@@ -5701,6 +5787,7 @@ $!+Tab::
     }
 Return
 
+; sc029 is the physical grave/tilde (`/~) key; scan-code notation avoids AutoHotkey treating ` as an escape character.
 !sc029::
     If !hitTilde {
         Thread, NoTimers, True
@@ -12549,7 +12636,7 @@ GetCtrlNNsByPrefix(hwndTop, classPrefix)
     WinGet, listC, ControlList,     ahk_id %hwndTop%
     WinGet, listH, ControlListHwnd, ahk_id %hwndTop%
     prefixLen := StrLen(classPrefix)
-    ctrlNNs   := StrSplit(RTrim(listC, "`r`n"), "`n", "`r")
+    ctrlNNs := StrSplit(RTrim(listC, "`r`n"), "`n", "`r")
     ctrlHwnds := StrSplit(RTrim(listH, "`r`n"), "`n", "`r")
 
     out := ""
