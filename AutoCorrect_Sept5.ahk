@@ -5523,7 +5523,7 @@ Return
     SwitchToDesktop(0)
     StopRecursion := False
     ManagedModifierCleanup("Ctrl Win", 0, 0)
-    Critical, Off
+Critical, Off
 Return
 
 #2::
@@ -6914,7 +6914,7 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
     ; Reject invalid work area.
     if (areaWidth <= 0 || areaHeight <= 0) {
         Gui, Overlay:Hide
-        overlayAlphaCurrent := 0
+        Overlay_SetAlpha(overlayHwnd, 0)
         return 0
     }
 
@@ -6955,7 +6955,7 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
     ; hide the overlay instead of covering the window.
     if (clippedHoleW <= 0 || clippedHoleH <= 0) {
         Gui, Overlay:Hide
-        overlayAlphaCurrent := 0
+        Overlay_SetAlpha(overlayHwnd, 0)
         return 0
     }
 
@@ -7063,7 +7063,7 @@ Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeX, holeY,
 }
 
 Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "", doRedraw := True) {
-    global overlayHwnd, overlayIsReady
+    global k_Opacity, overlayAlphaCurrent, overlayHwnd, overlayIsReady
     static HWND_TOPMOST   := -1
     static SWP_NOMOVE     := 0x0002
     static SWP_NOACTIVATE := 0x0010
@@ -7129,6 +7129,7 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     ; hide the overlay instead of covering the window.
     if (clippedHoleW <= 0 || clippedHoleH <= 0) {
         Gui, Overlay:Hide
+        Overlay_SetAlpha(overlayHwnd, 0)
         return 0
     }
 
@@ -7156,6 +7157,11 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     ; highlight moves by reshaping the same surface already on screen. That keeps
     ; movement smooth because only the hole geometry changes between frames.
     Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeRelX, holeRelY, clippedHoleW, clippedHoleH)
+
+    ; A preceding off-monitor target hides this one overlay at alpha 0. Resume
+    ; the normal preview fade only when the target returns to this monitor.
+    if (overlayAlphaCurrent < 1)
+        Overlay_FadeTo(overlayHwnd, k_Opacity, 30, overlayAlphaCurrent)
 
     ; Skip forced redraws when not needed so high-frequency cycle input does not
     ; pay an extra repaint cost on every step.
