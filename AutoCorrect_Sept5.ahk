@@ -843,7 +843,7 @@ OnMessage(0x0014, "_EraseLButtonResizeSyncGhostCardBackground")
 OnMessage(0x404, "HandleTrayIconMessage")
 
 ; Populate the monitor cache once before startup code needs display geometry.
-_BuildMonitorDimensions()
+BuildMonitorDimensions()
 
 totalVirtualDesktops := getTotalDesktops()
 currentMon           := GetMouseDisplayNumber()
@@ -3891,7 +3891,7 @@ $*MButton::
     activeMonitorDisplayNumber := GetMonitorRectForMouse(mx0, my0, k_UseWorkArea, monL, monT, monR, monB)
     ; Retain the startup monitor record so later drag updates can avoid scanning
     ; every cached monitor while the cursor remains inside this full monitor area.
-    activeMonitorRecord := _GetMonitorRecordByDisplayNumber(activeMonitorDisplayNumber)
+    activeMonitorRecord := GetMonitorRecordByDisplayNumber(activeMonitorDisplayNumber)
     If ((leftWinEdge - monL) <= k_SnapRange && (leftWinEdge - monL) >= 0) {
         snapState := "left"
     } Else If ((rightWinEdge - monR) <= k_SnapRange && (rightWinEdge - monR) >= 0) {
@@ -4088,7 +4088,7 @@ $*MButton::
             || mx >= activeMonitorRecord.fullArea.right
             || my < activeMonitorRecord.fullArea.top
             || my >= activeMonitorRecord.fullArea.bottom) {
-            activeMonitorRecord := _GetMonitorRecordForPoint(mx, my, false, true)
+            activeMonitorRecord := GetMonitorRecordForPoint(mx, my, false, true)
         }
 
         ; Read the requested area from the active record. These bounds can
@@ -4173,7 +4173,7 @@ $*MButton::
 
             rightSnapX    := monR - ww  ; X that places the right edge at monitor's right
 
-            WinGetPosEx(mButtonTargetHwnd, ignoredWindowX, ignoredWindowY, ww, wh)
+            ; WinGetPosEx(mButtonTargetHwnd, ignoredWindowX, ignoredWindowY, ww, wh)
             If (snapState = "left") {
                 ; While snapped left:
                 ; - Push-through: keep dragging left until virtwx0 <= monL - k_BreakAway to break snap
@@ -4228,8 +4228,8 @@ $*MButton::
         Else {
             gridSize := k_SnapRange
 
-            gridDx := ceil(dx/gridSize) * gridSize
-            gridDy := ceil(dy/gridSize) * gridSize
+            gridDx := (dx < 0 ? floor(dx/gridSize) : ceil(dx/gridSize)) * gridSize
+            gridDy := (dy < 0 ? floor(dy/gridSize) : ceil(dy/gridSize)) * gridSize
 
             If      (TL || TR) && (dragVert == "up"   || dragVert == "down") {
                 WinGetPosEx(mButtonTargetHwnd, tx, ty, tw, th)
@@ -4468,7 +4468,7 @@ ConfineMouseToCurrentMonitorArea(area := "work", x := 0, y := 0, w := 0, h := 0)
     MouseGetPos, mx, my
 
     ; Read both areas from the Windows DISPLAYn-indexed monitor cache.
-    monitorRecord := _GetMonitorRecordForPoint(mx, my, false, true)
+    monitorRecord := GetMonitorRecordForPoint(mx, my, false, true)
     if (!IsObject(monitorRecord))
         return 0
 
@@ -5904,7 +5904,11 @@ $!Lbutton::
             sleep, 5
         }
     }
-    Else If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < 550)) {
+    Else If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < k_DoubleClickTime)) {
+        ; Wait for the physical second click to end before injecting input.
+        While GetKeyState("LButton", "P")
+            Sleep, 5
+
         BeginBlockKeys()
         Send, {LAlt UP}
         Send, {Click, left}
@@ -6873,7 +6877,7 @@ Measure_Update() {
 }
 
 Overlay_GetWorkArea(displayNumber, ByRef areaLeft, ByRef areaTop, ByRef areaRight, ByRef areaBottom) {
-    if !_GetMonitorRectangleByDisplayNumber(displayNumber, true, areaLeft, areaTop, areaRight, areaBottom)
+    if !GetMonitorRectangleByDisplayNumber(displayNumber, true, areaLeft, areaTop, areaRight, areaBottom)
         return false
 
     return true
@@ -7228,7 +7232,7 @@ GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
     cx := round((wx + ww)/2)
     cy := round((wy + wh)/2)
 
-    monitorInfo := _GetMonitorRecordForPoint(cx, cy)
+    monitorInfo := GetMonitorRecordForPoint(cx, cy)
     if (!IsObject(monitorInfo))
         return false
 
@@ -13940,7 +13944,7 @@ ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ; Show popup menu by handle o
 CoordXCenterScreen()
 {
     displayNumber := GetCurrentDisplayNumber()
-    if !_GetMonitorRectangleByDisplayNumber(displayNumber, false, monitorLeft, monitorTop, monitorRight, monitorBottom)
+    if !GetMonitorRectangleByDisplayNumber(displayNumber, false, monitorLeft, monitorTop, monitorRight, monitorBottom)
         return 0
 
     return ((monitorRight - monitorLeft) / 2) + monitorLeft
@@ -13949,7 +13953,7 @@ CoordXCenterScreen()
 CoordYCenterScreen()
 {
     displayNumber := GetCurrentDisplayNumber()
-    if !_GetMonitorRectangleByDisplayNumber(displayNumber, false, monitorLeft, monitorTop, monitorRight, monitorBottom)
+    if !GetMonitorRectangleByDisplayNumber(displayNumber, false, monitorLeft, monitorTop, monitorRight, monitorBottom)
         return 0
 
     return ((monitorBottom - monitorTop - 30) / 2) + monitorTop
@@ -15436,7 +15440,7 @@ _IsFullMonitorHeightWindow(hwndID, displayNumber) {
     if (!hwndID || displayNumber < 1)
         return false
 
-    if !_GetMonitorRectangleByDisplayNumber(displayNumber, true, workAreaLeft, workAreaTop, workAreaRight, workAreaBottom)
+    if !GetMonitorRectangleByDisplayNumber(displayNumber, true, workAreaLeft, workAreaTop, workAreaRight, workAreaBottom)
         return false
 
     if !WinGetPosEx(hwndID, winX, winY, winW, winH)
@@ -15812,7 +15816,7 @@ _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH, usePrevi
     validPartners     := []
 
     displayNumber := GetWindowDisplayNumber(lButtonResizeSyncDraggedHwnd)
-    if _GetMonitorRectangleByDisplayNumber(displayNumber, true, monInfoLeft, monInfoTop, monInfoRight, monInfoBottom) {
+    if GetMonitorRectangleByDisplayNumber(displayNumber, true, monInfoLeft, monInfoTop, monInfoRight, monInfoBottom) {
         haveMonitorWorkArea := true
     }
 
@@ -16649,7 +16653,7 @@ TryStartBottomResizeCursorClamp(xPos := "", yPos := "", hwnd := "") {
     if (edgeHit != HTBOTTOM && edgeHit != HTBOTTOMLEFT && edgeHit != HTBOTTOMRIGHT)
         return false
 
-    monitorRecord := _GetMonitorRecordForPoint(xPos, yPos, false, true)
+    monitorRecord := GetMonitorRecordForPoint(xPos, yPos, false, true)
     if (!IsObject(monitorRecord))
         return false
 
@@ -17915,7 +17919,7 @@ _GetWindowMonitorEdgeTouchCount(windowHwnd, displayNumber := 0) {
     if (displayNumber < 1)
         return 0
 
-    if !_GetMonitorRectangleByDisplayNumber(displayNumber, true, workAreaLeft, workAreaTop, workAreaRight, workAreaBottom)
+    if !GetMonitorRectangleByDisplayNumber(displayNumber, true, workAreaLeft, workAreaTop, workAreaRight, workAreaBottom)
         return 0
 
     if !WinGetPosEx(windowHwnd, windowX, windowY, windowW, windowH)
@@ -18769,7 +18773,7 @@ FitMovedWindowAgainstOthers(movedHwndID, displayNumber := 0, edgeGapTolerance :=
 
     ; Use the monitor work area so "touching the edge" means touching the usable
     ; desktop edge rather than the monitor's raw pixel bounds.
-    if !_GetMonitorRectangleByDisplayNumber(displayNumber, true, monInfoLeft, monInfoTop, monInfoRight, monInfoBottom)
+    if !GetMonitorRectangleByDisplayNumber(displayNumber, true, monInfoLeft, monInfoTop, monInfoRight, monInfoBottom)
         return false
 
     if !WinGetPosEx(movedHwndID, movedX, movedY, movedW, movedH, movedOffsetX, movedOffsetY)

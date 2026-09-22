@@ -85,7 +85,7 @@ Global g_PrimaryDisplayNumber := 0
 ; helpers, such as GetMonitorRectsForWindow(), remain with their resize logic.
 ;------------------------------------------------------------------------------
 ; Build startup monitor and work-area records with the primary monitor at display #1.
-_BuildMonitorDimensions() {
+BuildMonitorDimensions() {
     global g_MonitorCount
     global g_MonitorsByDisplayNumber, g_PrimaryDisplayNumber
 
@@ -152,7 +152,7 @@ _BuildMonitorDimensions() {
 }
 
 ; Return the cached monitor record for a display number whose primary monitor is #1.
-_GetMonitorRecordByDisplayNumber(displayNumber) {
+GetMonitorRecordByDisplayNumber(displayNumber) {
     global g_MonitorsByDisplayNumber
 
     if (!g_MonitorsByDisplayNumber.HasKey(displayNumber))
@@ -162,7 +162,7 @@ _GetMonitorRecordByDisplayNumber(displayNumber) {
 }
 
 ; Return the monitor containing a point, or the nearest monitor when requested.
-_GetMonitorRecordForPoint(mx, my, useWorkArea := false, useNearestFallback := false) {
+GetMonitorRecordForPoint(mx, my, useWorkArea := false, useNearestFallback := false) {
     global g_MonitorsByDisplayNumber, g_PrimaryDisplayNumber
 
     bestDistanceSquared := 0x7FFFFFFF
@@ -188,14 +188,14 @@ _GetMonitorRecordForPoint(mx, my, useWorkArea := false, useNearestFallback := fa
         return bestMonitor
 
     if (useNearestFallback)
-        return _GetMonitorRecordByDisplayNumber(g_PrimaryDisplayNumber)
+        return GetMonitorRecordByDisplayNumber(g_PrimaryDisplayNumber)
 
     return ""
 }
 
 ; Copy cached full-monitor or work-area bounds into scalar output variables.
-_GetMonitorRectangleByDisplayNumber(displayNumber, useWorkArea, ByRef left, ByRef top, ByRef right, ByRef bottom) {
-    monitorInfo := _GetMonitorRecordByDisplayNumber(displayNumber)
+GetMonitorRectangleByDisplayNumber(displayNumber, useWorkArea, ByRef left, ByRef top, ByRef right, ByRef bottom) {
+    monitorInfo := GetMonitorRecordByDisplayNumber(displayNumber)
     if (!IsObject(monitorInfo)) {
         bottom := 0
         left   := 0
@@ -396,7 +396,7 @@ Acc_FindLikelyPathText(rootAcc, maxNodes := 140) {
 }
 
 ; Return the MSAA object associated with a window handle.
-Acc_FromWindow(hWnd, objID, ByRef acc) {
+_Acc_FromWindow(hWnd, objID, ByRef acc) {
     ; Cache the 16-byte IAccessible interface identifier after it is first converted.
     static iid
     static iidReady := false
@@ -442,7 +442,7 @@ Acc_GetChildrenListSafe(accObj, maxChildren := 60) {
         return outputList
 
     ; A child-reference wrapper stores its actual MSAA interface in its acc property.
-    iaObj := Acc_IsChildRef(accObj) ? accObj.acc : accObj
+    iaObj := _Acc_IsChildRef(accObj) ? accObj.acc : accObj
     if !IsObject(iaObj)
         return outputList
 
@@ -524,11 +524,11 @@ Acc_GetFocusedObject() {
         return ""
 
     ; Prefer the caret object because it identifies the control that is currently accepting text.
-    if (Acc_FromWindow(hWnd, OBJID_CARET, acc))
+    if (_Acc_FromWindow(hWnd, OBJID_CARET, acc))
         return acc
 
     ; Fall back to the window's client object when no separate caret object is available.
-    if (Acc_FromWindow(hWnd, OBJID_CLIENT, acc))
+    if (_Acc_FromWindow(hWnd, OBJID_CLIENT, acc))
         return acc
 
     return ""
@@ -646,7 +646,7 @@ Acc_Init() {
 }
 
 ; Identify the MSAA child-reference wrapper returned by Acc_CreateChildRef().
-Acc_IsChildRef(accObj) {
+_Acc_IsChildRef(accObj) {
     ; The marker identifies the wrapper used when MSAA returned only a child ID, not an object.
     return IsObject(accObj) && ObjHasKey(accObj, "__accChildRef") && (accObj.__accChildRef = true)
 }
@@ -664,7 +664,7 @@ Acc_LocationSafe(accObj, ByRef xPos, ByRef yPos, ByRef wid, ByRef hei, childId :
     if !IsObject(accObj)
         return false
 
-    if (Acc_IsChildRef(accObj)) {
+    if (_Acc_IsChildRef(accObj)) {
         ; Use the saved parent interface and child ID for a wrapper returned by Acc_CreateChildRef.
         iaObj := accObj.acc
         childVal := accObj.child
@@ -825,7 +825,7 @@ Acc_ObjectFromWindow(hWnd, idObject := 0xFFFFFFFC) {
     Acc_Init()
 
     ; Reuse Acc_FromWindow because it converts the native COM pointer into an AutoHotkey object.
-    if (Acc_FromWindow(hWnd, idObject, accObj))
+    if (_Acc_FromWindow(hWnd, idObject, accObj))
         return accObj
 
     return ""
@@ -839,7 +839,7 @@ Acc_ParentSafe(accObj) {
     if !IsObject(accObj)
         return ""
 
-    if (Acc_IsChildRef(accObj))
+    if (_Acc_IsChildRef(accObj))
         ; A numeric child has the saved parent object as its immediate MSAA parent.
         return accObj.acc
 
@@ -874,7 +874,7 @@ Acc_ResolveTarget(accObj, ByRef iaObj, ByRef childId) {
     if !IsObject(accObj)
         return false
 
-    if (Acc_IsChildRef(accObj)) {
+    if (_Acc_IsChildRef(accObj)) {
         ; Unwrap the parent interface and child ID that together describe this virtual MSAA child.
         iaObj := accObj.acc
         childId := accObj.child
@@ -996,7 +996,7 @@ Acc_WindowFromObjectSafe(accObj) {
     ; Begin with the supplied MSAA object and unwrap a child reference when necessary.
     iaObj := accObj
 
-    if (Acc_IsChildRef(accObj))
+    if (_Acc_IsChildRef(accObj))
         iaObj := accObj.acc
 
     ; Initialize native outputs so a failed accessibility call cannot return a stale handle.
@@ -1194,7 +1194,7 @@ GetCurrentDisplayNumber(){
     CoordMode, Mouse, Screen
     MouseGetPos, mx, my
 
-    monitorInfo := _GetMonitorRecordForPoint(mx, my)
+    monitorInfo := GetMonitorRecordForPoint(mx, my)
     return IsObject(monitorInfo) ? monitorInfo.displayNumber : 0
 }
 
@@ -1224,7 +1224,7 @@ GetMonitorCount() {
 GetMonitorRectForMouse(mx, my, useWorkArea, ByRef L, ByRef T, ByRef R, ByRef B) {
     ; Select by full monitor bounds so a cursor over a taskbar still maps to
     ; that monitor before the caller requests its smaller work area.
-    monitorInfo := _GetMonitorRecordForPoint(mx, my, false, true)
+    monitorInfo := GetMonitorRecordForPoint(mx, my, false, true)
     if (!IsObject(monitorInfo)) {
         B := 0
         L := 0
@@ -1713,7 +1713,7 @@ IsWindowOnDisplayNumber(thisWindowHwnd, targetDisplayNumber := 0) {
     if (W <= 0 || H <= 0)
         Return False
 
-    if !_GetMonitorRectangleByDisplayNumber(targetDisplayNumber, false, monitorLeft, monitorTop, monitorRight, monitorBottom)
+    if !GetMonitorRectangleByDisplayNumber(targetDisplayNumber, false, monitorLeft, monitorTop, monitorRight, monitorBottom)
         return false
 
     Critical, On
