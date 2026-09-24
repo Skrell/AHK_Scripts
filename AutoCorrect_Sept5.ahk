@@ -2739,7 +2739,11 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         ; New Explorer windows require a stable reported folder before the shared
         ; Details/content proof. Confirmed #32770 file dialogs normally do the same,
         ; but may use that proof alone when no folder-identity backend returns a path.
-        if (dialogKind == "file_dialog") {
+        if (vWinClass == "#32770" && vWinTitle == "Run") {
+            ; Keep Run's earlier placement/window-order handling, but do not classify it
+            ; as a file dialog or send it Ctrl+NumpadAdd.
+        }
+        else if (dialogKind == "file_dialog") {
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True , 0, True, False, True)
         }
         else if (vWinClass == "CabinetWClass" && isFirstTrackedActivation && !taskbarExplorerMoveMade) {
@@ -5607,16 +5611,16 @@ SortAllWins:
     WinSet, AlwaysOnTop, On,  ahk_id %_winIdD%
 
     If (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4) {
-            WinActivate, % "ahk_id " ValidWindows[4]
+        WinActivate, % "ahk_id " ValidWindows[4]
     }
     If (_winIdD != ValidWindows[3] && ValidWindows.MaxIndex() >= 3) {
-            WinActivate, % "ahk_id " ValidWindows[3]
+        WinActivate, % "ahk_id " ValidWindows[3]
     }
     If (_winIdD != ValidWindows[2] && ValidWindows.MaxIndex() >= 2) {
-            WinActivate, % "ahk_id " ValidWindows[2]
+        WinActivate, % "ahk_id " ValidWindows[2]
     }
     If (_winIdD != ValidWindows[1] && ValidWindows.MaxIndex() >= 1) {
-            WinActivate, % "ahk_id " ValidWindows[1]
+        WinActivate, % "ahk_id " ValidWindows[1]
     }
 
     WinSet, AlwaysOnTop, On, ahk_id %_winIdD%
@@ -5686,10 +5690,7 @@ Return
 ; focus between candidates. False leaves callers on the legacy WinActivate path.
 _ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
     static HWND_TOP            := 0
-    static SWP_NOACTIVATE      := 0x0010
-    static SWP_NOMOVE          := 0x0002
     static SWP_NOOWNERZORDER   := 0x0200
-    static SWP_NOSIZE          := 0x0001
 
     reorderCount := windows.MaxIndex()
     if (!reorderCount)
@@ -5710,7 +5711,6 @@ _ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
             return False
     }
 
-    swpFlags := SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOOWNERZORDER | SWP_NOSIZE
     Loop, %reorderCount%
     {
         candidateIndex := reorderCount - A_Index + 1
@@ -5718,33 +5718,21 @@ _ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
         if (selectedHwnd && candidateHwnd = selectedHwnd)
             continue
 
-        if !DllCall("user32\SetWindowPos"
-            , "ptr", candidateHwnd
-            , "ptr", HWND_TOP
-            , "int", 0
-            , "int", 0
-            , "int", 0
-            , "int", 0
-            , "uint", swpFlags)
+        if !WinSetZOrderNoActivate(candidateHwnd, HWND_TOP, SWP_NOOWNERZORDER)
         {
             return False
         }
     }
 
-    if (selectedHwnd && !DllCall("user32\SetWindowPos"
-        , "ptr", selectedHwnd
-        , "ptr", HWND_TOP
-        , "int", 0
-        , "int", 0
-        , "int", 0
-        , "int", 0
-        , "uint", swpFlags))
+    if (selectedHwnd && !WinSetZOrderNoActivate(selectedHwnd, HWND_TOP, SWP_NOOWNERZORDER))
     {
         return False
     }
 
     return True
 }
+
+~LAlt::Send {Blind}{vkE8}
 
 $!Tab::
 $!+Tab::
@@ -6886,9 +6874,6 @@ Overlay_GetWorkArea(displayNumber, ByRef areaLeft, ByRef areaTop, ByRef areaRigh
 Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, clickThrough := True, fadeMs := 100) {
     global overlayHwnd, overlayIsReady, overlayAlphaCurrent
     static HWND_TOPMOST   := -1
-    static SWP_NOMOVE     := 0x0002
-    static SWP_NOACTIVATE := 0x0010
-    static SWP_NOSIZE     := 0x0001
     static SWP_SHOWWINDOW := 0x0040
 
     if (!overlayIsReady || !overlayHwnd || !DllCall("IsWindow", "ptr", overlayHwnd))
@@ -6973,14 +6958,7 @@ Overlay_ShowHole(holePosX, holePosY, holeSizeW, holeSizeH, overlayAlpha := 180, 
     Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
     ; Reassert this dimmer HWND in the topmost band each time it is shown so the
     ; retained WindowTitle popup cannot leave the hole-overlay visually buried.
-    DllCall("user32\SetWindowPos"
-        , "ptr", overlayHwnd
-        , "ptr", HWND_TOPMOST
-        , "int", 0
-        , "int", 0
-        , "int", 0
-        , "int", 0
-        , "uint", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
+    WinSetZOrderNoActivate(overlayHwnd, HWND_TOPMOST, SWP_SHOWWINDOW)
 
     ; If currently transparent, reset alpha baseline.
     ; This guarantees the fade always starts from a known invisible state after a
@@ -7069,9 +7047,6 @@ Overlay_SetHoleRegion_WorkArea(overlayHwnd, areaWidth, areaHeight, holeX, holeY,
 Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "", doRedraw := True) {
     global k_Opacity, overlayAlphaCurrent, overlayHwnd, overlayIsReady
     static HWND_TOPMOST   := -1
-    static SWP_NOMOVE     := 0x0002
-    static SWP_NOACTIVATE := 0x0010
-    static SWP_NOSIZE     := 0x0001
     static SWP_SHOWWINDOW := 0x0040
 
     static lastHolePosX  := 0
@@ -7144,14 +7119,7 @@ Overlay_MoveHole(holePosX := "", holePosY := "", holeSizeW := "", holeSizeH := "
     Gui, Overlay:Show, % "x" areaLeft " y" areaTop " w" areaWidth " h" areaHeight " NA"
     ; Reassert the overlay here too because repeated Alt+Tab moves reuse the same
     ; HWND and must keep it above normal windows even after other popups reshuffle z-order.
-    DllCall("user32\SetWindowPos"
-        , "ptr", overlayHwnd
-        , "ptr", HWND_TOPMOST
-        , "int", 0
-        , "int", 0
-        , "int", 0
-        , "int", 0
-        , "uint", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
+    WinSetZOrderNoActivate(overlayHwnd, HWND_TOPMOST, SWP_SHOWWINDOW)
 
     ; Convert screen coords to overlay-relative coords.
     holeRelX := clipLeft - areaLeft
@@ -17831,27 +17799,42 @@ WinSetAlphaTopmost(guiHwnd, transparencyLevel := 220, isTopmost := true)
     DllCall("SetLayeredWindowAttributes" , "Ptr", guiHwnd , "UInt", 0 , "UChar", transparencyLevel , "UInt", lwaAlpha)
 
     ; --- Set/clear topmost ---
-    hwndTopmost := -1
-    hwndNoTopmost := -2
-    swpNoMove := 0x0002
-    swpNoSize := 0x0001
-    swpNoActivate := 0x0010
-    swpNoOwnerZOrder := 0x0200
-
-    swpFlags := swpNoMove | swpNoSize | swpNoActivate | swpNoOwnerZOrder
+    hwndTopmost       := -1
+    hwndNoTopmost     := -2
+    SWP_NOOWNERZORDER := 0x0200
 
     insertAfterHwnd := isTopmost ? hwndTopmost : hwndNoTopmost
 
-    DllCall("SetWindowPos"
-        , "Ptr", guiHwnd
+    WinSetZOrderNoActivate(guiHwnd, insertAfterHwnd, SWP_NOOWNERZORDER)
+
+    return true
+}
+
+; Reorder hwnd without activating it or changing its position or size.
+; insertAfterHwnd: 0 (HWND_TOP) raises it; -1 (HWND_TOPMOST) makes it
+; topmost; -2 (HWND_NOTOPMOST) removes its topmost status.
+; extraFlags defaults to 0 (no extra flags). Callers pass 0x0200
+; (SWP_NOOWNERZORDER) to leave the owner window's z-order unchanged or
+; 0x0040 (SWP_SHOWWINDOW) to show the window.
+; Always added: 0x0010 (SWP_NOACTIVATE) prevents activation, 0x0002
+; (SWP_NOMOVE) retains position, and 0x0001 (SWP_NOSIZE) retains size.
+; Return SetWindowPos's success flag so callers can handle failure.
+WinSetZOrderNoActivate(hwnd, insertAfterHwnd, extraFlags := 0)
+{
+    static SWP_NOACTIVATE := 0x0010
+    static SWP_NOMOVE     := 0x0002
+    static SWP_NOSIZE     := 0x0001
+
+    swpFlags := SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | extraFlags
+    return DllCall("user32\SetWindowPos"
+        , "Ptr", hwnd
         , "Ptr", insertAfterHwnd
         , "Int", 0
         , "Int", 0
         , "Int", 0
         , "Int", 0
-        , "UInt", swpFlags)
-
-    return true
+        , "UInt", swpFlags
+        , "Int")
 }
 
 ActivateTopMostWindow() {
@@ -21500,9 +21483,6 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     global bufferedCycleAdvance, hitTAB, hitTilde, k_Opacity, WindowTitleID, WindowTitle, WindowTitleIcon, WindowTitleText
 
     static HWND_TOPMOST   := -1
-    static SWP_NOMOVE     := 0x0002
-    static SWP_NOACTIVATE := 0x0010
-    static SWP_NOSIZE     := 0x0001
     static SWP_SHOWWINDOW := 0x0040
 
     cardPadX      := 20
@@ -21632,14 +21612,7 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     ; so explicitly raise this popup HWND to the top of the topmost band after
     ; Show. Without this, the already-visible dim Overlay GUI can stay above it
     ; in z-order and make the title card appear to have vanished.
-    DllCall("user32\SetWindowPos"
-        , "ptr", WindowTitleID
-        , "ptr", HWND_TOPMOST
-        , "int", 0
-        , "int", 0
-        , "int", 0
-        , "int", 0
-        , "uint", SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
+    WinSetZOrderNoActivate(WindowTitleID, HWND_TOPMOST, SWP_SHOWWINDOW)
     WinSet, Transparent, 1, ahk_id %WindowTitleID%
 
     If (!GetKeyState("LAlt", "P") && !GetKeyState("Esc","P"))
