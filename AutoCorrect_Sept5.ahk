@@ -52,7 +52,10 @@ Global LclickSelected                                        := False
 Global lastActWinID                                          :=
 ; True uses SetWindowPos to reorder regular windows without intermediate activation.
 ; False restores the original WinActivate-based ordering route for every hotkey.
-Global k_useSetWindowPosZOrderReordering                     := True
+Global k_useSetWindowPosZOrderReordering                     := False
+; Trial: attempt direct foreground activation in the two Alt+Tab sorting paths.
+; When True, those paths skip the SetWindowPos reorder so its cost does not mask this trial.
+Global k_useDirectForegroundActivationTrial                  := True
 ; +----------------------------------------------------------------------------+
 ; | Window Search State                                                        |
 ; | Stores the query, result counts, and selection flags used while searching  |
@@ -538,10 +541,18 @@ Global k_explorerItemsViewLoadingCondition                   := "Name=Working on
 ; | Debug Trace Configuration                                                  |
 ; | Enables diagnostic traces and defines their output files.                  |
 ; +----------------------------------------------------------------------------+
+; Enables the focused Alt+Tab stack trace while investigating reorder failures.
+Global k_debugTraceAltTabZOrderEnabled                      := False
+; Stores buffered Alt+Tab stack snapshots beside the script for comparison.
+Global k_debugTraceAltTabZOrderFile                         := A_ScriptDir . "\AutoCorrect_AltTabZOrderTrace.log"
 ; Enables the focused Ctrl+D fallback-paste trace without enabling general logging.
 Global k_debugTraceCtrlDPasteEnabled                         := False
 ; Stores Ctrl+D fallback-paste results beside the script for direct inspection.
 Global k_debugTraceCtrlDPasteFile                            := A_ScriptDir . "\AutoCorrect_CtrlDPasteTrace.log"
+; Temporarily enables the focused F7 desktop-icon fade timing trace for diagnosis.
+Global k_debugTraceDesktopIconFadeEnabled                    := True
+; Stores desktop-icon fade setup timings beside the script for direct inspection.
+Global k_debugTraceDesktopIconFadeFile                       := A_ScriptDir . "\AutoCorrect_DesktopIconFadeTrace.log"
 ; Enables the detailed Explorer/file-dialog CtrlAdd timing trace.
 Global k_debugTraceExplorerCtrlAddEnabled                    := True
 ; Persistent trace location beside this script so it is easy to find.
@@ -626,6 +637,8 @@ Global TaskBarHeight                                       := 0
 ; | Retains one blank-taskbar double-click until the newly activated Explorer  |
 ; | window claims that click-relative placement request or it expires.         |
 ; +----------------------------------------------------------------------------+
+; Stop taskbar-spawn animation after this many consecutive frames under the mouse.
+Global k_taskbarExplorerSpawnHoverStopFrames               := 3
 ; Sets the delay between taskbar-spawn animation frames so shorter delays update the window position more often.
 Global k_taskbarExplorerSpawnMoveFrameIntervalMs           := 8
 ; Maximum normal-window travel time prevents a very distant taskbar launch from feeling sluggish.
@@ -785,6 +798,36 @@ Global suppressRightButtonLogic                            := False
 ; True while the title-bar LButton+RButton chord owns the current left-click.
 Global titleBarChordOwnsLButton                            := False
 
+; +----------------------------------------------------------------------------+
+; | DesktopIcons fade state.                                                   |
+; | Holds the desktop bitmap used while desktop icons fade.                    |
+; +----------------------------------------------------------------------------+
+global desktopIconFadeBitmap                               := 0
+; Stores the allocated desktop bitmap height so it can be reused until monitor geometry changes.
+global desktopIconFadeBitmapHeight                         := 0
+; Holds the object previously selected into the reusable desktop bitmap device context.
+global desktopIconFadeBitmapPrior                          := 0
+; Stores the allocated desktop bitmap width so it can be reused until monitor geometry changes.
+global desktopIconFadeBitmapWidth                          := 0
+; Stores the virtual desktop height used by the layered icon-fade overlay.
+global desktopIconFadeHeight                               := 0
+; Holds the layered overlay window used while desktop icons fade.
+global desktopIconFadeHwnd                                 := 0
+; Stores the virtual desktop left edge used by the layered icon-fade overlay.
+global desktopIconFadeLeft                                 := 0
+; Caches Explorer's desktop icon-list handle during an icon fade.
+global desktopIconFadeListViewHwnd                         := 0
+; Holds the reusable memory device context containing the desktop bitmap.
+global desktopIconFadeMemoryDc                             := 0
+; Stores the virtual desktop top edge used by the layered icon-fade overlay.
+global desktopIconFadeTop                                  := 0
+; Stores the virtual desktop width used by the layered icon-fade overlay.
+global desktopIconFadeWidth                                := 0
+; Stores the direct transparency-command time for desktop icon fade diagnostics.
+global desktopIconFadeWinSetElapsedMs                      := 0
+; Tracks whether this script hid Explorer's live desktop icons.
+global desktopIconsHiddenByScript                          := false
+
 Process, Priority,, High
 
 UIA.TransactionTimeout := 2000
@@ -902,12 +945,15 @@ Gui, GUIHighlighter: Color, %k_border_color%
 ;      +--> Overlay_MoveHole(...)
 ;            |
 ;            +--> reuse the same overlay window
+;            +--> re-show it and reassert its topmost Z-order
 ;            +--> update the hole region in place
+;            +--> fade in only if its alpha had reached 0
 ;
 ;   Alt released / cycle ends
 ;      |
 ;      +--> Overlay_Hide(...)
 ;            |
+;            +--> Overlay_CancelFade()
 ;            +--> Overlay_FadeTo(..., allowModifierAbort := False)
 ;            +--> reset full region
 ;            +--> Gui, Overlay:Hide
@@ -918,11 +964,17 @@ Gui, GUIHighlighter: Color, %k_border_color%
 ;            |
 ;            +--> Overlay_CancelFade() stops the old hide fade
 ;            +--> new preview takes over immediately
-global overlayFadeToken    := 0
-global overlayAlphaCurrent := 0
-global overlayHwnd         := 0
-global overlayKeyColor     := "FF00FF"      ; RGB hex string
-global overlayIsReady      := False
+
+; Stores the most recent desktop-shell hover time for automatic icon fade.
+Global desktopIconsLastDesktopHoverTick := A_TickCount
+Global desktopIconsVisible              := True
+Global overlayAlphaCurrent              := 0
+Global overlayHwnd                      := 0
+Global overlayKeyColor                  := "FF00FF"      ; RGB hex string
+Global overlayIsReady                   := False
+
+; Restore Explorer's live desktop icons if the script exits during a fade.
+OnExit("_ResetDesktopIconFade")
 
 Gui, Overlay:New, +AlwaysOnTop -Caption +ToolWindow +E0x20 +HwndoverlayHwnd
 Gui, Overlay:Color, 000000
@@ -1093,7 +1145,20 @@ SetTimer MouseTrack, 20
 SetTimer KeyTrack, 25
 SetTimer MasterTimer, %10_Minutes%
 _RequestTypingAutoFixPrewarm()
+SetTimer, PrewarmDesktopIconFadeOverlay, -1
+SetTimer, WarmDesktopIconFadeAtStartup, -1000
 
+Return
+
+; Allocate the hidden desktop-icon fade resources after startup so F7 has no one-time setup cost.
+PrewarmDesktopIconFadeOverlay:
+    _PrewarmDesktopIconFadeOverlay()
+Return
+
+; Fade desktop icons out and back in once after startup to warm the complete fade path.
+WarmDesktopIconFadeAtStartup:
+    if (DesktopIcons(false))
+        DesktopIcons(true)
 Return
 
 ;------------------------------------------------------------------------------
@@ -5561,6 +5626,9 @@ Return
 Altup:
     global bufferedCycleAdvance, cycleCount, ValidWindows, GroupedWindows, startHighlight, hitTAB, hitTilde, LclickSelected, blockKeys, CanceledWinSwap
 
+    if hitTAB
+        _DebugTrace_AltTabZOrder("release", GroupedWindows[cycleCount], "cycle=" . cycleCount . " highlight=" . startHighlight . " canceled=" . CanceledWinSwap . " click=" . LclickSelected . " tilde=" . hitTilde)
+
     If startHighlight && !CanceledWinSwap {
         WinGet, actWndID, ID, A
         If (LclickSelected && hitTAB && !hitTilde && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
@@ -5601,32 +5669,35 @@ Return
 SortAllWins:
     Critical, On
 
-    if (k_useSetWindowPosZOrderReordering && _ReorderWindowStackNoActivate(ValidWindows, _winIdD)) {
+    if (!k_useDirectForegroundActivationTrial && k_useSetWindowPosZOrderReordering && _ReorderWindowStackNoActivate(ValidWindows, _winIdD)) {
         WinActivate, % "ahk_id " _winIdD
         Critical, Off
     Return
     }
 
+    directSuccessCount := 0
+    sortStartTick := A_TickCount
     WinSet, AlwaysOnTop, Off, ahk_id %_winIdD%
     WinSet, AlwaysOnTop, On,  ahk_id %_winIdD%
 
     If (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4) {
-        WinActivate, % "ahk_id " ValidWindows[4]
+        directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[4])
     }
     If (_winIdD != ValidWindows[3] && ValidWindows.MaxIndex() >= 3) {
-        WinActivate, % "ahk_id " ValidWindows[3]
+        directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[3])
     }
     If (_winIdD != ValidWindows[2] && ValidWindows.MaxIndex() >= 2) {
-        WinActivate, % "ahk_id " ValidWindows[2]
+        directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[2])
     }
     If (_winIdD != ValidWindows[1] && ValidWindows.MaxIndex() >= 1) {
-        WinActivate, % "ahk_id " ValidWindows[1]
+        directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[1])
     }
 
     WinSet, AlwaysOnTop, On, ahk_id %_winIdD%
-    WinActivate, % "ahk_id " _winIdD
+    directSuccessCount += _ActivateWindowWithForegroundTrial(_winIdD)
 
     WinSet, AlwaysOnTop, Off , % "ahk_id " _winIdD
+    _DebugTrace_AltTabZOrder("sort_all_final", _winIdD, "path=" . (k_useDirectForegroundActivationTrial ? "foreground_trial" : "legacy") . " directSuccesses=" . directSuccessCount . " durationMs=" . (A_TickCount - sortStartTick))
     Critical, Off
 Return
 
@@ -5634,32 +5705,38 @@ SortGroupedWins:
     Critical, On
 
     selectedHwnd := GroupedWindows[cycleCount]
-    if (k_useSetWindowPosZOrderReordering && _ReorderWindowStackNoActivate(ValidWindows, selectedHwnd)) {
+    _DebugTrace_AltTabZOrder("sort_grouped", selectedHwnd, "nativeEnabled=" . (k_useSetWindowPosZOrderReordering && !k_useDirectForegroundActivationTrial) . " foregroundTrial=" . k_useDirectForegroundActivationTrial)
+    if (!k_useDirectForegroundActivationTrial && k_useSetWindowPosZOrderReordering && _ReorderWindowStackNoActivate(ValidWindows, selectedHwnd)) {
         WinActivate, % "ahk_id " selectedHwnd
+        _DebugTrace_AltTabZOrder("sort_grouped_final", selectedHwnd, "path=native")
         Critical, Off
     Return
     }
 
+    _DebugTrace_AltTabZOrder("sort_grouped_fallback", selectedHwnd)
+    directSuccessCount := 0
+    sortStartTick := A_TickCount
     WinSet, AlwaysOnTop, Off, % "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, On,  % "ahk_id " GroupedWindows[cycleCount]
 
     If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) {
-        WinActivate, % "ahk_id " ValidWindows[4]
+        directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[4])
     }
     If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) {
-        WinActivate, % "ahk_id " ValidWindows[3]
+        directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[3])
     }
     If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) {
-        WinActivate, % "ahk_id " ValidWindows[2]
+        directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[2])
     }
     If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) {
-        WinActivate, % "ahk_id " ValidWindows[1]
+        directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[1])
     }
 
     WinSet, AlwaysOnTop, On, % "ahk_id " GroupedWindows[cycleCount]
-    WinActivate, % "ahk_id " GroupedWindows[cycleCount]
+    directSuccessCount += _ActivateWindowWithForegroundTrial(GroupedWindows[cycleCount])
 
     WinSet, AlwaysOnTop, Off, % "ahk_id " GroupedWindows[cycleCount]
+    _DebugTrace_AltTabZOrder("sort_grouped_final", selectedHwnd, "path=" . (k_useDirectForegroundActivationTrial ? "foreground_trial" : "legacy") . " directSuccesses=" . directSuccessCount . " durationMs=" . (A_TickCount - sortStartTick))
     Critical, Off
 Return
 
@@ -5686,6 +5763,22 @@ ResetWins:
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
+; Try the direct foreground API during the Alt+Tab sorting trial. If the target
+; is not immediately foreground, use WinActivate's existing retry behavior.
+_ActivateWindowWithForegroundTrial(hwnd)
+{
+    global k_useDirectForegroundActivationTrial
+
+    if (k_useDirectForegroundActivationTrial) {
+        DllCall("user32\SetForegroundWindow", "Ptr", hwnd, "Int")
+        if (DllCall("user32\GetForegroundWindow", "Ptr") = hwnd)
+            return True
+    }
+
+    WinActivate, % "ahk_id " hwnd
+    return False
+}
+
 ; Reorder up to the four windows handled by the cycle labels without changing
 ; focus between candidates. False leaves callers on the legacy WinActivate path.
 _ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
@@ -5693,24 +5786,31 @@ _ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
     static SWP_NOOWNERZORDER   := 0x0200
 
     reorderCount := windows.MaxIndex()
-    if (!reorderCount)
+    if (!reorderCount) {
+        _DebugTrace_AltTabZOrder("native_rejected", selectedHwnd, "reason=no_candidates")
         return False
+    }
 
     if (reorderCount > 4)
         reorderCount := 4
 
     ; Do not alter the topmost band or begin a native reorder with a stale HWND.
     ; The caller retains the original activation route whenever this preflight fails.
-    if (selectedHwnd && (!DllCall("user32\IsWindow", "ptr", selectedHwnd, "int") || IsAlwaysOnTop(selectedHwnd)))
+    if (selectedHwnd && (!DllCall("user32\IsWindow", "ptr", selectedHwnd, "int") || IsAlwaysOnTop(selectedHwnd))) {
+        _DebugTrace_AltTabZOrder("native_rejected", selectedHwnd, "reason=selected_stale_or_topmost")
         return False
+    }
 
     Loop, %reorderCount%
     {
         candidateHwnd := windows[A_Index]
-        if (!candidateHwnd || !DllCall("user32\IsWindow", "ptr", candidateHwnd, "int") || IsAlwaysOnTop(candidateHwnd))
+        if (!candidateHwnd || !DllCall("user32\IsWindow", "ptr", candidateHwnd, "int") || IsAlwaysOnTop(candidateHwnd)) {
+            _DebugTrace_AltTabZOrder("native_rejected", selectedHwnd, "reason=candidate_stale_or_topmost candidate=" . Format("0x{:X}", candidateHwnd))
             return False
+        }
     }
 
+    _DebugTrace_AltTabZOrder("native_begin", selectedHwnd, "count=" . reorderCount . " sourceCount=" . windows.Length())
     Loop, %reorderCount%
     {
         candidateIndex := reorderCount - A_Index + 1
@@ -5718,17 +5818,64 @@ _ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
         if (selectedHwnd && candidateHwnd = selectedHwnd)
             continue
 
-        if !WinSetZOrderNoActivate(candidateHwnd, HWND_TOP, SWP_NOOWNERZORDER)
+        moveResult := WinSetZOrderNoActivate(candidateHwnd, HWND_TOP, SWP_NOOWNERZORDER)
+        moveErr := moveResult ? "n/a" : A_LastError
+        _DebugTrace_AltTabZOrder("native_move", selectedHwnd, "candidate=" . Format("0x{:X}", candidateHwnd) . " role=other result=" . moveResult . " lastError=" . moveErr)
+        if !moveResult
         {
+            _DebugTrace_AltTabZOrder("native_move_failed", selectedHwnd, "candidate=" . Format("0x{:X}", candidateHwnd) . " error=" . moveErr)
             return False
         }
     }
 
-    if (selectedHwnd && !WinSetZOrderNoActivate(selectedHwnd, HWND_TOP, SWP_NOOWNERZORDER))
+    if (selectedHwnd)
     {
-        return False
+        moveResult := WinSetZOrderNoActivate(selectedHwnd, HWND_TOP, SWP_NOOWNERZORDER)
+        moveErr := moveResult ? "n/a" : A_LastError
+        _DebugTrace_AltTabZOrder("native_move", selectedHwnd, "candidate=" . Format("0x{:X}", selectedHwnd) . " role=selected result=" . moveResult . " lastError=" . moveErr)
+        if !moveResult
+        {
+            _DebugTrace_AltTabZOrder("native_move_failed", selectedHwnd, "candidate=selected error=" . moveErr)
+            return False
+        }
     }
 
+    ; A successful SetWindowPos call can leave the candidate windows out of order.
+    ; Check their relative z-order before skipping the callers' WinActivate path.
+    expectedOrder := []
+    if (selectedHwnd)
+        expectedOrder.Push(selectedHwnd)
+    Loop, %reorderCount%
+    {
+        candidateHwnd := windows[A_Index]
+        if (candidateHwnd != selectedHwnd)
+            expectedOrder.Push(candidateHwnd)
+    }
+
+    actualOrder := []
+    WinGet, stackCount, List
+    Loop, %stackCount%
+    {
+        stackHwnd := stackCount%A_Index%
+        for _, expectedHwnd in expectedOrder
+        {
+            if (stackHwnd = expectedHwnd) {
+                actualOrder.Push(stackHwnd)
+                break
+            }
+        }
+        if (actualOrder.Length() = expectedOrder.Length())
+            break
+    }
+    for idx, expectedHwnd in expectedOrder
+    {
+        if (actualOrder[idx] != expectedHwnd) {
+            _DebugTrace_AltTabZOrder("native_order_failed", selectedHwnd, "reason=relative_order")
+            return False
+        }
+    }
+
+    _DebugTrace_AltTabZOrder("native_done", selectedHwnd, "count=" . reorderCount)
     return True
 }
 
@@ -5768,6 +5915,8 @@ $!+Tab::
         }
 
         Overlay_Hide(30)
+        _DebugTrace_AltTabZOrder("complete", GroupedWindows[cycleCount])
+        _DebugTrace_AltTabZOrder("flush")
 
         GoSub, AltupCleanup
 
@@ -6027,6 +6176,7 @@ IsMouseInVScrollZone_WinGetPosEx_Sys(zonePadTop := 10, zonePadBot := 14
 
 Cycle() {
     global ValidWindows, GroupedWindows, LclickSelected, CanceledWinSwap, k_Opacity, bufferedCycleAdvance
+    global k_debugTraceAltTabZOrderEnabled
 
     cycleCount           := 1
     ; Start each Alt+Tab session with an empty buffer. DrawWindowTitlePopup() will set
@@ -6039,6 +6189,13 @@ Cycle() {
     currentMon := GetMouseDisplayNumber()
     WinGet, actId, ID, A
     WinGet, allWindows, List
+
+    if k_debugTraceAltTabZOrderEnabled {
+        cycleStartStack := []
+        Loop, %allWindows%
+            cycleStartStack.Push(allWindows%A_Index%)
+        _DebugTrace_AltTabZOrder("start", 0, "initialActive=" . Format("0x{:X}", actId) . " mouseMon=" . currentMon, cycleStartStack)
+    }
 
     Loop, %allWindows%
     {
@@ -7509,6 +7666,7 @@ _MaximizeTaskbarExplorerAfterMove(hWnd) {
 ; Move a claimed Explorer window against the clicked taskbar edge without crossing it.
 ; Declare the placement helper so the activation callback has one owner for taskbar-relative movement.
 _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
+    global k_taskbarExplorerSpawnHoverStopFrames
     global k_taskbarExplorerSpawnMoveFrameIntervalMs
     global k_taskbarExplorerSpawnMoveMaxDurationMs
     global k_taskbarExplorerSpawnMoveMinDurationMs
@@ -7652,7 +7810,8 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
     _DebugTrace_AppendTaskbarExplorerMove("placement request hWnd=" . hWnd . " start=(" . windowX
         . "," . windowY . "," . windowWidth . "," . windowHeight . ") target=(" . targetX
         . "," . targetY . "," . windowWidth . "," . windowHeight . ") durationMs=" . moveDurationMs
-        . " frameIntervalMs=" . k_taskbarExplorerSpawnMoveFrameIntervalMs)
+        . " frameIntervalMs=" . k_taskbarExplorerSpawnMoveFrameIntervalMs
+        . " hoverStopFrames=" . k_taskbarExplorerSpawnHoverStopFrames)
 
     ; Run taskbar motion on this thread so unrelated AHK timers cannot delay individual visible frames.
     moveAccepted := _MoveWindowExclusively(hWnd
@@ -7663,7 +7822,8 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
                                             , moveDurationMs
                                             , completionCallback
                                             , "smoothstep"
-                                            , k_taskbarExplorerSpawnMoveFrameIntervalMs)
+                                            , k_taskbarExplorerSpawnMoveFrameIntervalMs
+                                            , k_taskbarExplorerSpawnHoverStopFrames)
     ; Record whether the exclusive move accepted the request so a failed placement is not mistaken for a completed animation.
     _DebugTrace_AppendTaskbarExplorerMove("placement registration hWnd=" . hWnd . " accepted=" . moveAccepted)
     return moveAccepted
@@ -8489,8 +8649,10 @@ ResolveExplorerItemsView( targetHwndID                           ; Top-level Exp
             preferredFailureStage := ""
             preferredRootSnapshot := ""
             itemsEl := FindExplorerItemsViewElement(preferredTarget.hwnd
-                , preferredLookupBudgetMs, preferredLookupDeadlineTick
-                , preferredFailureStage, preferredRootSnapshot)
+                                                    , preferredLookupBudgetMs
+                                                    , preferredLookupDeadlineTick
+                                                    , preferredFailureStage
+                                                    , preferredRootSnapshot)
             preferredLookupElapsedMs := A_TickCount - preferredLookupStartTick
             if IsObject(itemsEl) {
                 preferredTargetState := "hit"
@@ -9239,6 +9401,12 @@ MSAA_IsFocusedEditable() {
     currentTarget := _MSAAGetFocusedTarget()
     return _MSAAIsEditableTarget(currentTarget)
 }
+
+; Toggle the desktop icon fade for testing.
+F7::
+    if (DesktopIcons(!desktopIconsVisible))
+        desktopIconsVisible := !desktopIconsVisible
+return
 
 F8::
     WinGet, debugWindowHwnd, ID, A
@@ -11434,6 +11602,15 @@ $~LButton::
     CancelTbcTypingWorkForContextChange()
 
     WinGetClass, _winClassD, ahk_id %_winIdD%
+    ; A desktop click restores icons only when this script hid them.
+    if (desktopIconsHiddenByScript
+     && (_winClassD == "Progman" || _winClassD == "ProgMan" || _winClassD == "WorkerW"))
+    {
+        if (DesktopIcons(true))
+            desktopIconsVisible := true
+        Return
+    }
+
     isExplorerDirectUIClick    := (_winClassD == "CabinetWClass" || _winClassD == "#32770")
                                && InStr(_winCtrlD, "DirectUIHWND", True)
     isExplorerNavigationHeader := (_winClassD == "CabinetWClass" || _winClassD == "#32770")
@@ -13955,136 +14132,6 @@ JEE_WinHasAltTabIcon(hWnd)
     Return 1
 }
 
-IsAltTabWindow_Why(hWnd)
-{
-    static WS_EX_APPWINDOW     := 0x40000
-    static WS_EX_TOOLWINDOW    := 0x80
-    static DWMWA_CLOAKED       := 14
-    static DWM_CLOAKED_SHELL   := 2
-    static WS_EX_NOACTIVATE    := 0x8000000
-    static GA_PARENT           := 1
-    static GW_OWNER            := 4
-    static WS_EX_WINDOWEDGE    := 0x100
-    static WS_EX_CONTROLPARENT := 0x10000
-    static WS_EX_DLGMODALFRAME := 0x00000001
-
-    WinGetTitle, hasTitle, ahk_id %hWnd%
-    if (!hasTitle)
-        return "no title"
-
-    if !DllCall("IsWindowVisible", "uptr", hWnd)
-        return "not visible"
-
-    DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
-    if (cloaked = DWM_CLOAKED_SHELL)
-        return "cloaked shell"
-
-    parent := DllCall("GetAncestor", "uptr", hWnd, "uint", GA_PARENT, "ptr")
-    if (parent && realHwnd(parent) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
-        return "parent not desktop"
-
-    WinGetClass, winClass, ahk_id %hWnd%
-    if (winClass = "Windows.UI.Core.CoreWindow" || winClass = "ProgMan" || winClass = "WorkerW")
-        return "blocked class: " . winClass
-
-    WinGet, exStyles, ExStyle, ahk_id %hWnd%
-    if (exStyles & WS_EX_APPWINDOW)
-        return "passes via WS_EX_APPWINDOW"
-
-    if (exStyles & WS_EX_TOOLWINDOW)
-        return "toolwindow"
-    if (exStyles & WS_EX_NOACTIVATE)
-        return "noactivate"
-    if (exStyles & WS_EX_DLGMODALFRAME)
-        return "dlgmodalframe"
-
-    if (exStyles & (WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT))
-        return "passes via edge/controlparent"
-
-    hwnd2 := hWnd
-    Loop
-    {
-        prev := hwnd2
-        hwnd2 := DllCall("GetWindow", "uptr", hwnd2, "uint", GW_OWNER, "ptr")
-        if (!hwnd2)
-            return "passes via owner-walk end (prev=" . prev . ")"
-
-        if DllCall("IsWindowVisible", "uptr", hwnd2)
-            return "visible owner: " . hwnd2
-    }
-}
-
-IsAltTabWindow_Why2(hWnd)
-{
-    static WS_EX_APPWINDOW       := 0x40000
-    static WS_EX_TOOLWINDOW      := 0x80
-    static DWMWA_CLOAKED         := 14
-    static DWM_CLOAKED_SHELL     := 2
-    static WS_EX_NOACTIVATE      := 0x8000000
-    static GA_PARENT             := 1
-    static GW_OWNER              := 4
-    static WS_EX_WINDOWEDGE      := 0x100
-    static WS_EX_CONTROLPARENT   := 0x10000
-
-    WinGetTitle, hasTitle, ahk_id %hWnd%
-    WinGetClass, winClass, ahk_id %hWnd%
-
-    if (!hasTitle && winClass != "CASCADIA_HOSTING_WINDOW_CLASS")
-        return "no title (class=" . winClass . ")"
-
-    isMinimized := DllCall("IsIconic", "uptr", hWnd)
-    if (!DllCall("IsWindowVisible", "uptr", hWnd) && !isMinimized)
-        return "not visible (and not minimized)"
-
-    cloaked := 0
-    DllCall("DwmApi\DwmGetWindowAttribute", "uptr", hWnd, "uint", DWMWA_CLOAKED, "uint*", cloaked, "uint", 4)
-    if (cloaked = DWM_CLOAKED_SHELL)
-        return "cloaked shell"
-
-    if (realHwnd(DllCall("GetAncestor", "uptr", hWnd, "uint", GA_PARENT, "ptr")) != realHwnd(DllCall("GetDesktopWindow", "ptr")))
-        return "parent not desktop"
-
-    if (winClass = "Windows.UI.Core.CoreWindow"
-        || (InStr(winClass, "Shell", False) && InStr(winClass, "TrayWnd", False))
-        || winClass == "ProgMan"
-        || winClass == "WorkerW")
-        return "blocked class=" . winClass
-
-    WinGet, exStyles, ExStyle, ahk_id %hWnd%
-
-    if (exStyles & WS_EX_APPWINDOW)
-        return "passes: WS_EX_APPWINDOW"
-
-    if (exStyles & WS_EX_TOOLWINDOW)
-        return "fails: WS_EX_TOOLWINDOW"
-
-    if (exStyles & WS_EX_NOACTIVATE)
-        return "fails: WS_EX_NOACTIVATE"
-
-    if (exStyles & (WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT))
-        return "passes: WS_EX_WINDOWEDGE/WS_EX_CONTROLPARENT"
-
-    hWnd2 := hWnd
-    Loop
-    {
-        prev := hWnd2
-        hWnd2 := DllCall("GetWindow", "uptr", hWnd2, "uint", GW_OWNER, "ptr")
-        if (!hWnd2)
-            return "owner-walk ended => would pass (prev=" . prev . ")"
-
-        if (DllCall("IsWindowVisible", "uptr", hWnd2))
-            return "fails: visible owner=" . hWnd2 . " (prev=" . prev . ")"
-    }
-}
-
-GetLastActivePopup(hwnd)
-{
-   static GA_ROOTOWNER := 3
-   hwnd := DllCall("GetAncestor", "uptr", hwnd, "uint", GA_ROOTOWNER, "ptr")
-   hwnd := DllCall("GetLastActivePopup", "uptr", hwnd, "ptr")
-   Return hwnd
-}
-
 GetDesktopCount() {
     global GetDesktopCountProc
 
@@ -14148,35 +14195,6 @@ IsPinnedWindow(hwnd)
     return DllCall(IsPinnedWindowProc, "Ptr", hwnd, "Int") ; return i32 (typically 1/0)
 }
 
-; ---- Desktop naming (Win11-only exports in this DLL) ----
-
-GetDesktopName(desktopNumber, bufSize := 1024)
-{
-    global GetDesktopNameProc
-    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
-    if (!InitVDA() || !GetDesktopNameProc)
-        return true
-
-    VarSetCapacity(utf8_buffer, bufSize, 0)
-    ran := DllCall(GetDesktopNameProc , "Int", desktopNumber , "Ptr", &utf8_buffer , "Ptr", bufSize , "Int") ; return i32
-
-    ; If you care about ran, you can check it here.
-    return StrGet(&utf8_buffer, bufSize, "UTF-8")
-}
-
-SetDesktopName(desktopNumber, name)
-{
-    ; NOTE: for UTF-8 literals to work correctly, save this .ahk as UTF-8 with BOM.
-    global SetDesktopNameProc
-    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
-    if (!InitVDA() || !SetDesktopNameProc)
-        return true
-    VarSetCapacity(name_utf8, 1024, 0)
-    StrPut(name, &name_utf8, "UTF-8")
-
-    return DllCall(SetDesktopNameProc, "Int", desktopNumber, "Ptr", &name_utf8, "Int") ; return i32
-}
-
 ; Switches to the zero-based desktopNumber by sending Ctrl+Win+Left or Right.
 ; After each send, waits until GetCurrentDesktopNumber() reports the change.
 SwitchToDesktop(desktopNumber)
@@ -14209,26 +14227,6 @@ SwitchToDesktop(desktopNumber)
     }
 
     return true
-}
-
-; ---- Desktop creation/removal (Win11-only exports in this DLL) ----
-
-CreateDesktop()
-{
-    global CreateDesktopProc
-    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
-    if (!InitVDA() || !CreateDesktopProc)
-        return true
-    return DllCall(CreateDesktopProc, "Int") ; return i32 (often new desktop number, or -1 on failure)
-}
-
-RemoveDesktop(removeDesktopNumber, fallbackDesktopNumber)
-{
-    global RemoveDesktopProc
-    ; Fail-open: if VDA is unavailable, don't incorrectly exclude windows
-    if (!InitVDA() || !RemoveDesktopProc)
-        return true
-    return DllCall(RemoveDesktopProc , "Int", removeDesktopNumber , "Int", fallbackDesktopNumber , "Int") ; return i32 (often 1/0)
 }
 
 getForemostWindowIdOnDesktop(n)
@@ -14980,11 +14978,19 @@ Return
 }
 
 MouseTrack() {
-    global currentMon, previousMon, StopRecursion, TaskBarHeight
+    global currentMon, desktopIconsLastDesktopHoverTick, desktopIconsVisible, previousMon, StopRecursion, TaskBarHeight
     static x, y, lastX, lastY, taskview
     static timeOfLastMove
 
     ListLines Off
+    if (MouseIsOverDesktopShellSurface()) {
+        desktopIconsLastDesktopHoverTick := A_TickCount
+    }
+    else if (desktopIconsVisible && A_TickCount - desktopIconsLastDesktopHoverTick > 30000) {
+        if (DesktopIcons(false))
+            desktopIconsVisible := false
+    }
+
     If (GetMonitorCount() > 1 && !GetKeyState("LButton","P")) {
         currentMon := GetMouseDisplayNumber(TaskBarHeight)
         If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
@@ -17001,8 +17007,10 @@ _GetWindowMoveAnimations() {
 
 ; Moves a window on the current thread so an animation can retain its requested
 ; cadence even while the script's ordinary timers would otherwise be eligible to run.
+; An optional hover threshold stops motion after consecutive hovered frames and
+; reports the move as handled so the taskbar caller skips its fallback placement.
 _MoveWindowExclusively(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durationMs := 180
-    , completionCallback := "", easingMode := "smoothstep", frameIntervalMs := 15) {
+    , completionCallback := "", easingMode := "smoothstep", frameIntervalMs := 15, hoverStopFrames := 0) {
     ; Reject a closed window before entering an exclusive section that cannot animate it.
     if !DllCall("IsWindow", "Ptr", hWnd)
         return False
@@ -17023,6 +17031,7 @@ _MoveWindowExclusively(hWnd, targetX, targetY, targetWidth := "", targetHeight :
     ; Normalize caller inputs once so each frame has an exact reachable target and a nonzero duration.
     durationMs      := Max(1, Round(durationMs))
     frameIntervalMs := Max(1, Round(frameIntervalMs))
+    hoverStopFrames := Max(0, Round(hoverStopFrames))
     targetHeight    := Round(targetHeight)
     targetWidth     := Round(targetWidth)
     targetX         := Round(targetX)
@@ -17035,6 +17044,7 @@ _MoveWindowExclusively(hWnd, targetX, targetY, targetWidth := "", targetHeight :
     ; Start timing before the exclusive section so each frame follows elapsed wall-clock time rather than loop count.
     startTick          := A_TickCount
     nextFrameElapsedMs := 0
+    hoverFrameCount    := 0
     ; Keep ordinary timers from interrupting the frame loop; the taskbar caller uses this only for a short placement animation.
     Critical, On
     Loop {
@@ -17060,6 +17070,22 @@ _MoveWindowExclusively(hWnd, targetX, targetY, targetWidth := "", targetHeight :
         frameX      := Round(startX + ((targetX - startX) * easedProgress))
         frameY      := Round(startY + ((targetY - startY) * easedProgress))
         WinMove, ahk_id %hWnd%, , %frameX%, %frameY%, %frameWidth%, %frameHeight%
+
+        ; Only a sustained hover over this top-level window stops its taskbar animation.
+        if (hoverStopFrames > 0) {
+            MouseGetPos, , , hoveredHwnd
+            ; GA_ROOT (2) lets Explorer child controls count as part of this window.
+            if (hoveredHwnd && DllCall("user32\GetAncestor", "Ptr", hoveredHwnd, "UInt", 2, "Ptr") == hWnd)
+                hoverFrameCount += 1
+            else
+                hoverFrameCount := 0
+
+            if (hoverFrameCount >= hoverStopFrames) {
+                _DebugTrace_AppendTaskbarExplorerMove("placement stopped hWnd=" . hWnd . " reason=hover frames=" . hoverFrameCount)
+                Critical, Off
+                return True
+            }
+        }
 
         ; Finish only after applying the exact target rectangle, then let the existing caller decide its follow-up work.
         if (frameHeight == targetHeight && frameWidth == targetWidth && frameX == targetX && frameY == targetY)
@@ -17405,79 +17431,458 @@ MoveAndFadeWindow(Hwnd, initPosx, toRight := True, fadeInOut := "out") {
     Return
 }
 
-DesktopIcons(FadeIn := True) ; lParam, wParam, Msg, hWnd
+; Captures the virtual desktop into a 32-bit bitmap before Explorer's live icon control changes.
+_CaptureDesktopIconFadeBitmap(screenLeft, screenTop, bitmapWidth, bitmapHeight)
 {
-    ControlGet, hwndProgman, Hwnd,, SysListView321, ahk_class Progman
-    ; Toggle See through icons.
-    If !FadeIn
+    global desktopIconFadeBitmap
+    global desktopIconFadeBitmapHeight
+    global desktopIconFadeBitmapPrior
+    global desktopIconFadeBitmapWidth
+    global desktopIconFadeMemoryDc
+
+    sourceDc := DllCall("user32\GetDC", "Ptr", 0, "Ptr")
+    if (!sourceDc)
+        return 0
+
+    if (!desktopIconFadeMemoryDc)
     {
-        Critical, On
-        If hwndProgman=
+        desktopIconFadeMemoryDc := DllCall("gdi32\CreateCompatibleDC", "Ptr", sourceDc, "Ptr")
+        if (!desktopIconFadeMemoryDc)
         {
-            WinSet, Trans, 200, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 150, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 100, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 75, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 25, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 0, ahk_class WorkerW
+            DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", sourceDc)
+            return 0
         }
-        Else
-        {
-            WinSet, Trans, 200, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 150, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 100, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 75, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 25, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 0, ahk_id %hwndProgman%
-            sleep, 20
-        }
-        Critical, Off
     }
-    Else
+
+    if (!desktopIconFadeBitmap || desktopIconFadeBitmapWidth != bitmapWidth || desktopIconFadeBitmapHeight != bitmapHeight)
     {
-        Critical, On
-        If hwndProgman=
+        if (desktopIconFadeBitmap)
         {
-            WinSet, Trans, OFF, ahk_class WorkerW
-            WinSet, Trans, 25, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 75, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 100, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 150, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 200, ahk_class WorkerW
-            sleep, 20
-            WinSet, Trans, 255, ahk_class WorkerW
+            if (desktopIconFadeBitmapPrior)
+                DllCall("gdi32\SelectObject", "Ptr", desktopIconFadeMemoryDc, "Ptr", desktopIconFadeBitmapPrior, "Ptr")
+            DllCall("gdi32\DeleteObject", "Ptr", desktopIconFadeBitmap)
+            desktopIconFadeBitmap := 0
+            desktopIconFadeBitmapPrior := 0
+            desktopIconFadeBitmapWidth := 0
+            desktopIconFadeBitmapHeight := 0
         }
-        Else
+
+        VarSetCapacity(bitmapInfo, 40, 0)
+        NumPut(40, bitmapInfo, 0, "UInt")
+        NumPut(bitmapWidth, bitmapInfo, 4, "Int")
+        NumPut(-bitmapHeight, bitmapInfo, 8, "Int")
+        NumPut(1, bitmapInfo, 12, "UShort")
+        NumPut(32, bitmapInfo, 14, "UShort")
+        bitmapBits := 0
+        captureBitmap := DllCall("gdi32\CreateDIBSection", "Ptr", sourceDc, "Ptr", &bitmapInfo, "UInt", 0, "PtrP", bitmapBits, "Ptr", 0, "UInt", 0, "Ptr")
+        if (!captureBitmap || !bitmapBits)
         {
-            WinSet, Trans, OFF, ahk_id %hwndProgman%
-            WinSet, Trans, 25, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 75, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 100, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 150, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 200, ahk_id %hwndProgman%
-            sleep, 20
-            WinSet, Trans, 255, ahk_id %hwndProgman%
+            DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", sourceDc)
+            return 0
         }
-        Critical, Off
+
+        desktopIconFadeBitmapPrior := DllCall("gdi32\SelectObject", "Ptr", desktopIconFadeMemoryDc, "Ptr", captureBitmap, "Ptr")
+        desktopIconFadeBitmap := captureBitmap
+        desktopIconFadeBitmapWidth := bitmapWidth
+        desktopIconFadeBitmapHeight := bitmapHeight
     }
+
+    copyResult := DllCall("gdi32\BitBlt", "Ptr", desktopIconFadeMemoryDc, "Int", 0, "Int", 0, "Int", bitmapWidth, "Int", bitmapHeight, "Ptr", sourceDc, "Int", screenLeft, "Int", screenTop, "UInt", 0x00CC0020, "Int")
+    DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", sourceDc)
+
+    if (!copyResult)
+        return 0
+
+    return desktopIconFadeBitmap
+}
+
+; Releases the saved bitmap and virtual-desktop geometry for the icon-fade overlay.
+_ClearDesktopIconFadeBitmap()
+{
+    global desktopIconFadeBitmap
+    global desktopIconFadeBitmapHeight
+    global desktopIconFadeBitmapPrior
+    global desktopIconFadeBitmapWidth
+    global desktopIconFadeHeight
+    global desktopIconFadeLeft
+    global desktopIconFadeMemoryDc
+    global desktopIconFadeTop
+    global desktopIconFadeWidth
+
+    if (desktopIconFadeMemoryDc && desktopIconFadeBitmap && desktopIconFadeBitmapPrior)
+        DllCall("gdi32\SelectObject", "Ptr", desktopIconFadeMemoryDc, "Ptr", desktopIconFadeBitmapPrior, "Ptr")
+    if (desktopIconFadeBitmap)
+        DllCall("gdi32\DeleteObject", "Ptr", desktopIconFadeBitmap)
+    if (desktopIconFadeMemoryDc)
+        DllCall("gdi32\DeleteDC", "Ptr", desktopIconFadeMemoryDc)
+
+    desktopIconFadeBitmap := 0
+    desktopIconFadeBitmapHeight := 0
+    desktopIconFadeBitmapPrior := 0
+    desktopIconFadeBitmapWidth := 0
+    desktopIconFadeHeight := 0
+    desktopIconFadeLeft := 0
+    desktopIconFadeMemoryDc := 0
+    desktopIconFadeTop := 0
+    desktopIconFadeWidth := 0
+}
+
+; Destroys the layered icon-fade overlay while retaining the saved bitmap for fade-in.
+_DestroyDesktopIconFadeOverlay()
+{
+    global desktopIconFadeHwnd
+
+    if (desktopIconFadeHwnd)
+        Gui, DesktopIconFade:Destroy
+
+    desktopIconFadeHwnd := 0
+}
+
+; Hides the reusable layered overlay after a completed icon fade.
+_HideDesktopIconFadeOverlay()
+{
+    global desktopIconFadeHwnd
+
+    if (!desktopIconFadeHwnd)
+        return
+    if (!DllCall("user32\IsWindow", "Ptr", desktopIconFadeHwnd, "Int"))
+    {
+        desktopIconFadeHwnd := 0
+        return
+    }
+
+    Gui, DesktopIconFade:Hide
+}
+
+; Allocates the hidden layered overlay without changing Explorer's live desktop icons.
+_PrewarmDesktopIconFadeOverlay()
+{
+    global desktopIconFadeBitmap
+    global desktopIconFadeHeight
+    global desktopIconFadeHwnd
+    global desktopIconFadeLeft
+    global desktopIconFadeTop
+    global desktopIconFadeWidth
+    global desktopIconsHiddenByScript
+
+    if (desktopIconsHiddenByScript || desktopIconFadeBitmap)
+        return
+
+    SysGet, desktopIconFadeLeft, 76
+    SysGet, desktopIconFadeTop, 77
+    SysGet, desktopIconFadeWidth, 78
+    SysGet, desktopIconFadeHeight, 79
+    if (desktopIconFadeWidth <= 0 || desktopIconFadeHeight <= 0)
+        return
+
+    desktopIconFadeBitmap := _CaptureDesktopIconFadeBitmap(desktopIconFadeLeft, desktopIconFadeTop, desktopIconFadeWidth, desktopIconFadeHeight)
+    if (!desktopIconFadeBitmap)
+    {
+        _ClearDesktopIconFadeBitmap()
+        return
+    }
+
+    if (!desktopIconFadeHwnd || !DllCall("user32\IsWindow", "Ptr", desktopIconFadeHwnd, "Int"))
+        Gui, DesktopIconFade:New, +HwnddesktopIconFadeHwnd -Caption +ToolWindow +E0x08080000
+    Gui, DesktopIconFade:Show, % "Hide x" desktopIconFadeLeft " y" desktopIconFadeTop " w" desktopIconFadeWidth " h" desktopIconFadeHeight, Desktop Icon Fade
+
+    if (!_UpdateDesktopIconFadeLayer(0))
+    {
+        _DestroyDesktopIconFadeOverlay()
+        _ClearDesktopIconFadeBitmap()
+    }
+}
+
+; Fades the saved desktop image by updating its layered-window alpha once per frame.
+_FadeDesktopIconLayer(startAlpha, endAlpha)
+{
+    frameTotal := 13
+    frameDelayMs := 16
+    frameNo := 0
+    while (frameNo < frameTotal)
+    {
+        alpha := Round(startAlpha + ((endAlpha - startAlpha) * frameNo / (frameTotal - 1)))
+        if (!_UpdateDesktopIconFadeLayer(alpha))
+            return false
+        if (frameNo < (frameTotal - 1))
+            Sleep, %frameDelayMs%
+        frameNo += 1
+    }
+
+    return true
+}
+
+; Finds the Explorer top-level window that hosts the desktop icon view.
+_FindDesktopIconHost()
+{
+    WinGet, desktopHostHwnd, ID, ahk_class Progman
+    if (desktopHostHwnd)
+    {
+        desktopViewHwnd := DllCall("FindWindowEx", "Ptr", desktopHostHwnd, "Ptr", 0, "Str", "SHELLDLL_DefView", "Ptr", 0, "Ptr")
+        if (desktopViewHwnd)
+            return desktopHostHwnd
+    }
+
+    WinGet, workerWindows, List, ahk_class WorkerW
+    workerNo := 1
+    while (workerNo <= workerWindows)
+    {
+        desktopHostHwnd := workerWindows%workerNo%
+        desktopViewHwnd := DllCall("FindWindowEx", "Ptr", desktopHostHwnd, "Ptr", 0, "Str", "SHELLDLL_DefView", "Ptr", 0, "Ptr")
+        if (desktopViewHwnd)
+            return desktopHostHwnd
+        workerNo += 1
+    }
+
+    return 0
+}
+
+; Finds the Explorer child control that draws the desktop icons.
+_FindDesktopIconListView()
+{
+    desktopHostHwnd := _FindDesktopIconHost()
+    if (!desktopHostHwnd)
+        return 0
+
+    desktopViewHwnd := DllCall("FindWindowEx", "Ptr", desktopHostHwnd, "Ptr", 0, "Str", "SHELLDLL_DefView", "Ptr", 0, "Ptr")
+    if (!desktopViewHwnd)
+        return 0
+
+    return DllCall("FindWindowEx", "Ptr", desktopViewHwnd, "Ptr", 0, "Str", "SysListView32", "Ptr", 0, "Ptr")
+}
+
+; Forces Explorer to paint restored icons before the overlay reveals them.
+_RefreshDesktopIcons(iconListViewHwnd)
+{
+    if (!DllCall("user32\IsWindow", "Ptr", iconListViewHwnd, "Int"))
+        return false
+
+    if (!DllCall("user32\RedrawWindow", "Ptr", iconListViewHwnd, "Ptr", 0, "Ptr", 0, "UInt", 0x00000385, "Int"))
+        return false
+
+    return (DllCall("dwmapi\DwmFlush", "Int") = 0)
+}
+
+; Restores Explorer's live icons and releases the icon-fade overlay resources.
+_ResetDesktopIconFade(exitReason := "", exitCode := 0)
+{
+    global desktopIconFadeListViewHwnd
+    global desktopIconsHiddenByScript
+
+    _DestroyDesktopIconFadeOverlay()
+    if (desktopIconsHiddenByScript)
+    {
+        if (!DllCall("user32\IsWindow", "Ptr", desktopIconFadeListViewHwnd, "Int"))
+            desktopIconFadeListViewHwnd := _FindDesktopIconListView()
+        if (desktopIconFadeListViewHwnd)
+            _SetDesktopIconsVisible(desktopIconFadeListViewHwnd, true)
+    }
+
+    desktopIconsHiddenByScript := false
+    _ClearDesktopIconFadeBitmap()
+}
+
+; Applies a visible or hidden state to Explorer's live desktop icon control.
+_SetDesktopIconsVisible(iconListViewHwnd, isVisible)
+{
+    global desktopIconFadeWinSetElapsedMs
+
+    desktopIconFadeWinSetElapsedMs := 0
+    if (!DllCall("user32\IsWindow", "Ptr", iconListViewHwnd, "Int"))
+        return false
+
+    desktopIconFadeWinSetStartTick := A_TickCount
+    if (isVisible)
+        WinSet, Transparent, Off, ahk_id %iconListViewHwnd%
+    else
+        WinSet, Transparent, 0, ahk_id %iconListViewHwnd%
+    desktopIconFadeWinSetElapsedMs := A_TickCount - desktopIconFadeWinSetStartTick
+
+    return true
+}
+
+; Creates the saved image as a hidden layered window, then places it above the desktop host.
+_ShowDesktopIconFadeOverlay()
+{
+    global desktopIconFadeBitmap
+    global desktopIconFadeHeight
+    global desktopIconFadeHwnd
+    global desktopIconFadeLeft
+    global desktopIconFadeTop
+    global desktopIconFadeWidth
+
+    desktopHostHwnd := _FindDesktopIconHost()
+    if (!desktopHostHwnd || !desktopIconFadeBitmap)
+        return false
+
+    if (!desktopIconFadeHwnd || !DllCall("user32\IsWindow", "Ptr", desktopIconFadeHwnd, "Int"))
+        Gui, DesktopIconFade:New, +HwnddesktopIconFadeHwnd -Caption +ToolWindow +E0x08080000
+    Gui, DesktopIconFade:Show, % "Hide x" desktopIconFadeLeft " y" desktopIconFadeTop " w" desktopIconFadeWidth " h" desktopIconFadeHeight, Desktop Icon Fade
+
+    if (!_UpdateDesktopIconFadeLayer())
+    {
+        _DestroyDesktopIconFadeOverlay()
+        return false
+    }
+
+    ; 0x0043 keeps the overlay's size and coordinates and then shows it above the desktop host.
+    if (!DllCall("user32\SetWindowPos", "Ptr", desktopIconFadeHwnd, "Ptr", desktopHostHwnd, "Int", 0, "Int", 0, "Int", 0, "Int", 0, "UInt", 0x0043))
+    {
+        _DestroyDesktopIconFadeOverlay()
+        return false
+    }
+
+    return true
+}
+
+; Sends the saved bitmap and one alpha value to the layered overlay in a single composited update.
+_UpdateDesktopIconFadeLayer(alpha := 255)
+{
+    global desktopIconFadeBitmap
+    global desktopIconFadeHeight
+    global desktopIconFadeHwnd
+    global desktopIconFadeLeft
+    global desktopIconFadeMemoryDc
+    global desktopIconFadeTop
+    global desktopIconFadeWidth
+
+    if (!desktopIconFadeHwnd || !desktopIconFadeBitmap || !desktopIconFadeMemoryDc)
+        return false
+
+    screenDc := DllCall("user32\GetDC", "Ptr", 0, "Ptr")
+    if (!screenDc)
+        return false
+
+    VarSetCapacity(destinationPoint, 8, 0)
+    VarSetCapacity(layerSize, 8, 0)
+    VarSetCapacity(sourcePoint, 8, 0)
+    NumPut(desktopIconFadeLeft, destinationPoint, 0, "Int")
+    NumPut(desktopIconFadeTop, destinationPoint, 4, "Int")
+    NumPut(desktopIconFadeWidth, layerSize, 0, "Int")
+    NumPut(desktopIconFadeHeight, layerSize, 4, "Int")
+    VarSetCapacity(blendFunction, 4, 0)
+    NumPut(alpha, blendFunction, 2, "UChar")
+
+    updateResult := DllCall("user32\UpdateLayeredWindow", "Ptr", desktopIconFadeHwnd, "Ptr", screenDc, "Ptr", &destinationPoint, "Ptr", &layerSize, "Ptr", desktopIconFadeMemoryDc, "Ptr", &sourcePoint, "UInt", 0, "Ptr", &blendFunction, "UInt", 0x00000002, "Int")
+    DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
+    return updateResult
+}
+
+; Fades Explorer's desktop icons by revealing or hiding a saved layered desktop image.
+DesktopIcons(FadeIn := True)
+{
+    global desktopIconFadeBitmap
+    global desktopIconFadeHeight
+    global desktopIconFadeHwnd
+    global desktopIconFadeLeft
+    global desktopIconFadeListViewHwnd
+    global desktopIconFadeMemoryDc
+    global desktopIconFadeTop
+    global desktopIconFadeWidth
+    global desktopIconFadeWinSetElapsedMs
+    global desktopIconsHiddenByScript
+
+    if (FadeIn)
+    {
+        if (!desktopIconsHiddenByScript)
+            return true
+
+        if (!desktopIconFadeBitmap)
+        {
+            _ResetDesktopIconFade()
+            return true
+        }
+
+        if (!_ShowDesktopIconFadeOverlay())
+            return false
+
+        if (!_SetDesktopIconsVisible(desktopIconFadeListViewHwnd, true))
+        {
+            _ResetDesktopIconFade()
+            return false
+        }
+
+        _RefreshDesktopIcons(desktopIconFadeListViewHwnd)
+        _FadeDesktopIconLayer(255, 0)
+        _HideDesktopIconFadeOverlay()
+        desktopIconsHiddenByScript := false
+        return true
+    }
+
+    ; Keeps temporary timing diagnostics in one script thread through fade-out setup.
+    Critical, On
+    desktopIconFadeSetupStartTick := A_TickCount
+    desktopIconFadePrewarmReady := desktopIconFadeBitmap && desktopIconFadeHwnd && desktopIconFadeMemoryDc
+    desktopIconFadeStageStartTick := A_TickCount
+    desktopIconFadeListViewHwnd := _FindDesktopIconListView()
+    desktopIconFadeListViewLookupElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+    if (!desktopIconFadeListViewHwnd)
+    {
+        Critical, Off
+        return false
+    }
+
+    desktopIconFadeStageStartTick := A_TickCount
+    _HideDesktopIconFadeOverlay()
+    desktopIconFadeHideOverlayElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+    desktopIconFadeStageStartTick := A_TickCount
+    SysGet, desktopIconFadeLeft, 76
+    SysGet, desktopIconFadeTop, 77
+    SysGet, desktopIconFadeWidth, 78
+    SysGet, desktopIconFadeHeight, 79
+    desktopIconFadeGeometryElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+    if (desktopIconFadeWidth <= 0 || desktopIconFadeHeight <= 0)
+    {
+        Critical, Off
+        return false
+    }
+
+    desktopIconFadeStageStartTick := A_TickCount
+    desktopIconFadeBitmap := _CaptureDesktopIconFadeBitmap(desktopIconFadeLeft, desktopIconFadeTop, desktopIconFadeWidth, desktopIconFadeHeight)
+    desktopIconFadeCaptureElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+    if (!desktopIconFadeBitmap)
+    {
+        Critical, Off
+        _ClearDesktopIconFadeBitmap()
+        return false
+    }
+
+    desktopIconFadeStageStartTick := A_TickCount
+    if (!_ShowDesktopIconFadeOverlay())
+    {
+        Critical, Off
+        _ClearDesktopIconFadeBitmap()
+        return false
+    }
+    desktopIconFadeShowOverlayElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+
+    desktopIconFadeStageStartTick := A_TickCount
+    if (!_SetDesktopIconsVisible(desktopIconFadeListViewHwnd, false))
+    {
+        Critical, Off
+        _ResetDesktopIconFade()
+        return false
+    }
+    desktopIconFadeHideLiveIconsElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+
+    desktopIconsHiddenByScript := true
+    Critical, Off
+
+    desktopIconFadeLayerStartTick := A_TickCount
+    desktopIconFadeLayerResult    := _FadeDesktopIconLayer(255, 0)
+    desktopIconFadeLayerElapsedMs := A_TickCount - desktopIconFadeLayerStartTick
+    desktopIconFadeSetupElapsedMs := desktopIconFadeLayerStartTick - desktopIconFadeSetupStartTick
+
+    _DebugTrace_AppendDesktopIconFade("fade_out: prewarmReady=" . (desktopIconFadePrewarmReady ? 1 : 0) . "; listViewLookupMs=" . desktopIconFadeListViewLookupElapsedMs . "; hideOverlayMs=" . desktopIconFadeHideOverlayElapsedMs . "; geometryMs=" . desktopIconFadeGeometryElapsedMs . "; captureMs=" . desktopIconFadeCaptureElapsedMs . "; showOverlayMs=" . desktopIconFadeShowOverlayElapsedMs . "; hideLiveIconsMs=" . desktopIconFadeHideLiveIconsElapsedMs . "; winSetMs=" . desktopIconFadeWinSetElapsedMs . "; setupMs=" . desktopIconFadeSetupElapsedMs . "; fadeMs=" . desktopIconFadeLayerElapsedMs)
+
+    if (!desktopIconFadeLayerResult)
+    {
+        _ResetDesktopIconFade()
+        return false
+    }
+
+    _HideDesktopIconFadeOverlay()
+    return true
 }
 
 ;https://www.autohotkey.com/boards/search.php?author_id=139004&sr=posts&sid=13343c88f1a3953143867b71b22fdafc
@@ -17729,6 +18134,52 @@ getSessionId()
     Return SessionId
 }
 
+; Buffer the active HWND, eligible HWNDs, and visible z-order at each Alt+Tab checkpoint.
+; Flush once after the cycle so file I/O does not interrupt preview or native reorder.
+_DebugTrace_AltTabZOrder(stage, selectedHwnd := 0, details := "", rawStack := "")
+{
+    global GroupedWindows, hitTAB, k_debugTraceAltTabZOrderEnabled, k_debugTraceAltTabZOrderFile, ValidWindows
+    static traceBuffer := ""
+
+    if (!k_debugTraceAltTabZOrderEnabled || !hitTAB)
+        return False
+
+    if (stage = "flush") {
+        if (traceBuffer = "")
+            return True
+        FileAppend, %traceBuffer%, %k_debugTraceAltTabZOrderFile%, UTF-8
+        if ErrorLevel
+            return False
+        traceBuffer := ""
+        return True
+    }
+
+    if (stage = "start")
+        traceBuffer := ""
+
+    if !IsObject(rawStack) {
+        rawStack := []
+        WinGet, rawCount, List
+        Loop, %rawCount%
+            rawStack.Push(rawCount%A_Index%)
+    }
+
+    WinGet, activeHwnd, ID, A
+    traceLine := A_Now . "." . A_MSec . " tick=" . A_TickCount . " stage=" . stage
+        . " active=" . Format("0x{:X}", activeHwnd) . " selected=" . Format("0x{:X}", selectedHwnd)
+        . " details=" . details . " valid=["
+    for idx, hwnd in ValidWindows
+        traceLine .= (idx = 1 ? "" : ",") . Format("0x{:X}", hwnd)
+    traceLine .= "] grouped=["
+    for idx, hwnd in GroupedWindows
+        traceLine .= (idx = 1 ? "" : ",") . Format("0x{:X}", hwnd)
+    traceLine .= "] raw=["
+    for idx, hwnd in rawStack
+        traceLine .= (idx = 1 ? "" : ",") . Format("0x{:X}", hwnd)
+    traceBuffer .= traceLine . "]`r`n"
+    return True
+}
+
 ; Append one timestamped Ctrl+D paste result without enabling general diagnostic logging.
 _DebugTrace_AppendCtrlDPaste(message)
 {
@@ -17740,6 +18191,20 @@ _DebugTrace_AppendCtrlDPaste(message)
 
     logLine := A_Now . "." . A_MSec . " " . message . "`r`n"
     FileAppend, %logLine%, %k_debugTraceCtrlDPasteFile%, UTF-8
+    return !ErrorLevel
+}
+
+; Append one timestamped desktop-icon fade timing result when its trace switch is enabled.
+_DebugTrace_AppendDesktopIconFade(message)
+{
+    global k_debugTraceDesktopIconFadeEnabled
+    global k_debugTraceDesktopIconFadeFile
+
+    if !k_debugTraceDesktopIconFadeEnabled
+        return False
+
+    logLine := A_Now . "." . A_MSec . " " . message . "`r`n"
+    FileAppend, %logLine%, %k_debugTraceDesktopIconFadeFile%, UTF-8
     return !ErrorLevel
 }
 
@@ -17811,13 +18276,18 @@ WinSetAlphaTopmost(guiHwnd, transparencyLevel := 220, isTopmost := true)
 }
 
 ; Reorder hwnd without activating it or changing its position or size.
-; insertAfterHwnd: 0 (HWND_TOP) raises it; -1 (HWND_TOPMOST) makes it
-; topmost; -2 (HWND_NOTOPMOST) removes its topmost status.
-; extraFlags defaults to 0 (no extra flags). Callers pass 0x0200
-; (SWP_NOOWNERZORDER) to leave the owner window's z-order unchanged or
-; 0x0040 (SWP_SHOWWINDOW) to show the window.
-; Always added: 0x0010 (SWP_NOACTIVATE) prevents activation, 0x0002
-; (SWP_NOMOVE) retains position, and 0x0001 (SWP_NOSIZE) retains size.
+; insertAfterHwnd values:
+;   - HWND_TOP        (0) : raises the window.
+;   - HWND_TOPMOST   (-1) : makes the window topmost.
+;   - HWND_NOTOPMOST (-2) : removes topmost status.
+; extraFlags values:
+;   - 0      (default)           : adds no extra flags.
+;   - 0x0200 (SWP_NOOWNERZORDER) : leaves the owner's z-order unchanged.
+;   - 0x0040 (SWP_SHOWWINDOW)    : shows the window.
+; Flags always added by this helper:
+;   - 0x0010 (SWP_NOACTIVATE) : prevents activation.
+;   - 0x0002 (SWP_NOMOVE)     : retains position.
+;   - 0x0001 (SWP_NOSIZE)     : retains size.
 ; Return SetWindowPos's success flag so callers can handle failure.
 WinSetZOrderNoActivate(hwnd, insertAfterHwnd, extraFlags := 0)
 {

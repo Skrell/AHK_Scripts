@@ -33,17 +33,11 @@ Global k_VDA_DllName := "VirtualDesktopAccessor_Win11.dll"
 ; This remains after k_VDA_DllName because it derives its value from that name.
 Global k_dllPath := A_ScriptDir . "\" . k_VDA_DllName
 
-; Export pointer used to create a virtual desktop.
-Global CreateDesktopProc := 0
-
 ; Export pointer used to read the current virtual desktop number.
 Global GetCurrentDesktopNumberProc := 0
 
 ; Export pointer used to read the virtual desktop count.
 Global GetDesktopCountProc := 0
-
-; Export pointer used to read a virtual desktop name.
-Global GetDesktopNameProc := 0
 
 ; Loaded VirtualDesktopAccessor module handle used to resolve exports.
 Global hVirtualDesktopAccessor := 0
@@ -59,12 +53,6 @@ Global IsWindowOnDesktopNumberProc := 0
 
 ; Export pointer used to move a window to a desktop number.
 Global MoveWindowToDesktopNumberProc := 0
-
-; Export pointer used to remove a virtual desktop.
-Global RemoveDesktopProc := 0
-
-; Export pointer used to change a virtual desktop name.
-Global SetDesktopNameProc := 0
 
 ; Cached height of the current monitor for display-aware callers.
 Global currMonHeight := 0
@@ -1322,8 +1310,7 @@ InitVDA()
     global hVirtualDesktopAccessor, k_dllPath
     global GetDesktopCountProc, GetCurrentDesktopNumberProc
     global IsWindowOnCurrentVirtualDesktopProc, IsWindowOnDesktopNumberProc, MoveWindowToDesktopNumberProc
-    global IsPinnedWindowProc, GetDesktopNameProc, SetDesktopNameProc
-    global CreateDesktopProc, RemoveDesktopProc
+    global IsPinnedWindowProc
 
     static initializing := false
     if (initializing)
@@ -1360,12 +1347,6 @@ InitVDA()
     IsWindowOnDesktopNumberProc         := _gp("IsWindowOnDesktopNumber")
     MoveWindowToDesktopNumberProc       := _gp("MoveWindowToDesktopNumber")
     IsPinnedWindowProc                  := _gp("IsPinnedWindow")
-
-    ; --- optional exports (may be missing detbc on build/OS) ---
-    GetDesktopNameProc                  := _gp("GetDesktopName")
-    SetDesktopNameProc                  := _gp("SetDesktopName")
-    CreateDesktopProc                   := _gp("CreateDesktop")
-    RemoveDesktopProc                   := _gp("RemoveDesktop")
 
     initializing := false
 
