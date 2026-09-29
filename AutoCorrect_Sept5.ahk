@@ -17787,14 +17787,8 @@ DesktopIcons(FadeIn := True)
         if (!desktopIconsHiddenByScript)
             return true
 
-        if (!desktopIconFadeBitmap)
-        {
-            _ResetDesktopIconFade()
-            return true
-        }
-
-        if (!_ShowDesktopIconFadeOverlay())
-            return false
+        ; Never reveal the image saved at fade-out: it can contain windows that have since moved.
+        _HideDesktopIconFadeOverlay()
 
         if (!_SetDesktopIconsVisible(desktopIconFadeListViewHwnd, true))
         {
@@ -17802,8 +17796,34 @@ DesktopIcons(FadeIn := True)
             return false
         }
 
-        _RefreshDesktopIcons(desktopIconFadeListViewHwnd)
-        _FadeDesktopIconLayer(255, 0)
+        if (!_RefreshDesktopIcons(desktopIconFadeListViewHwnd))
+        {
+            _ResetDesktopIconFade()
+            return false
+        }
+
+        SysGet, desktopIconFadeLeft, 76
+        SysGet, desktopIconFadeTop, 77
+        SysGet, desktopIconFadeWidth, 78
+        SysGet, desktopIconFadeHeight, 79
+        if (desktopIconFadeWidth <= 0 || desktopIconFadeHeight <= 0)
+        {
+            _ResetDesktopIconFade()
+            return false
+        }
+
+        if (!_CaptureDesktopIconFadeBitmap(desktopIconFadeLeft, desktopIconFadeTop, desktopIconFadeWidth, desktopIconFadeHeight))
+        {
+            _ResetDesktopIconFade()
+            return false
+        }
+
+        if (!_ShowDesktopIconFadeOverlay() || !_FadeDesktopIconLayer(255, 0))
+        {
+            _ResetDesktopIconFade()
+            return false
+        }
+
         _HideDesktopIconFadeOverlay()
         desktopIconsHiddenByScript := false
         return true
