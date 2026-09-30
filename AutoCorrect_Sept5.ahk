@@ -29,6 +29,13 @@ SetWinDelay,      1 ;
 SetControlDelay,  1 ;
 
 ; +----------------------------------------------------------------------------+
+; | Alt-Left-Button Enter Gesture State                                        |
+; | Retains the first physical-Alt click so successive double-clicks can each  |
+; | send Enter without depending on AutoHotkey's prior-hotkey state.           |
+; +----------------------------------------------------------------------------+
+; Tick when the current physical-Alt left-click pair began; zero means no click awaits a match.
+Global altLButtonFirstClickTick                              := 0
+; +----------------------------------------------------------------------------+
 ; | Window Enumeration And Cycle State                                         |
 ; | Tracks the live window lists and retained selection state shared by the    |
 ; | Alt+Tab-style window-cycling flows.                                        |
@@ -550,7 +557,7 @@ Global k_debugTraceCtrlDPasteEnabled                         := False
 ; Stores Ctrl+D fallback-paste results beside the script for direct inspection.
 Global k_debugTraceCtrlDPasteFile                            := A_ScriptDir . "\AutoCorrect_CtrlDPasteTrace.log"
 ; Temporarily enables the focused F7 desktop-icon fade timing trace for diagnosis.
-Global k_debugTraceDesktopIconFadeEnabled                    := True
+Global k_debugTraceDesktopIconFadeEnabled                    := False
 ; Stores desktop-icon fade setup timings beside the script for direct inspection.
 Global k_debugTraceDesktopIconFadeFile                       := A_ScriptDir . "\AutoCorrect_DesktopIconFadeTrace.log"
 ; Enables the detailed Explorer/file-dialog CtrlAdd timing trace.
@@ -802,31 +809,31 @@ Global titleBarChordOwnsLButton                            := False
 ; | DesktopIcons fade state.                                                   |
 ; | Holds the desktop bitmap used while desktop icons fade.                    |
 ; +----------------------------------------------------------------------------+
-global desktopIconFadeBitmap                               := 0
+Global desktopIconFadeBitmap                               := 0
 ; Stores the allocated desktop bitmap height so it can be reused until monitor geometry changes.
-global desktopIconFadeBitmapHeight                         := 0
+Global desktopIconFadeBitmapHeight                         := 0
 ; Holds the object previously selected into the reusable desktop bitmap device context.
-global desktopIconFadeBitmapPrior                          := 0
+Global desktopIconFadeBitmapPrior                          := 0
 ; Stores the allocated desktop bitmap width so it can be reused until monitor geometry changes.
-global desktopIconFadeBitmapWidth                          := 0
+Global desktopIconFadeBitmapWidth                          := 0
 ; Stores the virtual desktop height used by the layered icon-fade overlay.
-global desktopIconFadeHeight                               := 0
+Global desktopIconFadeHeight                               := 0
 ; Holds the layered overlay window used while desktop icons fade.
-global desktopIconFadeHwnd                                 := 0
+Global desktopIconFadeHwnd                                 := 0
 ; Stores the virtual desktop left edge used by the layered icon-fade overlay.
-global desktopIconFadeLeft                                 := 0
+Global desktopIconFadeLeft                                 := 0
 ; Caches Explorer's desktop icon-list handle during an icon fade.
-global desktopIconFadeListViewHwnd                         := 0
+Global desktopIconFadeListViewHwnd                         := 0
 ; Holds the reusable memory device context containing the desktop bitmap.
-global desktopIconFadeMemoryDc                             := 0
+Global desktopIconFadeMemoryDc                             := 0
 ; Stores the virtual desktop top edge used by the layered icon-fade overlay.
-global desktopIconFadeTop                                  := 0
+Global desktopIconFadeTop                                  := 0
 ; Stores the virtual desktop width used by the layered icon-fade overlay.
-global desktopIconFadeWidth                                := 0
+Global desktopIconFadeWidth                                := 0
 ; Stores the direct transparency-command time for desktop icon fade diagnostics.
-global desktopIconFadeWinSetElapsedMs                      := 0
+Global desktopIconFadeWinSetElapsedMs                      := 0
 ; Tracks whether this script hid Explorer's live desktop icons.
-global desktopIconsHiddenByScript                          := false
+Global desktopIconsHiddenByScript                          := false
 
 Process, Priority,, High
 
@@ -5155,6 +5162,8 @@ Return
     If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < k_DoubleClickTime) {
         Send, {Home}
         Send, +{End}
+        sleep, 10
+        Send, {delete}
     }
     Else {
         Send, +{End}
@@ -5879,7 +5888,15 @@ _ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
     return True
 }
 
+; Windows normally enters menu-key mode only when Alt is pressed and released without another key event.
+; The synthetic vkE8 occurs while Alt is down, so Windows treats Alt as having participated in a key
+; combination and does not activate the menu on release. {Blind} preserves Alt’s modifier state, so
+; real Alt shortcuts continue to work.
 ~LAlt::Send {Blind}{vkE8}
+
+~LAlt Up::
+    altLButtonFirstClickTick := 0
+Return
 
 $!Tab::
 $!+Tab::
@@ -6007,7 +6024,8 @@ $!x::
 Return
 #If
 
-$!Lbutton::
+#If GetKeyState("LAlt", "P")
+$*LButton::
     If (hitTab || hitTilde) {
         LclickSelected := True
 
@@ -6041,19 +6059,25 @@ $!Lbutton::
             sleep, 5
         }
     }
-    Else If (A_PriorHotkey == A_ThisHotkey && (A_TimeSincePriorHotkey < k_DoubleClickTime)) {
-        ; Wait for the physical second click to end before injecting input.
-        While GetKeyState("LButton", "P")
-            Sleep, 5
+    Else {
+        clickTick := A_TickCount
+        If (altLButtonFirstClickTick && clickTick - altLButtonFirstClickTick < k_DoubleClickTime) {
+            ; Clear the matched pair before injecting input so the next pair starts cleanly.
+            altLButtonFirstClickTick := 0
 
-        BeginBlockKeys()
-        Send, {LAlt UP}
-        Send, {Click, left}
-        Send, {ENTER}
-        EndBlockKeys()
-        sleep, 275
+            ; Wait for the physical second click to end before injecting input.
+            While GetKeyState("LButton", "P")
+                Sleep, 5
+
+            BeginBlockKeys()
+            SendInput, {Blind}{LAlt Up}{Click, Left}{Enter}
+            EndBlockKeys()
+        }
+        Else
+            altLButtonFirstClickTick := clickTick
     }
 Return
+#If
 
 RunDynaWinFind:
     DynaRun(WinFindExpr, Expr_Name)
@@ -16964,6 +16988,11 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
 
     WinGetClass, mClass, ahk_id %WindowUnderMouseID%
 
+    ; Audacity 4's QML caption buttons must receive the original click directly.
+    WinGet, captionProcessName, ProcessName, ahk_id %WindowUnderMouseID%
+    If (captionProcessName == "Audacity4.exe")
+        Return False
+
     If    ((mClass != "Shell_TrayWnd")
         && (mClass != "WorkerW")
         && (mClass != "ProgMan")
@@ -17516,15 +17545,15 @@ _ClearDesktopIconFadeBitmap()
     if (desktopIconFadeMemoryDc)
         DllCall("gdi32\DeleteDC", "Ptr", desktopIconFadeMemoryDc)
 
-    desktopIconFadeBitmap := 0
+    desktopIconFadeBitmap       := 0
     desktopIconFadeBitmapHeight := 0
-    desktopIconFadeBitmapPrior := 0
-    desktopIconFadeBitmapWidth := 0
-    desktopIconFadeHeight := 0
-    desktopIconFadeLeft := 0
-    desktopIconFadeMemoryDc := 0
-    desktopIconFadeTop := 0
-    desktopIconFadeWidth := 0
+    desktopIconFadeBitmapPrior  := 0
+    desktopIconFadeBitmapWidth  := 0
+    desktopIconFadeHeight       := 0
+    desktopIconFadeLeft         := 0
+    desktopIconFadeMemoryDc     := 0
+    desktopIconFadeTop          := 0
+    desktopIconFadeWidth        := 0
 }
 
 ; Destroys the layered icon-fade overlay while retaining the saved bitmap for fade-in.
@@ -17584,6 +17613,7 @@ _PrewarmDesktopIconFadeOverlay()
 
     if (!desktopIconFadeHwnd || !DllCall("user32\IsWindow", "Ptr", desktopIconFadeHwnd, "Int"))
         Gui, DesktopIconFade:New, +HwnddesktopIconFadeHwnd -Caption +ToolWindow +E0x08080000
+
     Gui, DesktopIconFade:Show, % "Hide x" desktopIconFadeLeft " y" desktopIconFadeTop " w" desktopIconFadeWidth " h" desktopIconFadeHeight, Desktop Icon Fade
 
     if (!_UpdateDesktopIconFadeLayer(0))
@@ -23125,7 +23155,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:aiton::ation
 :?:ioins::ions
 :?:ceis::cies
-:?:eses::esses
 :?:tn::nt
 :?:toir::itor
 ;------------------------------------------------------------------------------
