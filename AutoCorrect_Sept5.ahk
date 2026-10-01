@@ -33,8 +33,8 @@ SetControlDelay,  1 ;
 ; | Retains the first physical-Alt click so successive double-clicks can each  |
 ; | send Enter without depending on AutoHotkey's prior-hotkey state.           |
 ; +----------------------------------------------------------------------------+
-; Tick when the current physical-Alt left-click pair began; zero means no click awaits a match.
-Global altLButtonFirstClickTick                              := 0
+; Timestamp of the prior physical Alt-held left-click; zero means no click awaits a match.
+Global priorAltClickTick                                      := 0
 ; +----------------------------------------------------------------------------+
 ; | Window Enumeration And Cycle State                                         |
 ; | Tracks the live window lists and retained selection state shared by the    |
@@ -45,7 +45,7 @@ Global CanceledWinSwap                                       := False
 Global ValidWindows                                          := []
 Global GroupedWindows                                        := []
 Global MinimizedWindows                                      := []
-Global PrevActiveWindows                                     := []
+Global prevActiveWindows                                     := []
 Global allWinArray                                           := []
 Global cycleCount                                            := 1
 ; Alt+Tab/Alt+` can receive the next cycle key while DrawWindowTitlePopup() is still
@@ -198,8 +198,6 @@ Global clipTraceCtrlDPasteActive                             := False
 ; either commit "{BS}{?}{ENTER}" inline or fall back to one normal Enter, but
 ; never let both the raw key and the rewrite path fire.
 Global disableEnter                                          := False
-; Name of the most recently triggered hotkey for repeat-sensitive logic.
-Global lastHotkeyTyped                                       := ""
 ; Tick count of the most recent hotkey-triggered send used by typing heuristics.
 Global TimeOfLastHotkeyTyped                                 := A_TickCount
 ; +----------------------------------------------------------------------------+
@@ -1525,7 +1523,6 @@ MarkKeypressTime:
     if (!StopAutoFix && (tbcFixSlashAction || tbcHotyReplacement))
         CancelTbcTypingFixes(True, False)
     TimeOfLastHotkeyTyped := A_TickCount
-    lastHotkeyTyped       := A_ThisHotkey
 Return
 
 Marktime_Hoty:
@@ -1822,7 +1819,7 @@ FixSlash:
     Else If !IsGoogleDocWindow() && (!StopAutoFix && IsThisHotKeyLetterKey())
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
-    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && A_ThisHotkey == "$~Space" && A_TimeSincePriorHotkey<999)) {
+    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && (A_ThisHotkey == "$~Space" || A_ThisHotkey == "$~+Space") && A_TimeSincePriorHotkey<999)) {
         _RequestFixSlash("space")
         disableEnter              := False
     }
@@ -1854,6 +1851,82 @@ Return
 ;                     +--> yes: non-classic editor uses the older blind-send fallback
 ;                     +--> yes: queued Enter is released only after that rewrite attempt finishes
 ;                     +--> no : drop stale rewrite
+/*
+Example: typing   a / Space
+                 ────────
+Time (ms)           960       985       1010      1025       1065       1105
+                    │         │          │         │          │          │
+Physical key         a DOWN    / DOWN     / UP      Space UP   timer      timer
+                    │         │                     ▲          callback   callback
+                    │         │                     │
+                    │         │                     └─ Space itself has already
+                    │         │                        reached the target control.
+                    │         │
+───────────────────────────────────────────────────────────────────────────────────
+FixSlash state
+
+X_PriorPriorHotKey   ""        "a"        "a"       "a"        "a"        "a"
+
+disableEnter         false     true       true       false      false      false
+                              slash after
+                              a letter
+
+fixSlashCandidate
+HasPriorSlash        false     false      false      false      false      false
+                              first slash in this
+                              whitespace-delimited string
+
+A_TimeSincePrior
+Hotkey                          0 ms                  40 ms
+                                                     slash → Space is under
+                                                     the 999 ms limit
+
+tbcFixSlashAction    ""        ""         ""         "space"    "space"    ""
+                                                        queued               cleared
+
+tbcFixSlashRequested
+Tick                 0         0          0          1025       1025       0
+
+typingFixSeq         41        41         41         42         42         42
+                                                        new request token
+
+───────────────────────────────────────────────────────────────────────────────────
+/ DOWN at 985
+    FixSlash records that this is the first slash in the current string.
+    Because its preceding tracked key is a letter, it sets disableEnter := true.
+
+Space DOWN / UP
+    $~Space lets the physical Space reach the editor normally.
+    FixSlash confirms the slash was the prior hotkey, the prior tracked key was a
+    letter, the slash → Space interval is under 999 ms, and this is not a second
+    slash in the current whitespace-delimited string.
+
+    _RequestFixSlash("space") stores the target window/control, records the
+    request tick, increments typingFixSeq, and schedules FlushTbcFixSlash in 40 ms.
+
+Timer callback
+    Replacement is allowed only while the request is at most 250 ms old, physical
+    keyboard idle time is at least 40 ms, StopAutoFix is false, the request token
+    still matches typingFixSeq, and the original window/control still owns the caret.
+
+    A classic Edit/RichEdit control must also still contain the exact "/ " span at
+    its caret. The script then replaces only the slash with "?" and clears the
+    queued state. A non-classic editor uses its blind-send fallback instead.
+
+If typing continues before the replacement:
+
+1025                 1065                 1105 ... 1305
+queue "/ "           timer sees            keyboard never reaches
+                     keyboard active       40 ms idle
+
+                     reschedule ────────> request age exceeds 250 ms
+                                           → discard the replacement
+
+For non-classic slash+Enter, the same 999 ms, 40 ms idle, and 250 ms maximum-age
+rules apply, except Enter stays withheld until the queued slash rewrite is resolved.
+Classic Edit/RichEdit controls use the inline path instead: it polls every 5 ms for
+30 ms of physical idleness, up to 90 ms, then sends {BS}{?}{ENTER}.
+*/
 FlushTbcFixSlash:
     if (!tbcFixSlashAction)
         Return
@@ -4616,7 +4689,6 @@ Return
 $CapsLock::
     TimeOfLastHotkeyTyped := A_TickCount
     Send {Delete}
-    lastHotkeyTyped := "CapsLock"
 Return
 
 #If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE") && !IsEditFieldActive())
@@ -5162,8 +5234,6 @@ Return
     If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < k_DoubleClickTime) {
         Send, {Home}
         Send, +{End}
-        sleep, 10
-        Send, {delete}
     }
     Else {
         Send, +{End}
@@ -5349,18 +5419,15 @@ Return
 
 $~Space::
     GoSub, Marktime_Hoty_FixSlash
-    lastHotkeyTyped := "~Space"
 Return
 
 $!Space::
     Send, {Space}
-    lastHotkeyTyped := "~Space"
 Return
 
 ; duplicate hotkey in case shift is accidentally  held as a result of attempting to type a '?'
 $~+Space::
     GoSub, Marktime_Hoty_FixSlash
-    lastHotkeyTyped := "~Space"
 Return
 
 $~^Backspace::
@@ -5376,7 +5443,6 @@ $~Backspace::
     CancelTbcTypingFixes(True, True)
     _ResetFixSlashStringTracking()
     TimeOfLastHotkeyTyped := A_TickCount
-    lastHotkeyTyped := "~Backspace"
     X_PriorPriorHotKey :=
 Return
 
@@ -5895,7 +5961,8 @@ _ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
 ~LAlt::Send {Blind}{vkE8}
 
 ~LAlt Up::
-    altLButtonFirstClickTick := 0
+; Reset all in case another Lalt+Lbutton double click occurs
+    priorAltClickTick := 0
 Return
 
 $!Tab::
@@ -6024,6 +6091,31 @@ $!x::
 Return
 #If
 
+; Example timing when k_DoubleClickTime = 500 ms. $*LButton:: runs on each physical DOWN event.
+;
+; Time (ms)                 1000      1045      1120      1160      1400      1440
+; Physical LButton          DOWN      UP        DOWN      UP        DOWN      UP
+; ------------------------------------------------------------------------------------------------
+; $*LButton:: runs?         yes       no        yes       waiting   yes       no
+; clickTick                 := 1000             := 1120              := 1400
+; priorAltClickTick before  0                   1000                 0
+; priorAltClickTick set     := 1000             := 0                 := 1400
+; reason                    first click         1120 - 1000          first click
+;                                              = 120 ms < 500 ms
+; result                                        waits for the 1160 UP, then sends Click + Enter
+;
+; Time (ms)                 1510      1550      1800      1840      1910      1950
+; Physical LButton          DOWN      UP        DOWN      UP        DOWN      UP
+; ------------------------------------------------------------------------------------------------
+; $*LButton:: runs?         yes       waiting   yes       no        yes       waiting
+; clickTick                 := 1510             := 1800              := 1910
+; priorAltClickTick before  1400                0                    1800
+; priorAltClickTick set     := 0                 := 1800              := 0
+; reason                    1510 - 1400         first click           1910 - 1800
+;                          = 110 ms < 500 ms                         = 110 ms < 500 ms
+; result                    waits for the 1550 UP, then sends Click + Enter
+;                                                                  waits for the 1950 UP, then sends Click + Enter
+
 #If GetKeyState("LAlt", "P")
 $*LButton::
     If (hitTab || hitTilde) {
@@ -6061,9 +6153,9 @@ $*LButton::
     }
     Else {
         clickTick := A_TickCount
-        If (altLButtonFirstClickTick && clickTick - altLButtonFirstClickTick < k_DoubleClickTime) {
+        If (priorAltClickTick && clickTick - priorAltClickTick < k_DoubleClickTime) {
             ; Clear the matched pair before injecting input so the next pair starts cleanly.
-            altLButtonFirstClickTick := 0
+            priorAltClickTick := 0
 
             ; Wait for the physical second click to end before injecting input.
             While GetKeyState("LButton", "P")
@@ -6074,7 +6166,7 @@ $*LButton::
             EndBlockKeys()
         }
         Else
-            altLButtonFirstClickTick := clickTick
+            priorAltClickTick := clickTick
     }
 Return
 #If
