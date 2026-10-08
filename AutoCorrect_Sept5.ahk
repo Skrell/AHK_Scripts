@@ -484,11 +484,6 @@ Global explorerCtrlAddRequestToolbarBaselineUnchangedHits    := 0
 ; Prevents repeated native-path comparisons for the same unchanged toolbar
 ; baseline; this exists only to keep diagnostic tracing bounded per request.
 Global explorerCtrlAddRequestToolbarBaselineCrosscheckMade   := False
-; Before _RequestExplorerCtrlAdd() overwrites the shared explorerCtrlAddRequest*
-; values with a new request, it saves this flag. If the prior request was still open,
-; it then records request_superseded for that prior request, so its unfinished work
-; is explicitly documented
-Global debugTraceExplorerCtrlAddRequestOpen                  := False
 ; True only while an event-backed changed-path request is sleeping until either
 ; NavigateComplete2 or its low-frequency watchdog wakes the readiness timer.
 Global explorerCtrlAddRequestWaitingForNavigationEvent       := False
@@ -513,6 +508,18 @@ Global explorerNavigationStates                              := {}
 ; Buffered Explorer CtrlAdd trace text. Terminal outcomes flush this buffer so
 ; ordinary timer probes do not add a disk write to every readiness check.
 Global explorerCtrlAddTraceBuffer                            := ""
+; Tracks the active Explorer Shift+click until its matching button-up event.
+Global explorerShiftClickTraceActive                         := False
+; Buffers Explorer Shift+click diagnostics so mouse callbacks do not write to disk.
+Global explorerShiftClickTraceBuffer                         := ""
+; Stores the Explorer window captured when the diagnostic click began.
+Global explorerShiftClickTraceHwnd                           := 0
+; Identifies the current Explorer Shift+click diagnostic sequence.
+Global explorerShiftClickTraceId                             := 0
+; Selects the next post-release diagnostic sample.
+Global explorerShiftClickTracePostReleaseStep                := 0
+; Stores the tick count captured at the diagnostic button-down event.
+Global explorerShiftClickTraceStartTick                      := 0
 ; Fast fallback polling used by changed-path requests without Explorer navigation
 ; events, including confirmed #32770 file dialogs.
 Global k_explorerCtrlAddFastPathPollMs                       := 15
@@ -547,9 +554,9 @@ Global k_explorerItemsViewLoadingCondition                   := "Name=Working on
 ; | Enables diagnostic traces and defines their output files.                  |
 ; +----------------------------------------------------------------------------+
 ; Enables the focused Alt+Tab stack trace while investigating reorder failures.
-Global k_debugTraceAltTabZOrderEnabled                      := False
+Global k_debugTraceAltTabZOrderEnabled                       := False
 ; Stores buffered Alt+Tab stack snapshots beside the script for comparison.
-Global k_debugTraceAltTabZOrderFile                         := A_ScriptDir . "\AutoCorrect_AltTabZOrderTrace.log"
+Global k_debugTraceAltTabZOrderFile                          := A_ScriptDir . "\AutoCorrect_AltTabZOrderTrace.log"
 ; Enables the focused Ctrl+D fallback-paste trace without enabling general logging.
 Global k_debugTraceCtrlDPasteEnabled                         := False
 ; Stores Ctrl+D fallback-paste results beside the script for direct inspection.
@@ -558,14 +565,27 @@ Global k_debugTraceCtrlDPasteFile                            := A_ScriptDir . "\
 Global k_debugTraceDesktopIconFadeEnabled                    := False
 ; Stores desktop-icon fade setup timings beside the script for direct inspection.
 Global k_debugTraceDesktopIconFadeFile                       := A_ScriptDir . "\AutoCorrect_DesktopIconFadeTrace.log"
+; Before _RequestExplorerCtrlAdd() overwrites the shared explorerCtrlAddRequest*
+; values with a new request, it saves this flag. If the prior request was still open,
+; it then records request_superseded for that prior request, so its unfinished work
+; is explicitly documented
+Global debugTraceExplorerCtrlAddRequestOpen                  := False
 ; Enables the detailed Explorer/file-dialog CtrlAdd timing trace.
-Global k_debugTraceExplorerCtrlAddEnabled                    := True
+Global k_debugTraceExplorerCtrlAddEnabled                    := False
 ; Persistent trace location beside this script so it is easy to find.
 Global k_debugTraceExplorerCtrlAddFile                       := A_ScriptDir . "\AutoCorrect_ExplorerCtrlAddTrace.log"
+; Enables the focused Explorer Shift+click release trace while investigating stuck drags.
+Global k_debugTraceExplorerShiftClickEnabled                 := False
+; Stores Explorer Shift+click release events beside the script for direct inspection.
+Global k_debugTraceExplorerShiftClickFile                    := A_ScriptDir . "\AutoCorrect_ExplorerShiftClickTrace.log"
 ; Enables general virtual-desktop, session, and DWM diagnostic logging.
 Global k_debugTraceGeneralEnabled                            := False
 ; Persistent general diagnostic location beside this script.
 Global k_debugTraceGeneralFile                               := A_ScriptDir . "\AutoCorrect_Debug.log"
+; Enables buffered diagnostics for docked-window edge resize synchronization.
+Global k_debugTraceLButtonResizeSyncEnabled                  := True
+; Stores docked-window edge resize diagnostics beside this script for inspection.
+Global k_debugTraceLButtonResizeSyncFile                     := A_ScriptDir . "\AutoCorrect_LButtonResizeSyncTrace.log"
 ; Controls the per-frame taskbar Explorer trace; keep disabled because synchronous file writes distort frame cadence.
 Global k_debugTraceTaskbarExplorerMoveEnabled                := False
 ; Stores taskbar Explorer placement and generic timer-driven move traces beside the script.
@@ -742,6 +762,10 @@ Global lButtonResizeSyncLastDraggedY                       := ""
 Global lButtonResizeSyncPartners                           := []
 ; Original AlwaysOnTop states captured for synced-resize cleanup.
 Global lButtonResizeSyncTopmostStates                      := {}
+; Buffers docked-window resize diagnostics until the deferred trace writer runs.
+Global lButtonResizeSyncTraceBuffer                        := ""
+; Sequence number used to connect trace records from one resize attempt.
+Global lButtonResizeSyncTraceId                            := 0
 
 ; +----------------------------------------------------------------------------+
 ; | Hook, UIA, And Input-Guard State                                           |
@@ -781,18 +805,16 @@ Global k_skipClasses                                       := { "Shell_TrayWnd":
 ; | native right-click flow so custom RButton chords do not leak shell input.  |
 ; +----------------------------------------------------------------------------+
 ; Right-button state machine:
-; - rightButtonHeld/rightButtonNativeDown track whether a real OS-level right-click has started.
-; - rightButtonComboUsed suppresses the fallback Click, Right after a combo consumes the hold.
-; - rightButtonSuppressMenuOnUp dismisses the shell menu after an RButton+wheel action.
-; - rightButtonTaskbarPassthrough keeps the custom RButton state machine out of taskbar
-;   and desktop-shell clicks so those surfaces stay fully native.
+; - rightButtonHeld marks a script-owned hold; rightButtonNativeDown tracks a sent {RButton Down}.
+; - rightButtonComboUsed prevents fallback Click, Right after a chord or shell-item right-drag claims the hold.
+; - rightButtonSuppressMenuOnUp requests Esc after {RButton Up} when a wheel action follows a script-sent {RButton Down}.
+
 ; True when MButton should behave like Enter for the current gesture.
 Global MbuttonIsEnter                                      := False
 Global rightButtonHeld                                     := False
 Global rightButtonComboUsed                                := False
 Global rightButtonNativeDown                               := False
 Global rightButtonSuppressMenuOnUp                         := False
-Global rightButtonTaskbarPassthrough                       := False
 Global swallowNextRButtonUpFromMButtonDrag                 := False
 ; Temporarily suppresses native RButton handling during MButton drag flows.
 Global suspendRightButtonForMButtonDrag                    := False
@@ -1162,8 +1184,7 @@ Return
 
 ; Fade desktop icons out and back in once after startup to warm the complete fade path.
 WarmDesktopIconFadeAtStartup:
-    if (DesktopIcons(false))
-        DesktopIcons(true)
+    DesktopIcons(false)
 Return
 
 ;------------------------------------------------------------------------------
@@ -1187,6 +1208,8 @@ Return
 
 WatchLButtonResizeSync:
     if (!lButtonResizeSyncActive) {
+        _DebugTrace_LButtonResizeSync("watcher_stopped"
+            , "id=" . lButtonResizeSyncTraceId . " reason=sync_inactive")
         EndLButtonResizeSync()
         SetTimer, WatchLButtonResizeSync, Off
         GoSub, EnableTimers
@@ -1194,6 +1217,8 @@ WatchLButtonResizeSync:
     }
 
     if !GetKeyState("LButton", "P") {
+        _DebugTrace_LButtonResizeSync("release_detected"
+            , "id=" . lButtonResizeSyncTraceId . " draggedHwnd=" . lButtonResizeSyncDraggedHwnd)
         _FinalizeLButtonResizeSync()
         EndLButtonResizeSync()
         SetTimer, WatchLButtonResizeSync, Off
@@ -3084,7 +3109,6 @@ RWin::Return
 $WheelUp::send {Volume_Up}
 $WheelDown::send {Volume_Down}
 
-#If MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()
 /*
 HIGH-LEVEL HOTKEY RELATIONSHIPS
 ===============================
@@ -3103,8 +3127,8 @@ HIGH-LEVEL HOTKEY RELATIONSHIPS
 A) Special LButton+RButton         B) MButton move/resize               C) RButton system
 ---------------------------        ----------------------               ------------------
 
-only title-bar chord exists        $*MButton:: begins                  every press first hits
-in current code                           |                            passive ~*RButton tracker
+only title-bar chord exists        $*MButton:: begins                  press handling depends on
+in current code                           |                            active hotkey context
          |                                  |                                  |
          +--> over title bar?               +--> sets temporary                +--> MButton-mode dedicated
          |        |                               RButton ownership                 RButton capture active?
@@ -3121,10 +3145,10 @@ in current code                           |                            passive ~
          +--> not over title bar?                                            taskbar or desktop shell?
                   |                                                                  |
                   +--> no special LButton+RButton action                             +--> YES
-                                                                                     |    ~*RButton tracker still runs
-                                                                                     |    no normal custom $*RButton::
+                                                                                     |    no press tracker installed
+                                                                                     |    normal $*RButton:: inactive
                                                                                      |    native Windows RButton path
-                                                                                     |    RButton+Wheel stays native
+                                                                                     |    wheel native while pointer here
                                                                                      |
                                                                                      +--> NO
                                                                                           |
@@ -3202,8 +3226,8 @@ RButton + Wheel
 ===============
 WheelUp:: / WheelDown:: while RButton is physically down
         |
-        +--> hold marked as taskbar/desktop passthrough,
-        |    or mouse currently over taskbar/desktop shell?
+        +--> mouse currently over taskbar/desktop shell?
+        |    (the original press location is not recorded)
         |        |
         |        +--> YES -> send native wheel
         |
@@ -3263,7 +3287,7 @@ ONE-SENTENCE MENTAL MODEL
 
 - `LButton + RButton` currently has one special path: the title-bar chord.
 - `MButton` temporarily installs a top-priority RButton owner during move/resize mode.
-- every `RButton` press is passively tracked, but the custom `$*RButton::` state machine only exists off taskbar/desktop shell surfaces.
+- outside MButton drag capture, taskbar/desktop-shell presses stay native; other presses use scoped custom RButton hotkeys.
 */
 
 #If suspendRightButtonForMButtonDrag
@@ -3287,17 +3311,14 @@ return
 
 #If
 
-~*RButton::
-    ; Track taskbar/desktop-shell holds without taking ownership of the click itself.
-    ; The tilde lets Windows receive the real right-click natively on those surfaces.
-    rightButtonTaskbarPassthrough := true
-return
-
-#If
-
 ~*RButton Up::
-    if (rightButtonTaskbarPassthrough)
-        rightButtonTaskbarPassthrough := false
+    MouseGetPos, , , _winIdD
+    WinGetClass, _winClassD, ahk_id %_winIdD%
+    if (desktopIconsHiddenByScript && (_winClassD == "Progman" || _winClassD == "ProgMan" || _winClassD == "WorkerW")) {
+        if (DesktopIcons(true))
+            desktopIconsVisible := true
+        Return
+    }
 return
 
 #If !MouseIsOverAnyTaskbarSurface() && !MouseIsOverDesktopShellSurface()
@@ -3443,9 +3464,9 @@ return
 #If GetKeyState("RButton", "P")
 
 WheelUp::
-    ; If the hold started on the taskbar or desktop shell, keep the entire
-    ; RButton+wheel gesture native instead of repurposing it into the custom path.
-    if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()) {
+    ; If the pointer is currently over the taskbar or desktop shell, pass this wheel event
+    ; through as ordinary scrolling instead of running the custom RButton+wheel action.
+    if (MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()) {
         SendInput, {WheelUp}
         return
     }
@@ -3504,9 +3525,9 @@ WheelUp::
 return
 
 WheelDown::
-    ; Same bypass as WheelUp: preserve normal wheel behavior whenever this RButton hold
-    ; belongs to the taskbar or desktop shell instead of the custom combo logic.
-    if (rightButtonTaskbarPassthrough || MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()) {
+    ; Same bypass as WheelUp: preserve ordinary wheel behavior while the pointer
+    ; is currently over the taskbar or desktop shell.
+    if (MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()) {
         SendInput, {WheelDown}
         return
     }
@@ -3705,7 +3726,7 @@ return
 
 ; Reset right-button script state if an up transition is missed.
 _ResetRightButtonState(sendNativeUp := false) {
-    global rightButtonHeld, rightButtonComboUsed, rightButtonNativeDown, rightButtonSuppressMenuOnUp, rightButtonTaskbarPassthrough, suppressRightButtonLogic, swallowNextRButtonUpFromMButtonDrag
+    global rightButtonHeld, rightButtonComboUsed, rightButtonNativeDown, rightButtonSuppressMenuOnUp, suppressRightButtonLogic, swallowNextRButtonUpFromMButtonDrag
 
     SetTimer, WatchRightButtonState, Off
 
@@ -3722,7 +3743,6 @@ _ResetRightButtonState(sendNativeUp := false) {
     rightButtonComboUsed                := false
     rightButtonNativeDown               := false
     rightButtonSuppressMenuOnUp         := false
-    rightButtonTaskbarPassthrough       := false
     suppressRightButtonLogic            := false
     swallowNextRButtonUpFromMButtonDrag := false
 }
@@ -9880,6 +9900,50 @@ _DebugTrace_FlushExplorerCtrlAdd() {
     }
 }
 
+; Flushes buffered Explorer Shift+click events after the mouse callback has returned.
+_DebugTrace_FlushExplorerShiftClick() {
+    global explorerShiftClickTraceBuffer
+    global k_debugTraceExplorerShiftClickEnabled
+    global k_debugTraceExplorerShiftClickFile
+
+    if (!k_debugTraceExplorerShiftClickEnabled || explorerShiftClickTraceBuffer = "")
+        return
+
+    Critical, On
+    traceChunk := explorerShiftClickTraceBuffer
+    explorerShiftClickTraceBuffer := ""
+    Critical, Off
+
+    FileAppend, %traceChunk%, %k_debugTraceExplorerShiftClickFile%, UTF-8
+    if ErrorLevel {
+        Critical, On
+        explorerShiftClickTraceBuffer := traceChunk . explorerShiftClickTraceBuffer
+        Critical, Off
+    }
+}
+
+; Flushes buffered docked-window resize diagnostics after the resize callback has returned.
+_DebugTrace_FlushLButtonResizeSync() {
+    global k_debugTraceLButtonResizeSyncEnabled
+    global k_debugTraceLButtonResizeSyncFile
+    global lButtonResizeSyncTraceBuffer
+
+    if (!k_debugTraceLButtonResizeSyncEnabled || lButtonResizeSyncTraceBuffer = "")
+        return
+
+    Critical, On
+    traceChunk := lButtonResizeSyncTraceBuffer
+    lButtonResizeSyncTraceBuffer := ""
+    Critical, Off
+
+    FileAppend, %traceChunk%, %k_debugTraceLButtonResizeSyncFile%, UTF-8
+    if ErrorLevel {
+        Critical, On
+        lButtonResizeSyncTraceBuffer := traceChunk . lButtonResizeSyncTraceBuffer
+        Critical, Off
+    }
+}
+
 ; Add one timestamped event to the low-overhead Explorer CtrlAdd trace. Events
 ; remain in memory until a terminal outcome or the safety limit requests a flush.
 _DebugTrace_ExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := "") {
@@ -9931,6 +9995,82 @@ _DebugTrace_ExplorerCtrlAdd(eventName, details := "", flushNow := False, request
 
     if shouldFlush
         _DebugTrace_FlushExplorerCtrlAdd()
+}
+
+; Buffers one Explorer Shift+click event without performing disk I/O in the mouse callback.
+_DebugTrace_ExplorerShiftClick(eventName, details := "") {
+    global explorerShiftClickTraceBuffer
+    global k_debugTraceExplorerShiftClickEnabled
+
+    static sessionHeaderWritten := False
+
+    if !k_debugTraceExplorerShiftClickEnabled
+        return
+
+    details := StrReplace(StrReplace(details, "`r", "<CR>"), "`n", "<LF>")
+    traceLine := A_Now . "." . A_MSec . " tick=" . A_TickCount . " event=" . eventName
+    if (details != "")
+        traceLine .= " " . details
+
+    Critical, On
+    if !sessionHeaderWritten {
+        explorerShiftClickTraceBuffer .= "`r`n=== Explorer Shift+click trace session pid="
+            . DllCall("kernel32\GetCurrentProcessId", "UInt")
+            . " script=" . Chr(34) . A_ScriptFullPath . Chr(34) . " ===`r`n"
+        sessionHeaderWritten := True
+    }
+    explorerShiftClickTraceBuffer .= traceLine . "`r`n"
+    Critical, Off
+
+    SetTimer, DebugTraceFlushExplorerShiftClick, -1
+}
+
+; Buffers one docked-window resize event so the resize timer avoids direct disk I/O.
+_DebugTrace_LButtonResizeSync(eventName, details := "") {
+    global k_debugTraceLButtonResizeSyncEnabled
+    global lButtonResizeSyncTraceBuffer
+
+    static sessionHeaderWritten := False
+
+    if !k_debugTraceLButtonResizeSyncEnabled
+        return
+
+    details := StrReplace(StrReplace(details, "`r", "<CR>"), "`n", "<LF>")
+    traceLine := A_Now . "." . A_MSec . " tick=" . A_TickCount . " event=" . eventName
+    if (details != "")
+        traceLine .= " " . details
+
+    Critical, On
+    if !sessionHeaderWritten {
+        lButtonResizeSyncTraceBuffer .= "`r`n=== LButton resize-sync trace session pid="
+            . DllCall("kernel32\GetCurrentProcessId", "UInt")
+            . " script=" . Chr(34) . A_ScriptFullPath . Chr(34) . " ===`r`n"
+        sessionHeaderWritten := True
+    }
+    lButtonResizeSyncTraceBuffer .= traceLine . "`r`n"
+    Critical, Off
+
+    SetTimer, DebugTraceFlushLButtonResizeSync, -1
+}
+
+; Records the button, modifier, and mouse-target state for one Shift+click trace event.
+_TraceExplorerShiftClickState(eventName, details := "") {
+    CoordMode, Mouse, Screen
+    MouseGetPos, traceMouseX, traceMouseY, traceMouseHwnd, traceMouseCtrl
+    WinGetClass, traceMouseClass, ahk_id %traceMouseHwnd%
+
+    details .= " mouseX=" . traceMouseX . " mouseY=" . traceMouseY
+        . " mouseHwnd=" . traceMouseHwnd . " mouseClass=" . traceMouseClass
+        . " mouseCtrl=[" . traceMouseCtrl . "]"
+        . " activeHwnd=" . WinExist("A")
+        . " lbuttonLogical=" . (GetKeyState("LButton") ? 1 : 0)
+        . " lbuttonPhysical=" . (GetKeyState("LButton", "P") ? 1 : 0)
+        . " shiftLogical=" . (GetKeyState("Shift") ? 1 : 0)
+        . " shiftPhysical=" . (GetKeyState("Shift", "P") ? 1 : 0)
+        . " thisHotkey=[" . A_ThisHotkey . "]"
+        . " priorHotkey=[" . A_PriorHotkey . "]"
+        . " sincePriorMs=" . A_TimeSincePriorHotkey
+    _DebugTrace_ExplorerShiftClick(eventName, details)
 }
 
 ; Schedule another callback only while requestId still identifies the current
@@ -11706,6 +11846,85 @@ _TryClearSendCtrlBlockOnListViewDoubleClick(windowHwnd, ctrlNN, clickX, clickY) 
     return False
 }
 
+#If
+; Trace a pass-through Shift+click only when its mouse-down target is an Explorer
+; window. The trace never blocks or sends input; it only observes the state seen
+; by AutoHotkey when the button-down and button-up events arrive.
+~+LButton::
+    if !k_debugTraceExplorerShiftClickEnabled
+        Return
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, traceDownX, traceDownY, traceDownHwnd, traceDownCtrl
+    WinGetClass, traceDownClass, ahk_id %traceDownHwnd%
+    if (traceDownClass != "CabinetWClass")
+        Return
+
+    explorerShiftClickTraceActive          := True
+    explorerShiftClickTraceHwnd            := traceDownHwnd
+    explorerShiftClickTraceId              += 1
+    explorerShiftClickTracePostReleaseStep := 0
+    explorerShiftClickTraceStartTick       := A_TickCount
+    _TraceExplorerShiftClickState("down"
+        , "id=" . explorerShiftClickTraceId . " originHwnd=" . traceDownHwnd
+        . " originCtrl=[" . traceDownCtrl . "]")
+    SetTimer, ExplorerShiftClickTraceReleaseTimeout, -750
+Return
+
+~+LButton Up::
+    if (!k_debugTraceExplorerShiftClickEnabled || !explorerShiftClickTraceActive)
+        Return
+
+    explorerShiftClickTraceActive          := False
+    explorerShiftClickTracePostReleaseStep := 1
+    _TraceExplorerShiftClickState("up_hotkey"
+        , "id=" . explorerShiftClickTraceId . " originHwnd=" . explorerShiftClickTraceHwnd
+        . " elapsedMs=" . (A_TickCount - explorerShiftClickTraceStartTick))
+    SetTimer, ExplorerShiftClickTracePostRelease, -25
+Return
+
+; Flushes buffered events only after the input hotkey has completed.
+DebugTraceFlushExplorerShiftClick:
+    _DebugTrace_FlushExplorerShiftClick()
+Return
+
+; Flushes resize diagnostics outside the LButton hotkey and its 10 ms watcher.
+DebugTraceFlushLButtonResizeSync:
+    _DebugTrace_FlushLButtonResizeSync()
+Return
+
+; Samples state 25 ms and 150 ms after AutoHotkey receives the button-up event.
+ExplorerShiftClickTracePostRelease:
+    if (!k_debugTraceExplorerShiftClickEnabled || explorerShiftClickTraceActive)
+        Return
+
+    if (explorerShiftClickTracePostReleaseStep = 1) {
+        explorerShiftClickTracePostReleaseStep := 2
+        _TraceExplorerShiftClickState("post_release_25ms"
+            , "id=" . explorerShiftClickTraceId . " originHwnd=" . explorerShiftClickTraceHwnd
+            . " elapsedMs=" . (A_TickCount - explorerShiftClickTraceStartTick))
+        SetTimer, ExplorerShiftClickTracePostRelease, -125
+    }
+    else if (explorerShiftClickTracePostReleaseStep = 2) {
+        explorerShiftClickTracePostReleaseStep := 0
+        _TraceExplorerShiftClickState("post_release_150ms"
+            , "id=" . explorerShiftClickTraceId . " originHwnd=" . explorerShiftClickTraceHwnd
+            . " elapsedMs=" . (A_TickCount - explorerShiftClickTraceStartTick))
+    }
+Return
+
+; Records a missing matching button-up hotkey after a completed click should have released.
+ExplorerShiftClickTraceReleaseTimeout:
+    if (!k_debugTraceExplorerShiftClickEnabled || !explorerShiftClickTraceActive)
+        Return
+
+    explorerShiftClickTraceActive          := False
+    explorerShiftClickTracePostReleaseStep := 0
+    _TraceExplorerShiftClickState("up_hotkey_missing_after_750ms"
+        , "id=" . explorerShiftClickTraceId . " originHwnd=" . explorerShiftClickTraceHwnd
+        . " elapsedMs=" . (A_TickCount - explorerShiftClickTraceStartTick))
+Return
+
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBarFast(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
 $~LButton::
@@ -11719,9 +11938,7 @@ $~LButton::
 
     WinGetClass, _winClassD, ahk_id %_winIdD%
     ; A desktop click restores icons only when this script hid them.
-    if (desktopIconsHiddenByScript
-     && (_winClassD == "Progman" || _winClassD == "ProgMan" || _winClassD == "WorkerW"))
-    {
+    if (desktopIconsHiddenByScript && (_winClassD == "Progman" || _winClassD == "ProgMan" || _winClassD == "WorkerW")) {
         if (DesktopIcons(true))
             desktopIconsVisible := true
         Return
@@ -16236,27 +16453,46 @@ _FinalizeLButtonResizeSync() {
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncPartners
+    global lButtonResizeSyncTraceId
 
-    if (!lButtonResizeSyncActive || !IsObject(lButtonResizeSyncPartners) || !lButtonResizeSyncPartners.MaxIndex())
+    if (!lButtonResizeSyncActive || !IsObject(lButtonResizeSyncPartners) || !lButtonResizeSyncPartners.MaxIndex()) {
+        _DebugTrace_LButtonResizeSync("finalize_skipped"
+            , "id=" . lButtonResizeSyncTraceId . " reason=inactive_or_no_partners")
         return false
+    }
 
-    if (!WinExist("ahk_id " . lButtonResizeSyncDraggedHwnd))
+    if (!WinExist("ahk_id " . lButtonResizeSyncDraggedHwnd)) {
+        _DebugTrace_LButtonResizeSync("finalize_skipped"
+            , "id=" . lButtonResizeSyncTraceId . " reason=dragged_window_missing hwnd=" . lButtonResizeSyncDraggedHwnd)
         return false
+    }
 
-    if !WinGetPosEx(lButtonResizeSyncDraggedHwnd, draggedX, draggedY, draggedW, draggedH)
+    if !WinGetPosEx(lButtonResizeSyncDraggedHwnd, draggedX, draggedY, draggedW, draggedH) {
+        _DebugTrace_LButtonResizeSync("finalize_skipped"
+            , "id=" . lButtonResizeSyncTraceId . " reason=dragged_geometry_unavailable hwnd=" . lButtonResizeSyncDraggedHwnd)
         return false
+    }
 
     ; Ignore the gray preview rect here. It is already at the intended target,
     ; while the real follower still needs the corresponding WinMove applied.
     movePlan := _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH, false)
-    if !IsObject(movePlan)
+    if !IsObject(movePlan) {
+        _DebugTrace_LButtonResizeSync("finalize_skipped"
+            , "id=" . lButtonResizeSyncTraceId . " reason=move_plan_unavailable")
         return false
+    }
 
     if (movePlan.tbcMoves.MaxIndex())
         _ApplyLiveResizeSyncTbcMoves(movePlan.tbcMoves)
 
     _ReleaseLButtonResizeSyncDroppedFollowers(lButtonResizeSyncPartners, movePlan.validPartners)
     lButtonResizeSyncPartners := movePlan.validPartners
+    _DebugTrace_LButtonResizeSync("finalized"
+        , "id=" . lButtonResizeSyncTraceId
+        . " rect=" . draggedX . "," . draggedY . "," . draggedW . "," . draggedH
+        . " liveMoves=" . movePlan.tbcMoves.MaxIndex()
+        . " partnersRemaining=" . lButtonResizeSyncPartners.MaxIndex()
+        . " didResize=" . (movePlan.didResizeAny ? 1 : 0))
     return movePlan.didResizeAny
 }
 
@@ -16808,6 +17044,7 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     global lButtonResizeSyncLastDraggedY
     global lButtonResizeSyncPartners
     global lButtonResizeSyncTopmostStates
+    global lButtonResizeSyncTraceId
 
     static HTBOTTOM := 15  ; Non-client bottom resize border.
     static HTLEFT   := 10  ; Non-client left resize border.
@@ -16831,9 +17068,19 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     if (edgeHit != HTLEFT && edgeHit != HTRIGHT && edgeHit != HTTOP && edgeHit != HTBOTTOM)
         return false
 
+    lButtonResizeSyncTraceId += 1
+    traceId := lButtonResizeSyncTraceId
+    _DebugTrace_LButtonResizeSync("edge_attempt"
+        , "id=" . traceId . " hwnd=" . draggedHwndID
+        . " mouse=" . xPos . "," . yPos . " edgeHit=" . edgeHit
+        . " rect=" . draggedX . "," . draggedY . "," . draggedW . "," . draggedH)
+
     displayNumber := GetWindowDisplayNumber(draggedHwndID)
-    if (displayNumber < 1)
+    if (displayNumber < 1) {
+        _DebugTrace_LButtonResizeSync("setup_rejected"
+            , "id=" . traceId . " reason=display_unavailable")
         return false
+    }
 
     draggedIsFullHeight := (   (edgeHit = HTLEFT || edgeHit = HTRIGHT)
                             && _IsFullMonitorHeightWindow(draggedHwndID, displayNumber))
@@ -16847,8 +17094,11 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     liveResizeEdgeTouchTolerance      := 10
     suppressVerticalFullHeightCluster := (edgeHit = HTTOP || edgeHit = HTBOTTOM)
 
-    if (   suppressVerticalFullHeightCluster && _IsFullMonitorHeightWindow(draggedHwndID, displayNumber))
+    if (   suppressVerticalFullHeightCluster && _IsFullMonitorHeightWindow(draggedHwndID, displayNumber)) {
+        _DebugTrace_LButtonResizeSync("setup_rejected"
+            , "id=" . traceId . " reason=full_height_vertical_edge display=" . displayNumber)
         return false
+    }
 
     partnerSearchMode := ""
     if (edgeHit = HTLEFT)
@@ -16886,6 +17136,8 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
         resizeTargetInfo.fixedEdge := _GetLiveResizeSyncFixedEdge(sameSidePeerX, sameSidePeerY, sameSidePeerW, sameSidePeerH, edgeHit, "peer")
         lButtonResizeSyncPartners.Push(resizeTargetInfo)
         resizeTargetHwndMap[sameSidePeerHwndID] := true
+        _DebugTrace_LButtonResizeSync("partner_added"
+            , "id=" . traceId . " role=peer hwnd=" . sameSidePeerHwndID . " fixedEdge=" . resizeTargetInfo.fixedEdge)
     }
 
     for sameSidePeerIndex, sameSidePeerHwndID in sameSidePeerHwndIDs {
@@ -16924,11 +17176,16 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
             resizeTargetInfo.fixedEdge := _GetLiveResizeSyncFixedEdge(partnerX, partnerY, partnerW, partnerH, edgeHit, "opposite")
             lButtonResizeSyncPartners.Push(resizeTargetInfo)
             resizeTargetHwndMap[partnerHwndID] := true
+            _DebugTrace_LButtonResizeSync("partner_added"
+                , "id=" . traceId . " role=opposite hwnd=" . partnerHwndID . " fixedEdge=" . resizeTargetInfo.fixedEdge)
         }
     }
 
-    if (!lButtonResizeSyncPartners.MaxIndex())
+    if (!lButtonResizeSyncPartners.MaxIndex()) {
+        _DebugTrace_LButtonResizeSync("setup_rejected"
+            , "id=" . traceId . " reason=no_eligible_partners display=" . displayNumber)
         return false
+    }
 
     lButtonResizeSyncActive                    := true
     lButtonResizeSyncDraggedHwnd               := draggedHwndID
@@ -16942,6 +17199,10 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
     lButtonResizeSyncTopmostStates             := _CaptureLiveResizeSyncTopmostStates(draggedHwndID, lButtonResizeSyncPartners)
     _PrepareLButtonResizeSyncGhostCards(lButtonResizeSyncPartners)
 
+    _DebugTrace_LButtonResizeSync("armed"
+        , "id=" . traceId . " hwnd=" . draggedHwndID . " edgeHit=" . edgeHit
+        . " display=" . displayNumber . " partners=" . lButtonResizeSyncPartners.MaxIndex()
+        . " startedAlwaysOnTop=" . (lButtonResizeSyncDraggedStartedAlwaysOnTop ? 1 : 0))
     SetTimer, WatchLButtonResizeSync, 10
     return true
 }
@@ -16962,6 +17223,15 @@ EndLButtonResizeSync() {
     global lButtonResizeSyncLastDraggedY
     global lButtonResizeSyncPartners
     global lButtonResizeSyncTopmostStates
+    global lButtonResizeSyncTraceId
+
+    tracePartnerCount := IsObject(lButtonResizeSyncPartners) ? lButtonResizeSyncPartners.MaxIndex() : 0
+    _DebugTrace_LButtonResizeSync("cleanup"
+        , "id=" . lButtonResizeSyncTraceId
+        . " active=" . (lButtonResizeSyncActive ? 1 : 0)
+        . " draggedHwnd=" . lButtonResizeSyncDraggedHwnd
+        . " partners=" . tracePartnerCount
+        . " physicalLButton=" . (GetKeyState("LButton", "P") ? 1 : 0))
 
     if (   lButtonResizeSyncDraggedHwnd
         && lButtonResizeSyncDraggedTransparent
@@ -17001,6 +17271,7 @@ UpdateLButtonResizeSync() {
     global lButtonResizeSyncLastDraggedX
     global lButtonResizeSyncLastDraggedY
     global lButtonResizeSyncPartners
+    global lButtonResizeSyncTraceId
 
     static HTBOTTOM := 15  ; Non-client bottom resize border.
     static HTLEFT   := 10  ; Non-client left resize border.
@@ -17013,6 +17284,8 @@ UpdateLButtonResizeSync() {
     ; The dragged window owns the live edge being moved by the user. If it goes
     ; away mid-resize, stop driving partner windows immediately.
     if (!WinExist("ahk_id " . lButtonResizeSyncDraggedHwnd)) {
+        _DebugTrace_LButtonResizeSync("update_stopped"
+            , "id=" . lButtonResizeSyncTraceId . " reason=dragged_window_missing hwnd=" . lButtonResizeSyncDraggedHwnd)
         EndLButtonResizeSync()
         return false
     }
@@ -17020,6 +17293,8 @@ UpdateLButtonResizeSync() {
     ; Refresh the dragged window's geometry on each timer tick so every partner
     ; follows the exact edge the user is currently moving.
     if !WinGetPosEx(lButtonResizeSyncDraggedHwnd, draggedX, draggedY, draggedW, draggedH) {
+        _DebugTrace_LButtonResizeSync("update_stopped"
+            , "id=" . lButtonResizeSyncTraceId . " reason=dragged_geometry_unavailable hwnd=" . lButtonResizeSyncDraggedHwnd)
         EndLButtonResizeSync()
         return false
     }
@@ -17037,16 +17312,29 @@ UpdateLButtonResizeSync() {
 
     movePlan := _BuildLButtonResizeSyncMovePlan(draggedX, draggedY, draggedW, draggedH)
     if !IsObject(movePlan) {
+        _DebugTrace_LButtonResizeSync("update_stopped"
+            , "id=" . lButtonResizeSyncTraceId . " reason=move_plan_unavailable")
         EndLButtonResizeSync()
         return false
     }
 
+    tracePartnerCountBefore := lButtonResizeSyncPartners.MaxIndex()
     if (movePlan.tbcMoves.MaxIndex())
         _ApplyLButtonResizeSyncPreviewMoves(movePlan.tbcMoves)
 
     _ReleaseLButtonResizeSyncDroppedFollowers(lButtonResizeSyncPartners, movePlan.validPartners)
     lButtonResizeSyncPartners := movePlan.validPartners
+    tracePartnerCountAfter := lButtonResizeSyncPartners.MaxIndex()
+    _DebugTrace_LButtonResizeSync("geometry_changed"
+        , "id=" . lButtonResizeSyncTraceId
+        . " rect=" . draggedX . "," . draggedY . "," . draggedW . "," . draggedH
+        . " previewMoves=" . movePlan.tbcMoves.MaxIndex()
+        . " partnersBefore=" . tracePartnerCountBefore
+        . " partnersAfter=" . tracePartnerCountAfter
+        . " didResize=" . (movePlan.didResizeAny ? 1 : 0))
     if (!lButtonResizeSyncPartners.MaxIndex()) {
+        _DebugTrace_LButtonResizeSync("update_stopped"
+            , "id=" . lButtonResizeSyncTraceId . " reason=no_remaining_partners")
         EndLButtonResizeSync()
         return false
     }
@@ -22785,6 +23073,7 @@ SafeUIA_GetAutoId(el) {
 ::bots::
 ::caching::
 ::campaign::
+::caret::
 ::cases::
 ::champaign::
 ::codesign::
@@ -24660,6 +24949,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::focussing::focusing
 ::fonetic::phonetic
 ::foootball::football
+::ofr::for
 ::fora::for a
 ::forbad::forbade
 ::foreward::foreword
@@ -25097,6 +25387,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its any::it's any
 ::its available::it's available
 ::its beautiful::it's beautiful
+::its because::it's because
 ::its been::it's been
 ::its broken::it's broken
 ::its called::it's called
@@ -25544,6 +25835,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::orthagonally::orthogonally
 ::otherw::others
 ::ouevre::oeuvre
+::outliar::outlier
 ::outof::out of
 ::outtage::outage
 ::overshaddowed::overshadowed
@@ -25676,6 +25968,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::polinator::pollinator
 ::polinators::pollinators
 ::politican::politician
+::polute::pollute
 ::polyphonyic::polyphonic
 ::polysaccaride::polysaccharide
 ::polysaccharid::polysaccharide
