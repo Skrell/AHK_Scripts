@@ -571,7 +571,7 @@ Global k_debugTraceDesktopIconFadeFile                       := A_ScriptDir . "\
 ; is explicitly documented
 Global debugTraceExplorerCtrlAddRequestOpen                  := False
 ; Enables the detailed Explorer/file-dialog CtrlAdd timing trace.
-Global k_debugTraceExplorerCtrlAddEnabled                    := False
+Global k_debugTraceExplorerCtrlAddEnabled                    := True
 ; Persistent trace location beside this script so it is easy to find.
 Global k_debugTraceExplorerCtrlAddFile                       := A_ScriptDir . "\AutoCorrect_ExplorerCtrlAddTrace.log"
 ; Enables the focused Explorer Shift+click release trace while investigating stuck drags.
@@ -840,6 +840,8 @@ Global desktopIconFadeBitmapWidth                          := 0
 Global desktopIconFadeHeight                               := 0
 ; Holds the layered overlay window used while desktop icons fade.
 Global desktopIconFadeHwnd                                 := 0
+; Tracks Explorer's desktop icon count while the view is hidden.
+Global desktopIconFadeItemCount                            := -1
 ; Stores the virtual desktop left edge used by the layered icon-fade overlay.
 Global desktopIconFadeLeft                                 := 0
 ; Caches Explorer's desktop icon-list handle during an icon fade.
@@ -1182,9 +1184,10 @@ PrewarmDesktopIconFadeOverlay:
     _PrewarmDesktopIconFadeOverlay()
 Return
 
-; Fade desktop icons out and back in once after startup to warm the complete fade path.
+; Fade desktop icons out once after startup.
 WarmDesktopIconFadeAtStartup:
-    DesktopIcons(false)
+    if (DesktopIcons(false))
+        desktopIconsVisible := false
 Return
 
 ;------------------------------------------------------------------------------
@@ -2849,7 +2852,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
     if ( isFirstTrackedActivation || vWinClass == "#32770" || vWinClass == "CabinetWClass" ) {
         Critical, On
-        prevActiveWindows.push(hWnd)
+        if (isFirstTrackedActivation && !HasVal(prevActiveWindows, hWnd))
+            prevActiveWindows.push(hWnd)
         Critical, Off
 
         taskbarExplorerMoveMade := False
@@ -2934,11 +2938,10 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 , sendCtrlAddTargetScan, True)
         }
 
-        DetectHiddenWindows, On
         i := 1
         while (i <= prevActiveWindows.MaxIndex()) {
             checkID := prevActiveWindows[i]
-            If !WinExist("ahk_id " checkID)
+            If !DllCall("user32\IsWindow", "Ptr", checkID, "Int")
                 prevActiveWindows.RemoveAt(i)
             Else
                 ++i
@@ -2946,7 +2949,6 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 break
             }
         }
-        DetectHiddenWindows, Off
     }
     Else {
         Thread, NoTimers, False
@@ -5561,7 +5563,6 @@ $Esc::
 
     If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey  < k_DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
 
-        DetectHiddenWindows, Off
         executedOnce   := False
 
         If IsAltTabWindow(escHwndID) {
@@ -7603,8 +7604,6 @@ Return
 $~^LButton::
     Thread, NoTimers, True
     StopRecursion := True
-
-    DetectHiddenWindows, Off
 
     Send, {Ctrl UP}
 
@@ -15328,7 +15327,6 @@ MouseTrack() {
         currentMon := GetMouseDisplayNumber(TaskBarHeight)
         If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
             StopRecursion := True
-            DetectHiddenWindows, Off
 
             escHwndID := FindTopMostWindow()
             WinActivate, ahk_id %escHwndID%
@@ -18061,6 +18059,26 @@ _FindDesktopIconListView()
     return DllCall("FindWindowEx", "Ptr", desktopViewHwnd, "Ptr", 0, "Str", "SysListView32", "Ptr", 0, "Ptr")
 }
 
+; Reads Explorer's desktop icon count without waiting indefinitely for Explorer.
+_GetDesktopIconItemCount(iconListViewHwnd)
+{
+    static LVM_GETITEMCOUNT := 0x1004
+    static SMTO_ABORTIFHUNG := 0x0002
+
+    iconCount := 0
+    if (!DllCall("user32\SendMessageTimeoutW"
+        , "Ptr", iconListViewHwnd
+        , "UInt", LVM_GETITEMCOUNT
+        , "Ptr", 0
+        , "Ptr", 0
+        , "UInt", SMTO_ABORTIFHUNG
+        , "UInt", 50
+        , "UPtr*", iconCount))
+        return -1
+
+    return iconCount
+}
+
 ; Forces Explorer to paint restored icons before the overlay reveals them.
 _RefreshDesktopIcons(iconListViewHwnd)
 {
@@ -18076,9 +18094,11 @@ _RefreshDesktopIcons(iconListViewHwnd)
 ; Restores Explorer's live icons and releases the icon-fade overlay resources.
 _ResetDesktopIconFade(exitReason := "", exitCode := 0)
 {
+    global desktopIconFadeItemCount
     global desktopIconFadeListViewHwnd
     global desktopIconsHiddenByScript
 
+    SetTimer, _WatchHiddenDesktopIconAdditions, Off
     _DestroyDesktopIconFadeOverlay()
     if (desktopIconsHiddenByScript)
     {
@@ -18088,6 +18108,7 @@ _ResetDesktopIconFade(exitReason := "", exitCode := 0)
             _SetDesktopIconsVisible(desktopIconFadeListViewHwnd, true)
     }
 
+    desktopIconFadeItemCount := -1
     desktopIconsHiddenByScript := false
     _ClearDesktopIconFadeBitmap()
 }
@@ -18178,12 +18199,57 @@ _UpdateDesktopIconFadeLayer(alpha := 255)
     return updateResult
 }
 
+; Reveals the desktop icons when the hidden view gains an item.
+_WatchHiddenDesktopIconAdditions()
+{
+    global desktopIconFadeItemCount
+    global desktopIconFadeListViewHwnd
+    global desktopIconsHiddenByScript
+    global desktopIconsLastDesktopHoverTick
+    global desktopIconsVisible
+
+    if (!desktopIconsHiddenByScript)
+    {
+        SetTimer, _WatchHiddenDesktopIconAdditions, Off
+        return
+    }
+
+    if (_FindDesktopIconListView() != desktopIconFadeListViewHwnd)
+    {
+        _ResetDesktopIconFade()
+        desktopIconsLastDesktopHoverTick := A_TickCount
+        desktopIconsVisible := true
+        return
+    }
+
+    iconCount := _GetDesktopIconItemCount(desktopIconFadeListViewHwnd)
+    if (iconCount < 0)
+        return
+    if (desktopIconFadeItemCount < 0)
+    {
+        desktopIconFadeItemCount := iconCount
+        return
+    }
+    if (iconCount > desktopIconFadeItemCount)
+    {
+        SetTimer, _WatchHiddenDesktopIconAdditions, Off
+        if (DesktopIcons(true) || !desktopIconsHiddenByScript)
+        {
+            desktopIconsLastDesktopHoverTick := A_TickCount
+            desktopIconsVisible := true
+        }
+    }
+    else
+        desktopIconFadeItemCount := iconCount
+}
+
 ; Fades Explorer's desktop icons by revealing or hiding a saved layered desktop image.
 DesktopIcons(FadeIn := True)
 {
     global desktopIconFadeBitmap
     global desktopIconFadeHeight
     global desktopIconFadeHwnd
+    global desktopIconFadeItemCount
     global desktopIconFadeLeft
     global desktopIconFadeListViewHwnd
     global desktopIconFadeMemoryDc
@@ -18194,6 +18260,7 @@ DesktopIcons(FadeIn := True)
 
     if (FadeIn)
     {
+        SetTimer, _WatchHiddenDesktopIconAdditions, Off
         if (!desktopIconsHiddenByScript)
             return true
 
@@ -18286,6 +18353,7 @@ DesktopIcons(FadeIn := True)
     }
     desktopIconFadeShowOverlayElapsedMs := A_TickCount - desktopIconFadeStageStartTick
 
+    desktopIconFadeItemCount := _GetDesktopIconItemCount(desktopIconFadeListViewHwnd)
     desktopIconFadeStageStartTick := A_TickCount
     if (!_SetDesktopIconsVisible(desktopIconFadeListViewHwnd, false))
     {
@@ -18312,6 +18380,7 @@ DesktopIcons(FadeIn := True)
     }
 
     _HideDesktopIconFadeOverlay()
+    SetTimer, _WatchHiddenDesktopIconAdditions, 500
     return true
 }
 
