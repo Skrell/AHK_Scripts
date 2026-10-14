@@ -715,8 +715,12 @@ Global WindowTitleGuiReady                                 := False
 Global allowDoubleClicks                                   := True
 ; True while the custom live window-drag flow is in progress.
 Global DraggingWindow                                      := False
-; HWND whose LButton-driven column alignment is blocked after a SysHeader drag.
-; A qualifying double-click in that window's SysListView clears the block.
+; Normalized folder baseline for the blocked Explorer window; empty means retry the read.
+Global columnAutoAlignBlockFolder                          := ""
+; Generation rejects stale folder reads after a block is replaced or cleared.
+Global columnAutoAlignBlockId                              := 0
+; HWND whose click- and wheel-driven alignment is blocked after a manual column resize.
+; A file-view double-click or a confirmed directory change in this Explorer window clears it.
 Global disableSendCtrlHwnd                                 := ""
 ; Allows the script's context-sensitive LButton hotkeys while no guarded flow owns them.
 Global LbuttonEnabled                                      := True
@@ -840,7 +844,7 @@ Global desktopIconFadeBitmapWidth                          := 0
 Global desktopIconFadeHeight                               := 0
 ; Holds the layered overlay window used while desktop icons fade.
 Global desktopIconFadeHwnd                                 := 0
-; Tracks Explorer's desktop icon count while the view is hidden.
+; Tracks Explorer's icon count while hidden and until the first hover after reveal.
 Global desktopIconFadeItemCount                            := -1
 ; Stores the virtual desktop left edge used by the layered icon-fade overlay.
 Global desktopIconFadeLeft                                 := 0
@@ -3785,6 +3789,10 @@ WheelSendCtrlAdd:
     if (!tbcAdjustColumnsRequestId || !tbcAdjustColumnsHwnd || tbcAdjustColumnsCtrlNN == "")
         return
 
+    ; Preserve manually resized columns in this window until its block is cleared.
+    if (disableSendCtrlHwnd == tbcAdjustColumnsHwnd)
+        return
+
     ; Snapshot the request token once so every later stage can cheaply detect whether
     ; a newer wheel event replaced this tbc work item.
     currentRequestId := tbcAdjustColumnsRequestId
@@ -3888,6 +3896,10 @@ WheelSendCtrlAdd:
             }
 
             if (WinExist("A") != tbcAdjustColumnsHwnd)
+                return
+
+            ; A manual header resize may have blocked this window during target resolution.
+            if (disableSendCtrlHwnd == tbcAdjustColumnsHwnd)
                 return
 
             if (k_useNativeSysListViewColumnAutoFit
@@ -10281,10 +10293,11 @@ _TryGetExplorerNavigationEventPath(hwnd, previousGeneration, ByRef eventGenerati
 ; reports its resulting location. Only a retained active-tab observer may turn a
 ; filesystem URL into a path candidate; HWND-only fallbacks may wake but cannot
 ; authorize that URL. Do no PIDL or UIA work here: advance a cheap generation,
-; retain an eligible candidate, and wake only the sleeping path-change request.
-; Same-window non-path events are trace-only so Refresh timing can be measured
-; without letting NavigateComplete2 schedule or authorize Refresh alignment.
+; retain an eligible candidate, and wake the sleeping path-change request or block watcher.
+; A block wake only checks folder identity; it never authorizes Refresh alignment.
+; Same-window non-path events remain trace-only for the alignment request.
 ExplorerNavigationEvent_NavigateComplete2(pDisp, url) {
+    global columnAutoAlignBlockFolder, disableSendCtrlHwnd
     global explorerCtrlAddRequestAllowBestEffortSend
     global explorerCtrlAddRequestClass
     global explorerCtrlAddRequestDeadlineTick
@@ -10333,6 +10346,11 @@ ExplorerNavigationEvent_NavigateComplete2(pDisp, url) {
                 eventHwnd := rootHwnd
         }
     }
+
+    ; A proven event host can wake the block watcher independently of alignment requests.
+    ; An unknown initial baseline is still being captured or retried by its fallback timer.
+    if (eventHwnd && eventHwnd == disableSendCtrlHwnd && columnAutoAlignBlockFolder != "")
+        SetTimer, _WatchColumnAutoAlignBlock, -1
 
     ; Retain the existing last-resort wake-up for builds that expose neither
     ; dispatch identity nor HWND; never use this fallback to accept url.
@@ -11795,11 +11813,259 @@ PostActivationLButtonCheck:
         SendCtrlAdd(targetHwnd, targetClass, targetCtrl, True)
 Return
 
+; Manual-column block lifecycle; only a blocked Explorer host gets a folder watcher.
+; Clear the block, invalidate pending folder reads, and stop its timer.
+_ClearColumnAutoAlignBlock(expectedHwnd := 0, expectedId := 0)
+{
+    global columnAutoAlignBlockFolder, columnAutoAlignBlockId, disableSendCtrlHwnd
+
+    if ((expectedHwnd && disableSendCtrlHwnd != expectedHwnd)
+     || (expectedId && columnAutoAlignBlockId != expectedId))
+        return False
+    columnAutoAlignBlockId += 1
+    disableSendCtrlHwnd := ""
+    columnAutoAlignBlockFolder := ""
+    SetTimer, _WatchColumnAutoAlignBlock, Off
+    return True
+}
+
+; Publish a manual-resize block immediately, then baseline Explorer's displayed folder.
+_SetColumnAutoAlignBlock(hwnd)
+{
+    global columnAutoAlignBlockFolder, columnAutoAlignBlockId, disableSendCtrlHwnd
+
+    _ClearColumnAutoAlignBlock()
+    if (!hwnd || !WinExist("ahk_id " . hwnd))
+        return
+    disableSendCtrlHwnd := hwnd
+    blockId := columnAutoAlignBlockId
+    WinGetClass, windowClass, ahk_id %hwnd%
+    if (windowClass != "CabinetWClass")
+        return
+
+    ; GetExplorerPath also connects the matching active-tab navigation observer.
+    folder := ""
+    try folder := _NormalizeExplorerFolderIdentity(GetExplorerPath(hwnd))
+    catch {
+    }
+    if (disableSendCtrlHwnd != hwnd || columnAutoAlignBlockId != blockId)
+        return
+    columnAutoAlignBlockFolder := folder
+    SetTimer, _WatchColumnAutoAlignBlock, -250
+}
+
+; Recheck the blocked host after navigation events and every 250 ms until cleared.
+_WatchColumnAutoAlignBlock()
+{
+    global columnAutoAlignBlockFolder, columnAutoAlignBlockId, disableSendCtrlHwnd
+
+    hwnd := disableSendCtrlHwnd
+    blockId := columnAutoAlignBlockId
+    if (!hwnd)
+        return
+    WinGetClass, windowClass, ahk_id %hwnd%
+    if (!WinExist("ahk_id " . hwnd) || windowClass != "CabinetWClass") {
+        _ClearColumnAutoAlignBlock(hwnd, blockId)
+        return
+    }
+
+    folder := ""
+    try folder := _NormalizeExplorerFolderIdentity(GetExplorerPath(hwnd))
+    catch {
+    }
+    ; A slow read must never clear a newer block, even for the same HWND.
+    if (disableSendCtrlHwnd != hwnd || columnAutoAlignBlockId != blockId)
+        return
+    if (folder != "") {
+        if (columnAutoAlignBlockFolder == "")
+            columnAutoAlignBlockFolder := folder
+        else if (folder != columnAutoAlignBlockFolder) {
+            _ClearColumnAutoAlignBlock(hwnd, blockId)
+            return
+        }
+    }
+    ; Failed reads retain the block; same-folder Refresh and sorting do too.
+    SetTimer, _WatchColumnAutoAlignBlock, -250
+}
+
+; Explorer DirectUI column-resize helpers; failed reads never set a resize block.
+; Uses _GetExplorerFolderIdentityFromShellBrowser() to verify the same folder.
+
+; Capture widths, folder, active tab, and a retained canonical COM view identity.
+_CaptureExplorerColumnWidths(hwnd)
+{
+    browser    := 0
+    folderView := 0
+    identity   := 0
+    manager    := 0
+    view       := 0
+    try {
+        browser    := _GetExplorerColumnBrowser(hwnd, tabHwnd)
+        if (!browser)
+            return ""
+        if (DllCall(NumGet(NumGet(browser+0)+15*A_PtrSize), "Ptr", browser, "Ptr*", view, "Int") < 0 || !view)
+            return ""
+        folderView := ComObjQuery(view, "{CDE725B0-CCC9-4519-917E-325D72FAB4CE}")
+        if (!folderView)
+            return ""
+        mode       := 0
+        if (DllCall(NumGet(NumGet(folderView+0)+3*A_PtrSize), "Ptr", folderView, "UInt*", mode, "Int") < 0 || mode != 4)
+            return ""
+        folder     := _GetExplorerFolderIdentityFromShellBrowser(browser)
+        if (folder = "")
+            return ""
+        manager    := ComObjQuery(view, "{D8EC27BB-3F3B-4042-B10A-4ACFD924D453}")
+        if (!manager)
+            return ""
+        widths     := _ReadExplorerColumnWidths(manager)
+        if (!IsObject(widths))
+            return ""
+        identity   := ComObjQuery(view, "{00000000-0000-0000-C000-000000000046}")
+        if (!identity)
+            return ""
+        ; The wrapper owns this reference until the gesture snapshot is released.
+        viewToken  := ComObject(13, identity, 1)
+        identity   := 0
+        WinGetPos, , , windowWidth, windowHeight, ahk_id %hwnd%
+        return {folder: folder, hwnd: hwnd, tabHwnd: tabHwnd, view: viewToken
+            , widths: widths, windowHeight: windowHeight, windowWidth: windowWidth}
+    }
+    catch {
+        return ""
+    }
+    finally {
+        if (identity)
+            ObjRelease(identity)
+        if (manager)
+            ObjRelease(manager)
+        if (folderView)
+            ObjRelease(folderView)
+        if (view)
+            ObjRelease(view)
+        if (browser)
+            ObjRelease(browser)
+    }
+}
+
+; Acquire the browser for this host's visible tab, following the host script's tab matching.
+_GetExplorerColumnBrowser(hwnd, ByRef tabHwnd)
+{
+    static browserIid := "{000214E2-0000-0000-C000-000000000046}"
+    ; Reuse only the automation entry point; snapshots remain local to each gesture.
+    static shellApp := ""
+    tabHwnd := 0
+    ControlGet, tabHwnd, Hwnd,, ShellTabWindowClass1, ahk_id %hwnd%
+    try {
+        if (!IsObject(shellApp))
+            shellApp := ComObjCreate("Shell.Application")
+        for shellWin in shellApp.Windows {
+            if (shellWin.Hwnd != hwnd)
+                continue
+            browser := 0
+            try {
+                browser := ComObjQuery(shellWin, browserIid, browserIid)
+                if (!browser)
+                    continue
+                if (tabHwnd) {
+                    candidateTab := 0
+                    hr := DllCall(NumGet(NumGet(browser+0)+3*A_PtrSize)
+                        , "Ptr", browser, "Ptr*", candidateTab, "Int")
+                    if (hr < 0 || candidateTab != tabHwnd)
+                        continue
+                }
+                result := browser
+                browser := 0
+                return result
+            }
+            finally {
+                if (browser)
+                    ObjRelease(browser)
+            }
+        }
+    }
+    catch {
+        shellApp := ""
+    }
+    return 0
+}
+
+; Compare the same view and column identities; sorting and reordering alone do not qualify.
+_HaveExplorerColumnWidthsChanged(before, after)
+{
+    if (!IsObject(before) || !IsObject(after))
+        return False
+    if (before.hwnd != after.hwnd || before.tabHwnd != after.tabHwnd
+        || !(before.folder == after.folder)
+        || ComObjValue(before.view) != ComObjValue(after.view)
+        || before.windowWidth != after.windowWidth || before.windowHeight != after.windowHeight
+        || before.widths.Count() != after.widths.Count())
+        return False
+    changed := False
+    for key, width in before.widths {
+        if (!after.widths.HasKey(key))
+            return False
+        if (width != after.widths[key])
+            changed := True
+    }
+    return changed
+}
+
+; Read CM_MASK_WIDTH for each visible PROPERTYKEY; never change a column.
+_ReadExplorerColumnWidths(manager)
+{
+    static CM_ENUM_VISIBLE := 2
+    static CM_MASK_WIDTH := 1
+    columnCount := 0
+    if (DllCall(NumGet(NumGet(manager+0)+5*A_PtrSize)
+        , "Ptr", manager, "UInt", CM_ENUM_VISIBLE, "UInt*", columnCount, "Int") < 0)
+        return ""
+    if (columnCount < 1 || columnCount > 512)
+        return ""
+    VarSetCapacity(keys, columnCount*20, 0)
+    if (DllCall(NumGet(NumGet(manager+0)+6*A_PtrSize)
+        , "Ptr", manager, "UInt", CM_ENUM_VISIBLE, "Ptr", &keys, "UInt", columnCount, "Int") < 0)
+        return ""
+    widths := {}
+    Loop, %columnCount% {
+        keyPtr := &keys + (A_Index-1)*20
+        key := ""
+        Loop, 5
+            key .= Format("{:08X}", NumGet(keyPtr+0, (A_Index-1)*4, "UInt"))
+        VarSetCapacity(info, 184, 0)
+        NumPut(184, info, 0, "UInt")
+        NumPut(CM_MASK_WIDTH, info, 4, "UInt")
+        if (DllCall(NumGet(NumGet(manager+0)+4*A_PtrSize)
+            , "Ptr", manager, "Ptr", keyPtr, "Ptr", &info, "Int") < 0)
+            return ""
+        width := NumGet(info, 12, "UInt")
+        if (width >= 0x80000000 || widths.HasKey(key))
+            return ""
+        widths[key] := width
+    }
+    return widths
+}
+
+; Observe one already-confirmed Explorer header hold without retaining gesture state.
+ObserveExplorerColumnResize(hwnd)
+{
+    WinGetClass, windowClass, ahk_id %hwnd%
+    before := ""
+    if (windowClass == "CabinetWClass" && WinExist("A") == hwnd && GetKeyState("LButton", "P"))
+        before := _CaptureExplorerColumnWidths(hwnd)
+    ; A release during the initial COM read leaves no proven pre-resize baseline.
+    baselineReady := IsObject(before) && GetKeyState("LButton", "P")
+    KeyWait, LButton, U T5
+    if (!baselineReady || GetKeyState("LButton", "P") || WinExist("A") != hwnd)
+        return False
+    after := _CaptureExplorerColumnWidths(hwnd)
+    return _HaveExplorerColumnWidthsChanged(before, after)
+}
+
 ; Recognize a same-control double-click using Windows' configured time and
 ; distance limits, then clear the window's manual-column-resize block. The first
 ; click is retained briefly; other clicks reset that candidate without clearing
 ; the block. Return true so the caller can request alignment after mouse-up.
-_TryClearSendCtrlBlockOnListViewDoubleClick(windowHwnd, ctrlNN, clickX, clickY) {
+_TryClearSendCtrlBlockOnFileViewDoubleClick(windowHwnd, ctrlNN, clickX, clickY, allowDirectUI := False) {
     global disableSendCtrlHwnd
 
     static firstClickCtrlNN := ""
@@ -11808,7 +12074,7 @@ _TryClearSendCtrlBlockOnListViewDoubleClick(windowHwnd, ctrlNN, clickX, clickY) 
     static firstClickX      := 0
     static firstClickY      := 0
 
-    if (disableSendCtrlHwnd != windowHwnd || !InStr(ctrlNN, "SysListView32", True)) {
+    if (disableSendCtrlHwnd != windowHwnd || !(InStr(ctrlNN, "SysListView32", True) || (allowDirectUI && InStr(ctrlNN, "DirectUIHWND", True)))) {
         firstClickCtrlNN := ""
         firstClickHwnd   := 0
         firstClickTick   := 0
@@ -11828,7 +12094,7 @@ _TryClearSendCtrlBlockOnListViewDoubleClick(windowHwnd, ctrlNN, clickX, clickY) 
      && elapsedMs <= doubleClickTime
      && Abs(clickX - firstClickX) <= Floor(doubleClickWidth / 2)
      && Abs(clickY - firstClickY) <= Floor(doubleClickHeight / 2)) {
-        disableSendCtrlHwnd := ""
+        _ClearColumnAutoAlignBlock(windowHwnd)
         firstClickCtrlNN    := ""
         firstClickHwnd      := 0
         firstClickTick      := 0
@@ -12013,10 +12279,11 @@ $~LButton::
 
     clearedSendCtrlBlock := False
     If (disableSendCtrlHwnd != "")
-        clearedSendCtrlBlock := _TryClearSendCtrlBlockOnListViewDoubleClick(_winIdD, _winCtrlD, lbX1, lbY1)
+        clearedSendCtrlBlock := _TryClearSendCtrlBlockOnFileViewDoubleClick(_winIdD, _winCtrlD, lbX1, lbY1
+            , isExplorerDirectUIClick && (directUIClickKind == "blank" || directUIClickKind == "item"))
 
-    ; A qualifying double-click inside the blocked SysListView re-enables
-    ; automatic alignment and requests it if the captured ListView remains eligible.
+    ; A qualifying double-click inside the blocked file view re-enables
+    ; automatic alignment and requests it if the captured view remains eligible.
     ; Wait for mouse-up because SendCtrlAdd() rejects sends while LButton is down;
     ; the native clicks still reach the target through the `~` hotkey prefix.
     If clearedSendCtrlBlock {
@@ -12042,7 +12309,7 @@ $~LButton::
         Return
     }
     Else If (!WinExist("ahk_id " . disableSendCtrlHwnd))
-        disableSendCtrlHwnd := ""
+        _ClearColumnAutoAlignBlock()
 
     ; Chromium webpage clicks do not benefit from the generic non-Explorer
     ; blank-space classification or SendCtrlAdd() flow. The hotkey predicate
@@ -12163,7 +12430,16 @@ $~LButton::
         }
     }
 
-    KeyWait, LButton, U T5
+    ; The resize observer owns the normal mouse-up wait only for Explorer DirectUI headers.
+    if (_winClassD == "CabinetWClass" && isExplorerDirectUIColumnHeader) {
+        if (ObserveExplorerColumnResize(_winIdD)) {
+            _SetColumnAutoAlignBlock(_winIdD)
+            GoSub, EnableTimers
+            Return
+        }
+    }
+    else
+        KeyWait, LButton, U T5
 
     If !(_winClassD == "CabinetWClass" || _winClassD == "#32770")  {
         If (InStr(_winCtrlD,"SysHeader32", True)) {
@@ -12319,10 +12595,10 @@ $~LButton::
                 _RequestHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, True)
         }
     }
-    ; A SysHeader drag of at least 15 pixels blocks this window's LButton-driven
-    ; alignment until a qualifying double-click in its SysListView clears it.
+    ; A SysHeader drag of at least 15 pixels blocks this window's click- and wheel-driven
+    ; alignment until a file-view double-click or Explorer directory change clears it.
     Else If (InStr(_winCtrlU, "SysHeader", True) && (abs(lbX1-lbX2) >= 15 || abs(lbY1-lbY2) >= 15)) {
-        disableSendCtrlHwnd := _winIdU
+        _SetColumnAutoAlignBlock(_winIdU)
     }
 
     GoSub, EnableTimers
@@ -14687,6 +14963,7 @@ EndBlockWheel() {
 ; before injecting Ctrl+NumpadAdd. This lets a just-arrived WheelUp/WheelDown event
 ; abort the send instead of being interpreted alongside a synthetic Ctrl chord.
 SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, guardHwnd := 0) {
+    global disableSendCtrlHwnd
     global tbcAdjustColumnsLastWheelTick, tbcAdjustColumnsRequestId
     global k_tbcAdjustColumnsPostSendWheelGuardMs, k_tbcAdjustColumnsSendGuardMs
 
@@ -14700,6 +14977,10 @@ SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, gu
             return false
 
         if (guardHwnd && WinExist("A") != guardHwnd)
+            return false
+
+        ; Only wheel requests honor this block here; re-check after the send-guard delay.
+        if (guardRequestId && guardHwnd && disableSendCtrlHwnd == guardHwnd)
             return false
     }
 
@@ -15310,17 +15591,26 @@ Return
 }
 
 MouseTrack() {
-    global currentMon, desktopIconsLastDesktopHoverTick, desktopIconsVisible, previousMon, StopRecursion, TaskBarHeight
+    global currentMon, desktopIconFadeItemCount, desktopIconsHiddenByScript, desktopIconsLastDesktopHoverTick, desktopIconsVisible
+    global previousMon, StopRecursion, TaskBarHeight
     static x, y, lastX, lastY, taskview
     static timeOfLastMove
 
     ListLines Off
     if (MouseIsOverDesktopShellSurface()) {
         desktopIconsLastDesktopHoverTick := A_TickCount
+        if (desktopIconsVisible && !desktopIconsHiddenByScript && desktopIconFadeItemCount >= 0) {
+            desktopIconFadeItemCount := -1
+            SetTimer, _WatchDesktopIconAdditions, Off
+        }
     }
     else if (desktopIconsVisible && A_TickCount - desktopIconsLastDesktopHoverTick > 30000) {
-        if (DesktopIcons(false))
-            desktopIconsVisible := false
+        if (!desktopIconsHiddenByScript && desktopIconFadeItemCount >= 0)
+            _WatchDesktopIconAdditions()
+        if (A_TickCount - desktopIconsLastDesktopHoverTick > 30000) {
+            if (DesktopIcons(false))
+                desktopIconsVisible := false
+        }
     }
 
     If (GetMonitorCount() > 1 && !GetKeyState("LButton","P")) {
@@ -18098,7 +18388,7 @@ _ResetDesktopIconFade(exitReason := "", exitCode := 0)
     global desktopIconFadeListViewHwnd
     global desktopIconsHiddenByScript
 
-    SetTimer, _WatchHiddenDesktopIconAdditions, Off
+    SetTimer, _WatchDesktopIconAdditions, Off
     _DestroyDesktopIconFadeOverlay()
     if (desktopIconsHiddenByScript)
     {
@@ -18199,8 +18489,8 @@ _UpdateDesktopIconFadeLayer(alpha := 255)
     return updateResult
 }
 
-; Reveals the desktop icons when the hidden view gains an item.
-_WatchHiddenDesktopIconAdditions()
+; Reveals hidden icons, then renews their timeout for additions until the first desktop hover.
+_WatchDesktopIconAdditions()
 {
     global desktopIconFadeItemCount
     global desktopIconFadeListViewHwnd
@@ -18210,8 +18500,12 @@ _WatchHiddenDesktopIconAdditions()
 
     if (!desktopIconsHiddenByScript)
     {
-        SetTimer, _WatchHiddenDesktopIconAdditions, Off
-        return
+        if (desktopIconFadeItemCount < 0 || MouseIsOverDesktopShellSurface())
+        {
+            desktopIconFadeItemCount := -1
+            SetTimer, _WatchDesktopIconAdditions, Off
+            return
+        }
     }
 
     if (_FindDesktopIconListView() != desktopIconFadeListViewHwnd)
@@ -18232,11 +18526,25 @@ _WatchHiddenDesktopIconAdditions()
     }
     if (iconCount > desktopIconFadeItemCount)
     {
-        SetTimer, _WatchHiddenDesktopIconAdditions, Off
-        if (DesktopIcons(true) || !desktopIconsHiddenByScript)
+        if (desktopIconsHiddenByScript)
         {
+            SetTimer, _WatchDesktopIconAdditions, Off
+            fadeSucceeded := DesktopIcons(true)
+            if (fadeSucceeded || !desktopIconsHiddenByScript)
+            {
+                desktopIconsLastDesktopHoverTick := A_TickCount
+                desktopIconsVisible := true
+                if (fadeSucceeded && !MouseIsOverDesktopShellSurface())
+                {
+                    desktopIconFadeItemCount := iconCount
+                    SetTimer, _WatchDesktopIconAdditions, 500
+                }
+            }
+        }
+        else
+        {
+            desktopIconFadeItemCount := iconCount
             desktopIconsLastDesktopHoverTick := A_TickCount
-            desktopIconsVisible := true
         }
     }
     else
@@ -18260,7 +18568,8 @@ DesktopIcons(FadeIn := True)
 
     if (FadeIn)
     {
-        SetTimer, _WatchHiddenDesktopIconAdditions, Off
+        SetTimer, _WatchDesktopIconAdditions, Off
+        desktopIconFadeItemCount := -1
         if (!desktopIconsHiddenByScript)
             return true
 
@@ -18307,6 +18616,8 @@ DesktopIcons(FadeIn := True)
     }
 
     ; Keeps temporary timing diagnostics in one script thread through fade-out setup.
+    SetTimer, _WatchDesktopIconAdditions, Off
+    desktopIconFadeItemCount := -1
     Critical, On
     desktopIconFadeSetupStartTick := A_TickCount
     desktopIconFadePrewarmReady := desktopIconFadeBitmap && desktopIconFadeHwnd && desktopIconFadeMemoryDc
@@ -18380,7 +18691,7 @@ DesktopIcons(FadeIn := True)
     }
 
     _HideDesktopIconFadeOverlay()
-    SetTimer, _WatchHiddenDesktopIconAdditions, 500
+    SetTimer, _WatchDesktopIconAdditions, 500
     return true
 }
 
