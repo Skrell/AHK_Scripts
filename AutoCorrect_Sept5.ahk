@@ -12380,7 +12380,7 @@ $~LButton::
 
     ; A quiet gap makes this the first click of a new sequence and rearms the
     ; custom action for a matching second click.
-    If (!allowDoubleClicks && A_TimeSincePriorHotkey > k_DoubleClickTime)
+    If (!allowDoubleClicks && A_TimeSincePriorHotkey > 350)
         allowDoubleClicks := True
 
     prevPath := ""
