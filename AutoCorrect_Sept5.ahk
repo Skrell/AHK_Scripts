@@ -11819,9 +11819,9 @@ _ClearColumnAutoAlignBlock(expectedHwnd := 0, expectedId := 0)
 {
     global columnAutoAlignBlockFolder, columnAutoAlignBlockId, disableSendCtrlHwnd
 
-    if ((expectedHwnd && disableSendCtrlHwnd != expectedHwnd)
-     || (expectedId && columnAutoAlignBlockId != expectedId))
+    if ((expectedHwnd && disableSendCtrlHwnd != expectedHwnd) || (expectedId && columnAutoAlignBlockId != expectedId))
         return False
+        
     columnAutoAlignBlockId += 1
     disableSendCtrlHwnd := ""
     columnAutoAlignBlockFolder := ""
@@ -11837,6 +11837,7 @@ _SetColumnAutoAlignBlock(hwnd)
     _ClearColumnAutoAlignBlock()
     if (!hwnd || !WinExist("ahk_id " . hwnd))
         return
+        
     disableSendCtrlHwnd := hwnd
     blockId := columnAutoAlignBlockId
     WinGetClass, windowClass, ahk_id %hwnd%
@@ -11848,8 +11849,10 @@ _SetColumnAutoAlignBlock(hwnd)
     try folder := _NormalizeExplorerFolderIdentity(GetExplorerPath(hwnd))
     catch {
     }
+    
     if (disableSendCtrlHwnd != hwnd || columnAutoAlignBlockId != blockId)
         return
+        
     columnAutoAlignBlockFolder := folder
     SetTimer, _WatchColumnAutoAlignBlock, -250
 }
@@ -11863,6 +11866,7 @@ _WatchColumnAutoAlignBlock()
     blockId := columnAutoAlignBlockId
     if (!hwnd)
         return
+        
     WinGetClass, windowClass, ahk_id %hwnd%
     if (!WinExist("ahk_id " . hwnd) || windowClass != "CabinetWClass") {
         _ClearColumnAutoAlignBlock(hwnd, blockId)
@@ -18051,80 +18055,74 @@ MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durati
 }
 
 MoveAndFadeWindow(Hwnd, initPosx, toRight := True, fadeInOut := "out") {
+    ; Slide and fade on one elapsed-time curve; keep all frame work in this call.
+    static ticksPerSecond := 0
+
+    ; Numeric DllCall output arguments must be initialized for UseUnsetLocal.
+    afterFrameTick := 0
+    frameTick      := 0
+    startTick      := 0
+
+    distancePx      := 90
+    durationMs      := 180
+    frameIntervalMs := 10
+
+    if (!DllCall("user32\IsWindow", "Ptr", Hwnd))
+        Return
+    if (!ticksPerSecond && !DllCall("QueryPerformanceFrequency", "Int64*", ticksPerSecond))
+        Return
+
+    direction := toRight ? 1 : -1
+    fadingOut := (fadeInOut == "out")
+    startAlpha := fadingOut ? 255 : 0
+    endAlpha   := fadingOut ? 0 : 255
+    startX     := fadingOut ? initPosx : initPosx - (distancePx * direction)
+    endX       := fadingOut ? initPosx + (distancePx * direction) : initPosx
+
+    priorHiddenWindows := A_DetectHiddenWindows
+    priorWinDelay      := A_WinDelay
     DetectHiddenWindows, On
-    If toRight
-        moveConst := 1
-    Else
-        moveConst := -1
+    ; Avoid adding a built-in WinMove sleep to every animation frame.
+    SetWinDelay, -1
+    try {
+        ; Position an incoming window while it is still fully transparent.
+        WinSet, Transparent, %startAlpha%, ahk_id %Hwnd%
+        WinMove, ahk_id %Hwnd%,, %startX%
+        DllCall("QueryPerformanceCounter", "Int64*", startTick)
 
-    If (fadeInOut == "out") {
-        temp_x := initPosx
+        Loop {
+            if (!DllCall("user32\IsWindow", "Ptr", Hwnd))
+                Return
 
-        WinSet, Transparent, 225, ahk_id %Hwnd%
-        temp_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x%
-        sleep, 20
-        WinSet, Transparent, 200, ahk_id %Hwnd%
-        temp_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x%
-        sleep, 20
-        WinSet, Transparent, 175, ahk_id %Hwnd%
-        temp_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x%
-        sleep, 20
-        WinSet, Transparent, 150, ahk_id %Hwnd%
-        temp_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x%
-        sleep, 20
-        WinSet, Transparent, 100, ahk_id %Hwnd%
-        temp_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x%
-        sleep, 20
-        WinSet, Transparent, 50,  ahk_id %Hwnd%
-        temp_x += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x%
-        sleep, 20
-        WinSet, Transparent, 0,   ahk_id %Hwnd%
-        sleep, 20
-        WinMove, ahk_id %Hwnd%,, %initPosx%
+            DllCall("QueryPerformanceCounter", "Int64*", frameTick)
+            elapsedMs := (frameTick - startTick) * 1000 / ticksPerSecond
+            progress  := Min(1, Max(0, elapsedMs / durationMs))
+            eased     := progress * progress * (3 - 2 * progress)
+            frameAlpha := Round(startAlpha + ((endAlpha - startAlpha) * eased))
+            frameX     := Round(startX + ((endX - startX) * eased))
+
+            WinMove, ahk_id %Hwnd%,, %frameX%
+            WinSet, Transparent, %frameAlpha%, ahk_id %Hwnd%
+            ; Progress reaches one before finishing, applying both exact endpoints.
+            if (progress >= 1)
+                break
+
+            ; Include drawing-command time in the frame interval and total duration.
+            DllCall("QueryPerformanceCounter", "Int64*", afterFrameTick)
+            afterFrameMs := (afterFrameTick - startTick) * 1000 / ticksPerSecond
+            waitMs := Ceil(Min(frameIntervalMs - (afterFrameMs - elapsedMs), durationMs - afterFrameMs))
+            if (waitMs > 0)
+                Sleep, %waitMs%
+        }
+
+        ; Restore the outgoing window's X while invisible, before desktop transfer.
+        if (fadingOut)
+            WinMove, ahk_id %Hwnd%,, %initPosx%
     }
-    Else {
-        If toRight
-            temp_x_start := initPosx-(15 * 6)
-        Else
-            temp_x_start := initPosx+(15 * 6)
-
-        WinSet, Transparent, 0, ahk_id %Hwnd%
-
-        WinMove, ahk_id %Hwnd%,, %temp_x_start%
-        temp_x_start += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x_start%
-        sleep, 20
-        WinSet, Transparent, 50, ahk_id %Hwnd%
-        temp_x_start += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x_start%
-        sleep, 20
-        WinSet, Transparent, 100, ahk_id %Hwnd%
-        temp_x_start += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x_start%
-        sleep, 20
-        WinSet, Transparent, 150, ahk_id %Hwnd%
-        temp_x_start += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x_start%
-        sleep, 20
-        WinSet, Transparent, 175, ahk_id %Hwnd%
-        temp_x_start += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x_start%
-        sleep, 20
-        WinSet, Transparent, 200,  ahk_id %Hwnd%
-        temp_x_start += 15*moveConst
-        WinMove, ahk_id %Hwnd%,, %temp_x_start%
-        sleep, 20
-        WinSet, Transparent, 225, ahk_id %Hwnd%
-        sleep, 20
-        WinSet, Transparent, 255, ahk_id %Hwnd%
+    finally {
+        SetWinDelay, %priorWinDelay%
+        DetectHiddenWindows, %priorHiddenWindows%
     }
-
     Return
 }
 
