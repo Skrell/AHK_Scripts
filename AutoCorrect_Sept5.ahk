@@ -3962,6 +3962,26 @@ IsConsoleWindow() {
 }
 
 
+; Test actual taskbar bounds even when a temporarily topmost dragged window covers them.
+; Only visible primary/secondary taskbar windows qualify; there is no fallback hit.
+_IsPointOverTaskbar(pointX, pointY) {
+    for _, taskbarClass in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"] {
+        WinGet, taskbarList, List, ahk_class %taskbarClass%
+        Loop, %taskbarList% {
+            taskbarHwnd := taskbarList%A_Index%
+            if (!DllCall("user32\IsWindowVisible", "Ptr", taskbarHwnd))
+                continue
+
+            WinGetPos, taskbarX, taskbarY, taskbarW, taskbarH, ahk_id %taskbarHwnd%
+            if (taskbarW > 0 && taskbarH > 0
+             && pointX >= taskbarX && pointX < taskbarX + taskbarW
+             && pointY >= taskbarY && pointY < taskbarY + taskbarH)
+                return True
+        }
+    }
+    return False
+}
+
 ForceRedrawWindow(hwnd) {
     static RDW_INVALIDATE  := 0x0001
     static RDW_UPDATENOW   := 0x0100
@@ -4014,6 +4034,8 @@ $*MButton::
     cursorIsConfined        := False
     dragTopmostApplied      := False
     dragTransparencyApplied := False
+    ; Set only by a move-mode position change beyond the gesture threshold.
+    mButtonMoveApplied      := False
 
     If (!mButtonTargetHwnd || !JEE_WinHasAltTabIcon(mButtonTargetHwnd)) {
         ; Nothing draggable here, so release the temporary RButton suppression immediately.
@@ -4402,6 +4424,8 @@ $*MButton::
             If (newX != lastAppliedWindowX || newY != lastAppliedWindowY
                 || ww != lastAppliedWindowW || wh != lastAppliedWindowH) {
                 WinMove, ahk_id %mButtonTargetHwnd%, , %newX%, %newY%
+                if (Abs(newX - (wx0 + offsetX)) > deltaPxTrig || Abs(newY - wy0) > deltaPxTrig)
+                    mButtonMoveApplied := True
                 lastAppliedWindowH := wh
                 lastAppliedWindowW := ww
                 lastAppliedWindowX := newX
@@ -4554,6 +4578,11 @@ $*MButton::
             BlockInput, MouseMoveOff
         }
     }
+    ; Freeze the release point before cleanup can yield or the pointer moves again.
+    CoordMode, Mouse, Screen
+    MouseGetPos, mButtonReleaseX, mButtonReleaseY
+    mButtonDropOnTaskbar := mButtonMoveApplied && !isRbutton
+                        && _IsPointOverTaskbar(mButtonReleaseX, mButtonReleaseY)
     Critical, Off
 
     ; If MButton is released while resizing at an edge, release the cursor
@@ -4568,7 +4597,7 @@ $*MButton::
     If (!startedAlwaysOnTop)
         ForceRedrawWindow(mButtonTargetHwnd)
 
-    If (rlsTime - initTime < k_SingleClickTime
+    If (!mButtonDropOnTaskbar && rlsTime - initTime < k_SingleClickTime
         && isOverTitleBar
         && (abs(checkClickMx - mx0) <= deltaPxTrig)
         && (abs(checkClickMy - my0) <= deltaPxTrig)) {
@@ -4576,12 +4605,12 @@ $*MButton::
         WinSet, Transparent, Off, ahk_id %mButtonTargetHwnd%
         GoSub, SwitchDesktop
     }
-    Else If (rlsTime - initTime < k_SingleClickTime
+    Else If (!mButtonDropOnTaskbar && rlsTime - initTime < k_SingleClickTime
             && (abs(checkClickMx - mx0) <= deltaPxTrig)
             && (abs(checkClickMy - my0) <= deltaPxTrig)) {
         Send, {Mbutton}
     }
-    Else If (wh/abs(monB-monT) > 0.90) {
+    Else If (!mButtonDropOnTaskbar && wh/abs(monB-monT) > 0.90) {
         ; Normalize nearly full-height windows before the post-move fit helper runs.
         ; Waiting here avoids sampling stale geometry immediately after this WinMove.
         WinMove, ahk_id %mButtonTargetHwnd%, , , %monT%, , abs(monB-monT) + 2*abs(offsetY) + 1
@@ -4594,14 +4623,21 @@ $*MButton::
         WinSet, Transparent, Off, ahk_id %mButtonTargetHwnd%
     }
 
-    WinGetPosEx(mButtonTargetHwnd, finalWindowX, finalWindowY, finalWindowW, finalWindowH)
-    didMoveWindow := ( Abs(finalWindowX - dragStartX) > deltaPxTrig
-                    || Abs(finalWindowY - dragStartY) > deltaPxTrig
-                    || Abs(finalWindowW - dragStartW) > deltaPxTrig
-                    || Abs(finalWindowH - dragStartH) > deltaPxTrig)
+    ; Minimize only after restoring temporary drag styles, then use the normal exit cleanup.
+    if (mButtonDropOnTaskbar) {
+        if (DllCall("user32\IsWindow", "Ptr", mButtonTargetHwnd))
+            WinMinimize, ahk_id %mButtonTargetHwnd%
+    }
+    else {
+        WinGetPosEx(mButtonTargetHwnd, finalWindowX, finalWindowY, finalWindowW, finalWindowH)
+        didMoveWindow := ( Abs(finalWindowX - dragStartX) > deltaPxTrig
+                        || Abs(finalWindowY - dragStartY) > deltaPxTrig
+                        || Abs(finalWindowW - dragStartW) > deltaPxTrig
+                        || Abs(finalWindowH - dragStartH) > deltaPxTrig)
 
-    if (didMoveWindow)
-        FitMovedWindowAgainstOthers(mButtonTargetHwnd, stopMon, 100, 100)
+        if (didMoveWindow)
+            FitMovedWindowAgainstOthers(mButtonTargetHwnd, stopMon, 100, 100)
+    }
 
     ; Normal exit: restore plain RButton handling before leaving MButton drag mode.
     StopRecursion := False
