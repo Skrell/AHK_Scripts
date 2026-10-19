@@ -833,6 +833,9 @@ Global titleBarChordOwnsLButton                            := False
 ; | DesktopIcons fade state.                                                   |
 ; | Holds the desktop bitmap used while desktop icons fade.                    |
 ; +----------------------------------------------------------------------------+
+; Holds the source item press and movement threshold for desktop drag-to-reveal.
+Global desktopIconDragState                                := ""
+; Holds the captured desktop bitmap used by the icon-fade overlay.
 Global desktopIconFadeBitmap                               := 0
 ; Stores the allocated desktop bitmap height so it can be reused until monitor geometry changes.
 Global desktopIconFadeBitmapHeight                         := 0
@@ -4819,9 +4822,11 @@ Return
 
     ctrlDModifierTargetHwnd     := DllCall("user32\GetForegroundWindow", "Ptr")
     ; Capture the hotkey start time so the trace can identify slow Ctrl+D stages.
-    ctrlDStartTick              := A_TickCount
+    if (k_debugTraceCtrlDPasteEnabled)
+        ctrlDStartTick              := A_TickCount
     ; Record Ctrl+D entry so an absent trace identifies a non-running source or failed file write.
-    _DebugTrace_AppendCtrlDPaste("Ctrl+D: started; foregroundHwnd=" . ctrlDModifierTargetHwnd)
+    if (k_debugTraceCtrlDPasteEnabled)
+        _DebugTrace_AppendCtrlDPaste("Ctrl+D: started; foregroundHwnd=" . ctrlDModifierTargetHwnd)
     Critical, On
     StopAutoFix                 := True
     caretRectKeyBeforeMove      := ""
@@ -4860,12 +4865,14 @@ Return
         ManagedModifierCleanup("Ctrl", ctrlDModifierTargetHwnd, 0)
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 35, 2, 10)
         ; Record when selection is ready without exposing its text content.
-        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: selection-ready; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        if (k_debugTraceCtrlDPasteEnabled)
+            _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: selection-ready; elapsedMs=" . (A_TickCount - ctrlDStartTick))
 
         ; 2) Copy the line text via your clipboard-safe helper
         lineText                    := Clip("", "", "", "Shift Alt Ctrl Win", fastInsertWindowId)   ; returns the copied text, clipboard will auto-restore later
         ; Record the copy duration before checking whether it produced any text.
-        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: copy-complete; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        if (k_debugTraceCtrlDPasteEnabled)
+            _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: copy-complete; elapsedMs=" . (A_TickCount - ctrlDStartTick))
         if (lineText = "")
         {
             ; Abort before the Enter step if selection/copy failed so this hotkey
@@ -4883,7 +4890,8 @@ Return
         ManagedModifierCleanup("Ctrl", ctrlDModifierTargetHwnd, 0)
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 60)
         ; Record when the inserted blank line is ready to receive the duplicate.
-        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: paste-target-ready; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        if (k_debugTraceCtrlDPasteEnabled)
+            _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: paste-target-ready; elapsedMs=" . (A_TickCount - ctrlDStartTick))
         GetActiveCaretRectKey(caretRectKeyBeforeMove)
         if (fastInsertTargetState = "classic_edit")
             fastInsertResult := _FastInsertWrappedTextIntoClassicControl(fastInsertWindowId, fastInsertControlHwnd, lineText)
@@ -4891,7 +4899,8 @@ Return
             fastInsertResult := fastInsertTargetState
 
         ; Record the direct-control result so we know whether Ctrl+D bypassed clipboard paste.
-        _DebugTrace_AppendCtrlDPaste("Ctrl+D: fast-insert result=" . fastInsertResult . "; controlHwnd=" . fastInsertControlHwnd)
+        if (k_debugTraceCtrlDPasteEnabled)
+            _DebugTrace_AppendCtrlDPaste("Ctrl+D: fast-insert result=" . fastInsertResult . "; controlHwnd=" . fastInsertControlHwnd)
         didFastInsert := (fastInsertResult = "inserted")
         if (!didFastInsert && fastInsertResult != "message_uncertain" && IsForegroundWindow(fastInsertWindowId))
         {
@@ -4901,7 +4910,7 @@ Return
             ; completed just before SendMessageTimeoutW returned, so Ctrl+V could
             ; duplicate the line.
             clipPreferExplicitCtrlV := True
-            clipTraceCtrlDPasteActive := True
+            clipTraceCtrlDPasteActive := k_debugTraceCtrlDPasteEnabled
             try {
                 Clip(lineText, "", "", "Shift Alt Ctrl Win", fastInsertWindowId)
             } finally {
@@ -4911,7 +4920,8 @@ Return
         }
         WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 90, 2, 30)
         ; Record when either direct insertion or clipboard paste has settled.
-        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: paste-complete; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        if (k_debugTraceCtrlDPasteEnabled)
+            _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: paste-complete; elapsedMs=" . (A_TickCount - ctrlDStartTick))
         if (didFastInsert && originalFastInsertLineStartIdx >= 0)
             ; After a fast EM_REPLACESEL insert, restore directly to the saved line
             ; start instead of trying to infer the original position by keystrokes.
@@ -4928,7 +4938,8 @@ Return
             WaitForActiveCaretRectChangeAndSettle(caretRectKeyBeforeMove, 60, 2, 30)
         }
         ; Record total hotkey time after the original-line caret restoration.
-        _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: completed; elapsedMs=" . (A_TickCount - ctrlDStartTick))
+        if (k_debugTraceCtrlDPasteEnabled)
+            _DebugTrace_AppendCtrlDPaste("Ctrl+D timing: completed; elapsedMs=" . (A_TickCount - ctrlDStartTick))
         ; Optional                  : if you prefer immediate clipboard restore instead of the ~700ms timer, uncomment:
         ; Clip("", "", "RESTORE")
 
@@ -4959,6 +4970,8 @@ ControlExist(ctrlNN, winTitle := "", winText := "") {
 ; or "message_uncertain". The last state must not fall back to Ctrl+V because the
 ; target may have processed EM_REPLACESEL just before the timeout was reported.
 _FastInsertWrappedTextIntoClassicControl(windowId, controlHwnd, text) {
+    global k_debugTraceCtrlDPasteEnabled
+
     static emGetSel := 0x00B0
     static emReplaceSel := 0x00C2
     static smtoAbortIfHung := 0x0002
@@ -4977,26 +4990,29 @@ _FastInsertWrappedTextIntoClassicControl(windowId, controlHwnd, text) {
     VarSetCapacity(replacementBuffer, (StrLen(replacementText) + 1) * 2, 0)
     StrPut(replacementText, &replacementBuffer, "UTF-16")
 
-    ; Capture selection offsets and content size without writing the copied text to the trace.
-    VarSetCapacity(selectionStartBefore, 4, 0)
-    VarSetCapacity(selectionEndBefore, 4, 0)
-    DllCall("SendMessage"
-        , "Ptr", controlHwnd
-        , "UInt", emGetSel
-        , "Ptr", &selectionStartBefore
-        , "Ptr", &selectionEndBefore
-        , "Ptr")
-    textLengthBefore := DllCall("SendMessage"
-        , "Ptr", controlHwnd
-        , "UInt", wmGetTextLength
-        , "Ptr", 0
-        , "Ptr", 0
-        , "Int")
+    if (k_debugTraceCtrlDPasteEnabled) {
+        ; Capture selection offsets and content size without writing the copied text to the trace.
+        VarSetCapacity(selectionStartBefore, 4, 0)
+        VarSetCapacity(selectionEndBefore, 4, 0)
+        DllCall("SendMessage"
+            , "Ptr", controlHwnd
+            , "UInt", emGetSel
+            , "Ptr", &selectionStartBefore
+            , "Ptr", &selectionEndBefore
+            , "Ptr")
+        textLengthBefore := DllCall("SendMessage"
+            , "Ptr", controlHwnd
+            , "UInt", wmGetTextLength
+            , "Ptr", 0
+            , "Ptr", 0
+            , "Int")
 
-    ; Record the target's pre-insert state to confirm the blank line remains selected.
-    _DebugTrace_AppendCtrlDPaste("Ctrl+D: fast-insert before; class=" . GetWindowClassName(controlHwnd)
-        . "; selection=" . NumGet(selectionStartBefore, 0, "UInt") . "-" . NumGet(selectionEndBefore, 0, "UInt")
-        . "; textLength=" . textLengthBefore . "; replacementLength=" . StrLen(replacementText))
+        ; Record the target's pre-insert state to confirm the blank line remains selected.
+        _DebugTrace_AppendCtrlDPaste("Ctrl+D: fast-insert before; class=" . GetWindowClassName(controlHwnd)
+            . "; selection=" . NumGet(selectionStartBefore, 0, "UInt") . "-" . NumGet(selectionEndBefore, 0, "UInt")
+            . "; textLength=" . textLengthBefore . "; replacementLength=" . StrLen(replacementText))
+
+    }
 
     ; Bound the message send to 250 ms. A zero result does not tell us whether
     ; EM_REPLACESEL ran, so callers treat it as "message_uncertain" and never
@@ -5012,26 +5028,28 @@ _FastInsertWrappedTextIntoClassicControl(windowId, controlHwnd, text) {
         , "Ptr*", messageResult
         , "Ptr")
 
-    ; Capture the resulting selection and size to verify whether EM_REPLACESEL changed the control.
-    VarSetCapacity(selectionStartAfter, 4, 0)
-    VarSetCapacity(selectionEndAfter, 4, 0)
-    DllCall("SendMessage"
-        , "Ptr", controlHwnd
-        , "UInt", emGetSel
-        , "Ptr", &selectionStartAfter
-        , "Ptr", &selectionEndAfter
-        , "Ptr")
-    textLengthAfter := DllCall("SendMessage"
-        , "Ptr", controlHwnd
-        , "UInt", wmGetTextLength
-        , "Ptr", 0
-        , "Ptr", 0
-        , "Int")
+    if (k_debugTraceCtrlDPasteEnabled) {
+        ; Capture the resulting selection and size for the optional diagnostic message.
+        VarSetCapacity(selectionStartAfter, 4, 0)
+        VarSetCapacity(selectionEndAfter, 4, 0)
+        DllCall("SendMessage"
+            , "Ptr", controlHwnd
+            , "UInt", emGetSel
+            , "Ptr", &selectionStartAfter
+            , "Ptr", &selectionEndAfter
+            , "Ptr")
+        textLengthAfter := DllCall("SendMessage"
+            , "Ptr", controlHwnd
+            , "UInt", wmGetTextLength
+            , "Ptr", 0
+            , "Ptr", 0
+            , "Int")
 
-    ; Record the post-insert state without exposing the copied line's contents.
-    _DebugTrace_AppendCtrlDPaste("Ctrl+D: fast-insert after; sent=" . sendSucceeded
-        . "; selection=" . NumGet(selectionStartAfter, 0, "UInt") . "-" . NumGet(selectionEndAfter, 0, "UInt")
-        . "; textLength=" . textLengthAfter)
+        ; Record the post-insert state without exposing the copied line's contents.
+        _DebugTrace_AppendCtrlDPaste("Ctrl+D: fast-insert after; sent=" . sendSucceeded
+            . "; selection=" . NumGet(selectionStartAfter, 0, "UInt") . "-" . NumGet(selectionEndAfter, 0, "UInt")
+            . "; textLength=" . textLengthAfter)
+    }
     return sendSucceeded ? "inserted" : "message_uncertain"
 }
 
@@ -5603,6 +5621,7 @@ GetVisibleHwndByPartialClass(classPart) {
 ; A second Esc press on the same foremost window opens close confirmation.
 ; Pressing x while that second Esc remains held cancels the close.
 $Esc::
+    _StopDesktopIconDrag()
     StopRecursion := True
     SetTimer, EscTimer, Off
 
@@ -7849,6 +7868,8 @@ _MaximizeTaskbarExplorerAfterMove(hWnd) {
 ; Move a claimed Explorer window against the clicked taskbar edge without crossing it.
 ; Declare the placement helper so the activation callback has one owner for taskbar-relative movement.
 _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
+    global k_debugTraceTaskbarExplorerMoveEnabled
+
     global k_taskbarExplorerSpawnHoverStopFrames
     global k_taskbarExplorerSpawnMoveFrameIntervalMs
     global k_taskbarExplorerSpawnMoveMaxDurationMs
@@ -7856,7 +7877,8 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
     global k_taskbarExplorerSpawnMoveMsPerPixel
 
     ; Record entry so the trace distinguishes an uncalled placement helper from an animation failure.
-    _DebugTrace_AppendTaskbarExplorerMove("placement entered hWnd=" . hWnd . " clickX=" . clickX . " clickY=" . clickY)
+    if (k_debugTraceTaskbarExplorerMoveEnabled)
+        _DebugTrace_AppendTaskbarExplorerMove("placement entered hWnd=" . hWnd . " clickX=" . clickX . " clickY=" . clickY)
 
     ; Use full bounds to classify the taskbar and the work area for safe placement.
     GetMonitorRectForMouse(clickX, clickY, False, monitorLeft, monitorTop, monitorRight, monitorBottom)
@@ -7864,7 +7886,8 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
 
     if (safeRight <= safeLeft || safeBottom <= safeTop) {
         ; Record invalid work-area geometry because it prevents this helper from requesting any animation.
-        _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=invalid_initial_safe_bounds")
+        if (k_debugTraceTaskbarExplorerMoveEnabled)
+            _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=invalid_initial_safe_bounds")
         return False
     }
 
@@ -7907,13 +7930,15 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
 
     if (taskbarEdge == "") {
         ; Record an unclassified taskbar because no edge-specific destination can be calculated.
-        _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=taskbar_edge_not_found")
+        if (k_debugTraceTaskbarExplorerMoveEnabled)
+            _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=taskbar_edge_not_found")
         return False
     }
 
     if (safeRight <= safeLeft || safeBottom <= safeTop) {
         ; Record a taskbar-constrained work area with no usable space for the claimed Explorer window.
-        _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=invalid_taskbar_safe_bounds")
+        if (k_debugTraceTaskbarExplorerMoveEnabled)
+            _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=invalid_taskbar_safe_bounds")
         return False
     }
 
@@ -7926,7 +7951,8 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
     WinGetPos, windowX, windowY, windowWidth, windowHeight, ahk_id %hWnd%
     if (windowWidth <= 0 || windowHeight <= 0) {
         ; Record missing Explorer dimensions because animation cannot operate on a zero-sized window.
-        _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=invalid_window_bounds")
+        if (k_debugTraceTaskbarExplorerMoveEnabled)
+            _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=invalid_window_bounds")
         return False
     }
 
@@ -7953,13 +7979,15 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
     if (wasMaximized) {
         if !DllCall("IsWindow", "Ptr", hWnd) {
             ; Record a closed Explorer window because it cannot be placed or re-maximized.
-            _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=maximized_window_closed")
+            if (k_debugTraceTaskbarExplorerMoveEnabled)
+                _DebugTrace_AppendTaskbarExplorerMove("placement aborted hWnd=" . hWnd . " reason=maximized_window_closed")
             return False
         }
         WinMove, ahk_id %hWnd%, , %targetX%, %targetY%, %windowWidth%, %windowHeight%
         _CompleteTaskbarExplorerSpawn(hWnd, True)
         ; Record the direct placement path used only after restoring a maximized Explorer window.
-        _DebugTrace_AppendTaskbarExplorerMove("placement completed hWnd=" . hWnd . " mode=maximized_direct")
+        if (k_debugTraceTaskbarExplorerMoveEnabled)
+            _DebugTrace_AppendTaskbarExplorerMove("placement completed hWnd=" . hWnd . " mode=maximized_direct")
         return True
     }
 
@@ -7990,11 +8018,12 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
     completionCallback := Func("_CompleteTaskbarExplorerSpawn").Bind(hWnd, False)
 
     ; Record the fully calculated animation request before beginning the exclusive taskbar movement.
-    _DebugTrace_AppendTaskbarExplorerMove("placement request hWnd=" . hWnd . " start=(" . windowX
-        . "," . windowY . "," . windowWidth . "," . windowHeight . ") target=(" . targetX
-        . "," . targetY . "," . windowWidth . "," . windowHeight . ") durationMs=" . moveDurationMs
-        . " frameIntervalMs=" . k_taskbarExplorerSpawnMoveFrameIntervalMs
-        . " hoverStopFrames=" . k_taskbarExplorerSpawnHoverStopFrames)
+    if (k_debugTraceTaskbarExplorerMoveEnabled)
+        _DebugTrace_AppendTaskbarExplorerMove("placement request hWnd=" . hWnd . " start=(" . windowX
+            . "," . windowY . "," . windowWidth . "," . windowHeight . ") target=(" . targetX
+            . "," . targetY . "," . windowWidth . "," . windowHeight . ") durationMs=" . moveDurationMs
+            . " frameIntervalMs=" . k_taskbarExplorerSpawnMoveFrameIntervalMs
+            . " hoverStopFrames=" . k_taskbarExplorerSpawnHoverStopFrames)
 
     ; Run taskbar motion on this thread so unrelated AHK timers cannot delay individual visible frames.
     moveAccepted := _MoveWindowExclusively(hWnd
@@ -8008,7 +8037,8 @@ _MoveTaskbarExplorerSpawn(hWnd, clickX, clickY) {
                                             , k_taskbarExplorerSpawnMoveFrameIntervalMs
                                             , k_taskbarExplorerSpawnHoverStopFrames)
     ; Record whether the exclusive move accepted the request so a failed placement is not mistaken for a completed animation.
-    _DebugTrace_AppendTaskbarExplorerMove("placement registration hWnd=" . hWnd . " accepted=" . moveAccepted)
+    if (k_debugTraceTaskbarExplorerMoveEnabled)
+        _DebugTrace_AppendTaskbarExplorerMove("placement registration hWnd=" . hWnd . " accepted=" . moveAccepted)
     return moveAccepted
 }
 
@@ -8266,7 +8296,8 @@ Explorer__GetRoleNum(ByRef io_accObj := "") {
 ; Classify a point inside a SysListView32 using MSAA roles. Returning "unknown"
 ; lets the public blank-space check use its theme-independent pixel fallback
 ; without mistaking a positively identified item or header for blank space.
-_GetSysListViewClickType(xPos, yPos) {
+; Optional distinguishItems returns "item" for item roles, separately from headers.
+_GetSysListViewClickType(xPos, yPos, distinguishItems := False) {
     static ROLE_SYSTEM_LIST         := 0x21
     static ROLE_SYSTEM_LISTITEM     := 0x22
     static ROLE_SYSTEM_OUTLINEITEM  := 0x24
@@ -8280,7 +8311,7 @@ _GetSysListViewClickType(xPos, yPos) {
 
     role := Explorer__RoleValueToNum(Explorer__AccRoleSafe(acc, childId))
     if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
-        return "content"
+        return distinguishItems ? "item" : "content"
     if (role = ROLE_SYSTEM_COLUMNHEADER)
         return "content"
     if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE)
@@ -8294,7 +8325,7 @@ _GetSysListViewClickType(xPos, yPos) {
 
         role := Explorer__GetRoleNum(cur)
         if (role = ROLE_SYSTEM_LISTITEM || role = ROLE_SYSTEM_OUTLINEITEM)
-            return "content"
+            return distinguishItems ? "item" : "content"
         if (role = ROLE_SYSTEM_COLUMNHEADER)
             return "content"
         if (role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_OUTLINE)
@@ -11857,7 +11888,7 @@ _ClearColumnAutoAlignBlock(expectedHwnd := 0, expectedId := 0)
 
     if ((expectedHwnd && disableSendCtrlHwnd != expectedHwnd) || (expectedId && columnAutoAlignBlockId != expectedId))
         return False
-        
+
     columnAutoAlignBlockId += 1
     disableSendCtrlHwnd := ""
     columnAutoAlignBlockFolder := ""
@@ -11873,7 +11904,7 @@ _SetColumnAutoAlignBlock(hwnd)
     _ClearColumnAutoAlignBlock()
     if (!hwnd || !WinExist("ahk_id " . hwnd))
         return
-        
+
     disableSendCtrlHwnd := hwnd
     blockId := columnAutoAlignBlockId
     WinGetClass, windowClass, ahk_id %hwnd%
@@ -11885,10 +11916,10 @@ _SetColumnAutoAlignBlock(hwnd)
     try folder := _NormalizeExplorerFolderIdentity(GetExplorerPath(hwnd))
     catch {
     }
-    
+
     if (disableSendCtrlHwnd != hwnd || columnAutoAlignBlockId != blockId)
         return
-        
+
     columnAutoAlignBlockFolder := folder
     SetTimer, _WatchColumnAutoAlignBlock, -250
 }
@@ -11902,7 +11933,7 @@ _WatchColumnAutoAlignBlock()
     blockId := columnAutoAlignBlockId
     if (!hwnd)
         return
-        
+
     WinGetClass, windowClass, ahk_id %hwnd%
     if (!WinExist("ahk_id " . hwnd) || windowClass != "CabinetWClass") {
         _ClearColumnAutoAlignBlock(hwnd, blockId)
@@ -12233,6 +12264,7 @@ Return
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBarFast(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
 $~LButton::
+    _StopDesktopIconDrag()
     CoordMode, Mouse, Screen
     MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
     activeBeforeLButton := WinExist("A")
@@ -12277,6 +12309,18 @@ $~LButton::
         else
             directUIClickKind := ExplorerClickClassify(lbX1, lbY1, _winCtrlD)
     }
+
+    ; Arm before activation returns or mouse-up waits, reusing Explorer's item result.
+    desktopDragItem := False
+    if ((_winClassD == "Progman" || _winClassD == "ProgMan" || _winClassD == "WorkerW")
+     && InStr(_winCtrlD, "SysListView32", True)) {
+        try
+            desktopDragItem := (_GetSysListViewClickType(lbX1, lbY1, True) == "item")
+        catch
+            desktopDragItem := False
+    }
+    if ((_winClassD == "CabinetWClass" && directUIClickKind == "item") || desktopDragItem)
+        _StartDesktopIconDrag(_winIdD, lbX1, lbY1)
 
     ; A confirmed column header can sort or resize a column, but never opens a
     ; folder, so exclude it from DirectUI double-click navigation detection.
@@ -14340,7 +14384,22 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                             restoreNeeded := False
                     }
                     if (restoreNeeded) {
-                        ControlGetFocus, currentFocusedCtrlNN, ahk_id %initTargetHwnd%
+                        ; A failed focus query skips restoration; the finally block still releases input.
+                        focusQuerySucceeded := True
+                        try {
+                            ControlGetFocus, currentFocusedCtrlNN, ahk_id %initTargetHwnd%
+                            focusQuerySucceeded := !ErrorLevel
+                        }
+                        catch {
+                            focusQuerySucceeded := False
+                        }
+                        if (!focusQuerySucceeded) {
+                            if traceThisCall
+                                _DebugTrace_ExplorerCtrlAdd("focus_restore_skipped"
+                                    , "reason=focus_query_failed targetHwnd=" . initTargetHwnd
+                                    , False, traceRequestId)
+                            Return
+                        }
                         if (currentFocusedCtrlNN = initFocusedCtrlNN)
                             restoreNeeded := False
                     }
@@ -17748,6 +17807,8 @@ _GetWindowMoveAnimations() {
 ; reports the move as handled so the taskbar caller skips its fallback placement.
 _MoveWindowExclusively(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durationMs := 180
     , completionCallback := "", easingMode := "smoothstep", frameIntervalMs := 15, hoverStopFrames := 0) {
+    global k_debugTraceTaskbarExplorerMoveEnabled
+
     ; Reject a closed window before entering an exclusive section that cannot animate it.
     if !DllCall("IsWindow", "Ptr", hWnd)
         return False
@@ -17818,7 +17879,8 @@ _MoveWindowExclusively(hWnd, targetX, targetY, targetWidth := "", targetHeight :
                 hoverFrameCount := 0
 
             if (hoverFrameCount >= hoverStopFrames) {
-                _DebugTrace_AppendTaskbarExplorerMove("placement stopped hWnd=" . hWnd . " reason=hover frames=" . hoverFrameCount)
+                if (k_debugTraceTaskbarExplorerMoveEnabled)
+                    _DebugTrace_AppendTaskbarExplorerMove("placement stopped hWnd=" . hWnd . " reason=hover frames=" . hoverFrameCount)
                 Critical, Off
                 return True
             }
@@ -17851,6 +17913,8 @@ _MoveWindowExclusively(hWnd, targetX, targetY, targetWidth := "", targetHeight :
 
 ; Advances one window-move animation frame and completes its optional callback.
 _MoveWindowFrame(animation) {
+    global k_debugTraceTaskbarExplorerMoveEnabled
+
     ; Stop stale timers when the window disappears or a newer request owns its animation.
     animations                     := _GetWindowMoveAnimations()
     targetHwnd := animation.hWnd
@@ -17861,16 +17925,18 @@ _MoveWindowFrame(animation) {
     if (!IsObject(currentAnimation)
         || currentAnimation.requestId != animation.requestId
         || !targetWindowExists) {
-        ; Identify the rejected ownership or window-state condition before deleting this callback's timer.
-        if !IsObject(currentAnimation)
-            abortReason := "registry_missing"
-        else if (currentAnimation.requestId != animation.requestId)
-            abortReason := "superseded_request"
-        else
-            abortReason := "window_closed"
-        ; Record a rejected callback so the trace distinguishes it from a callback that applied no visible frame.
-        _DebugTrace_AppendTaskbarExplorerMove("frame aborted requestId=" . animation.requestId . " hWnd=" . targetHwnd
-            . " reason=" . abortReason)
+        if (k_debugTraceTaskbarExplorerMoveEnabled) {
+            ; Identify the rejected ownership or window-state condition before deleting this callback's timer.
+            if !IsObject(currentAnimation)
+                abortReason := "registry_missing"
+            else if (currentAnimation.requestId != animation.requestId)
+                abortReason := "superseded_request"
+            else
+                abortReason := "window_closed"
+            ; Record a rejected callback so the trace distinguishes it from a callback that applied no visible frame.
+            _DebugTrace_AppendTaskbarExplorerMove("frame aborted requestId=" . animation.requestId . " hWnd=" . targetHwnd
+                . " reason=" . abortReason)
+        }
         if IsObject(timerCallback)
             SetTimer, % timerCallback, Delete
         animation.timerCallback := ""
@@ -17881,7 +17947,8 @@ _MoveWindowFrame(animation) {
     }
 
     ; Record a valid timer callback before computing its target rectangle.
-    _DebugTrace_AppendTaskbarExplorerMove("frame entered requestId=" . animation.requestId . " hWnd=" . targetHwnd)
+    if (k_debugTraceTaskbarExplorerMoveEnabled)
+        _DebugTrace_AppendTaskbarExplorerMove("frame entered requestId=" . animation.requestId . " hWnd=" . targetHwnd)
 
     ; Keep one animation frame uninterruptible while checking messages every 5 ms so its calculation and WinMove stay together.
     Critical, On
@@ -17967,9 +18034,10 @@ _MoveWindowFrame(animation) {
     Critical, Off
 
     ; Record the applied rectangle without logging window content, so delayed or capped movement is measurable.
-    _DebugTrace_AppendTaskbarExplorerMove("frame applied requestId=" . animation.requestId . " hWnd=" . targetHwnd
-        . " elapsedMs=" . elapsedMs . " progress=" . Round(progress, 3)
-        . " rect=(" . frameX . "," . frameY . "," . frameWidth . "," . frameHeight . ")")
+    if (k_debugTraceTaskbarExplorerMoveEnabled)
+        _DebugTrace_AppendTaskbarExplorerMove("frame applied requestId=" . animation.requestId . " hWnd=" . targetHwnd
+            . " elapsedMs=" . elapsedMs . " progress=" . Round(progress, 3)
+            . " rect=(" . frameX . "," . frameY . "," . frameWidth . "," . frameHeight . ")")
 
     ; A frame-capped animation can outlast its nominal duration; finalize only when the exact target rectangle was rendered.
     if (frameHeight != animation.targetHeight || frameWidth != animation.targetWidth
@@ -17982,26 +18050,31 @@ _MoveWindowFrame(animation) {
     animations.Delete(targetHwnd)
     animation.timerCallback := ""
     ; Record completion so the final-frame trace can be separated from a timer that remains active.
-    _DebugTrace_AppendTaskbarExplorerMove("frame completed requestId=" . animation.requestId . " hWnd=" . targetHwnd)
+    if (k_debugTraceTaskbarExplorerMoveEnabled)
+        _DebugTrace_AppendTaskbarExplorerMove("frame completed requestId=" . animation.requestId . " hWnd=" . targetHwnd)
     if IsObject(completionCallback)
         completionCallback.Call()
 }
 
 ; Animates a window to exact screen bounds without blocking the calling thread.
 MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durationMs := 180, completionCallback := "", easingMode := "smoothstep", frameIntervalMs := 15, maxFrameDeltaPx := "") {
+    global k_debugTraceTaskbarExplorerMoveEnabled
+
     static nextRequestId := 0
 
     ; Validate the window and its current bounds before creating timer-owned animation state.
     if !DllCall("IsWindow", "Ptr", hWnd) {
         ; Record a rejected request because an invalid HWND cannot receive a timer-owned WinMove.
-        _DebugTrace_AppendTaskbarExplorerMove("registration rejected hWnd=" . hWnd . " reason=window_closed")
+        if (k_debugTraceTaskbarExplorerMoveEnabled)
+            _DebugTrace_AppendTaskbarExplorerMove("registration rejected hWnd=" . hWnd . " reason=window_closed")
         return False
     }
 
     WinGetPos, startX, startY, startWidth, startHeight, ahk_id %hWnd%
     if (startWidth <= 0 || startHeight <= 0) {
         ; Record unusable current bounds because a timer cannot interpolate from a zero-sized rectangle.
-        _DebugTrace_AppendTaskbarExplorerMove("registration rejected hWnd=" . hWnd . " reason=invalid_start_bounds")
+        if (k_debugTraceTaskbarExplorerMoveEnabled)
+            _DebugTrace_AppendTaskbarExplorerMove("registration rejected hWnd=" . hWnd . " reason=invalid_start_bounds")
         return False
     }
 
@@ -18012,7 +18085,8 @@ MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durati
         targetHeight := startHeight
     if (targetWidth <= 0 || targetHeight <= 0) {
         ; Record unusable destination bounds because WinMove requires a positive target rectangle.
-        _DebugTrace_AppendTaskbarExplorerMove("registration rejected hWnd=" . hWnd . " reason=invalid_target_bounds")
+        if (k_debugTraceTaskbarExplorerMoveEnabled)
+            _DebugTrace_AppendTaskbarExplorerMove("registration rejected hWnd=" . hWnd . " reason=invalid_target_bounds")
         return False
     }
 
@@ -18053,7 +18127,8 @@ MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durati
         if IsObject(completionCallback)
             completionCallback.Call()
         ; Record immediate completion so no timer frame is expected for an already-positioned window.
-        _DebugTrace_AppendTaskbarExplorerMove("registration completed hWnd=" . hWnd . " mode=already_at_target")
+        if (k_debugTraceTaskbarExplorerMoveEnabled)
+            _DebugTrace_AppendTaskbarExplorerMove("registration completed hWnd=" . hWnd . " mode=already_at_target")
         return True
     }
 
@@ -18085,8 +18160,9 @@ MoveWindow(hWnd, targetX, targetY, targetWidth := "", targetHeight := "", durati
     ; Use the caller's requested frame cadence while the default retains the prior 15 ms timer interval.
     SetTimer, % timerCallback, %frameIntervalMs%
     ; Record timer registration with all cadence inputs needed to explain the following frame sequence.
-    _DebugTrace_AppendTaskbarExplorerMove("timer registered requestId=" . nextRequestId . " hWnd=" . hWnd
-        . " durationMs=" . durationMs . " frameIntervalMs=" . frameIntervalMs . " maxFrameDeltaPx=" . maxFrameDeltaPx)
+    if (k_debugTraceTaskbarExplorerMoveEnabled)
+        _DebugTrace_AppendTaskbarExplorerMove("timer registered requestId=" . nextRequestId . " hWnd=" . hWnd
+            . " durationMs=" . durationMs . " frameIntervalMs=" . frameIntervalMs . " maxFrameDeltaPx=" . maxFrameDeltaPx)
     return True
 }
 
@@ -18314,7 +18390,12 @@ _PrewarmDesktopIconFadeOverlay()
     }
 
     if (!desktopIconFadeHwnd || !DllCall("user32\IsWindow", "Ptr", desktopIconFadeHwnd, "Int"))
-        Gui, DesktopIconFade:New, +HwnddesktopIconFadeHwnd -Caption +ToolWindow +E0x08080000
+        ; +E sets extended window styles; bytes high-to-low are 08 08 00 20.
+        ; 0x08080020 = 0x08000000 | 0x00080000 | 0x00000020; the 00 byte adds no flags.
+        ; 0x08000000 (WS_EX_NOACTIVATE): prevents activation from mouse clicks.
+        ; 0x00080000 (WS_EX_LAYERED): enables bitmap/opacity rendering with UpdateLayeredWindow.
+        ; 0x00000020 (WS_EX_TRANSPARENT): makes this layered overlay click-through.
+        Gui, DesktopIconFade:New, +HwnddesktopIconFadeHwnd -Caption +ToolWindow +E0x08080020
 
     Gui, DesktopIconFade:Show, % "Hide x" desktopIconFadeLeft " y" desktopIconFadeTop " w" desktopIconFadeWidth " h" desktopIconFadeHeight, Desktop Icon Fade
 
@@ -18325,12 +18406,12 @@ _PrewarmDesktopIconFadeOverlay()
     }
 }
 
-; Fades the saved desktop image by updating its layered-window alpha once per frame.
+; Fades the saved desktop image using the normal frame count and delay.
 _FadeDesktopIconLayer(startAlpha, endAlpha)
 {
-    frameTotal := 13
+    frameTotal   := 13
     frameDelayMs := 16
-    frameNo := 0
+    frameNo      := 0
     while (frameNo < frameTotal)
     {
         alpha := Round(startAlpha + ((endAlpha - startAlpha) * frameNo / (frameTotal - 1)))
@@ -18441,23 +18522,27 @@ _ResetDesktopIconFade(exitReason := "", exitCode := 0)
 _SetDesktopIconsVisible(iconListViewHwnd, isVisible)
 {
     global desktopIconFadeWinSetElapsedMs
+    global k_debugTraceDesktopIconFadeEnabled
 
-    desktopIconFadeWinSetElapsedMs := 0
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeWinSetElapsedMs := 0
     if (!DllCall("user32\IsWindow", "Ptr", iconListViewHwnd, "Int"))
         return false
 
-    desktopIconFadeWinSetStartTick := A_TickCount
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeWinSetStartTick := A_TickCount
     if (isVisible)
         WinSet, Transparent, Off, ahk_id %iconListViewHwnd%
     else
         WinSet, Transparent, 0, ahk_id %iconListViewHwnd%
-    desktopIconFadeWinSetElapsedMs := A_TickCount - desktopIconFadeWinSetStartTick
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeWinSetElapsedMs := A_TickCount - desktopIconFadeWinSetStartTick
 
     return true
 }
 
-; Creates the saved image as a hidden layered window, then places it above the desktop host.
-_ShowDesktopIconFadeOverlay()
+; Shows the saved image above the desktop host for FadeIn, or below it for fade-out.
+_ShowDesktopIconFadeOverlay(FadeIn := False)
 {
     global desktopIconFadeBitmap
     global desktopIconFadeHeight
@@ -18471,7 +18556,12 @@ _ShowDesktopIconFadeOverlay()
         return false
 
     if (!desktopIconFadeHwnd || !DllCall("user32\IsWindow", "Ptr", desktopIconFadeHwnd, "Int"))
-        Gui, DesktopIconFade:New, +HwnddesktopIconFadeHwnd -Caption +ToolWindow +E0x08080000
+        ; +E sets extended window styles; bytes high-to-low are 08 08 00 20.
+        ; 0x08080020 = 0x08000000 | 0x00080000 | 0x00000020; the 00 byte adds no flags.
+        ; 0x08000000 (WS_EX_NOACTIVATE): prevents activation from mouse clicks.
+        ; 0x00080000 (WS_EX_LAYERED): enables bitmap/opacity rendering with UpdateLayeredWindow.
+        ; 0x00000020 (WS_EX_TRANSPARENT): makes this layered overlay click-through.
+        Gui, DesktopIconFade:New, +HwnddesktopIconFadeHwnd -Caption +ToolWindow +E0x08080020
     Gui, DesktopIconFade:Show, % "Hide x" desktopIconFadeLeft " y" desktopIconFadeTop " w" desktopIconFadeWidth " h" desktopIconFadeHeight, Desktop Icon Fade
 
     if (!_UpdateDesktopIconFadeLayer())
@@ -18480,8 +18570,19 @@ _ShowDesktopIconFadeOverlay()
         return false
     }
 
-    ; 0x0043 keeps the overlay's size and coordinates and then shows it above the desktop host.
-    if (!DllCall("user32\SetWindowPos", "Ptr", desktopIconFadeHwnd, "Ptr", desktopHostHwnd, "Int", 0, "Int", 0, "Int", 0, "Int", 0, "UInt", 0x0043))
+    insertAfterHwnd := desktopHostHwnd
+    if (FadeIn) {
+        ; GW_HWNDPREV (3) locates the window immediately above the desktop host.
+        ; Inserting after it puts the cover above the live icons and below application windows.
+        insertAfterHwnd := DllCall("user32\GetWindow", "Ptr", desktopHostHwnd, "UInt", 3, "Ptr")
+        if (insertAfterHwnd == desktopIconFadeHwnd)
+            insertAfterHwnd := DllCall("user32\GetWindow", "Ptr", desktopIconFadeHwnd, "UInt", 3, "Ptr")
+        ; HWND_TOP (0) keeps the cover non-topmost if the next higher window is topmost.
+        if (insertAfterHwnd && (DllCall("user32\GetWindowLongW", "Ptr", insertAfterHwnd, "Int", -20, "UInt") & 0x00000008))
+            insertAfterHwnd := 0
+    }
+    ; Preserve click-through input and show without activation or geometry changes.
+    if (!DllCall("user32\SetWindowPos", "Ptr", desktopIconFadeHwnd, "Ptr", insertAfterHwnd, "Int", 0, "Int", 0, "Int", 0, "Int", 0, "UInt", 0x0053))
     {
         _DestroyDesktopIconFadeOverlay()
         return false
@@ -18521,6 +18622,29 @@ _UpdateDesktopIconFadeLayer(alpha := 255)
     updateResult := DllCall("user32\UpdateLayeredWindow", "Ptr", desktopIconFadeHwnd, "Ptr", screenDc, "Ptr", &destinationPoint, "Ptr", &layerSize, "Ptr", desktopIconFadeMemoryDc, "Ptr", &sourcePoint, "UInt", 0, "Ptr", &blendFunction, "UInt", 0x00000002, "Int")
     DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", screenDc)
     return updateResult
+}
+
+; Arm a short-lived watcher only after a confirmed Explorer or desktop item press.
+_StartDesktopIconDrag(sourceHwnd, startX, startY)
+{
+    global desktopIconDragState
+
+    if (!GetKeyState("LButton", "P"))
+        return
+    desktopIconDragState := { dragStarted: False, sourceHwnd: sourceHwnd
+        , startX: startX, startY: startY
+        , thresholdX: Max(1, DllCall("user32\GetSystemMetrics", "Int", 68, "Int"))
+        , thresholdY: Max(1, DllCall("user32\GetSystemMetrics", "Int", 69, "Int")) }
+    SetTimer, _WatchDesktopIconDrag, 50
+}
+
+; Cancel the pending item drag without changing Explorer's native mouse handling.
+_StopDesktopIconDrag()
+{
+    global desktopIconDragState
+
+    SetTimer, _WatchDesktopIconDrag, Off
+    desktopIconDragState := ""
 }
 
 ; Reveals hidden icons, then renews their timeout for additions until the first desktop hover.
@@ -18585,8 +18709,50 @@ _WatchDesktopIconAdditions()
         desktopIconFadeItemCount := iconCount
 }
 
+; Reveal icons while an item drag is still held over the desktop, then maintain its hover timeout.
+_WatchDesktopIconDrag()
+{
+    global desktopIconDragState
+    global desktopIconsHiddenByScript
+    global desktopIconsLastDesktopHoverTick
+    global desktopIconsVisible
+
+    dragState := desktopIconDragState
+    if (!IsObject(dragState) || !GetKeyState("LButton", "P") || GetKeyState("Esc", "P")
+     || GetKeyState("MButton", "P") || GetKeyState("RButton", "P")
+     || !DllCall("user32\IsWindow", "Ptr", dragState.sourceHwnd)) {
+        _StopDesktopIconDrag()
+        return
+    }
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, dragX, dragY
+    if (!dragState.dragStarted) {
+        if (Abs(dragX - dragState.startX) < dragState.thresholdX
+         && Abs(dragY - dragState.startY) < dragState.thresholdY)
+            return
+        dragState.dragStarted := True
+    }
+    if (!MouseIsOverDesktopShellSurface())
+        return
+    if (desktopIconDragState != dragState || !GetKeyState("LButton", "P"))
+        return
+
+    ; The hidden flag prevents repeated fades; keep watching until release or cancellation.
+    fadeSucceeded := !desktopIconsHiddenByScript || DesktopIcons(true, 0)
+    if (desktopIconDragState != dragState)
+        return
+    if (fadeSucceeded || !desktopIconsHiddenByScript) {
+        desktopIconsVisible := true
+        desktopIconsLastDesktopHoverTick := A_TickCount
+    }
+    else
+        _StopDesktopIconDrag()
+}
+
 ; Fades Explorer's desktop icons by revealing or hiding a saved layered desktop image.
-DesktopIcons(FadeIn := True)
+; Optional fadeInDurationMs = 0 reveals instantly; otherwise use the normal frame timing.
+DesktopIcons(FadeIn := True, fadeInDurationMs := "")
 {
     global desktopIconFadeBitmap
     global desktopIconFadeHeight
@@ -18599,6 +18765,7 @@ DesktopIcons(FadeIn := True)
     global desktopIconFadeWidth
     global desktopIconFadeWinSetElapsedMs
     global desktopIconsHiddenByScript
+    global k_debugTraceDesktopIconFadeEnabled
 
     if (FadeIn)
     {
@@ -18607,15 +18774,19 @@ DesktopIcons(FadeIn := True)
         if (!desktopIconsHiddenByScript)
             return true
 
-        ; Never reveal the image saved at fade-out: it can contain windows that have since moved.
+        ; A fresh capture avoids showing windows left in the old fade-out image.
         _HideDesktopIconFadeOverlay()
-
-        if (!_SetDesktopIconsVisible(desktopIconFadeListViewHwnd, true))
-        {
-            _ResetDesktopIconFade()
-            return false
+        if (fadeInDurationMs != "" && fadeInDurationMs = 0) {
+            ; Instant reveal performs no desktop capture or overlay animation.
+            if (!_SetDesktopIconsVisible(desktopIconFadeListViewHwnd, true) || !_RefreshDesktopIcons(desktopIconFadeListViewHwnd)) {
+                _ResetDesktopIconFade()
+                return false
+            }
+            desktopIconsHiddenByScript := false
+            return true
         }
 
+        ; Flush the still-hidden icons and old overlay before capturing the icon-free desktop.
         if (!_RefreshDesktopIcons(desktopIconFadeListViewHwnd))
         {
             _ResetDesktopIconFade()
@@ -18638,7 +18809,18 @@ DesktopIcons(FadeIn := True)
             return false
         }
 
-        if (!_ShowDesktopIconFadeOverlay() || !_FadeDesktopIconLayer(255, 0))
+        ; Present the opaque icon-free cover before making the live icons visible underneath.
+        if (!_ShowDesktopIconFadeOverlay(True) || DllCall("dwmapi\DwmFlush", "Int") != 0)
+        {
+            _ResetDesktopIconFade()
+            return false
+        }
+        if (!_SetDesktopIconsVisible(desktopIconFadeListViewHwnd, true) || !_RefreshDesktopIcons(desktopIconFadeListViewHwnd))
+        {
+            _ResetDesktopIconFade()
+            return false
+        }
+        if (!_FadeDesktopIconLayer(255, 0))
         {
             _ResetDesktopIconFade()
             return false
@@ -18649,39 +18831,51 @@ DesktopIcons(FadeIn := True)
         return true
     }
 
-    ; Keeps temporary timing diagnostics in one script thread through fade-out setup.
+    ; Prepare fade-out; collect diagnostic timings only when logging is enabled.
     SetTimer, _WatchDesktopIconAdditions, Off
     desktopIconFadeItemCount := -1
     Critical, On
-    desktopIconFadeSetupStartTick := A_TickCount
-    desktopIconFadePrewarmReady := desktopIconFadeBitmap && desktopIconFadeHwnd && desktopIconFadeMemoryDc
-    desktopIconFadeStageStartTick := A_TickCount
-    desktopIconFadeListViewHwnd := _FindDesktopIconListView()
-    desktopIconFadeListViewLookupElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+    if (k_debugTraceDesktopIconFadeEnabled) {
+        desktopIconFadeSetupStartTick          := A_TickCount
+        desktopIconFadePrewarmReady            := desktopIconFadeBitmap && desktopIconFadeHwnd && desktopIconFadeMemoryDc
+        desktopIconFadeStageStartTick          := A_TickCount
+    }
+    desktopIconFadeListViewHwnd            := _FindDesktopIconListView()
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeListViewLookupElapsedMs := A_TickCount - desktopIconFadeStageStartTick
     if (!desktopIconFadeListViewHwnd)
     {
         Critical, Off
         return false
     }
 
-    desktopIconFadeStageStartTick := A_TickCount
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeStageStartTick       := A_TickCount
     _HideDesktopIconFadeOverlay()
-    desktopIconFadeHideOverlayElapsedMs := A_TickCount - desktopIconFadeStageStartTick
-    desktopIconFadeStageStartTick := A_TickCount
+    if (k_debugTraceDesktopIconFadeEnabled) {
+        desktopIconFadeHideOverlayElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+        desktopIconFadeStageStartTick       := A_TickCount
+    }
+
     SysGet, desktopIconFadeLeft, 76
     SysGet, desktopIconFadeTop, 77
     SysGet, desktopIconFadeWidth, 78
     SysGet, desktopIconFadeHeight, 79
-    desktopIconFadeGeometryElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeGeometryElapsedMs    := A_TickCount - desktopIconFadeStageStartTick
+
     if (desktopIconFadeWidth <= 0 || desktopIconFadeHeight <= 0)
     {
         Critical, Off
         return false
     }
 
-    desktopIconFadeStageStartTick := A_TickCount
-    desktopIconFadeBitmap := _CaptureDesktopIconFadeBitmap(desktopIconFadeLeft, desktopIconFadeTop, desktopIconFadeWidth, desktopIconFadeHeight)
-    desktopIconFadeCaptureElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeStageStartTick   := A_TickCount
+    desktopIconFadeBitmap           := _CaptureDesktopIconFadeBitmap(desktopIconFadeLeft, desktopIconFadeTop, desktopIconFadeWidth, desktopIconFadeHeight)
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeCaptureElapsedMs := A_TickCount - desktopIconFadeStageStartTick
     if (!desktopIconFadeBitmap)
     {
         Critical, Off
@@ -18689,34 +18883,42 @@ DesktopIcons(FadeIn := True)
         return false
     }
 
-    desktopIconFadeStageStartTick := A_TickCount
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeStageStartTick := A_TickCount
     if (!_ShowDesktopIconFadeOverlay())
     {
         Critical, Off
         _ClearDesktopIconFadeBitmap()
         return false
     }
-    desktopIconFadeShowOverlayElapsedMs := A_TickCount - desktopIconFadeStageStartTick
 
-    desktopIconFadeItemCount := _GetDesktopIconItemCount(desktopIconFadeListViewHwnd)
-    desktopIconFadeStageStartTick := A_TickCount
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeShowOverlayElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+    desktopIconFadeItemCount            := _GetDesktopIconItemCount(desktopIconFadeListViewHwnd)
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeStageStartTick       := A_TickCount
     if (!_SetDesktopIconsVisible(desktopIconFadeListViewHwnd, false))
     {
         Critical, Off
         _ResetDesktopIconFade()
         return false
     }
-    desktopIconFadeHideLiveIconsElapsedMs := A_TickCount - desktopIconFadeStageStartTick
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeHideLiveIconsElapsedMs := A_TickCount - desktopIconFadeStageStartTick
 
     desktopIconsHiddenByScript := true
     Critical, Off
 
-    desktopIconFadeLayerStartTick := A_TickCount
+    if (k_debugTraceDesktopIconFadeEnabled)
+        desktopIconFadeLayerStartTick := A_TickCount
     desktopIconFadeLayerResult    := _FadeDesktopIconLayer(255, 0)
-    desktopIconFadeLayerElapsedMs := A_TickCount - desktopIconFadeLayerStartTick
-    desktopIconFadeSetupElapsedMs := desktopIconFadeLayerStartTick - desktopIconFadeSetupStartTick
+    if (k_debugTraceDesktopIconFadeEnabled) {
+        desktopIconFadeLayerElapsedMs := A_TickCount - desktopIconFadeLayerStartTick
+        desktopIconFadeSetupElapsedMs := desktopIconFadeLayerStartTick - desktopIconFadeSetupStartTick
+    }
 
-    _DebugTrace_AppendDesktopIconFade("fade_out: prewarmReady=" . (desktopIconFadePrewarmReady ? 1 : 0) . "; listViewLookupMs=" . desktopIconFadeListViewLookupElapsedMs . "; hideOverlayMs=" . desktopIconFadeHideOverlayElapsedMs . "; geometryMs=" . desktopIconFadeGeometryElapsedMs . "; captureMs=" . desktopIconFadeCaptureElapsedMs . "; showOverlayMs=" . desktopIconFadeShowOverlayElapsedMs . "; hideLiveIconsMs=" . desktopIconFadeHideLiveIconsElapsedMs . "; winSetMs=" . desktopIconFadeWinSetElapsedMs . "; setupMs=" . desktopIconFadeSetupElapsedMs . "; fadeMs=" . desktopIconFadeLayerElapsedMs)
+    if (k_debugTraceDesktopIconFadeEnabled)
+        _DebugTrace_AppendDesktopIconFade("fade_out: prewarmReady=" . (desktopIconFadePrewarmReady ? 1 : 0) . "; listViewLookupMs=" . desktopIconFadeListViewLookupElapsedMs . "; hideOverlayMs=" . desktopIconFadeHideOverlayElapsedMs . "; geometryMs=" . desktopIconFadeGeometryElapsedMs . "; captureMs=" . desktopIconFadeCaptureElapsedMs . "; showOverlayMs=" . desktopIconFadeShowOverlayElapsedMs . "; hideLiveIconsMs=" . desktopIconFadeHideLiveIconsElapsedMs . "; winSetMs=" . desktopIconFadeWinSetElapsedMs . "; setupMs=" . desktopIconFadeSetupElapsedMs . "; fadeMs=" . desktopIconFadeLayerElapsedMs)
 
     if (!desktopIconFadeLayerResult)
     {
@@ -18764,6 +18966,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
 {
     global clipPreferExplicitCtrlV
     global clipTraceCtrlDPasteActive
+    global k_debugTraceCtrlDPasteEnabled
     static BackUpClip := "", Stored := False, LastClip := "", Restored := ""
 
     if (Restore) {
@@ -18815,7 +19018,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
         } else {
             LastClip := Text
             if !_TrySetClipboardText(Text) {
-                if (clipTraceCtrlDPasteActive) {
+                if (clipTraceCtrlDPasteActive && k_debugTraceCtrlDPasteEnabled) {
                     traceForegroundHwnd := DllCall("user32\GetForegroundWindow", "Ptr")
                     traceMessage := "Ctrl+D: clipboard write failed; no Ctrl+V was sent"
                     traceMessage .= "; expectedHwnd=" . expectedWindowId
@@ -18830,7 +19033,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
             ; Clipboard writes can take long enough for the user to change
             ; windows. Never send Ctrl+V to that newly foreground target.
             if (expectedWindowId && !IsForegroundWindow(expectedWindowId)) {
-                if (clipTraceCtrlDPasteActive) {
+                if (clipTraceCtrlDPasteActive && k_debugTraceCtrlDPasteEnabled) {
                     traceForegroundHwnd := DllCall("user32\GetForegroundWindow", "Ptr")
                     traceMessage := "Ctrl+D: focus changed before Ctrl+V; no Ctrl+V was sent"
                     traceMessage .= "; expectedHwnd=" . expectedWindowId
@@ -18847,7 +19050,7 @@ Clip(Text := "", Reselect := "", Restore := "", modifiersToSync := "Shift Alt Ct
                 didPaste := ManagedCtrlChord("v", 6, True, modifiersToSync, expectedWindowId)
             else
                 didPaste := ManagedCtrlChord("v", 6, False, modifiersToSync, expectedWindowId)
-            if (clipTraceCtrlDPasteActive) {
+            if (clipTraceCtrlDPasteActive && k_debugTraceCtrlDPasteEnabled) {
                 traceForegroundHwnd := DllCall("user32\GetForegroundWindow", "Ptr")
                 traceMessage := "Ctrl+D: ManagedCtrlChord(" . (clipPreferExplicitCtrlV ? "explicit Ctrl+V" : "Ctrl+V") . ")"
                 traceMessage .= " returned " . (didPaste ? "True" : "False")
