@@ -6249,9 +6249,22 @@ $*LButton::
             While GetKeyState("LButton", "P")
                 Sleep, 5
 
+            ; Claim keyboard blocking only when no other operation owns it.
+            altClickPriorCritical := A_IsCritical
+            Critical, On
+            if (blockKeys) {
+                Critical, %altClickPriorCritical%
+                Return
+            }
             BeginBlockKeys()
-            SendInput, {Blind}{LAlt Up}{Click, Left}{Enter}
-            EndBlockKeys()
+            try {
+                Critical, %altClickPriorCritical%
+                SendInput, {Blind}{LAlt Up}{Click, Left}{Enter}
+            } finally {
+                ; Unblock before restoring Alt to its current physical state.
+                EndBlockKeys()
+                ManagedModifierCleanup("Alt", 0)
+            }
         }
         Else
             priorAltClickTick := clickTick
