@@ -24208,6 +24208,10 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ; Shared typo endings covering multiple whole-word corrections.
 :?:blility::bility
 :?:veing::ving
+; direcylt -> directly
+:?:cylt::ctly
+; direcytl -> directly
+:?:cytl::ctly
 ;------------------------------------------------------------------------------
 ; Word beginnings
 ;------------------------------------------------------------------------------
@@ -24357,6 +24361,38 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:shcematic::schematic
 :*:substract::subtract
 :*:volounteer::volunteer
+; cnsocious -> conscious
+:*:cnsoc::consc
+; cnsoecutive -> consecutive
+:*:cnsoe::conse
+; cnsoider -> consider
+:*:cnsoi::consi
+; cnsoole -> console
+:*:cnsoo::conso
+; cnsotant -> constant
+:*:cnsot::const
+; cnsoult -> consult
+:*:cnsou::consu
+; cpomuter -> computer
+:*:cpom::comp
+; csnoider -> consider
+:*:csno::cons
+; csonider -> consider
+:*:cson::cons
+; ctonact -> contact
+:*:ctona::conta
+; ctonent -> content
+:*:ctone::conte
+; ctoninue -> continue
+:*:ctoni::conti
+; ctonrol -> control
+:*:ctonr::contr
+; ntiernet -> internet
+:*:ntier::inter
+; omcmunication -> communication
+:*:omcm::comm
+; tanrsfer -> transfer
+:*:tanrs::trans
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
@@ -25984,7 +26020,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its an::it's an
 ::its as::it's as
 ::its apparently::it's apparently
-::its the::it's the
 ::its any::it's any
 ::its available::it's available
 ::its beautiful::it's beautiful
@@ -26047,6 +26082,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its something::it's something
 ::its started::it's started
 ::its sunny::it's sunny
+::its the::it's the
 ::its there::it's there
 ::its time::it's time
 ::its true::it's true
@@ -27716,6 +27752,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::hls::HLS
 ::disparite::disparate
 ::formated::formatted
+::aleviate::alleviate
 ;------------------------------------------------------------------------------
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
