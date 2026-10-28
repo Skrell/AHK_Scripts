@@ -121,6 +121,9 @@ Global c_typingAutoFixHwnd                                   := 0
 Global c_typingAutoFixReason                                 := ""
 ; Tick count when the cache entry was last refreshed.
 Global c_typingAutoFixTick                                   := 0
+; True enables custom-control editability checks; False bypasses their cache
+; and preparation/refresh timers while retaining the existing hotstring exclusions.
+Global k_hotstringEditabilityCheckEnabled                    := False
 ; Maximum age for a same-window/same-control fast cache hit.
 Global k_typingAutoFixFastTtlMs                              := 125
 ; Minimum gap before repeating slower UIA/MSAA probes for unchanged focus.
@@ -2149,10 +2152,14 @@ CancelTbcTypingWorkForContextChange() {
 ; change. The physical-input snapshots are captured now, before the delayed
 ; focus lookup, so the async probe can distinguish no typing from a partial word.
 _RequestTypingAutoFixPrewarm(delayMs := "") {
+    global k_hotstringEditabilityCheckEnabled
     global k_typingAutoFixPrewarmDelayMs
     global hotstringBoundarySeq, physicalTypingSeq
     global typingAutoFixPrewarmStartHotstringBoundarySeq
     global typingAutoFixPrewarmStartTypingSeq
+
+    if (!k_hotstringEditabilityCheckEnabled)
+        return
 
     if (delayMs = "")
         delayMs := k_typingAutoFixPrewarmDelayMs
@@ -21943,6 +21950,9 @@ IsGoogleDocWindow() {
 ; Prewarm the eligibility cache before a hotstring needs to evaluate it. Startup,
 ; activation, and pointer-focus changes all schedule this label after focus settles.
 PrewarmTypingAutoFixContext:
+    if (!k_hotstringEditabilityCheckEnabled)
+        Return
+
     prewarmStartHotstringBoundarySeq  := typingAutoFixPrewarmStartHotstringBoundarySeq
     prewarmStartTypingSeq             := typingAutoFixPrewarmStartTypingSeq
     WinGet, prewarmHwnd, ID, A
@@ -21969,6 +21979,11 @@ ResetHotstringBufferAfterBoundary:
 Return
 
 FlushTypingAutoFixRefresh:
+    if (!k_hotstringEditabilityCheckEnabled) {
+        _ClearTbcTypingAutoFixRefresh()
+        Return
+    }
+
     tbcRefreshCtrlClass                  := typingAutoFixRefreshCtrlClass
     tbcRefreshCtrlHwnd                   := typingAutoFixRefreshCtrlHwnd
     tbcRefreshCtrlNN                     := typingAutoFixRefreshCtrlNN
@@ -22121,6 +22136,10 @@ RefreshTypingAutoFixContext(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
 Hotstring eligibility flow
 ==========================
 
+The flow and timeline below assume k_hotstringEditabilityCheckEnabled = True.
+False bypasses the custom-control cache and editability checks, skips preparation
+and refresh timers, and retains the immediate application/control exclusions.
+
 startup / window activation / pointer-focus change
     |
     +--> PrewarmTypingAutoFixContext
@@ -22155,6 +22174,145 @@ their background probe is pending, preventing a slow accessibility call from
 blocking keyboard input or disabling the hotstring table globally. The prewarm
 cache may temporarily contain false for that target, but the live predicate
 does not use that unconfirmed value until the probe produces a confirmed result.
+
+Illustrative execution timeline
+===============================
+Assumptions: the same eligible custom field stays focused, no confirmed answer
+or matching refresh request exists initially, input is quiet when each timer
+fires, and UIA confirms editability. Times are illustrative, not measured or a
+fixed repeating schedule; actual timer execution and accessibility calls can
+finish later. MSAA fallback is skipped because UIA succeeds in this example.
+
+TIME       EXECUTION
+---------  ------------------------------------------------------------
+
+   0 ms    AutoHotkey evaluates #If
+             |
+             +-> ShouldRunHotstringAutoCorrect()
+                   |
+                   +-> GetHotstringEligibilityFastOrQueue()
+                         |
+                         |  No confirmed answer; no pending request.
+                         |
+                         +-> QueueTypingAutoFixRefresh()
+                         |     Saves target and request details.
+                         |     Executes:
+                         |
+                         |     SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
+                         |
+                         |     Delay evaluates to -25: run once in approximately 25 ms.
+                         |     Returns to the cache-reading helper.
+                         |
+                         +-> Returns TRUE
+                   |
+                   +-> Returns TRUE to AutoHotkey.
+                         Original permission call is finished.
+
+           Corrections are temporarily allowed while the timer waits.
+           |
+           | approximately 25 ms
+           v
+
+  25 ms    AutoHotkey starts FlushTypingAutoFixRefresh:
+             |
+             |  Checks quiet input, same field, and current request.
+             |
+             +-> RefreshTypingAutoFixContext()
+             |     |
+             |     +-> UIA_IsFocusedEditable()
+             |     |     Returns TRUE: editing support confirmed.
+             |     |
+             |     +-> _TypingAutoFixSetCache()
+             |           Saves TRUE, target, reason, timestamp.
+             |           Returns through the refresh function.
+             |
+             +-> _ClearTbcTypingAutoFixRefresh()
+             |     Clears the completed pending request.
+             |
+             +-> Return: this timer invocation ends.
+
+           Saved answer: TRUE
+           Cache timestamp: 25 ms
+           Last accessibility check: 25 ms
+
+
+ 100 ms    AutoHotkey evaluates #If again.
+             |
+             +-> ShouldRunHotstringAutoCorrect()
+                   +-> GetHotstringEligibilityFastOrQueue()
+                         Cache age = 75 ms.
+                         Returns saved TRUE.
+                         No timer scheduled.
+
+
+ 200 ms    Another #If evaluation follows the same two-function path.
+             |
+             +-> GetHotstringEligibilityFastOrQueue()
+                   Cache age = 175 ms: older than 125 ms.
+                   |
+                   +-> QueueTypingAutoFixRefresh()
+                   |     Executes:
+                   |
+                   |     SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
+                   |
+                   |     Schedules FlushTypingAutoFixRefresh approximately 25 ms later.
+                   |     Returns to the cache-reading helper.
+                   |
+                   +-> Returns saved TRUE immediately.
+
+
+ 225 ms    AutoHotkey starts FlushTypingAutoFixRefresh:
+             |
+             +-> RefreshTypingAutoFixContext()
+             |     Last accessibility check was only 200 ms ago.
+             |     Therefore, skips another accessibility check.
+             |     |
+             |     +-> _TypingAutoFixSetCache()
+             |           Reuses TRUE; renews cache timestamp to 225 ms.
+             |
+             +-> _ClearTbcTypingAutoFixRefresh()
+             +-> Return.
+
+           Saved answer: TRUE
+           Cache timestamp: 225 ms
+           Last accessibility check: still 25 ms
+
+
+ 400 ms    Another #If evaluation follows the same two-function path.
+             |
+             +-> GetHotstringEligibilityFastOrQueue()
+                   Cache age = 175 ms.
+                   |
+                   +-> QueueTypingAutoFixRefresh()
+                   |     Executes:
+                   |
+                   |     SetTimer, FlushTypingAutoFixRefresh, % -k_typingAutoFixRefreshDelayMs
+                   |
+                   |     Schedules FlushTypingAutoFixRefresh approximately 25 ms later.
+                   |     Returns to the cache-reading helper.
+                   |
+                   +-> Returns saved TRUE immediately.
+
+
+ 425 ms    AutoHotkey starts FlushTypingAutoFixRefresh:
+             |
+             +-> RefreshTypingAutoFixContext()
+             |     Last accessibility check was 400 ms ago.
+             |     Another accessibility check is now permitted.
+             |     |
+             |     +-> UIA_IsFocusedEditable()
+             |     |     Returns TRUE.
+             |     |
+             |     +-> _TypingAutoFixSetCache()
+             |           Saves TRUE and timestamp 425 ms.
+             |
+             +-> _ClearTbcTypingAutoFixRefresh()
+             +-> Return.
+
+A cache timestamp can be renewed without another accessibility check, as at
+225 ms. The saved answer is retained until cleared or overwritten; the 125 ms
+age threshold requests a refresh rather than deleting that answer. The 400 ms
+limit controls repeated accessibility checks for unchanged confirmed focus.
 */
 
 ; Returns a confirmed cached editability answer for the exact focused target
@@ -22209,6 +22367,7 @@ GetHotstringEligibilityFastOrQueue(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
 ; Returns true only when the large hotstring autocorrect table should be active
 ; for the current focus target.
 ShouldRunHotstringAutoCorrect() {
+    global k_hotstringEditabilityCheckEnabled
     global SearchingWindows
     global hitTAB
     global hitTilde
@@ -22248,6 +22407,10 @@ ShouldRunHotstringAutoCorrect() {
     ; allowing RichEdit controls and accessibility-backed custom editors.
     if (InStr(ctrlNN, "Edit", True) && !InStr(ctrlNN, "Rich", True))
         return false
+
+    ; Disabling the optional check allows remaining controls without consulting the cache.
+    if (!k_hotstringEditabilityCheckEnabled)
+        return true
 
     if (IsClassicEditControlClass(ctrlClass))
         return true
@@ -22439,6 +22602,7 @@ _SetHotstringResetTimingAfterAsyncProbe(protectPartialWord, startTypingSeq , sta
 QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     , nowTick := "", protectPartialWord := false, startTypingSeq := ""
     , startHotstringBoundarySeq := "") {
+    global k_hotstringEditabilityCheckEnabled
     global hotstringBoundarySeq, hotstringResetAtBoundarySeq
     global hotstringResetTimerPending
     global physicalTypingSeq
@@ -22452,6 +22616,9 @@ QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     global typingAutoFixRefreshRequestedTick
     global typingAutoFixRefreshStartHotstringBoundarySeq
     global typingAutoFixRefreshStartTypingSeq
+
+    if (!k_hotstringEditabilityCheckEnabled)
+        return
 
     if (nowTick = "")
         nowTick := A_TickCount
@@ -23794,6 +23961,7 @@ SafeUIA_GetAutoId(el) {
 ::tiers::
 ::pane::
 ::annotate::
+::faulty::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -24083,7 +24251,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
-:?:uccessful::successful
+::uccessful::successful
 :?:sccessful::successful
 :?:sucessful::successful
 :?:succssful::successful
@@ -24098,7 +24266,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:succesfsul::successful
 :?:successufl::successful
 :?:successflu::successful
-:?:uccessfully::successfully
+::uccessfully::successfully
 :?:sccessfully::successfully
 :?:sucessfully::successfully
 :?:succssfully::successfully
@@ -24161,8 +24329,29 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:iosn::ions
 :?:gbps::Gbps
 :?:gpbs::Gbps
-:?:lien::line
-:?:liens::lines
+; Specific line/lines misspellings; preserve valid lien/liens and alien/aliens.
+::airlien::airline
+::airliens::airlines
+::baselien::baseline
+::crystallien::crystalline
+::deadlien::deadline
+::declien::decline
+::decliens::declines
+::disciplien::discipline
+::discipliens::disciplines
+::gasolien::gasoline
+::guideliens::guidelines
+::headlien::headline
+::headliens::headlines
+::inclien::incline
+::incliens::inclines
+::inlien::inline
+::inliens::inlines
+::offlien::offline
+::onlien::online
+::outlien::outline
+::pipelien::pipeline
+::timelien::timeline
 :?:oen::one
 :?:iaion::iation
 :?:cims::cisms
@@ -24295,19 +24484,26 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:supercede::supersede
 :*:superceed::supersede
 :*:weild::wield
-:*:nay::any
+; Specific any-word misspellings; preserve valid nay and naysayer.
+::naybody::anybody
+::naymore::anymore
+::nayone::anyone
+::naything::anything
+::naytime::anytime
+::nayway::anyway
+::naywhere::anywhere
 :*:soem::some
 :*:seom::some
-:*:cmakel::CMakeLists.txt
-:*:cmaket::CMakeLists.txt
-:*:unfo::unfortunately, `
-:*:Unfo::Unfortunately, `
-:*:chara::character
-:*:chars::characters
-:*:privi::privilege `
-:*:prive::privilege `
-:*:envi::environment `
-:*:simult::simultaneous`
+::cmakel::CMakeLists.txt
+::cmaket::CMakeLists.txt
+::unfo::unfortunately,
+::Unfo::Unfortunately,
+::chara::character
+::chars::characters
+::privi::privilege
+::prive::privilege
+::envi::environment
+::simult::simultaneous
 :*:follwo::follow
 :*:ncorrect::incorrect
 :*:icorrect::incorrect
@@ -24323,8 +24519,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:incorerct::incorrect
 :*:incorrcet::incorrect
 :*:incorretc::incorrect
-:*:methodo::methodology `
-:*:orthog::orthogonal
+::methodo::methodology
+::orthog::orthogonal
 :*:pecifi::specifi
 :*:secifi::specifi
 :*:spcifi::specifi
@@ -24401,8 +24597,28 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?*:sgin::sign  ; Covers subcatagories and catagories.
 :?*:fortuante::fortunate  ; Covers subcatagories and catagories.
 :?*:laod::load
-:?*:olad::load
-:?*:loda::load
+; Specific load misspellings; preserve internal olad/loda in correctly spelled words.
+; The screened ending-only loda rule covers loda/downloda/uploda/reloda.
+::downlodaable::downloadable
+::downlodaed::downloaded
+::downlodaing::downloading
+::downlodas::downloads
+::downolad::download
+::downoladable::downloadable
+::downoladed::downloaded
+::downolading::downloading
+::downolads::downloads
+::lodaed::loaded
+::lodaing::loading
+::lodas::loads
+::olad::load
+::oladed::loaded
+::olading::loading
+::olads::loads
+::reolad::reload
+::uplodaed::uploaded
+::upolad::upload
+::upoladed::uploaded
 :?*:isntall::install
 :?*:insatll::install
 :?*:istall::install
@@ -27708,7 +27924,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::cusomter::customer
 ::conecnered::concerned
 ::iopll::IOPLL
-::Suggesitons::SuggestIons
 ::Vicne::Vince
 ::pgorammer::programmer
 ::Antony::Anthony
