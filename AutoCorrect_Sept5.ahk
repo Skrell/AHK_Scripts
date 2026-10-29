@@ -5295,6 +5295,91 @@ _SwapSelectedBooleanLiteral() {
     StopAutoFix := False
 Return
 
+; Open one highlighted Windows path without changing the selected text.
+; Preserve UNC prefixes while accepting forward or repeated slash separators.
+_OpenSelectedPath() {
+    global StopAutoFix
+
+    priorCritical := A_IsCritical
+    priorStopAutoFix := StopAutoFix
+    targetWindowId := DllCall("user32\GetForegroundWindow", "Ptr")
+    Critical, On
+    StopAutoFix := True
+    try {
+        ; Defer modifier synchronization to the finalizer so copy failures and
+        ; clipboard restoration also finish through the existing unstick logic.
+        selectedPath := Clip("", "", "", "", targetWindowId)
+
+        ; Do not reassert held modifiers and then move focus away from the
+        ; window that owns their deferred cleanup. Finish the physical chord
+        ; first; cancellation still restores the clipboard and modifier state.
+        releaseStartTick := A_TickCount
+        while (GetKeyState("o", "P")
+            || GetKeyState("LCtrl", "P") || GetKeyState("RCtrl", "P")
+            || GetKeyState("LAlt", "P") || GetKeyState("RAlt", "P")
+            || GetKeyState("LShift", "P") || GetKeyState("RShift", "P")
+            || GetKeyState("LWin", "P") || GetKeyState("RWin", "P")) {
+            if (!IsForegroundWindow(targetWindowId) || A_TickCount - releaseStartTick >= 2000)
+                return
+            Sleep, 10
+        }
+        if (!IsForegroundWindow(targetWindowId))
+            return
+    } finally {
+        try {
+            Clip("", "", "RESTORE")
+        } finally {
+            try {
+                ; Repair all modifier sides and queue the normal six follow-up
+                ; passes before a dialog or the opened path can change focus.
+                ManagedModifierCleanup("Shift Alt Ctrl Win", targetWindowId, 6)
+            } finally {
+                StopAutoFix := priorStopAutoFix
+                Critical, %priorCritical%
+            }
+        }
+    }
+
+    selectedPath := Trim(selectedPath, " `t`r`n")
+    ; Remove matching surrounding quotes commonly included when copying a path.
+    quoteChar := SubStr(selectedPath, 1, 1)
+    if (StrLen(selectedPath) >= 2 && (quoteChar = """" || quoteChar = "'") && SubStr(selectedPath, 0) = quoteChar)
+        selectedPath := Trim(SubStr(selectedPath, 2, StrLen(selectedPath) - 2), " `t`r`n")
+
+    if (selectedPath = "" || InStr(selectedPath, "`n") || InStr(selectedPath, "`r")) {
+        MsgBox, 48, Open selected path, Highlight one file or folder path first.
+        return
+    }
+
+    selectedPath := StrReplace(selectedPath, "/", "\")
+    isUncPath := (SubStr(selectedPath, 1, 2) = "\\")
+    selectedPath := RegExReplace(selectedPath, "\\+", "\")
+    if (isUncPath)
+        selectedPath := "\" . selectedPath
+
+    pathAttrs := FileExist(selectedPath)
+    if (!pathAttrs) {
+        MsgBox, 48, Open selected path, % "File or folder not found:`n" . selectedPath
+        return
+    }
+
+    ; Pass the path separately to the Windows shell so spaces stay part of it.
+    ; Folders explicitly use Explorer; files use their registered open action.
+    if (InStr(pathAttrs, "D"))
+        openResult := DllCall("shell32\ShellExecuteW", "Ptr", 0, "WStr", "open", "WStr", A_WinDir . "\explorer.exe", "WStr", """" . selectedPath . """", "Ptr", 0, "Int", 1, "Ptr")
+    else
+        openResult := DllCall("shell32\ShellExecuteW", "Ptr", 0, "WStr", "open", "WStr", selectedPath, "Ptr", 0, "Ptr", 0, "Int", 1, "Ptr")
+
+    if (openResult <= 32)
+        MsgBox, 48, Open selected path, % "Windows could not open:`n" . selectedPath . "`nShell error: " . openResult
+}
+
+; Ctrl+Alt+O opens the highlighted file or folder with Windows.
+$^!o::
+    KeyWait, o, T0.25
+    _OpenSelectedPath()
+Return
+
 ; Swap a selected true/false literal and keep its capitalization style.
 !s::
     Critical, On
