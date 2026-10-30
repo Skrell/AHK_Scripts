@@ -12487,8 +12487,6 @@ $~LButton::
     tooltip,
     GoSub, DisableTimers
 
-    HotString("Reset")
-
     ; During a native bottom-edge or bottom-corner resize, derive the pointer
     ; limit that stops the window's bottom edge at the top of a bottom taskbar.
     TryStartBottomResizeCursorClamp(lbX1, lbY1, _winIdD)
@@ -24618,7 +24616,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:speicfi::specifi
 :*:specfii::specifi
 :*:speciif::specifi
-:*:fucn::func
 :*:retreiv::retriev
 
 ; Shared typo beginnings covering multiple whole-word corrections.
@@ -25927,7 +25924,14 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::frome::from
 ::fromt he::from the
 ::fromthe::from the
+; Complete-word corrections avoid clearing recognition midway through fucniton.
+::fucn::func
 ::fucniton::function
+::fucntor::functor
+::fucntor's::functor's
+::fucntorial::functorial
+::fucntors::functors
+::fucntus::functus
 ::fued::feud
 ::funguses::fungi
 ::furneral::funeral
