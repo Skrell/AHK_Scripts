@@ -31,6 +31,7 @@ and backtick-escaped lines are outside the matcher; unprocessed lines are kept.
 
 from pathlib import Path
 import re
+from time import monotonic
 
 
 def _apply_end(rule, text):
@@ -94,6 +95,35 @@ def _apply_start(rule, text):
     return None
 
 
+def _make_progress_reporter(label):
+    """Return a throttled CLI reporter showing counts, a bar and elapsed time."""
+    last_tick   = None
+    start_tick  = monotonic()
+
+    def report(completed, total):
+        """Print initial/final status and intermediate updates at most once a second."""
+        nonlocal last_tick
+
+        now_tick = monotonic()
+        finished = completed >= total
+        if last_tick is not None and not finished and now_tick - last_tick < 1:
+            return
+
+        bar_width = 24
+        elapsed   = now_tick - start_tick
+        ratio     = completed / total if total else 1.0
+        filled    = int(bar_width * ratio)
+        bar       = "#" * filled + "-" * (bar_width - filled)
+        message   = (
+            f"{label}: [{bar}] {ratio:6.1%} "
+            f"{completed:,}/{total:,} | elapsed {elapsed:,.1f}s"
+        )
+        print(f"\r{message}", end="\n" if finished else "", flush=True)
+        last_tick = now_tick
+
+    return report
+
+
 def _read_definitions(path):
     """Create the dictionaries that the two public readers subsequently select.
 
@@ -152,7 +182,7 @@ def _read_definitions(path):
     return definitions
 
 
-def find_covered_word_rules(whole_word_rules, rules):
+def find_covered_word_rules(whole_word_rules, rules, progress=None):
     """Check each complete whole_word_rule directly against the supplied start/middle/end rules.
 
     Example whole-word rule:
@@ -168,8 +198,11 @@ def find_covered_word_rules(whole_word_rules, rules):
     Each returned decision refers to the original whole-word rule and its selected rule.
     When several rules give the exact target, retain the lowest rule order.
     This checks positional coverage only and does not modify any AHK file.
+    An optional progress(completed, total) callback reports finished whole-word checks.
     """
     decisions = []
+    if progress is not None:
+        progress(0, len(whole_word_rules))
     for whole_word_rule in whole_word_rules:
         # The whole typo is "inetrnet"; its expected correction is "internet".
         best_rule = None
@@ -211,6 +244,8 @@ def find_covered_word_rules(whole_word_rules, rules):
             "whole_word_rule": whole_word_rule,
             "rule": best_rule,
         })
+        if progress is not None:
+            progress(len(decisions), len(whole_word_rules))
     return decisions
 
 
@@ -241,15 +276,33 @@ def main():
         base_dir / "GeneratedWords_ScreenedRules.ahk",
     ]
 
+    # Ask before the lengthy comparison; Enter, EOF and Ctrl+C preserve existing output.
+    overwrite = False
+    if filtered_path.exists():
+        try:
+            answer = input(
+                f"{filtered_path} already exists. Overwrite it? [y/N]: "
+            ).strip().casefold()
+        except (EOFError, KeyboardInterrupt):
+            print("\nCancelled. Existing output was not changed.", flush=True)
+            return 0
+        if answer not in ("y", "yes"):
+            print("Cancelled. Existing output was not changed.", flush=True)
+            return 0
+        overwrite = True
+
+    print("Reading start/middle/end rules...", flush=True)
     # rules receives start/middle/end dictionaries such as
     # {"trigger": "inetr", "replacement": "inter", "kind": "start", ...}.
     rules            = read_current_rules(pattern_paths)
+    print("Reading generated whole-word rules...", flush=True)
     # whole_word_rules receives individual dictionaries such as
     # {"trigger": "inetrnet", "replacement": "internet", ...}.
     whole_word_rules = read_generated_word_rules(generated_path)
     # The existing lists are passed without copying. The returned decisions
     # list links each whole_word_rule dictionary to a selected rule dictionary or None.
-    decisions = find_covered_word_rules(whole_word_rules, rules)
+    progress = _make_progress_reporter("Checking coverage")
+    decisions = find_covered_word_rules(whole_word_rules, rules, progress=progress)
 
     # Begin the summary count at zero; none of the source containers is changed.
     covered_count = 0
@@ -261,7 +314,8 @@ def main():
 
     # Covered=True means omit that source line from the filtered copy.
     # Uncovered and unprocessed source lines are copied without alteration.
-    write_filtered_word_rules(decisions, generated_path, filtered_path)
+    print(f"Writing filtered output: {filtered_path}", flush=True)
+    write_filtered_word_rules(decisions, generated_path, filtered_path, overwrite=overwrite)
 
     # Print the counts and the new file path; the original file was not rewritten.
     print(f"Start/middle/end rules read: {len(rules):,}")
@@ -349,7 +403,7 @@ def read_generated_word_rules(generated_path):
     # same dictionaries and reads their trigger/replacement fields.
     return whole_word_rules
 
-def write_filtered_word_rules(decisions, generated_path, output_path):
+def write_filtered_word_rules(decisions, generated_path, output_path, overwrite=False):
     """Copy original lines except those marked covered into a new AHK file.
 
     For example, if a decision for ::inetrnet::internet has covered=True,
@@ -357,7 +411,8 @@ def write_filtered_word_rules(decisions, generated_path, output_path):
     its line. Comments, blank lines and skipped/unprocessed lines are also kept.
 
     Original UTF-8 bytes, BOM state and each retained line ending are preserved.
-    The output must be a different, new file: an existing file is not overwritten.
+    The output must differ from the source. Existing output requires overwrite=True;
+    main() only supplies that value after the user confirms the overwrite prompt.
     """
     source = Path(generated_path)
     target = Path(output_path)
@@ -392,8 +447,8 @@ def write_filtered_word_rules(decisions, generated_path, output_path):
 
     if source.read_bytes() != original_bytes:
         raise ValueError("The source changed while preparing the filtered copy.")
-    # Exclusive creation prevents accidentally replacing an earlier output.
-    with target.open("xb") as output:
+    # Retain exclusive creation unless overwriting was explicitly approved.
+    with target.open("wb" if overwrite else "xb") as output:
         output.write(filtered_bytes)
     if target.read_bytes() != filtered_bytes:
         raise RuntimeError("Filtered output byte verification failed.")

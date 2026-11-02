@@ -9284,7 +9284,7 @@ UIA_WalkUpToUIItemsView_(el, uiaDeadlineTick := 0, transactionTimeout := 2000) {
     return ""
 }
 
-IsDetailsView_ExplorerCOM(winHwnd := "", ByRef detailsReason := "") {
+IsDetailsView_ExplorerCOM(winHwnd := "", ByRef detailsReason := "", traceRequestId := "") {
 
     static FVM_DETAILS := 4  ; FOLDERVIEWMODE.FVM_DETAILS
 
@@ -9296,10 +9296,24 @@ IsDetailsView_ExplorerCOM(winHwnd := "", ByRef detailsReason := "") {
         return false
     }
 
+    ; Attribute COM time to activation, collection, HWND reads, and view-mode reads.
+    comStartTick := A_TickCount
+    shellCreateMs := 0
+    collectionMs := 0
+    hwndReadMs := 0
+    viewModeReadMs := 0
+    enumeratedCount := 0
     try {
+        stageStartTick := A_TickCount
         shell := ComObjCreate("Shell.Application")
-        for oWin in shell.Windows
+        shellCreateMs := A_TickCount - stageStartTick
+        stageStartTick := A_TickCount
+        shellWindows := shell.Windows
+        collectionMs := A_TickCount - stageStartTick
+        for oWin in shellWindows
         {
+            enumeratedCount++
+            stageStartTick := A_TickCount
             h := ""
             try
                 h := oWin.Hwnd
@@ -9310,14 +9324,18 @@ IsDetailsView_ExplorerCOM(winHwnd := "", ByRef detailsReason := "") {
                     h := ""
             }
 
+            hwndReadMs += A_TickCount - stageStartTick
             if (h = winHwnd)
             {
                 try {
+                    stageStartTick := A_TickCount
                     currentViewMode := oWin.Document.CurrentViewMode
+                    viewModeReadMs := A_TickCount - stageStartTick
                     detailsReason := "current_view_mode=" . currentViewMode
                     return (currentViewMode = FVM_DETAILS)
                 }
                 catch {
+                    viewModeReadMs := A_TickCount - stageStartTick
                     detailsReason := "current_view_mode_unavailable"
                     return false
                 }
@@ -9326,6 +9344,15 @@ IsDetailsView_ExplorerCOM(winHwnd := "", ByRef detailsReason := "") {
     } catch e {
         detailsReason := "explorer_com_exception"
         return false
+    } finally {
+        if (traceRequestId != "")
+            _DebugTrace_ExplorerCtrlAdd("details_com_timing"
+                , "hwnd=" . winHwnd . " elapsedMs=" . (A_TickCount - comStartTick)
+                . " shellCreateMs=" . shellCreateMs . " collectionMs=" . collectionMs
+                . " hwndReadMs=" . hwndReadMs . " viewModeReadMs=" . viewModeReadMs
+                . " enumerated=" . enumeratedCount
+                . " enumerationAndOtherMs=" . Max(0, A_TickCount - comStartTick - shellCreateMs - collectionMs - hwndReadMs - viewModeReadMs)
+                . " reason=[" . detailsReason . "]", False, traceRequestId)
     }
 
     detailsReason := "explorer_com_window_not_found"
@@ -9348,7 +9375,8 @@ IsDetailsView(winHwnd := ""                                          ; Window to
             , ByRef resolvedCtrlHwnd             := 0                ; Returns that native HWND when ownership is proven, avoiding later rediscovery.
             , ByRef itemsViewResolutionElapsedMs := 0                ; Accumulates lookup time so tracing can isolate resolver latency.
             , preferredTarget                    := ""               ; Supplies an optional request-scoped #32770 native target hint.
-            , ByRef preferredTargetState         := "") {            ; Reports whether that hint was unused, invalid, missed, or successfully reused.
+            , ByRef preferredTargetState         := ""               ; Reports whether that hint was unused, invalid, missed, or successfully reused.
+            , traceRequestId                     := "") {            ; Correlates optional COM timing with its readiness request.
 
     ; Clear the returned Details-mode evidence so this invocation reports only its own result.
     detailsReason                := ""
@@ -9379,7 +9407,7 @@ IsDetailsView(winHwnd := ""                                          ; Window to
     WinGetClass, cls, ahk_id %winHwnd%
 
     if (cls = "CabinetWClass" || cls = "ExplorerWClass")
-        return IsDetailsView_ExplorerCOM(winHwnd, detailsReason)
+        return IsDetailsView_ExplorerCOM(winHwnd, detailsReason, traceRequestId)
 
     if (cls = "#32770") {
         itemsViewResolutionStartTick := A_TickCount
@@ -10636,6 +10664,8 @@ _GetExplorerCtrlAddRequestPath(targetHwnd, windowClass, requestId, ByRef request
     global explorerCtrlAddRequestId
     global explorerCtrlAddRequestLocationResolver
 
+    ; Include observer setup and cleanup in the complete resolver-call duration.
+    pathCallStartTick := A_TickCount
     preferredResolver := explorerCtrlAddRequestLocationResolver
     if (windowClass == "#32770") {
         location    := _ResolveDialogFolderLocation(targetHwnd, preferredResolver, requestId)
@@ -10647,6 +10677,11 @@ _GetExplorerCtrlAddRequestPath(targetHwnd, windowClass, requestId, ByRef request
         resolver    := "shell"
     }
 
+    pathCallElapsedMs := A_TickCount - pathCallStartTick
+    _DebugTrace_ExplorerCtrlAdd("path_resolver_returned"
+        , "hwnd=" . targetHwnd . " resolver=" . resolver
+        . " elapsedMs=" . pathCallElapsedMs . " found=" . (currentPath != "")
+        , False, requestId)
     Critical, On
     requestIsCurrent := (requestId = explorerCtrlAddRequestId)
     if (requestIsCurrent && resolver != "")
@@ -12955,6 +12990,10 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
     if (transactionTimeout <= 0)
         transactionTimeout := 1
 
+    ; Measure setup, loading-message lookup, and timeout restoration separately.
+    probeSetupStartTick := A_TickCount
+    probeSetupElapsedMs := 0
+    loadingLookupElapsedMs := 0
     ; Preserve UIA's connection timeout so this probe can restore it after applying shorter lookup budgets.
     priorConnectionTimeout          := ""
     ; Preserve UIA's transaction timeout so this probe cannot leave later UIA work with its temporary budget.
@@ -12991,6 +13030,7 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
         catch e
             priorTransactionTimeout := ""
 
+        probeSetupElapsedMs := A_TickCount - probeSetupStartTick
         ; Record the exact Details-mode proof or failure so callers and traces can explain the probe result.
         detailsReason             := ""
         ; Receive the current UIA Items View so Details and content checks can inspect the same resolved panel.
@@ -13030,7 +13070,8 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
                                         , resolvedCtrlHwnd
                                         , itemsViewResolutionElapsedMs
                                         , preferredTarget
-                                        , preferredTargetState)
+                                        , preferredTargetState
+                                        , requestId)
 
             isDetailsViewElapsedMs := A_TickCount - isDetailsViewStartTick
         }
@@ -13109,10 +13150,12 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
         ; A visible loading message overrides residual ListItem evidence from the
         ; previous folder, so column sizing waits for Explorer to finish rendering.
         loadingEvidenceEl := ""
+        loadingLookupStartTick := A_TickCount
         try
             loadingEvidenceEl := itemsEl.FindFirstBy(k_explorerItemsViewLoadingCondition)
         catch e
             loadingEvidenceEl := ""
+        loadingLookupElapsedMs := A_TickCount - loadingLookupStartTick
         if IsObject(loadingEvidenceEl) {
             probeResult.reason := "working_on_it_visible"
             return probeResult
@@ -13152,6 +13195,7 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
                , itemsViewResolutionElapsedMs   : itemsViewResolutionElapsedMs
                , preferredTargetState           : preferredTargetState }
     } finally {
+        restoreTimeoutStartTick := A_TickCount
         try {
             if (priorTransactionTimeout != "" && IsObject(UIA))
                 UIA.TransactionTimeout := priorTransactionTimeout
@@ -13162,6 +13206,14 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
                 UIA.ConnectionTimeout := priorConnectionTimeout
         } catch e {
         }
+        restoreTimeoutElapsedMs := A_TickCount - restoreTimeoutStartTick
+        if (requestId != "")
+            _DebugTrace_ExplorerCtrlAdd("details_probe_extra_timing"
+                , "hwnd=" . targetHwndID . " setupMs=" . probeSetupElapsedMs
+                . " loadingLookupMs=" . loadingLookupElapsedMs
+                . " restoreTimeoutMs=" . restoreTimeoutElapsedMs
+                . " deadlineOverrunMs=" . Max(0, A_TickCount - uiaDeadlineTick)
+                , False, requestId)
     }
 }
 
@@ -21834,6 +21886,9 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
     scanException := False
     shellBrowserQueryElapsedMs := 0
     tabMatchElapsedMs := 0
+    ; Measure COM enumerator creation/Next between loop bodies, excluding body work.
+    enumerationElapsedMs := 0
+    enumerationResumeTick := 0
 
     ; Guard the COM collection scan because Explorer can replace tab objects while navigation is in progress.
     collectionScanStartTick := A_TickCount
@@ -21842,18 +21897,22 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
         shellWindowsStartTick := A_TickCount
         shellWindows := shellApp.Windows
         collectionElapsedMs := A_TickCount - shellWindowsStartTick
+        enumerationResumeTick := A_TickCount
 
         ; Enumerate Shell.Application windows to locate the COM object associated with the requested Explorer host.
         for shellWin in shellWindows
         {
+            enumerationElapsedMs += A_TickCount - enumerationResumeTick
             enumeratedWindowCount++
             shellWinHwndStartTick := A_TickCount
             shellWinHwnd := shellWin.hwnd
             hwndReadElapsedMs += A_TickCount - shellWinHwndStartTick
 
             ; Skip COM windows hosted by another top-level HWND because they cannot describe this Explorer instance.
-            if (shellWinHwnd != hwnd)
+            if (shellWinHwnd != hwnd) {
+                enumerationResumeTick := A_TickCount
                 continue
+            }
             hostMatchCount++
 
             ; Query IShellBrowser once for both active-tab verification and native current-folder resolution.
@@ -21886,6 +21945,7 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
                 if (thisTabHwnd != activeTabHwnd) {
                     if (shellBrowser)
                         ObjRelease(shellBrowser)
+                    enumerationResumeTick := A_TickCount
                     continue
                 }
             }
@@ -21936,6 +21996,7 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
         _DebugTrace_ExplorerCtrlAdd("explorer_path_collection_scan"
             , "elapsedMs=" . (A_TickCount - collectionScanStartTick)
             . " collectionMs=" . collectionElapsedMs
+            . " enumerationMs=" . enumerationElapsedMs
             . " enumerated=" . enumeratedWindowCount
             . " hwndReadMs=" . hwndReadElapsedMs
             . " hostMatches=" . hostMatchCount
@@ -21952,8 +22013,14 @@ GetExplorerPath(hwnd := "", traceRequestId := "") {
     ; Keep the matched active-tab automation object alive as an event source.
     ; A matching filesystem NavigateComplete2 URL may satisfy a path-changing
     ; CabinetWClass request; every other case retains the native PIDL lookup.
-    if IsObject(foundWin)
+    if IsObject(foundWin) {
+        observerStartTick := A_TickCount
         _EnsureExplorerNavigationObserver(foundWin, hwnd, activeTabHwnd)
+        if (traceRequestId != "")
+            _DebugTrace_ExplorerCtrlAdd("explorer_path_observer_setup"
+                , "elapsedMs=" . (A_TickCount - observerStartTick)
+                . " hwnd=" . hwnd . " activeTabHwnd=" . activeTabHwnd, False, traceRequestId)
+    }
 
     ; Use a nonempty folder identity immediately because no toolbar fallback is needed when either shell resolver succeeded.
     if (foundPath != "") {
@@ -22481,9 +22548,10 @@ ShouldRunHotstringAutoCorrect() {
     if (_HotstringAutoCorrectIsExcludedProcess(processName) || _TypingAutoFixIsExcludedProcess(processName))
         return false
 
-    ; Capture one guarded identity snapshot. A transient focus lookup failure is
-    ; treated as unknown and therefore must not disable every hotstring.
-    if !_TypingAutoFixTryGetFocusedControlIdentity(activeHwnd, ctrlNN , ctrlHwnd, ctrlClass)
+    ; With optional checks disabled, capture only the name needed by the Edit exclusion.
+    ; A transient focus lookup failure remains unknown and must not disable hotstrings.
+    if !_TypingAutoFixTryGetFocusedControlIdentity(activeHwnd, ctrlNN , ctrlHwnd, ctrlClass
+        , !k_hotstringEditabilityCheckEnabled)
         return true
 
     ; Preserve the long-standing exclusion for plain Edit controls while still
@@ -22739,8 +22807,10 @@ QueueTypingAutoFixRefresh(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
 ; window while UIA reports an editable descendant. In that specific case,
 ; ControlGetFocus returns blank, so use the active window itself as the exact
 ; HWND/class identity and let the later UIA/MSAA probe decide editability.
+; Optional nameOnly keeps active-window validation and guarded ControlGetFocus,
+; then skips handle/class lookup when only the name-based exclusion is needed.
 _TypingAutoFixTryGetFocusedControlIdentity(activeHwnd, ByRef ctrlNN
-    , ByRef ctrlHwnd, ByRef ctrlClass) {
+    , ByRef ctrlHwnd, ByRef ctrlClass, nameOnly := False) {
     ctrlNN := ""
     ctrlHwnd := 0
     ctrlClass := ""
@@ -22752,6 +22822,9 @@ _TypingAutoFixTryGetFocusedControlIdentity(activeHwnd, ByRef ctrlNN
         ControlGetFocus, ctrlNN, ahk_id %activeHwnd%
     catch
         return false
+
+    if (nameOnly)
+        return true
 
     if (ctrlNN = "") {
         ctrlHwnd := activeHwnd
@@ -26383,6 +26456,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its ready::it's ready
 ::its really::it's really
 ::its run::it's run
+::its running::it's running
 ::its safe::it's safe
 ::its something::it's something
 ::its started::it's started
