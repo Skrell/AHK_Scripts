@@ -1,5 +1,5 @@
 ; GeneratedWords screened generic rules - AutoHotkey v1 include file.
-; 21,984 proposed rules with no collisions found in the checked word lists.
+; 21,989 proposed rules with no collisions found in the checked word lists.
 ; Include under the main script's existing hotstring eligibility condition and input level.
 ; B: backspace trigger; C: case-sensitive; T: literal replacement; k-1: no key delay.
 ; *: immediate beginning; ?: word ending; ?*: immediate anywhere in a word.
@@ -21990,3 +21990,10 @@
 :BCTk-1?:wivs::wives
 :BCTk-1?:ybod::ybody
 :BCTk-1?:yoen::yone
+
+; Additional screened ei/ie word-start corrections.
+:BCTk-1*:cieli::ceili
+:BCTk-1*:feilde::fielde
+:BCTk-1*:feildi::fieldi
+:BCTk-1*:sieze::seize
+:BCTk-1*:yeilde::yielde

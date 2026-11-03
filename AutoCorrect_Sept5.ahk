@@ -12982,6 +12982,7 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
                              , preferredTarget         := "") {              ; Supplies an optional #32770 native target hint to reduce repeated candidate scans.
 
     global UIA
+    global k_debugTraceExplorerCtrlAddEnabled
     global k_explorerItemsViewContentEvidenceCondition
     global k_explorerItemsViewLoadingCondition
 
@@ -13157,6 +13158,32 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
             loadingEvidenceEl := ""
         loadingLookupElapsedMs := A_TickCount - loadingLookupStartTick
         if IsObject(loadingEvidenceEl) {
+            ; Debug-only raw-parent comparison tests whether a children-only search
+            ; could locate this loading message. Unknown results are not a mismatch.
+            if (k_debugTraceExplorerCtrlAddEnabled && requestId != "") {
+                loadingParentStartTick := A_TickCount
+                loadingParentMatch := "unknown"
+                loadingParentStatus := "query_failed"
+                try {
+                    loadingParentEl := UIA.RawViewWalker.GetParentElement(loadingEvidenceEl)
+                    loadingParentStatus := "parent_unavailable"
+                    if IsObject(loadingParentEl) {
+                        loadingParentSame := UIA.CompareElements(loadingParentEl, itemsEl)
+                        loadingParentStatus := "compare_failed"
+                        if (StrLen(loadingParentSame) > 0) {
+                            loadingParentMatch := loadingParentSame ? 1 : 0
+                            loadingParentStatus := "ok"
+                        }
+                    }
+                } catch e {
+                    loadingParentStatus := "exception"
+                }
+                _DebugTrace_ExplorerCtrlAdd("loading_message_parent"
+                    , "hwnd=" . targetHwndID . " view=raw"
+                    . " directChild=" . loadingParentMatch . " status=" . loadingParentStatus
+                    . " elapsedMs=" . (A_TickCount - loadingParentStartTick)
+                    , False, requestId)
+            }
             probeResult.reason := "working_on_it_visible"
             return probeResult
         }
@@ -24404,6 +24431,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::zto::to
 ::ou::you
 ::u::you
+::em::me
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
