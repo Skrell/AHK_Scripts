@@ -25,6 +25,8 @@ expected correction before the whole-word rule is marked covered.
 
 main() connects the readers and checker, writes GeneratedWords_filtered.ahk,
 and prints counts. The original GeneratedWords.ahk is left unchanged.
+EXCEPTION_WORDS lists valid triggers whose entire definitions are omitted
+from the filtered output, independently of generic-rule coverage.
 Matching is literal and case-sensitive. Inherited options, include expansion
 and backtick-escaped lines are outside the matcher; unprocessed lines are kept.
 """
@@ -32,6 +34,107 @@ and backtick-escaped lines are outside the matcher; unprocessed lines are kept.
 from pathlib import Path
 import re
 from time import monotonic
+
+
+# Exact, case-sensitive triggers that must not become autocorrection rules.
+# Listing "naive" omits ::naive::native from the filtered output.
+# Add another valid word here to omit every generated rule with that trigger.
+EXCEPTION_WORDS = [
+    "ail",
+    "ale",
+    "alp",
+    "ape",
+    "ark",
+    "awn",
+    "bah",
+    "boa",
+    "bog",
+    "boo",
+    "bun",
+    "cor",
+    "cot",
+    "coy",
+    "cub",
+    "dew",
+    "dub",
+    "dud",
+    "eel",
+    "eon",
+    "fib",
+    "fie",
+    "fir",
+    "fro",
+    "fungi",
+    "gab",
+    "gag",
+    "gin",
+    "goo",
+    "hag",
+    "haw",
+    "heir",
+    "hem",
+    "hen",
+    "hid",
+    "hoe",
+    "hog",
+    "hue",
+    "hug",
+    "hut",
+    "ilk",
+    "inventor",
+    "ire",
+    "irk",
+    "jut",
+    "kin",
+    "lad",
+    "loo",
+    "lop",
+    "lug",
+    "moo",
+    "nab",
+    "naive",
+    "nap",
+    "nit",
+    "nod",
+    "oat",
+    "ode",
+    "orb",
+    "ore",
+    "pea",
+    "pep",
+    "ply",
+    "pry",
+    "pug",
+    "pun",
+    "pup",
+    "pus",
+    "rag",
+    "raining",
+    "receding",
+    "rig",
+    "roe",
+    "rub",
+    "rue",
+    "rum",
+    "rut",
+    "sag",
+    "sis",
+    "sop",
+    "sow",
+    "soy",
+    "sty",
+    "sup",
+    "tow",
+    "urn",
+    "vie",
+    "wag",
+    "wee",
+    "weigh",
+    "wig",
+    "woe",
+    "wok",
+    "woo",
+]
 
 
 def _apply_end(rule, text):
@@ -146,9 +249,9 @@ def _read_definitions(path):
     # For the generated example, raw_line includes "::inetrnet::internet"
     # and its newline. line_idx supplies its actual source line number.
     for line_idx, raw_line in enumerate(text.splitlines(keepends=True), start=1):
-        # line becomes "::inetrnet::internet"; raw_line still has its newline.
-        # The parsed text and the original source-line bytes are kept separately.
-        line = raw_line.rstrip("\r\n")
+        # " \t::fie::file\r\n" becomes "::fie::file" for parsing.
+        # raw_line retains the original indentation and newline for output.
+        line = raw_line.rstrip("\r\n").lstrip(" \t")
         # A blank line or "; explanation" creates no dictionary.
         if not line.strip() or line.lstrip().startswith(";"):
             continue
@@ -260,8 +363,9 @@ def main():
 
     Illustrative decisions with covered=[True, False, True] would produce a count
     of 2. The actual count is computed from the real returned decisions at runtime.
-    write_filtered_word_rules() then omits covered source line numbers from a new
-    output file and copies every other original line, including unprocessed lines.
+    write_filtered_word_rules() omits covered source lines and EXCEPTION_WORDS
+    triggers. For ::naive::native, "naive" is listed, so that complete line is
+    omitted even if covered=False. Every other original line is copied.
     """
     # For this module in Programs/hotstring-rule-audit, base_dir is Programs.
     base_dir       = Path(__file__).resolve().parent.parent
@@ -306,14 +410,18 @@ def main():
 
     # Begin the summary count at zero; none of the source containers is changed.
     covered_count = 0
+    exception_count = 0
     # Illustratively, covered values [True, False, True] increment twice.
     # The real runtime decisions determine the actual printed count.
     for decision in decisions:
         if decision["covered"]:
             covered_count += 1
+        # ::naive::native increments this separate count because "naive" is listed.
+        if decision["whole_word_rule"]["trigger"] in EXCEPTION_WORDS:
+            exception_count += 1
 
-    # Covered=True means omit that source line from the filtered copy.
-    # Uncovered and unprocessed source lines are copied without alteration.
+    # Covered=True or a listed exception trigger omits the complete source line.
+    # Other uncovered and unprocessed lines are copied without alteration.
     print(f"Writing filtered output: {filtered_path}", flush=True)
     write_filtered_word_rules(decisions, generated_path, filtered_path, overwrite=overwrite)
 
@@ -321,6 +429,7 @@ def main():
     print(f"Start/middle/end rules read: {len(rules):,}")
     print(f"Whole-word rules read: {len(whole_word_rules):,}")
     print(f"Whole-word rules with identical start/middle/end coverage: {covered_count:,}")
+    print(f"Whole-word rules omitted by exception list: {exception_count:,}")
     print(f"Filtered file: {filtered_path}")
     # The direct-execution block passes this success value to SystemExit.
     return 0
@@ -404,13 +513,16 @@ def read_generated_word_rules(generated_path):
     return whole_word_rules
 
 def write_filtered_word_rules(decisions, generated_path, output_path, overwrite=False):
-    """Copy original lines except those marked covered into a new AHK file.
+    """Copy original lines except covered rules and listed exception triggers.
 
     For example, if a decision for ::inetrnet::internet has covered=True,
-    that whole-word rule's source line number is omitted. A covered=False decision keeps
-    its line. Comments, blank lines and skipped/unprocessed lines are also kept.
+    that whole-word rule's source line number is omitted. A covered=False decision
+    keeps its line unless its trigger is in EXCEPTION_WORDS. For ::naive::native,
+    the listed trigger "naive" omits the complete line, not its correction target.
+    Comments, blank lines and skipped/unprocessed lines are also kept.
 
     Original UTF-8 bytes, BOM state and each retained line ending are preserved.
+    Retained lines are written directly, then verified one line at a time.
     The output must differ from the source. Existing output requires overwrite=True;
     main() only supplies that value after the user confirms the overwrite prompt.
     """
@@ -423,35 +535,35 @@ def write_filtered_word_rules(decisions, generated_path, output_path, overwrite=
     # line numbers refer to the same lines, including any blank/comment lines.
     original_bytes = source.read_bytes()
     original_lines = original_bytes.decode("utf-8-sig").splitlines(keepends=True)
-    covered_lines = set()
+    omitted_lines  = set()
     for decision in decisions:
         whole_word_rule = decision["whole_word_rule"]
-        line_idx = whole_word_rule["line"] - 1
+        line_idx        = whole_word_rule["line"] - 1
+
         if line_idx < 0 or line_idx >= len(original_lines):
             raise ValueError("The source changed after its whole-word rules were read.")
+
         if original_lines[line_idx].encode("utf-8") != whole_word_rule["raw_line"]:
             raise ValueError("The source changed after its whole-word rules were read.")
-        if decision["covered"]:
-            covered_lines.add(whole_word_rule["line"])
 
-    # Preserve a file-level BOM even when its first hotstring is filtered out.
-    filtered_bytes = bytearray()
-    if original_bytes.startswith(b"\xef\xbb\xbf"):
-        filtered_bytes.extend(b"\xef\xbb\xbf")
-
-    # Example: covered_lines={4145} omits only that numbered source line.
-    # All other lines retain their exact text, spacing and individual newline.
-    for line_idx, raw_line in enumerate(original_lines, start=1):
-        if line_idx not in covered_lines:
-            filtered_bytes.extend(raw_line.encode("utf-8"))
+        # "naive" is listed, so omit ::naive::native even when covered=False.
+        if decision["covered"] or whole_word_rule["trigger"] in EXCEPTION_WORDS:
+            omitted_lines.add(whole_word_rule["line"])
 
     if source.read_bytes() != original_bytes:
         raise ValueError("The source changed while preparing the filtered copy.")
+
     # Retain exclusive creation unless overwriting was explicitly approved.
     with target.open("wb" if overwrite else "xb") as output:
-        output.write(filtered_bytes)
-    if target.read_bytes() != filtered_bytes:
-        raise RuntimeError("Filtered output byte verification failed.")
+        # Preserve the original BOM even when the first hotstring is omitted.
+        if original_bytes.startswith(b"\xef\xbb\xbf"):
+            output.write(b"\xef\xbb\xbf")
+
+        # If omitted_lines={4145}, skip line 4145 and write every other line directly.
+        # Each raw_line still includes its original spacing and newline.
+        for line_idx, raw_line in enumerate(original_lines, start=1):
+            if line_idx not in omitted_lines:
+                output.write(raw_line.encode("utf-8"))
 
 
 # Direct execution calls main(); importing leaves the containers unbuilt.
