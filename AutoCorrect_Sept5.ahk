@@ -546,6 +546,9 @@ Global k_explorerCtrlAddTimeoutMs                            := 1200
 Global k_explorerCtrlAddTraceBufferChars                     := 65536
 ; Minimum delay before Refresh begins its verified Details/content probe.
 Global k_explorerCtrlAddRefreshMinimumWaitMs                 := 300
+; BEGIN removable Explorer loading-search experiment: False restores descendant search.
+Global k_explorerItemsViewChildrenLoadingEnabled            := True
+; END removable Explorer loading-search experiment.
 ; Shared UIA evidence accepted as proof that an Items View exposes either an
 ; item or a recognized empty-result message.
 Global k_explorerItemsViewContentEvidenceCondition           := "ControlType=ListItem OR Name=This folder is empty. OR Name=No items match your search."
@@ -12961,6 +12964,56 @@ _ApplyExplorerUIABudget(uiaDeadlineTick, requestedTimeoutMs := 2000) {
     return effectiveTimeoutMs
 }
 
+; BEGIN removable Explorer loading-search experiment.
+; Search immediate children (0x2 = TreeScope_Children). On a debug-only comparison,
+; a descendant hit after a shallow miss still blocks alignment. Existing deadline
+; checks prevent starting the comparison after expiry. Sequential hits can differ
+; if Explorer changes during the two searches; a difference is diagnostic evidence.
+; Removal: delete this helper and its switch, then restore the original FindFirstBy call.
+_FindExplorerLoadingMessageChildren(itemsEl, targetHwnd, requestId, uiaDeadlineTick, transactionTimeout) {
+    global k_debugTraceExplorerCtrlAddEnabled
+    global k_explorerItemsViewLoadingCondition
+
+    childStartTick := A_TickCount
+    childEl := ""
+    childStatus := "ok"
+    try
+        childEl := itemsEl.FindFirstBy(k_explorerItemsViewLoadingCondition, 0x2)
+    catch e
+        childStatus := "exception"
+    childElapsedMs := A_TickCount - childStartTick
+    resultEl := childEl
+
+    if (k_debugTraceExplorerCtrlAddEnabled && requestId != "") {
+        descendantElapsedMs := 0
+        descendantFound := "not_checked"
+        comparisonStatus := "child_found"
+        if !IsObject(childEl) {
+            comparisonStatus := "budget_expired"
+            if (_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+                descendantStartTick := A_TickCount
+                comparisonStatus := "ok"
+                try {
+                    resultEl := itemsEl.FindFirstBy(k_explorerItemsViewLoadingCondition)
+                    descendantFound := IsObject(resultEl) ? 1 : 0
+                } catch e {
+                    comparisonStatus := "exception"
+                    descendantFound := "unknown"
+                }
+                descendantElapsedMs := A_TickCount - descendantStartTick
+            }
+        }
+        _DebugTrace_ExplorerCtrlAdd("loading_search_children_test"
+            , "hwnd=" . targetHwnd . " childFound=" . (IsObject(childEl) ? 1 : 0)
+            . " childStatus=" . childStatus . " childMs=" . childElapsedMs
+            . " descendantFound=" . descendantFound . " descendantMs=" . descendantElapsedMs
+            . " comparisonStatus=" . comparisonStatus
+            , False, requestId)
+    }
+    return resultEl
+}
+; END removable Explorer loading-search experiment.
+
 ; Report Details mode and visible-content readiness independently so the timer
 ; can distinguish not-Details, Details-only, and Details-with-content states.
 ; One shared deadline supplies the remaining requested timeout to all UIA work.
@@ -12983,6 +13036,7 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
 
     global UIA
     global k_debugTraceExplorerCtrlAddEnabled
+    global k_explorerItemsViewChildrenLoadingEnabled
     global k_explorerItemsViewContentEvidenceCondition
     global k_explorerItemsViewLoadingCondition
 
@@ -13152,8 +13206,14 @@ _ProbeExplorerDetailsViewState(targetHwndID                                  ; T
         ; previous folder, so column sizing waits for Explorer to finish rendering.
         loadingEvidenceEl := ""
         loadingLookupStartTick := A_TickCount
-        try
-            loadingEvidenceEl := itemsEl.FindFirstBy(k_explorerItemsViewLoadingCondition)
+        ; Removable experiment: replace this try block with the descendant call below.
+        try {
+            if (targetClass == "CabinetWClass" && k_explorerItemsViewChildrenLoadingEnabled)
+                loadingEvidenceEl := _FindExplorerLoadingMessageChildren(itemsEl, targetHwndID
+                    , requestId, uiaDeadlineTick, transactionTimeout)
+            else
+                loadingEvidenceEl := itemsEl.FindFirstBy(k_explorerItemsViewLoadingCondition)
+        }
         catch e
             loadingEvidenceEl := ""
         loadingLookupElapsedMs := A_TickCount - loadingLookupStartTick
@@ -24145,6 +24205,7 @@ SafeUIA_GetAutoId(el) {
 ::pane::
 ::annotate::
 ::faulty::
+::fungi::
 ;------------------------------------------------------------------------------
 ; Special Exceptions
 ;------------------------------------------------------------------------------
@@ -24493,7 +24554,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:iotn::tion
 :?:soin::sion
 :?:itons::tions
-:?:emnt::ment
 :?:mnet::ment
 :?:metn::ment
 :?:emtn::ment
@@ -24536,14 +24596,12 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::outlien::outline
 ::pipelien::pipeline
 ::timelien::timeline
-:?:oen::one
 :?:iaion::iation
 :?:cims::cisms
 :?:lyl::lly
 :?:aingin::aining
 :?:ainign::aining
 :?:gni::ing
-:?:ign::ing
 :?:ngi::ing
 :?:yda::day
 :?:gound::ground
@@ -24575,12 +24633,10 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:aiton::ation
 :?:ioins::ions
 :?:ceis::cies
-:?:tn::nt
 :?:toir::itor
 
 ; Shared typo endings covering multiple whole-word corrections.
 :?:blility::bility
-:?:veing::ving
 ; direcylt -> directly
 :?:cylt::ctly
 ; direcytl -> directly
@@ -26896,6 +26952,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::parantheses::parentheses
 ::paraphenalia::paraphernalia
 ::parellels::parallels
+::paris::pairs
 ::parituclar::particular
 ::parrakeets::parakeets
 ::parralel::parallel
@@ -28164,4 +28221,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 #include %A_ScriptDir%\GeneratedWords_ScreenedRules.ahk
 #include %A_ScriptDir%\GeneratedWords_filtered.ahk
+:?:emnt::ment
+:?:ign::ing
+:?:oen::one
+:?:tn::nt
+:?:veing::ving
 #If
