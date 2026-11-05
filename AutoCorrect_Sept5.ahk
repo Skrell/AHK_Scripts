@@ -1033,7 +1033,7 @@ Loop, %allwindows%
     winID := allWindows%A_Index%
     WinGet, minState, MinMax, ahk_id %winID%
 
-    If (minState > -1 && IsAltTabWindow(winID)) {
+    if (minState > -1 && IsAltTabWindow(winID)) {
         prevActiveWindows.push(winID)
     }
 }
@@ -1143,7 +1143,7 @@ sleep, 50
 
 WinGetPos, , , , TaskBarHeight, ahk_class Shell_TrayWnd
 
-If (GetMonitorCount() > 1) {
+if (GetMonitorCount() > 1) {
     currentMon := GetMouseDisplayNumber()
     previousMon := currentMon
 }
@@ -2557,19 +2557,19 @@ WhichButton(vPosX, vPosY, hWnd) {
         errorFound := True
     }
 
-    If (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
+    if (vName == "" || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false))) {
         SendMessage, 0x84, 0, (vPosX & 0xFFFF) | (vPosY & 0xFFFF)<<16,, ahk_id %hWnd%, , , , 500
-        If (ErrorLevel == 8)
+        if (ErrorLevel == 8)
             vName := "minimize"
-        Else If (ErrorLevel == 9)
+        else if (ErrorLevel == 9)
             vName := "maximize"
-        Else If (ErrorLevel == 20)
+        else if (ErrorLevel == 20)
             vName := "close"
         ; msgbox, 1 - %vName%
     }
 
     isAltTab := JEE_WinHasAltTabIcon(hWnd)
-    If (isAltTab && vName == "") { ; || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false)))) {
+    if (isAltTab && vName == "") { ; || (!InStr(vName,"close",false) && !InStr(vName,"restore",false) && !InStr(vName,"maximize",false) && !InStr(vName,"minimize",false)))) {
         wx := wy := ww := wh := 0
         SysGet, SM_CXBORDER, 5
         SysGet, SM_CYBORDER, 6
@@ -2585,7 +2585,7 @@ WhichButton(vPosX, vPosY, hWnd) {
         WinGet, isMax, MinMax, ahk_id %hWnd%
 
         titlebarHeight := SM_CYMIN-SM_CYSIZEFRAME
-        If (isMax == 1)
+        if (isMax == 1)
             titlebarHeight := SM_CYSIZE
 
         WinGetPosEx(hWnd, wx, wy, ww, wh)
@@ -2626,7 +2626,7 @@ DetectWin11() {
         Return False
     }
 
-    If (SubStr(version, 1, 4) = "10.0" && buildNumber >= 22000)
+    if (SubStr(version, 1, 4) = "10.0" && buildNumber >= 22000)
         Return True
     Else
         Return False
@@ -2814,7 +2814,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         WinGetClass, vWinClass, % "ahk_id " hWnd
         WinGetTitle, vWinTitle, % "ahk_id " hWnd
         WinGet, vWinProc, ProcessName, ahk_id %hWnd%
-        If (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768") || WinExist("ahk_class MsoCommandBarPopup"))
+        if (vWinClass != "" || vWinTitle != "" || WinExist("ahk_class #32768") || WinExist("ahk_class MsoCommandBarPopup"))
             break
         sleep, 1
     }
@@ -2835,14 +2835,14 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Return
         }
 
-        If (   (!isTaskbarExplorerSpawn && IsOverException(hWnd))
+        if (   (!isTaskbarExplorerSpawn && IsOverException(hWnd))
             || dialogKind == "plain"
             || ((vWinStyle & 0xFFF00000 == 0x94C00000) && vWinClass != "#32770")
             || !WinExist("ahk_id " hWnd)) {
-            If (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
+            if (vWinClass == "#32768" || vWinClass == "OperationStatusWindow") {
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
             }
-            If (dialogKind == "plain") {
+            if (dialogKind == "plain") {
                 ; WinActivate, ahk_id %hWnd%
                 WinSet, AlwaysOnTop, On, ahk_id %hWnd%
                 WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
@@ -2875,7 +2875,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
 
         taskbarExplorerMoveMade := False
         WinGet, state, MinMax, ahk_id %hWnd%
-        If (state > -1) {
+        if (state > -1) {
             if (isTaskbarExplorerSpawn) {
                 taskbarExplorerMoveMade := _MoveTaskbarExplorerSpawn(hWnd, taskbarExplorerClickX, taskbarExplorerClickY)
             }
@@ -2890,16 +2890,16 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             }
         }
 
-        If (vWinClass == "#32770") {
+        if (vWinClass == "#32770") {
             WinSet, AlwaysOnTop, On, ahk_id %hWnd%
         }
-        Else If (vWinClass != "#32770" && WinExist("ahk_class #32770")) {
+        else if (vWinClass != "#32770" && WinExist("ahk_class #32770")) {
             WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
             WinSet, AlwaysOnTop, Off, ahk_class #32770
             WinSet, AlwaysOnTop, Off, ahk_id %hWnd%
         }
 
-        If (InStr(vWinTitle, "Save", False) && vWinClass != "#32770") {
+        if (InStr(vWinTitle, "Save", False) && vWinClass != "#32770") {
             LbuttonEnabled := True
             Thread, NoTimers, False
             WinSet, AlwaysOnTop, On,  ahk_id %hWnd%
@@ -2919,7 +2919,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             Loop, 99 {
                 sleep, 1
                 ControlGetFocus, initFocusedCtrl, ahk_id %hWnd%
-                If (initFocusedCtrl != "")
+                if (initFocusedCtrl != "")
                     break
             }
         }
@@ -2962,12 +2962,12 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
                 prevActiveWindows.RemoveAt(i)
             Else
                 ++i
-            If (GetKeyState("Lbutton", "P")) {
+            if (GetKeyState("Lbutton", "P")) {
                 break
             }
         }
     }
-    Else {
+    else {
         Thread, NoTimers, False
     }
 
@@ -3071,7 +3071,7 @@ $~^Enter::
     Loop, %myWindow%
     {
         ControlGet, myOkay, Hwnd,, OK, % "ahk_id " myWindow%A_Index%
-        If (myOkay) {
+        if (myOkay) {
             ControlClick,, ahk_id %myOkay%,,,2
             hwndID := "ahk_id " myWindow%A_Index%
             sleep, 400
@@ -3968,7 +3968,7 @@ Return
 
 IsConsoleWindow() {
     WinGetClass, targetClass, A
-    If (targetClass == "mintty" || targetClass == "CASCADIA_HOSTING_WINDOW_CLASS" || targetClass == "ConsoleWindowClass")
+    if (targetClass == "mintty" || targetClass == "CASCADIA_HOSTING_WINDOW_CLASS" || targetClass == "ConsoleWindowClass")
         Return True
     Else
         Return False
@@ -4059,7 +4059,7 @@ $*MButton::
     }
 
     WinGetClass, mButtonTargetClass, ahk_id %mButtonTargetHwnd%
-    If (k_skipClasses.HasKey(mButtonTargetClass)) {
+    if (k_skipClasses.HasKey(mButtonTargetClass)) {
         ; For excluded classes, fall back to a normal MButton click and tear down the
         ; temporary RButton suppression state on the way out.
         KeyWait, Mbutton, U T3
@@ -4078,7 +4078,7 @@ $*MButton::
 
     BlockInput, MouseMove
     WinGetPosEx(mButtonTargetHwnd, wx0, wy0, ww, wh, offsetX, offsetY)
-    If (ww = "" || wh = "") {
+    if (ww = "" || wh = "") {
         BlockInput, MouseMoveOff
         KeyWait, Mbutton, U T3
         Send, {Mbutton}
@@ -4118,11 +4118,11 @@ $*MButton::
 
     If      (mx0 <= leftWinEdge + floor(ww/2) && my0 <= wy0 + floor(wh/2))
         TL := True
-    Else If (mx0 >  leftWinEdge + floor(ww/2) && my0 <= wy0 + floor(wh/2))
+    else if (mx0 >  leftWinEdge + floor(ww/2) && my0 <= wy0 + floor(wh/2))
         TR := True
-    Else If (mx0 <= leftWinEdge + floor(ww/2) && my0 >  wy0 + floor(wh/2))
+    else if (mx0 <= leftWinEdge + floor(ww/2) && my0 >  wy0 + floor(wh/2))
         BL := True
-    Else If (mx0 >  leftWinEdge + floor(ww/2) && my0 >  wy0 + floor(wh/2))
+    else if (mx0 >  leftWinEdge + floor(ww/2) && my0 >  wy0 + floor(wh/2))
         BR := True
 
     BlockInput, MouseMoveOff
@@ -4148,7 +4148,7 @@ $*MButton::
     Critical, On
     while GetKeyState("MButton", "P") {
 
-        If (A_TickCount - initTime < k_SingleClickTime && !GetKeyState("LShift","P")) {
+        if (A_TickCount - initTime < k_SingleClickTime && !GetKeyState("LShift","P")) {
             Sleep, 1
             continue
         }
@@ -4159,7 +4159,7 @@ $*MButton::
 
         ; Yield while physical drag input is unchanged. New cursor movement or
         ; an RButton transition reaches the existing drag logic on the next poll.
-        If (isRbutton == lastInputRButton && mx == lastInputMouseX && my == lastInputMouseY) {
+        if (isRbutton == lastInputRButton && mx == lastInputMouseX && my == lastInputMouseY) {
             Sleep, 8
             continue
         }
@@ -4179,7 +4179,7 @@ $*MButton::
         Else
             switchingBackToMove := False
 
-        If (isRbutton && !isRbutton_last) {
+        if (isRbutton && !isRbutton_last) {
             switchingBacktoResize := True
         }
         Else
@@ -4212,7 +4212,7 @@ $*MButton::
             lastAppliedWindowY := ""
         }
 
-        If (mButtonTargetMinMaxState == 1 && (abs(mx - mx0) > deltaPxTrig || abs(my - my0) > deltaPxTrig)) {
+        if (mButtonTargetMinMaxState == 1 && (abs(mx - mx0) > deltaPxTrig || abs(my - my0) > deltaPxTrig)) {
             BlockInput, Mousemove
             xRatio := (mx-monL)/ww
             yRatio := (my-monT)/wh
@@ -4265,7 +4265,7 @@ $*MButton::
         mxPrev := mx
         myPrev := my
 
-        If (dragHorz_prev != "" && dragHorz != "" && dragHorz_prev != dragHorz)
+        if (dragHorz_prev != "" && dragHorz != "" && dragHorz_prev != dragHorz)
         || (dragVert_prev != "" && dragVert != "" && dragVert_prev != dragVert) {
             mx0 := mx
             my0 := my
@@ -4378,9 +4378,9 @@ $*MButton::
                 cursorIsConfined := False
             }
             ; --- One-way vertical clamp (top/bottom) ---
-            If (virtwy0 < minY)
+            if (virtwy0 < minY)
                 newY := minY
-            Else If (virtwy0 > maxY)
+            else if (virtwy0 > maxY)
                 newY := maxY
             Else
                 newY := virtwy0
@@ -4392,40 +4392,40 @@ $*MButton::
             rightSnapX    := monR - ww  ; X that places the right edge at monitor's right
 
             ; WinGetPosEx(mButtonTargetHwnd, ignoredWindowX, ignoredWindowY, ww, wh)
-            If (snapState = "left") {
+            if (snapState = "left") {
                 ; While snapped left:
                 ; - Push-through: keep dragging left until virtwx0 <= monL - k_BreakAway to break snap
                 ; - Release: drag right until virtwx0 >= monL + k_ReleaseAway to release snap
                 ; ie Have you moved (virtwx0) far enough past the monitor edge (monL) → k_BreakAway/k_ReleaseAway
-                If (virtwx0 <= monL - k_BreakAway || virtwx0 >= monL + k_ReleaseAway) {
+                if (virtwx0 <= monL - k_BreakAway || virtwx0 >= monL + k_ReleaseAway) {
                     snapState := ""
                     newX := virtwx0
-                } Else {
+                } else {
                     newX := monL
                 }
-            } Else If (snapState = "right") {
+            } else if (snapState = "right") {
                 ; While snapped right (window's right edge at monR):
                 ; - Push-through: keep dragging right until virtwx0 >= rightSnapX + k_BreakAway to break snap
                 ; - Release: drag left until virtwx0 <= rightSnapX - k_ReleaseAway to release snap
-                If (virtwx0 >= rightSnapX + k_BreakAway || virtwx0 <= rightSnapX - k_ReleaseAway) {
+                if (virtwx0 >= rightSnapX + k_BreakAway || virtwx0 <= rightSnapX - k_ReleaseAway) {
                     snapState := ""
                     newX := virtwx0
-                } Else {
+                } else {
                     newX := rightSnapX
                 }
-            } Else {
+            } else {
                 ; Not currently snapped: check proximity to edges to start snapping
-                If (Abs(leftWinEdge - monL) <= k_SnapRange && dragHorz == "left") {
+                if (Abs(leftWinEdge - monL) <= k_SnapRange && dragHorz == "left") {
                     snapState := "left"
                     windowSnapped := True
                     newX := monL
                     ; tooltip, snapState %snapState%
-                } Else If (Abs(rightWinEdge - monR) <= k_SnapRange && dragHorz == "right") {
+                } else if (Abs(rightWinEdge - monR) <= k_SnapRange && dragHorz == "right") {
                     snapState := "right"
                     windowSnapped := True
                     newX := rightSnapX
                     ; tooltip, snapState %snapState%
-                } Else {
+                } else {
                     newX := virtwx0
                     ; tooltip, snapState "none" - %virtwx0% - %dx% - %dy%
                 }
@@ -4434,7 +4434,7 @@ $*MButton::
             ; correct for windows' shadows
             newX := newX + offsetX
             ; No horizontal clamping otherwise: allow off-screen left/right
-            If (newX != lastAppliedWindowX || newY != lastAppliedWindowY
+            if (newX != lastAppliedWindowX || newY != lastAppliedWindowY
                 || ww != lastAppliedWindowW || wh != lastAppliedWindowH) {
                 WinMove, ahk_id %mButtonTargetHwnd%, , %newX%, %newY%
                 if (Abs(newX - (wx0 + offsetX)) > deltaPxTrig || Abs(newY - wy0) > deltaPxTrig)
@@ -4445,7 +4445,7 @@ $*MButton::
                 lastAppliedWindowY := newY
             }
         }
-        Else {
+        else {
             gridSize := k_SnapRange
 
             gridDx := (dx < 0 ? floor(dx/gridSize) : ceil(dx/gridSize)) * gridSize
@@ -4453,7 +4453,7 @@ $*MButton::
 
             If      (TL || TR) && (dragVert == "up"   || dragVert == "down") {
                 WinGetPosEx(mButtonTargetHwnd, tx, ty, tw, th)
-                If (dragVert == "up" && ty == minY) {
+                if (dragVert == "up" && ty == minY) {
                     adjustSize := False
                     BlockInput, MouseMove
                     MouseMove, mx, my
@@ -4462,8 +4462,8 @@ $*MButton::
                     sleep, 250
                     BlockInput, MouseMoveOff
                 }
-                Else {
-                    If (dragVert == "up") {
+                else {
+                    if (dragVert == "up") {
                         virtwy0 := wy0 - abs(gridDy)
                         virtwh0 := wh  + abs(gridDy)
                         If ((virtwh0 > maxHU - k_SnapRange) || (virtwy0 < minY + k_SnapRange)) {
@@ -4471,7 +4471,7 @@ $*MButton::
                             virtwh0 := maxHU
                         }
                     }
-                    Else If (dragVert == "down") {
+                    else if (dragVert == "down") {
                         virtwh0 := wh - abs(dy)
                     }
 
@@ -4482,9 +4482,9 @@ $*MButton::
                     newH := virtwh0 + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
                 }
             }
-            Else If (BL || BR) && (dragVert == "up"   || dragVert == "down") {
+            else if (BL || BR) && (dragVert == "up"   || dragVert == "down") {
                 WinGetPosEx(mButtonTargetHwnd, tx, ty, tw, th)
-                If (dragVert == "down" && th == maxHD) {
+                if (dragVert == "down" && th == maxHD) {
                     adjustSize := False
                     BlockInput, MouseMove
                     MouseMove, mx, my
@@ -4494,13 +4494,13 @@ $*MButton::
                     BlockInput, MouseMoveOff
                 }
                 else {
-                    If (dragVert == "down") {
+                    if (dragVert == "down") {
                         ; virtwy0 doesnt matter since it remains fixed when adjusting width
                         virtwh0 := wh + abs(gridDy)
-                        If (virtwh0 > maxHD - k_SnapRange)
+                        if (virtwh0 > maxHD - k_SnapRange)
                             virtwh0 := maxHD
                     }
-                    Else If (dragVert == "up") {
+                    else if (dragVert == "up") {
                         virtwh0 := wh - abs(dy)
                     }
 
@@ -4511,9 +4511,9 @@ $*MButton::
                     newH := virtwh0 + 2*abs(offsetY) + 1 ; these adjustments are ONLY needed for WinMove, WinGetPosEx is 100% accurate
                 }
             }
-            Else If (TL || BL) && (dragHorz == "left" || dragHorz == "right") {
+            else if (TL || BL) && (dragHorz == "left" || dragHorz == "right") {
                 WinGetPosEx(mButtonTargetHwnd, tx, ty, tw, th)
-                If (dragHorz == "left" && tx == minX) {
+                if (dragHorz == "left" && tx == minX) {
                     adjustSize := False
                     BlockInput, MouseMove
                     MouseMove, mx, my
@@ -4522,8 +4522,8 @@ $*MButton::
                     sleep, 250
                     BlockInput, MouseMoveOff
                 }
-                Else {
-                    If (dragHorz == "left") {
+                else {
+                    if (dragHorz == "left") {
                         virtwx0 := wx0 - abs(gridDx)
                         virtww0 := ww  + abs(gridDx)
                         If ((virtww0 > (maxWL - k_SnapRange)) || (virtwx0 < (minX + k_SnapRange))) {
@@ -4531,7 +4531,7 @@ $*MButton::
                             virtww0 := maxWL
                         }
                     }
-                    Else If (dragHorz == "right") {
+                    else if (dragHorz == "right") {
                         virtww0 := ww - abs(dx)
                     }
 
@@ -4542,9 +4542,9 @@ $*MButton::
                     newH :=
                 }
             }
-            Else If (TR || BR) && (dragHorz == "left" || dragHorz == "right") {
+            else if (TR || BR) && (dragHorz == "left" || dragHorz == "right") {
                 WinGetPosEx(mButtonTargetHwnd, tx, ty, tw, th)
-                If (dragHorz == "right" && tx+tw == monR) {
+                if (dragHorz == "right" && tx+tw == monR) {
                     adjustSize := False
                     BlockInput, MouseMove
                     MouseMove, mx, my
@@ -4553,14 +4553,14 @@ $*MButton::
                     sleep, 250
                     BlockInput, MouseMoveOff
                 }
-                Else {
-                    If (dragHorz == "right") {
+                else {
+                    if (dragHorz == "right") {
                         ; virtwx0 doesnt matter since it remains fixed when adjusting width
                         virtww0 := ww + abs(gridDx)
-                        If (virtww0 > (maxWR - k_SnapRange))
+                        if (virtww0 > (maxWR - k_SnapRange))
                             virtww0 := maxWR
                     }
-                    Else If (dragHorz == "left") {
+                    else if (dragHorz == "left") {
                         virtww0 := ww - abs(dx)
                     }
 
@@ -4574,7 +4574,7 @@ $*MButton::
 
             ; correct for windows' shadows
             If adjustSize {
-                If (newX != lastAppliedWindowX || newY != lastAppliedWindowY
+                if (newX != lastAppliedWindowX || newY != lastAppliedWindowY
                     || newW != lastAppliedWindowW || newH != lastAppliedWindowH) {
                     WinMove, ahk_id %mButtonTargetHwnd%, , %newX%, %newY%, %newW%, %newH%
                     lastAppliedWindowH := newH
@@ -4585,7 +4585,7 @@ $*MButton::
             }
         }
 
-        If (windowSnapped) {
+        if (windowSnapped) {
             BlockInput, MouseMove
             sleep, 250
             BlockInput, MouseMoveOff
@@ -5060,6 +5060,7 @@ _FastInsertWrappedTextIntoClassicControl(windowId, controlHwnd, text) {
             . "; selection=" . NumGet(selectionStartAfter, 0, "UInt") . "-" . NumGet(selectionEndAfter, 0, "UInt")
             . "; textLength=" . textLengthAfter)
     }
+
     return sendSucceeded ? "inserted" : "message_uncertain"
 }
 
@@ -5138,6 +5139,7 @@ _MoveCaretToIndexInClassicControl(windowId, controlHwnd, caretIndex) {
         return false
 
     DllCall("SendMessage", "Ptr", controlHwnd, "UInt", emSetSel, "Ptr", caretIndex, "Ptr", caretIndex, "Ptr")
+
     return true
 }
 
@@ -5261,8 +5263,9 @@ _SwapSelectedBooleanLiteral() {
     ; down event after Ctrl+C or Ctrl+V; its later physical release could then
     ; activate the target application's menu bar.
     modifiersToSync := ""
-    targetWindowId := DllCall("user32\GetForegroundWindow", "Ptr")
-    selectedText   := Clip("", "", "", modifiersToSync, targetWindowId)
+    targetWindowId  := DllCall("user32\GetForegroundWindow", "Ptr")
+    selectedText    := Clip("", "", "", modifiersToSync, targetWindowId)
+
     if (selectedText = "")
         return false
 
@@ -5414,11 +5417,11 @@ Return
 
 !+;::
     StopAutoFix := True
-    If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < k_DoubleClickTime) {
+    if (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey < k_DoubleClickTime) {
         Send, {Home}
         Send, +{End}
     }
-    Else {
+    else {
         Send, +{End}
     }
     Hotstring("Reset")
@@ -5575,7 +5578,7 @@ $~Enter::
         Keywait, Enter, U T3
 
         WinGet, checkID, ID, A
-        If (checkID == entID)
+        if (checkID == entID)
             SendCtrlAdd(entID, entCl)
         }
 Return
@@ -5589,7 +5592,7 @@ $~F2::
 
     Loop, 10000
     {
-        If (GetKeyState("Enter") || GetKeyState("Lbutton") || GetKeyState("Esc"))
+        if (GetKeyState("Enter") || GetKeyState("Lbutton") || GetKeyState("Esc"))
             break
         sleep, 1
     }
@@ -5655,25 +5658,31 @@ prevChromeTab()
         {
             this_id := allChromeWindows%A_Index%
             WinGetTitle, titID, ahk_id %this_id%
-            If (titID == "")
+            if (titID == "")
                 break
         }
-        If (titID == "")
+
+        if (titID == "")
             break
+
         sleep, 20
-        If (A_Index == 99) {
+
+        if (A_Index == 99) {
             StopRecursion := False
             Return
         }
     }
+
     sleep, 250
     WinActivate, ahk_id %this_id%
     ; ControlFocus, Chrome_RenderWidgetHostHWND1, ahk_id %this_id%
     Send, {Enter}
     sleep, 150
+
     If WinExist("ahk_id " . this_id) && WinActive("ahk_id " . this_id) {
         Send, {tab}{tab}{Enter}
     }
+
     tooltip, switched!
     sleep, 1000
     tooltip,
@@ -5723,7 +5732,7 @@ $Esc::
     escHwndID := FindTopMostWindow()
     WinGetTitle, escTitle, ahk_id %escHwndID%
 
-    If (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey  < k_DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
+    if (A_PriorHotKey == A_ThisHotKey && A_TimeSincePriorHotkey  < k_DoubleClickTime && escHwndID == escHwndID_old && escTitle == escTitle_old) {
 
         executedOnce   := False
 
@@ -5768,9 +5777,9 @@ $Esc::
 
                     testhwndID := GetVisibleHwndByPartialClass("Dialog")
                     If ((WinExist("ahk_class #32770") || WinExist("ahk_class NUIDialog") || testhwndID) && !executedOnce) {
-                        If (testhwndID)
+                        if (testhwndID)
                             WinGet, dialog_hwndID, ID, ahk_id %testhwndID%
-                        Else If (WinExist("ahk_class NUIDialog"))
+                        else if (WinExist("ahk_class NUIDialog"))
                             WinGet, dialog_hwndID, ID, ahk_class NUIDialog
                         Else
                             WinGet, dialog_hwndID, ID, ahk_class #32770
@@ -5783,12 +5792,12 @@ $Esc::
                     }
                 }
                 sleep, 125
-                If (WinExist("ahk_id " . escHwndID) && !executedOnce) {
+                if (WinExist("ahk_id " . escHwndID) && !executedOnce) {
                     WinGet, kill_pid, PID, ahk_id %escHwndID%
                     Process, Close, %kill_pid%
                 }
 
-                If (WinExist("ahk_id " . escHwndID) && !executedOnce) {
+                if (WinExist("ahk_id " . escHwndID) && !executedOnce) {
                     WinKill , ahk_id %escHwndID%
                     Loop, 50
                     {
@@ -5802,7 +5811,7 @@ $Esc::
                         WinKill , ahk_id %escHwndID%
                     }
                 }
-                Else {
+                else {
                     ; tooltip, tried to clear
                     Overlay_Hide(30)
                     ClearWindowTitlePopup()
@@ -5889,7 +5898,7 @@ Altup:
 
     If startHighlight && !CanceledWinSwap {
         WinGet, actWndID, ID, A
-        If (LclickSelected && hitTAB && !hitTilde && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
+        if (LclickSelected && hitTAB && !hitTilde && (GroupedWindows.length() > 2) && actWndID != ValidWindows[1]) {
             BeginBlockKeys()
             GoSub, SortAllWins
             EndBlockKeys()
@@ -5930,24 +5939,24 @@ SortAllWins:
     if (!k_useDirectForegroundActivationTrial && k_useSetWindowPosZOrderReordering && _ReorderWindowStackNoActivate(ValidWindows, _winIdD)) {
         WinActivate, % "ahk_id " _winIdD
         Critical, Off
-    Return
+        Return
     }
 
     directSuccessCount := 0
-    sortStartTick := A_TickCount
+    sortStartTick      := A_TickCount
     WinSet, AlwaysOnTop, Off, ahk_id %_winIdD%
     WinSet, AlwaysOnTop, On,  ahk_id %_winIdD%
 
-    If (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4) {
+    if (_winIdD != ValidWindows[4] && ValidWindows.MaxIndex() >= 4) {
         directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[4])
     }
-    If (_winIdD != ValidWindows[3] && ValidWindows.MaxIndex() >= 3) {
+    if (_winIdD != ValidWindows[3] && ValidWindows.MaxIndex() >= 3) {
         directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[3])
     }
-    If (_winIdD != ValidWindows[2] && ValidWindows.MaxIndex() >= 2) {
+    if (_winIdD != ValidWindows[2] && ValidWindows.MaxIndex() >= 2) {
         directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[2])
     }
-    If (_winIdD != ValidWindows[1] && ValidWindows.MaxIndex() >= 1) {
+    if (_winIdD != ValidWindows[1] && ValidWindows.MaxIndex() >= 1) {
         directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[1])
     }
 
@@ -5968,7 +5977,7 @@ SortGroupedWins:
         WinActivate, % "ahk_id " selectedHwnd
         _DebugTrace_AltTabZOrder("sort_grouped_final", selectedHwnd, "path=native")
         Critical, Off
-    Return
+        Return
     }
 
     _DebugTrace_AltTabZOrder("sort_grouped_fallback", selectedHwnd)
@@ -5977,16 +5986,16 @@ SortGroupedWins:
     WinSet, AlwaysOnTop, Off, % "ahk_id " GroupedWindows[cycleCount]
     WinSet, AlwaysOnTop, On,  % "ahk_id " GroupedWindows[cycleCount]
 
-    If (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) {
+    if (ValidWindows.MaxIndex() >= 4 && GroupedWindows[cycleCount] != ValidWindows[4]) {
         directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[4])
     }
-    If (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) {
+    if (ValidWindows.MaxIndex() >= 3 && GroupedWindows[cycleCount] != ValidWindows[3]) {
         directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[3])
     }
-    If (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) {
+    if (ValidWindows.MaxIndex() >= 2 && GroupedWindows[cycleCount] != ValidWindows[2]) {
         directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[2])
     }
-    If (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) {
+    if (ValidWindows.MaxIndex() >= 1 && GroupedWindows[cycleCount] != ValidWindows[1]) {
         directSuccessCount += _ActivateWindowWithForegroundTrial(ValidWindows[1])
     }
 
@@ -6009,15 +6018,15 @@ ResetWins:
     validWindowCount := ValidWindows.MaxIndex()
     if (k_useSetWindowPosZOrderReordering && validWindowCount && _ReorderWindowStackNoActivate(ValidWindows)) {
         WinActivate, % "ahk_id " ValidWindows[1]
-    Return
+        Return
     }
-    If (ValidWindows.MaxIndex() >= 4)
+    if (ValidWindows.MaxIndex() >= 4)
         WinActivate, % "ahk_id " ValidWindows[4]
-    If (ValidWindows.MaxIndex() >= 3)
+    if (ValidWindows.MaxIndex() >= 3)
         WinActivate, % "ahk_id " ValidWindows[3]
-    If (ValidWindows.MaxIndex() >= 2)
+    if (ValidWindows.MaxIndex() >= 2)
         WinActivate, % "ahk_id " ValidWindows[2]
-    If (ValidWindows.MaxIndex() >= 1)
+    if (ValidWindows.MaxIndex() >= 1)
         WinActivate, % "ahk_id " ValidWindows[1]
 Return
 
@@ -6125,6 +6134,7 @@ _ReorderWindowStackNoActivate(windows, selectedHwnd := 0) {
         if (actualOrder.Length() = expectedOrder.Length())
             break
     }
+
     for idx, expectedHwnd in expectedOrder
     {
         if (actualOrder[idx] != expectedHwnd) {
@@ -6173,7 +6183,7 @@ $!+Tab::
         }
         ; tooltip, %cycleCount%
         If !CanceledWinSwap {
-            If (cycleCount > 2) {
+            if (cycleCount > 2) {
                 startHighlight := True
                 Overlay_FadeTo(overlayHwnd, 255, 5)
             }
@@ -6213,18 +6223,18 @@ Return
         {
             hwndID := allWindows%A_Index%
 
-            If (GetMonitorCount() > 1) {
+            if (GetMonitorCount() > 1) {
                 currentMon := GetMouseDisplayNumber()
                 currentMonHasActWin := IsWindowOnDisplayNumber(hwndID, currentMon)
             }
-            Else {
+            else {
                 currentMonHasActWin := True
             }
 
-            If (currentMonHasActWin) {
-                If (IsAltTabWindow(hwndID)) {
+            if (currentMonHasActWin) {
+                if (IsAltTabWindow(hwndID)) {
                     WinGet, state, MinMax, ahk_id %hwndID%
-                    If (state > -1) {
+                    if (state > -1) {
                         ValidWindows.push(hwndID)
                     }
                 }
@@ -6238,7 +6248,7 @@ Return
         }
 
         If !CanceledWinSwap {
-            If (cycleCount > 2) {
+            if (cycleCount > 2) {
                 startHighlight := True
                 Overlay_FadeTo(overlayHwnd, 255, 5)
             }
@@ -6301,7 +6311,7 @@ Return
 
 #If GetKeyState("LAlt", "P")
 $*LButton::
-    If (hitTab || hitTilde) {
+    if (hitTab || hitTilde) {
         LclickSelected := True
 
         MouseGetPos, , , _winIdD,
@@ -6334,9 +6344,9 @@ $*LButton::
             sleep, 5
         }
     }
-    Else {
+    else {
         clickTick := A_TickCount
-        If (priorAltClickTick && clickTick - priorAltClickTick < k_DoubleClickTime) {
+        if (priorAltClickTick && clickTick - priorAltClickTick < k_DoubleClickTime) {
             ; Clear the matched pair before injecting input so the next pair starts cleanly.
             priorAltClickTick := 0
 
@@ -6514,28 +6524,28 @@ Cycle() {
         Critical On
         hwndID := allWindows%A_Index%
 
-        If (GetMonitorCount() > 1) {
+        if (GetMonitorCount() > 1) {
             currentMonHasActWin := IsWindowOnDisplayNumber(hwndID, currentMon)
         }
-        Else {
+        else {
             currentMonHasActWin := True
         }
 
-        If (currentMonHasActWin) {
+        if (currentMonHasActWin) {
             ; If (!IsWindowElevated(hwndID) && IsAltTabWindow(hwndID)) {
-            If (IsAltTabWindow(hwndID)) {
+            if (IsAltTabWindow(hwndID)) {
                 WinGet, state, MinMax, ahk_id %hwndID%
-                If (state > -1) {
+                if (state > -1) {
                     ValidWindows.push(hwndID)
                     GroupedWindows.push(hwndID)
 
-                    If (GroupedWindows.MaxIndex() == 2) {
+                    if (GroupedWindows.MaxIndex() == 2) {
                         WinActivate, % "ahk_id " hwndID
                         cycleCount := 2
-                        If (hwndID == actId) {
+                        if (hwndID == actId) {
                             failedSwitch := True
                         }
-                        Else {
+                        else {
                             Critical, Off
 
                             WinGetPosEx(hwndID, wx, wy, ww, wh)
@@ -6545,7 +6555,7 @@ Cycle() {
                                 Return 0
                         }
                     }
-                    If (GroupedWindows.MaxIndex() == 3 && failedSwitch) {
+                    if (GroupedWindows.MaxIndex() == 3 && failedSwitch) {
                         WinActivate, % "ahk_id " hwndID
                         cycleCount := 3
                         Critical, Off
@@ -6566,7 +6576,7 @@ Cycle() {
     }
     Critical, Off
 
-    If (GroupedWindows.length() <= 1) {
+    if (GroupedWindows.length() <= 1) {
         tooltip, % "Only " GroupedWindows.length() " Window to Show..."
         sleep, 1000
         tooltip,
@@ -6588,7 +6598,7 @@ Cycle() {
         If LclickSelected || CanceledWinSwap
             break
 
-        If (GroupedWindows.length() >= 2)
+        if (GroupedWindows.length() >= 2)
         {
             ; Each additional physical Tab press follows this execution sequence:
             ; 1. DrawWindowTitlePopup() can set bufferedCycleAdvance := True when one of
@@ -6597,7 +6607,7 @@ Cycle() {
             ;    a later DrawWindowTitlePopup() call can represent one later Tab press.
             ; 3. If bufferedAdvance is False, KeyWait, Tab, D T0.1 instead waits up to
             ;    100 ms for Tab to become physically down and sets ErrorLevel = 0 if seen.
-            ; 4. If (bufferedAdvance || !ErrorLevel) evaluates True, update cycleCount,
+            ; 4. if (bufferedAdvance || !ErrorLevel) evaluates True, update cycleCount,
             ;    assign gwHwndId, and execute WinActivate for that grouped window.
             ; 5. KeyWait, Tab, U then waits only for Tab to become physically released;
             ;    it does not store another Tab-down event. After it returns, the next
@@ -6609,16 +6619,16 @@ Cycle() {
             If !bufferedAdvance
                 KeyWait, Tab, D T0.1
 
-            If (bufferedAdvance || !ErrorLevel)
+            if (bufferedAdvance || !ErrorLevel)
             {
                 If !GetKeyState("LShift","P") {
-                    If (cycleCount == GroupedWindows.MaxIndex())
+                    if (cycleCount == GroupedWindows.MaxIndex())
                         cycleCount := 1
                     Else
                         cycleCount += 1
                 }
                 Else If GetKeyState("LShift","P") {
-                    If (cycleCount == 1)
+                    if (cycleCount == 1)
                         cycleCount := GroupedWindows.MaxIndex()
                     Else
                         cycleCount -= 1
@@ -6677,25 +6687,25 @@ CycleAppWindows(activeProcessName, activeClass) {
         WinGetTitle, tit, ahk_id %hwndID%
         WinGet, mmState, MinMax, ahk_id %hwndID%
 
-        If (mmState == -1) {
+        if (mmState == -1) {
             ; Minimized windows are classified by the monitor they would restore
             ; onto, not by their current minimized icon state.
             restoredMon := GetWindowDisplayNumber(hwndID)
-            If (restoredMon = currentMon)
+            if (restoredMon = currentMon)
                 CurrentMonitorMinimizedWindows.Push(hwndID)
             Else
                 OtherMonitorMinimizedWindows.Push(hwndID)
             continue
         }
 
-        If (GetMonitorCount() > 1) {
+        if (GetMonitorCount() > 1) {
             currentMonHasActWin := IsWindowOnDisplayNumber(hwndId, currentMon)
         }
-        Else {
+        else {
             currentMonHasActWin := True
         }
 
-        If (currentMonHasActWin && tit != "")
+        if (currentMonHasActWin && tit != "")
             CurrentMonitorWindows.Push(hwndID)
     }
     ; Rotate phase 1 so the active window becomes GroupedWindows[1]. Since the
@@ -6703,12 +6713,12 @@ CycleAppWindows(activeProcessName, activeClass) {
     ; current-monitor sibling window instead of immediately restoring a minimized
     ; sibling from phases 2 or 3.
     for idx, grpHwndID in CurrentMonitorWindows {
-        If (grpHwndID = activeHwndID) {
+        if (grpHwndID = activeHwndID) {
             activeCurrentMonitorWindowIndex := idx
             break
         }
     }
-    If (activeCurrentMonitorWindowIndex > 0) {
+    if (activeCurrentMonitorWindowIndex > 0) {
         ; Rebuild phase 1 starting from the active visible sibling window.
         ; This makes GroupedWindows[1] the active window, so the existing
         ; cycleCount := 2 startup behavior advances first to the next visible
@@ -6719,12 +6729,12 @@ CycleAppWindows(activeProcessName, activeClass) {
             ; to the front once we pass the end. The result is a rotated copy of
             ; CurrentMonitorWindows that preserves the original sibling order.
             reorderedIndex := activeCurrentMonitorWindowIndex + A_Index - 1
-            If (reorderedIndex > CurrentMonitorWindows.Length())
+            if (reorderedIndex > CurrentMonitorWindows.Length())
                 reorderedIndex := reorderedIndex - CurrentMonitorWindows.Length()
             GroupedWindows.Push(CurrentMonitorWindows[reorderedIndex])
         }
     }
-    Else {
+    else {
         for idx, grpHwndID in CurrentMonitorWindows
             GroupedWindows.Push(grpHwndID)
     }
@@ -6742,7 +6752,7 @@ CycleAppWindows(activeProcessName, activeClass) {
     Critical, Off
 
     numWindows := GroupedWindows.length()
-    If (numWindows <= 1) {
+    if (numWindows <= 1) {
         Loop, 100 {
             Tooltip, Only %numWindows% Window(s) found!
             sleep, 10
@@ -6754,7 +6764,7 @@ CycleAppWindows(activeProcessName, activeClass) {
     gwHwndId := GroupedWindows[cycleCount] ; get ready to activate next window
 
     WinGet, mmState, MinMax, ahk_id %gwHwndId%
-    If (GetMonitorCount() > 1 && mmState == -1) {
+    if (GetMonitorCount() > 1 && mmState == -1) {
         windowsToMinimize.push(GroupedWindows[cycleCount])
     }
     WinActivate, ahk_id %gwHwndId%
@@ -6774,7 +6784,7 @@ CycleAppWindows(activeProcessName, activeClass) {
     DrawWindowTitlePopup(gwHwndId, tits, pp)
 
     cycleCount++
-    If (cycleCount > numWindows) {
+    if (cycleCount > numWindows) {
         cycleCount := 1
     }
     gwHwndId   := GroupedWindows[cycleCount]
@@ -6791,10 +6801,10 @@ CycleAppWindows(activeProcessName, activeClass) {
         If !bufferedAdvance
             KeyWait, ``, D T0.1
 
-        If (bufferedAdvance || !ErrorLevel)
+        if (bufferedAdvance || !ErrorLevel)
         {
             WinGet, mmState, MinMax, ahk_id %gwHwndId%
-            If (GetMonitorCount() > 1 && mmState == -1) {
+            if (GetMonitorCount() > 1 && mmState == -1) {
                 windowsToMinimize.push(gwHwndId)
             }
             WinActivate, ahk_id %gwHwndId%
@@ -6811,7 +6821,7 @@ CycleAppWindows(activeProcessName, activeClass) {
             DrawWindowTitlePopup(gwHwndId, tits, pp)
 
             cycleCount++
-            If (cycleCount > numWindows) {
+            if (cycleCount > numWindows) {
                 cycleCount := 1
             }
             gwHwndId   := GroupedWindows[cycleCount]
@@ -6822,9 +6832,9 @@ CycleAppWindows(activeProcessName, activeClass) {
                 ; Flattening the three phases into GroupedWindows means phase 3 can
                 ; legally contain minimized windows restored to another monitor.
                 ; Only visible windows are still constrained to the current monitor.
-                If (mmState > -1 && !IsWindowOnDisplayNumber(gwHwndId, currentMon)) {
+                if (mmState > -1 && !IsWindowOnDisplayNumber(gwHwndId, currentMon)) {
                     cycleCount++
-                    If (cycleCount > numWindows)
+                    if (cycleCount > numWindows)
                         cycleCount := 1
                     gwHwndId := GroupedWindows[cycleCount]
                 }
@@ -6838,11 +6848,11 @@ CycleAppWindows(activeProcessName, activeClass) {
     Loop, % windowsToMinimize.length()
     {
         tempId := windowsToMinimize[A_Index]
-        If (tempId != lastActWinID) {
+        if (tempId != lastActWinID) {
             WinMinimize, ahk_id %tempId%
             sleep, 100
         }
-        Else {
+        else {
             If !IsWindowOnDisplayNumber(tempId, currentMon) {
                 WinActivate, ahk_id %tempId%
                 Send, #+{Left}
@@ -6851,7 +6861,7 @@ CycleAppWindows(activeProcessName, activeClass) {
     }
 
     cycleCount := cycleCount - 1 ; correct for final increment of cycleCount++
-    If (cycleCount <= 0)
+    if (cycleCount <= 0)
         cycleCount := GroupedWindows.MaxIndex()
 
     Return cycleCount
@@ -6867,7 +6877,7 @@ RegExEscape(s) {
 }
 
 LaunchWinFind:
-    If (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (0.75*(k_DoubleClickTime/2))) {
+    if (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (0.75*(k_DoubleClickTime/2))) {
         StopRecursion   := True
         SetTimer, KeyTrack,   Off
         ; SetTimer, MouseTrack, Off
@@ -6919,7 +6929,7 @@ LaunchWinFind:
                 allWinArray.Push(finalTitle)
             }
 
-            If (allWinArray.length() == 0) {
+            if (allWinArray.length() == 0) {
                 ToolTip, % "No matches found for """ UserInputTrimmed """ out of " totalCount "..."
                 Sleep, 1500
                 Tooltip,
@@ -6959,15 +6969,15 @@ LaunchWinFind:
                 titleEntry     := Trim(splitEntry2[3])
 
                 WinGet, Path, ProcessPath, ahk_exe %procEntry%
-                If (minState == -1 )
+                if (minState == -1 )
                     finalEntry   := % desktopEntry ":  [" titleEntry "] (" procEntry ")"
                 Else
                     finalEntry   := % desktopEntry ":  " titleEntry " (" procEntry ")"
 
-                If (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
+                if (desktopEntryLast != ""  && (desktopEntryLast != desktopEntry)) {
                     Menu, windows, Add
                 }
-                If (finalEntry != "" && titleEntry != "") {
+                if (finalEntry != "" && titleEntry != "") {
                     totalMenuItemCount := totalMenuItemCount + 1
                     onlyTitleFound := finalEntry
 
@@ -6981,11 +6991,11 @@ LaunchWinFind:
             }
             Critical Off
 
-            If (totalMenuItemCount == 1 && onlyTitleFound != "") {
+            if (totalMenuItemCount == 1 && onlyTitleFound != "") {
                 ; tooltip, total found windows : %totalMenuItemCount%
                 GoSub, ActivateWindow
             }
-            Else If (totalMenuItemCount > 1) {
+            else if (totalMenuItemCount > 1) {
                 SetTimer, RunDynaWinFind, -1
 
                 CoordMode, Mouse, Screen
@@ -7001,7 +7011,7 @@ LaunchWinFind:
                 ; Gui, ShadowFrFull:  Hide
                 Menu, windows, deleteAll
             }
-            Else {
+            else {
                 Loop,100 {
                     tooltip, No windows found!
                     sleep, 10
@@ -7024,7 +7034,7 @@ ActivateWindow:
     result       := {}
     CalcID       :=
 
-    If (totalMenuItemCount == 1 && onlyTitleFound != "")
+    if (totalMenuItemCount == 1 && onlyTitleFound != "")
         thisMenuItem := onlyTitleFound
     Else
         thisMenuItem := A_ThisMenuItem
@@ -7036,29 +7046,29 @@ ActivateWindow:
     fulltitle := Trim(fulltitle)
     RegExMatch(fulltitle, "O)(\]$)", result)
     ; msgbox, % fulltitle " with " result.Count()
-    If (result.Count() > 0) {
+    if (result.Count() > 0) {
         fulltitle := RegExReplace(fulltitle, "^\[", "")
         fulltitle := Trim(fulltitle)
         fulltitle := RegExReplace(fulltitle, "\]?\s*$", "")
         fulltitle := Trim(fulltitle)
     }
 
-    If (fulltitle == "Calculator") {
+    if (fulltitle == "Calculator") {
         ; https://www.autohotkey.com/boards/viewtopic.php?t=43997
         WinGet, CalcIDs, List, Calculator
-        If (CalcIDs = 1) ; Calc is NOT minimized
+        if (CalcIDs = 1) ; Calc is NOT minimized
             CalcID := CalcIDs1
         Else
             CalcID := CalcIDs2 ; Calc is Minimized use 2nd ID
         WinActivate, ahk_id %CalcID%
         WinSet, AlwaysOnTop, On, ahk_id %CalcID%
     }
-    Else {
+    else {
         WinActivate, %fulltitle%
         WinSet, AlwaysOnTop, On, %fulltitle%
     }
 
-    If (CalcID)
+    if (CalcID)
         WinGet, hwndOfTitle, ID, %CalcID%
     Else
         WinGet, hwndOfTitle, ID, %fulltitle%
@@ -7067,7 +7077,7 @@ ActivateWindow:
     Overlay_ShowHole(wx, wy, ww, wh, k_Opacity,, 60)
 
     WinGet, actWinState, MinMax, %fulltitle%
-    If (actWinState == -1)
+    if (actWinState == -1)
         sleep, 125
 
     sleep, 400
@@ -7092,7 +7102,7 @@ ClearRect(hwnd := "") {
         Loop, 5
         {
             DrawingRect := False
-            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            if (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 Critical, Off
                 Gui, GUIHighlighter: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
@@ -7108,14 +7118,14 @@ ClearRect(hwnd := "") {
         {
             current_trans := 255-(decrement_amount * A_Index)
             WinSet, Transparent, %current_trans%, ahk_id %Highlighter%
-            If (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
+            if (GetKeyState("LAlt", "P") || GetKeyState("LButton", "P")) {
                 Critical, Off
                 Gui, GUIHighlighter: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
                 WinSet, AlwaysOnTop, Off, ahk_id %Highlighter%
                 Return
             }
-            If (hwnd != "" && !WinExist("ahk_id " . hwnd)) {
+            if (hwnd != "" && !WinExist("ahk_id " . hwnd)) {
                 Critical, Off
                 Gui, GUIHighlighter: Hide
                 WinSet, Transparent, 255, ahk_id %Highlighter%
@@ -7139,12 +7149,12 @@ DrawRect:
     drawRectX := drawRectY := drawRectWidth := drawRectHeight := 0
     WinGetPosEx(activeWin, drawRectX, drawRectY, drawRectWidth, drawRectHeight)
 
-    If (drawRectX="")
+    if (drawRectX="")
         Return
 
     borderType := "inside"                ; set to inside, outside, or both
 
-    If (borderType = "outside") {
+    if (borderType = "outside") {
         outerX      := 0
         outerY      := 0
         outerX2     := drawRectWidth+2*k_border_thickness
@@ -7160,7 +7170,7 @@ DrawRect:
         newW        := drawRectWidth+2*k_border_thickness
         newH        := drawRectHeight+2*k_border_thickness
 
-    } Else If (borderType="inside") {
+    } else if (borderType="inside") {
         offset      := 0
 
         outerX      := offset
@@ -7178,7 +7188,7 @@ DrawRect:
         newW        := drawRectWidth
         newH        := drawRectHeight
 
-    } Else If (borderType="both") {
+    } else if (borderType="both") {
         outerX      := 0
         outerY      := 0
         outerX2     := drawRectWidth+2*k_border_thickness
@@ -7706,14 +7716,19 @@ $^Lbutton Up::
 
     captionCtrlClickButtonName := WhichButton(captionCtrlClickX, captionCtrlClickY, captionCtrlClickHwnd)
 
-    If (InStr(captionCtrlClickButtonName,"close",false)) {
+    if (InStr(captionCtrlClickButtonName,"close",false)) {
         tooltip, Closing all windows...
         WinGet, captionCtrlClickWindowList, list, ahk_exe %captionCtrlClickProcessName% ahk_class %captionCtrlClickClass%
         captionCtrlClickDisplayNumber := GetMouseDisplayNumber()
         loop % captionCtrlClickWindowList
         {
             captionCtrlClickWindowHwnd := captionCtrlClickWindowList%A_Index%
-            If (GetMonitorCount() > 1) {
+            ; Preserve minimized windows when closing the application's matching windows.
+            WinGet, captionCtrlClickWindowState, MinMax, ahk_id %captionCtrlClickWindowHwnd%
+            if (captionCtrlClickWindowState == -1)
+                continue
+
+            if (GetMonitorCount() > 1) {
                 captionCtrlClickWindowOnDisplay := IsWindowOnDisplayNumber(captionCtrlClickWindowHwnd, captionCtrlClickDisplayNumber)
                 If captionCtrlClickWindowOnDisplay {
                     WinClose, ahk_id %captionCtrlClickWindowHwnd%
@@ -7725,14 +7740,14 @@ $^Lbutton Up::
             }
         }
     }
-    If (InStr(captionCtrlClickButtonName,"minimize",false)) {
+    if (InStr(captionCtrlClickButtonName,"minimize",false)) {
         tooltip, Minimizing all windows...
         WinGet, captionCtrlClickWindowList, list, ahk_exe %captionCtrlClickProcessName% ahk_class %captionCtrlClickClass%
         captionCtrlClickDisplayNumber := GetMouseDisplayNumber()
         loop % captionCtrlClickWindowList
         {
             captionCtrlClickWindowHwnd := captionCtrlClickWindowList%A_Index%
-            If (GetMonitorCount() > 1) {
+            if (GetMonitorCount() > 1) {
                 captionCtrlClickWindowOnDisplay := IsWindowOnDisplayNumber(captionCtrlClickWindowHwnd, captionCtrlClickDisplayNumber)
                 If captionCtrlClickWindowOnDisplay {
                     WinMinimize, ahk_id %captionCtrlClickWindowHwnd%
@@ -7767,7 +7782,7 @@ $Lbutton Up::
     MouseGetPos, captionClickX, captionClickY, captionClickHwnd
     captionClickButtonName := WhichButton(captionClickX, captionClickY, captionClickHwnd)
 
-    If (   InStr(captionClickButtonName, "minimize", false)
+    if (   InStr(captionClickButtonName, "minimize", false)
         || InStr(captionClickButtonName, "maximize", false)
         || InStr(captionClickButtonName, "restore",  false)
         || InStr(captionClickButtonName, "close",    false))
@@ -7812,7 +7827,7 @@ $~^LButton::
                 if (taskbarWidgetWindowState == -1) {
                     taskbarWidgetWindowDisplayNumber := GetWindowDisplayNumber(taskbarWidgetWindowHwnd)
 
-                    If (taskbarWidgetWindowDisplayNumber == taskbarWidgetDisplayNumber) {
+                    if (taskbarWidgetWindowDisplayNumber == taskbarWidgetDisplayNumber) {
                         WinRestore, ahk_id %taskbarWidgetWindowHwnd%
                         sleep, 100
                     }
@@ -8182,7 +8197,7 @@ _SpawnExplorerFromTaskbar(clickX, clickY) {
 #If MouseIsOverTaskbarBlank()
 $~Lbutton::
     MouseGetPos, expX1, expY1,
-    If (A_PriorHotkey == A_ThisHotkey
+    if (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < k_DoubleClickTime)
         && (abs(expX1-expX2) < 20 && abs(expY1-expY2) < 20)) {
 
@@ -10234,6 +10249,67 @@ _DebugTrace_ExplorerCtrlAdd(eventName, details := "", flushNow := False, request
 
     if shouldFlush
         _DebugTrace_FlushExplorerCtrlAdd()
+}
+
+; Record fresh Explorer tab/folder identity around a shortcut send without updating
+; navigation generations, observers, or path caches. All COM work is debug-gated.
+; Tab/foreground samples bracket the folder read because these calls are not atomic.
+_DebugTrace_ExplorerCtrlAddSendContext(hwnd, phase, requestId) {
+    global k_debugTraceExplorerCtrlAddEnabled
+
+    if (!k_debugTraceExplorerCtrlAddEnabled || requestId = "")
+        return
+    WinGetClass, snapshotClass, ahk_id %hwnd%
+    if (snapshotClass != "CabinetWClass")
+        return
+
+    snapshotStartTick := A_TickCount
+    foregroundBefore := WinExist("A")
+    activeTabBefore := 0
+    ControlGet, activeTabBefore, Hwnd,, ShellTabWindowClass1, ahk_id %hwnd%
+    folderPath := ""
+    snapshotStatus := "matching_tab_not_found"
+    try {
+        shell := ComObjCreate("Shell.Application")
+        for shellWin in shell.Windows {
+            if (shellWin.HWND != hwnd)
+                continue
+            shellBrowser := 0
+            try {
+                shellBrowser := ComObjQuery(shellWin, "{000214E2-0000-0000-C000-000000000046}"
+                    , "{000214E2-0000-0000-C000-000000000046}")
+                if (!shellBrowser) {
+                    snapshotStatus := "shell_browser_unavailable"
+                    continue
+                }
+                tabHwnd := 0
+                tabHr := DllCall(NumGet(NumGet(shellBrowser + 0) + 3*A_PtrSize)
+                    , "Ptr", shellBrowser, "Ptr*", tabHwnd, "Int")
+                if (activeTabBefore && (tabHr < 0 || tabHwnd != activeTabBefore))
+                    continue
+                folderPath := _GetExplorerFolderIdentityFromShellBrowser(shellBrowser, snapshotStatus)
+                snapshotStatus := folderPath != "" ? "ok" : snapshotStatus
+                if (snapshotStatus = "")
+                    snapshotStatus := "folder_unavailable"
+                break
+            } finally {
+                if (shellBrowser)
+                    ObjRelease(shellBrowser)
+            }
+        }
+    } catch e {
+        snapshotStatus := "exception"
+    }
+    activeTabAfter := 0
+    ControlGet, activeTabAfter, Hwnd,, ShellTabWindowClass1, ahk_id %hwnd%
+    foregroundAfter := WinExist("A")
+    _DebugTrace_ExplorerCtrlAdd("ctrl_numpadadd_context_snapshot"
+        , "phase=" . phase . " hwnd=" . hwnd
+        . " activeTabBefore=" . activeTabBefore . " activeTabAfter=" . activeTabAfter
+        . " foregroundBefore=" . foregroundBefore . " foregroundAfter=" . foregroundAfter
+        . " path=[" . folderPath . "] status=" . snapshotStatus
+        . " elapsedMs=" . (A_TickCount - snapshotStartTick)
+        , False, requestId)
 }
 
 ; Buffers one Explorer Shift+click event without performing disk I/O in the mouse callback.
@@ -12470,9 +12546,10 @@ $~LButton::
 
     navigationStartPath := ""
     shouldCaptureNavigationPath := ((_winClassD == "CabinetWClass" || _winClassD == "#32770")
-        && (isExplorerDirectUIClick
+        &&  (isExplorerDirectUIClick
          || (!isExplorerNavigationHeader && _IsExplorerNavigationSurfaceCtrl(_winCtrlD))
-         || (isExplorerNavigationHeader && navigationHeaderKind != "refresh")))
+         || (isExplorerNavigationHeader  && navigationHeaderKind != "refresh")))
+
     if (shouldCaptureNavigationPath)
         navigationStartPath := GetExplorerPath(_winIdD)
 
@@ -12487,9 +12564,9 @@ $~LButton::
     }
 
     ; Arm before activation returns or mouse-up waits, reusing Explorer's item result.
+    ; Native list items also qualify in applications such as 7-Zip; headers and blank space do not.
     desktopDragItem := False
-    if ((_winClassD == "Progman" || _winClassD == "ProgMan" || _winClassD == "WorkerW")
-     && InStr(_winCtrlD, "SysListView32", True)) {
+    if (InStr(_winCtrlD, "SysListView32", True)) {
         try
             desktopDragItem := (_GetSysListViewClickType(lbX1, lbY1, True) == "item")
         catch
@@ -12536,7 +12613,7 @@ $~LButton::
         return
 
     clearedSendCtrlBlock := False
-    If (disableSendCtrlHwnd != "")
+    if (disableSendCtrlHwnd != "")
         clearedSendCtrlBlock := _TryClearSendCtrlBlockOnFileViewDoubleClick(_winIdD, _winCtrlD, lbX1, lbY1
             , isExplorerDirectUIClick && (directUIClickKind == "blank" || directUIClickKind == "item"))
 
@@ -12548,10 +12625,10 @@ $~LButton::
         KeyWait, LButton, U T3
 
         If !GetKeyState("LButton", "P") {
-            If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
+            if (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
                 SendCtrlAdd(_winIdD, _winClassD, _winCtrlD)
             }
-            Else {
+            else {
                 ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
                 If IsSysListViewReportView(controlHwnd)
                     SendCtrlAdd(_winIdD, _winClassD, _winCtrlD)
@@ -12562,7 +12639,7 @@ $~LButton::
         Return
     }
 
-    If (disableSendCtrlHwnd == _winIdD) {
+    if (disableSendCtrlHwnd == _winIdD) {
         GoSub, EnableTimers
         Return
     }
@@ -12584,18 +12661,18 @@ $~LButton::
                         && (A_TimeSincePriorHotkey <= k_DoubleClickTime)
                         && (Abs(lbX1-lbX2) < 25 && Abs(lbY1-lbY2) < 25)
                         && (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))
-    If (allowDoubleClicks && (IsObject(explorerDirectUIDoubleClick) || isLegacyDoubleClick)) {
+    if (allowDoubleClicks && (IsObject(explorerDirectUIDoubleClick) || isLegacyDoubleClick)) {
 
         ; Consume this rapid click sequence before performing its custom action
         ; so a third or fourth click cannot be interpreted as another pair.
         allowDoubleClicks := False
         ; tooltip, %isBlankSpaceExplorer% - %isBlankSpaceNonExplorer%
-        If (isBlankSpaceExplorer || isBlankSpaceNonExplorer) {
-            If (InStr(_winCtrlD, "SysListView32", True)) {
+        if (isBlankSpaceExplorer || isBlankSpaceNonExplorer) {
+            if (InStr(_winCtrlD, "SysListView32", True)) {
                 Send, {Backspace}
                 SetTimer, RunDynaExprTimeout, -1
             }
-            Else {
+            else {
                 Send, !{Up}
                 SetTimer, RunDynaExprTimeout, -1
             }
@@ -12603,7 +12680,7 @@ $~LButton::
 
         KeyWait, Lbutton, U T3
 
-        If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
+        if (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
             ; Every DirectUI shell double-click now uses its captured mouse-down
             ; path and the shared changed-path plus Details/content proof. Keep
             ; prevPath only as the legacy fallback for other shell controls.
@@ -12613,7 +12690,7 @@ $~LButton::
             if (doubleClickStartPath != "")
                 _RequestExplorerCtrlAdd(_winIdD, _winClassD, _winCtrlD, 0, doubleClickStartPath, True)
         }
-        Else {
+        else {
             If InStr(_winCtrlD, "SysListView32", True) {
                 ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
                 If IsSysListViewReportView(controlHwnd)
@@ -12642,12 +12719,12 @@ $~LButton::
         allowDoubleClicks := True
 
     prevPath := ""
-    If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
-        If (InStr(_winCtrlD, "SysHeader32", True)) {
+    if (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
+        if (InStr(_winCtrlD, "SysHeader32", True)) {
             isColumnHeader := True
         }
-        Else {
-            If (InStr(_winCtrlD, "DirectUIHWND", True)) {
+        else {
+            if (InStr(_winCtrlD, "DirectUIHWND", True)) {
                 ; Reuse the mouse-down classification so header detection and
                 ; DirectUI double-click exclusion use the same UIA result.
                 result := directUIClickKind
@@ -12668,18 +12745,18 @@ $~LButton::
                 }
                 ; tooltip, %result%
             }
-            Else If (InStr(_winCtrlD, "SysListView32", True)) {
+            else if (InStr(_winCtrlD, "SysListView32", True)) {
                 isBlankSpaceExplorer := IsSysListViewBlankSpaceClick(lbX1, lbY1)
             }
 
             If (!isColumnHeader && (isBlankSpaceExplorer || isItemClick)) {
                 Loop,20 {
-                    If (WinExist("A") != _winIdD) {
+                    if (WinExist("A") != _winIdD) {
                         GoSub, EnableTimers
                         Return
                     }
                     prevPath := GetExplorerPath(_winIdD)
-                    If (prevPath != "")
+                    if (prevPath != "")
                         break
 
                     Sleep, 15
@@ -12700,7 +12777,7 @@ $~LButton::
         KeyWait, LButton, U T5
 
     If !(_winClassD == "CabinetWClass" || _winClassD == "#32770")  {
-        If (InStr(_winCtrlD,"SysHeader32", True)) {
+        if (InStr(_winCtrlD,"SysHeader32", True)) {
             isColumnHeader := True
         }
         if (InStr(_winCtrlD, "SysListView32", True))
@@ -12725,17 +12802,17 @@ $~LButton::
         Return
     }
 
-    If (timeDiff < floor(k_DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
+    if (timeDiff < floor(k_DoubleClickTime/2) && (abs(lbX1-lbX2) < 15 && abs(lbY1-lbY2) < 15)) {
 
-        If (   (InStr(_winCtrlU, "SysListView32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
+        if (   (InStr(_winCtrlU, "SysListView32", True) || InStr(_winCtrlU, "DirectUIHWND", True))
             && (isBlankSpaceExplorer || isBlankSpaceNonExplorer) ) {
 
 
             If InStr(_winCtrlU, "SysListView32", True) {
-                If (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
+                if (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
                     SetTimer, SendCtrlAddLabel, -125
                 }
-                Else {
+                else {
                     ControlGet, controlHwnd, Hwnd,, %_winCtrlU%, ahk_id %_winIdU%
                     If IsSysListViewReportView(controlHwnd)
                         SetTimer, SendCtrlAddLabel, -125
@@ -12744,13 +12821,13 @@ $~LButton::
             Else
                 SetTimer, SendCtrlAddLabel, -125
         }
-        Else If ( isColumnHeader && !isItemClick) {
+        else if ( isColumnHeader && !isItemClick) {
 
-            If (_winClassD == "CabinetWClass" && k_isWin11 && k_isModernExplorerInReg) {
+            if (_winClassD == "CabinetWClass" && k_isWin11 && k_isModernExplorerInReg) {
 
                 _SendFocusedCtrlAdd(_winIdU, _winCtrlU, 60, 15, 6, "active_modern_explorer_header")
             }
-            Else {
+            else {
                 ; Get UIA element
                 pt    := SafeUIA_ElementFromPoint(lbX2, lbY2, "", 2000)
                 ctype := SafeUIA_GetControlType(pt)
@@ -12777,15 +12854,15 @@ $~LButton::
                     return
                 }
 
-                If (ctype == "" || ctype > 50035 || (ctype > 50008 && ctype < 50031)) {
+                if (ctype == "" || ctype > 50035 || (ctype > 50008 && ctype < 50031)) {
                     ; DO NOTHING
                     }
-                    Else {
-                        If (ctype  == 50031 || ctype  == 50008) && (_winClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
+                    else {
+                        if (ctype  == 50031 || ctype  == 50008) && (_winClassD == "#32770" || InStr(_winCtrlU,"DirectUIHWND3", True)) {
                         _SendFocusedCtrlAdd(_winIdU, _winCtrlU, 60, 15, 6
                             , "active_header_uia_controltype_50031_or_50008")
                     }
-                    Else If (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
+                    else if (ctype  == 50035) { ; this most likely would indicate an SysListView based window like 7-zip
                         If !k_isWin11
                             Send, {F5}
 
@@ -12816,7 +12893,7 @@ $~LButton::
                 }
             }
         }
-        Else If ( (_winClassD == "CabinetWClass" || _winClassD == "#32770")
+        else if ( (_winClassD == "CabinetWClass" || _winClassD == "#32770")
                && _IsExplorerNavigationHeaderCtrl(_winCtrlU)) {
 
             ; Reuse the mouse-down classification only for a completed click near
@@ -12855,7 +12932,7 @@ $~LButton::
     }
     ; A SysHeader drag of at least 15 pixels blocks this window's click- and wheel-driven
     ; alignment until a file-view double-click or Explorer directory change clears it.
-    Else If (InStr(_winCtrlU, "SysHeader", True) && (abs(lbX1-lbX2) >= 15 || abs(lbY1-lbY2) >= 15)) {
+    else if (InStr(_winCtrlU, "SysHeader", True) && (abs(lbX1-lbX2) >= 15 || abs(lbY1-lbY2) >= 15)) {
         _SetColumnAutoAlignBlock(_winIdU)
     }
 
@@ -13572,7 +13649,7 @@ Return
 #MaxThreadsPerHotkey 1
 UpdateInputBoxTitle:
     WinSet, ExStyle, +0x80, ahk_class #32770 ; 0x80 is WS_EX_TOOLWINDOW
-    If (WinExist("Type Up to 3 Letters of a Window Title to Search") && !StopCheck) {
+    if (WinExist("Type Up to 3 Letters of a Window Title to Search") && !StopCheck) {
         WinSet, AlwaysOnTop, On, Type Up to 3 Letters of a Window Title to Search
         StopCheck := True
     }
@@ -13586,7 +13663,7 @@ UpdateInputBoxTitle:
         SetTimer, UpdateInputBoxTitle, off
         Return
     }
-    Else {
+    else {
         UserInputTrimmed := Trim(memotext)
     }
 Return
@@ -13604,28 +13681,28 @@ SwitchDesktop:
     Menu, vdeskMenu, DeleteAll
     Loop,% getTotalDesktops()
     {
-        If (CurrentDesktop != A_Index)
+        if (CurrentDesktop != A_Index)
         {
             Menu, vdeskMenu, Add,  Move to Desktop %A_Index%, SendWindow
             ; Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
-            If ( A_Index == 1)
+            if ( A_Index == 1)
                 Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\1-move-blk.ico, , 32
-            Else If (A_Index == 2)
+            else if (A_Index == 2)
                 Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\2-move-blk.ico, , 32
-            Else If (A_Index == 3)
+            else if (A_Index == 3)
                 Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\3-move-blk.ico, , 32
-            Else If (A_Index == 4)
+            else if (A_Index == 4)
                 Menu, vdeskMenu, Icon, Move to Desktop %A_Index%, %A_ScriptDir%\4-move-blk.ico, , 32
 
             Menu, vdeskMenu, Add,  Move and Go to Desktop %A_Index%, SendWindowAndGo
             ; Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_WinDir%\System32\imageres.dll, 290, 32
-            If ( A_Index == 1)
+            if ( A_Index == 1)
                 Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\1-moveswitch-blk.ico, , 32
-            Else If (A_Index == 2)
+            else if (A_Index == 2)
                 Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\2-moveswitch-blk.ico, , 32
-            Else If (A_Index == 3)
+            else if (A_Index == 3)
                 Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\3-moveswitch-blk.ico, , 32
-            Else If (A_Index == 4)
+            else if (A_Index == 4)
                 Menu, vdeskMenu, Icon, Move and Go to Desktop %A_Index%, %A_ScriptDir%\4-moveswitch-blk.ico, , 32
         }
     }
@@ -13648,7 +13725,7 @@ SendWindow:
     initialDesktopNumber := GetCurrentDesktopNumber()
 
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
-    If (targetDesktopNumber < initialDesktopNumber)
+    if (targetDesktopNumber < initialDesktopNumber)
         MoveAndFadeWindow(movehWndId, sw_x, False)
     Else
         MoveAndFadeWindow(movehWndId, sw_x, True)
@@ -13672,7 +13749,7 @@ SendWindowAndGo:
 
     initialDesktopNumber := GetCurrentDesktopNumber()
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
-    If (targetDesktopNumber < initialDesktopNumber)
+    if (targetDesktopNumber < initialDesktopNumber)
         MoveAndFadeWindow(movehWndId, sw_x, False)
     Else
         MoveAndFadeWindow(movehWndId, sw_x, True)
@@ -13681,7 +13758,7 @@ SendWindowAndGo:
     sleep, 400
 
     WinGetPos, sw_x, sw_y, sw_h, sw_w, ahk_id %movehWndId%
-    If (targetDesktopNumber < initialDesktopNumber)
+    if (targetDesktopNumber < initialDesktopNumber)
         MoveAndFadeWindow(movehWndId, sw_x, False, "in")
     Else
         MoveAndFadeWindow(movehWndId, sw_x, True, "in")
@@ -14278,7 +14355,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         Return
     }
 
-    If (initTargetClass == "")
+    if (initTargetClass == "")
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
     Else
         lClassCheck := initTargetClass
@@ -14295,7 +14372,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                             , False, traceRequestId)
 
     WinGet, quickCheckID, ID, A
-    If (quickCheckID != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd)) {
+    if (quickCheckID != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd)) {
         SetTimer, SendCtrlAddLabel, Off
         WinGetClass, lClassCheck, ahk_id %initTargetHwnd%
         if traceThisCall
@@ -14315,7 +14392,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
     }
     If (!GetKeyState("LShift","P" )) {
         focusDiscoveryStartTick := A_TickCount
-        If (initFocusedCtrlNN == "") {
+        if (initFocusedCtrlNN == "") {
             ; Prefer the focused child reported by the target window itself.
             ; Use one immediate mouse lookup when focus is blank or still too
             ; generic and readiness did not already resolve the exact target.
@@ -14349,7 +14426,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                 . " targetAlreadyResolved=" . (TargetControl != "")
                                 , False, traceRequestId)
 
-        If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+        if (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
         {
             if traceThisCall
                 _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
@@ -14371,7 +14448,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                 . " targetCtrl=[" . TargetControl . "]"
                                 , False, traceRequestId)
 
-        If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+        if (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
         {
             if traceThisCall
                 _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
@@ -14383,7 +14460,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
             Return
         }
 
-        If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+        if (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
         {
             if traceThisCall
                 _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
@@ -14485,7 +14562,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                 , False, traceRequestId)
         }
 
-        If (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
+        if (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (waitForExplorerLoad) {
                 explorerLoadStartTick := A_TickCount
                 WaitForExplorerLoad(initTargetHwnd, False, True)
@@ -14495,7 +14572,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                         . " branch=DirectUIHWND3 targetCtrl=[" . TargetControl . "]"
                                         , False, traceRequestId)
             }
-            If (hasResolvedTarget || TargetControl != initFocusedCtrlNN) {
+            if (hasResolvedTarget || TargetControl != initFocusedCtrlNN) {
 
                 focusStartTick := A_TickCount
                 focusSucceeded := _EnsureFocusedCtrlAddTarget(initTargetHwnd, TargetControl , resolvedHwnd, hasResolvedTarget, 60, 15, lClassCheck)
@@ -14517,7 +14594,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 }
             }
         }
-        Else If (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
+        else if (TargetControl == "DirectUIHWND2" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (waitForExplorerLoad) {
                 explorerLoadStartTick := A_TickCount
                 WaitForExplorerLoad(initTargetHwnd, True, False)
@@ -14527,7 +14604,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                         . " branch=DirectUIHWND2 targetCtrl=[" . TargetControl . "]"
                                         , False, traceRequestId)
             }
-            If (hasResolvedTarget || TargetControl != initFocusedCtrlNN) {
+            if (hasResolvedTarget || TargetControl != initFocusedCtrlNN) {
 
                 focusStartTick := A_TickCount
                 focusSucceeded := _EnsureFocusedCtrlAddTarget(initTargetHwnd, TargetControl , resolvedHwnd, hasResolvedTarget, 60, 15, lClassCheck)
@@ -14549,7 +14626,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 }
             }
         }
-        Else If (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
+        else if (lClassCheck == "CabinetWClass" || lClassCheck == "#32770") {
             if (waitForExplorerLoad) {
                 ; This fallback shell branch already resolved a real content target.
                 ; Skip the slower UIA focus-confirmation part when focus is already
@@ -14584,8 +14661,8 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 }
             }
         }
-        Else {
-            If (hasResolvedTarget || TargetControl != initFocusedCtrlNN) {
+        else {
+            if (hasResolvedTarget || TargetControl != initFocusedCtrlNN) {
                 focusStartTick := A_TickCount
                 focusSucceeded := _EnsureFocusedCtrlAddTarget(initTargetHwnd, TargetControl , resolvedHwnd, hasResolvedTarget, 60, 15, lClassCheck)
                 if traceThisCall
@@ -14616,7 +14693,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
             }
         }
 
-        If (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
+        if (GetKeyState("LButton","P") || TargetControl == "" || WinExist("A") != initTargetHwnd || !WinExist("ahk_id " . initTargetHwnd))
         {
             if traceThisCall
                 _DebugTrace_ExplorerCtrlAdd("sendctrladd_aborted"
@@ -14628,9 +14705,11 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
             Return
         }
 
-        If (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
+        if (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
             BeginBlockKeys()
             try {
+                if traceThisCall
+                    _DebugTrace_ExplorerCtrlAddSendContext(initTargetHwnd, "before_send", traceRequestId)
                 ctrlNumpadAddStartTick := A_TickCount
                 if traceThisCall
                     _DebugTrace_ExplorerCtrlAdd("ctrl_numpadadd_send"
@@ -14643,6 +14722,8 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                         , "elapsedMs=" . (A_TickCount - ctrlNumpadAddStartTick)
                         . " targetCtrl=[" . TargetControl . "]"
                         , False, traceRequestId)
+                if traceThisCall
+                    _DebugTrace_ExplorerCtrlAddSendContext(initTargetHwnd, "after_send", traceRequestId)
 
                 If ((InStr(initFocusedCtrlNN,"Edit",True)
                   || (restoreTreeFocus && InStr(initFocusedCtrlNN,"Tree",True)))
@@ -14697,7 +14778,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                 , "elapsedMs=" . (A_TickCount - focusRestoreDelayStartTick)
                                 , False, traceRequestId)
 
-                        If (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd) {
+                        if (GetKeyState("LButton","P") || WinExist("A") != initTargetHwnd) {
                             if traceThisCall
                                 _DebugTrace_ExplorerCtrlAdd("focus_restore_skipped"
                                     , "reason=lbutton_or_foreground_changed lbutton="
@@ -14775,11 +14856,11 @@ Return
 VolumeHover() {
     If WinExist("ahk_class tooltips_class32") {
         ControlGetText, toolText,, ahk_class tooltips_class32
-        If (InStr(toolText, "Speakers",False) || InStr(toolText, "Headphones",False) || (InStr(toolText, "Audio",False) && InStr(toolText, "Output",False))) {
+        if (InStr(toolText, "Speakers",False) || InStr(toolText, "Headphones",False) || (InStr(toolText, "Audio",False) && InStr(toolText, "Output",False))) {
             Return True
         }
     }
-    Else {
+    else {
         Return False
     }
 }
@@ -14788,7 +14869,7 @@ VolumeHover() {
 IsOverException(hWnd := "") {
     ctrlNN := ""
 
-    If (hWnd == "")
+    if (hWnd == "")
         MouseGetPos, , , hwndID, ctrlNN
     Else
         hwndID := hWnd
@@ -14797,7 +14878,7 @@ IsOverException(hWnd := "") {
     WinGetClass, cl, ahk_id %hwndID%
     WinGet, proc, ProcessName, ahk_id %hwndID%
 
-    If (   proc == "peazip.exe"
+    if (   proc == "peazip.exe"
         || proc == "SndVol.exe"
         || ((InStr("File Explorer", tit, True) || proc == "explorer.exe") && (InStr("Home", tit, True) || InStr("This PC", tit, True) || InStr("Gallery", tit, True)))
         || (InStr("InstallShield", tit, True))
@@ -15016,7 +15097,7 @@ ShowMenuX(hMenu, X := "", Y := "", Flags := 0) {   ; Show popup menu by handle o
     ; If X or Y was not provided, use the current mouse position.
     ; Temporarily switch mouse CoordMode to Screen so the popup
     ; position is based on absolute screen coordinates.
-    If (X = "" Or Y = "") {
+    if (X = "" Or Y = "") {
         CMM := A_CoordModeMouse
         CoordMode, Mouse, Screen
         MouseGetPos, XX, YY
@@ -15106,9 +15187,9 @@ JEE_WinHasAltTabIcon(hWnd)
     || (vWinStyle & 0x8000000) ;WS_DISABLED := 0x8000000 ;affects alt-tab but not taskbar
         Return 0
     WinGet, vWinExStyle, ExStyle, % "ahk_id " hWnd
-    If (vWinExStyle & 0x40000) ;WS_EX_APPWINDOW := 0x40000
+    if (vWinExStyle & 0x40000) ;WS_EX_APPWINDOW := 0x40000
         Return 1
-    If (vWinExStyle & 0x80) ;WS_EX_TOOLWINDOW := 0x80
+    if (vWinExStyle & 0x80) ;WS_EX_TOOLWINDOW := 0x80
     || (vWinExStyle & 0x8000000) ;WS_EX_NOACTIVATE := 0x8000000 ;affects alt-tab but not taskbar
         Return 0
     Return 1
@@ -15223,7 +15304,7 @@ getForemostWindowIdOnDesktop(n)
         windowID := winIDList%A_Index%
         windowIsOnDesktop := DllCall(IsWindowOnDesktopNumberProc, "Ptr", windowID, "UInt", n, "Int")
         ; Select the first (and foremost) window which is in the specified desktop.
-        If (windowIsOnDesktop == 1) {
+        if (windowIsOnDesktop == 1) {
             Return windowID
         }
     }
@@ -15263,15 +15344,15 @@ UpdateValidWindows() {
     {
         hwndID := allWindows%A_Index%
 
-        If (IsAltTabWindow(hwndID)) {
+        if (IsAltTabWindow(hwndID)) {
             WinGet, state, MinMax, ahk_id %hwndID%
-            If (GetMonitorCount() > 1 && state > -1) {
+            if (GetMonitorCount() > 1 && state > -1) {
                 currentMonHasActWin := IsWindowOnDisplayNumber(hwndID, currentMon)
             }
-            Else If (state > -1) {
+            else if (state > -1) {
                 currentMonHasActWin := True
             }
-            If (currentMonHasActWin && state > -1) {
+            if (currentMonHasActWin && state > -1) {
                 ValidWindows.push(hwndID)
             }
         }
@@ -15284,7 +15365,7 @@ FrameShadow(HGui) {
     DllCall("dwmapi\DwmIsCompositionEnabled","IntP",_ISENABLED) ; Get If DWM Manager is Enabled
     If !_ISENABLED ; If DWM is not enabled, Make Basic Shadow
         DllCall("SetClassLong","UInt",HGui,"Int",-26,"Int",DllCall("GetClassLong","UInt",HGui,"Int",-26)|0x20000)
-    Else {
+    else {
         VarSetCapacity(_MARGINS,16)
         ; Set MARGINS.cxLeftWidth to one pixel so DWM extends the frame along the left edge.
         NumPut(1,&_MARGINS,0,"UInt")
@@ -15938,7 +16019,7 @@ KeyTrack() {
 
     activeHwnd := WinExist("A")
     WinGetClass, currClass, ahk_id %activeHwnd%
-    If (InStr(currClass, "EVERYTHING", True)) {
+    if (InStr(currClass, "EVERYTHING", True)) {
         StopAutoFix := True
         ; Everything/Edit1 qualifies the key event, captures the exact
         ; current search-box identity once, and lets the debounce timer resize
@@ -15951,11 +16032,11 @@ KeyTrack() {
         }
         StopAutoFix := False
     }
-    Else If (currClass == "XLMAIN") {
+    else if (currClass == "XLMAIN") {
         _ClearTbcEverythingEditAdjustState()
         StopAutoFix := True
     }
-    Else {
+    else {
         _ClearTbcEverythingEditAdjustState()
         StopAutoFix := False
     }
@@ -15987,9 +16068,9 @@ MouseTrack() {
         }
     }
 
-    If (GetMonitorCount() > 1 && !GetKeyState("LButton","P")) {
+    if (GetMonitorCount() > 1 && !GetKeyState("LButton","P")) {
         currentMon := GetMouseDisplayNumber(TaskBarHeight)
-        If (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
+        if (currentMon > 0 && previousMon != currentMon && previousMon > 0) {
             StopRecursion := True
 
             escHwndID := FindTopMostWindow()
@@ -16014,15 +16095,15 @@ MouseIsOverTitleBarFast(xPos := "", yPos := "", excludeCaptions := True) {
 
 MouseIsOverTitleBar(xPos := "", yPos := "", excludeCaptions := True, WindowUnderMouseID := "", ctrlnnUnderMouse := "", mClass := "") {
     CoordMode, Mouse, Screen
-    If (xPos != "" && yPos != "" && WindowUnderMouseID == "")
+    if (xPos != "" && yPos != "" && WindowUnderMouseID == "")
         MouseGetPos, , , WindowUnderMouseID, ctrlnnUnderMouse
-    Else If (xPos == "" || yPos == "")
+    else if (xPos == "" || yPos == "")
         MouseGetPos, xPos, yPos, WindowUnderMouseID, ctrlnnUnderMouse
 
     if (!WindowUnderMouseID || !IsAltTabWindow(WindowUnderMouseID))
         return False
 
-    If (mClass == "")
+    if (mClass == "")
         WinGetClass, mClass, ahk_id %WindowUnderMouseID%
 
     if (   MouseIsOverTaskbar(WindowUnderMouseID, ctrlnnUnderMouse, mClass)
@@ -18032,7 +18113,7 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
 
     ; Audacity 4's QML caption buttons must receive the original click directly.
     WinGet, captionProcessName, ProcessName, ahk_id %WindowUnderMouseID%
-    If (captionProcessName == "Audacity4.exe")
+    if (captionProcessName == "Audacity4.exe")
         Return False
 
     If    ((mClass != "Shell_TrayWnd")
@@ -18050,7 +18131,7 @@ MouseIsOverCaptionButtons(xPos := "", yPos := "") {
         ; Only run the WhichButton() fallback inside the actual top-right caption-button strip.
         ; Otherwise text under the mouse (for example source code containing the word
         ; "minimize") can be mistaken for a caption button name.
-        Else If (ctrlNNUnderMouse != "" && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45)))) {
+        else if (ctrlNNUnderMouse != "" && (yPos > y) && (yPos < (y+titlebarHeight)) && (xPos > (x+w-(3*45)))) {
             vName := WhichButton(xPos, yPos, windowUnderMouseId)
             if (   InStr(vName, "minimize", false)
                 || InStr(vName, "maximize", false)
@@ -18899,7 +18980,7 @@ _UpdateDesktopIconFadeLayer(alpha := 255)
     return updateResult
 }
 
-; Arm a short-lived watcher only after a confirmed Explorer or desktop item press.
+; Arm a short-lived watcher only after a confirmed Explorer or native list-view item press.
 _StartDesktopIconDrag(sourceHwnd, startX, startY)
 {
     global desktopIconDragState
@@ -19211,7 +19292,7 @@ HasVal(haystack, needle) {
     If !(IsObject(haystack)) || (haystack.Length() = 0)
         Return 0
     for index, value in haystack
-        If (value = needle)
+        if (value = needle)
             Return index
     Return 0
 }
@@ -19386,7 +19467,7 @@ mapDesktopsFromRegistry()
     ; Get the current desktop UUID. Length should be 32 always, but there's no guarantee this couldn't change in a later Windows release so we check.
     IdLength := 32
     SessionId := getSessionId()
-    If (SessionId) {
+    if (SessionId) {
 
         ; Older windows 10 version
         ;RegRead, CurrentDesktopId, HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\1\VirtualDesktops, CurrentVirtualDesktop
@@ -19400,19 +19481,19 @@ mapDesktopsFromRegistry()
             RegRead, CurrentDesktopId, HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\%SessionId%\VirtualDesktops, CurrentVirtualDesktop
         }
 
-        If (CurrentDesktopId) {
+        if (CurrentDesktopId) {
             IdLength := StrLen(CurrentDesktopId)
         }
     }
 
     ; Get a list of the UUIDs for all virtual desktops on the system
     RegRead, DesktopList, HKEY_CURRENT_USER, SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops, VirtualDesktopIDs
-    If (DesktopList) {
+    if (DesktopList) {
         DesktopListLength := StrLen(DesktopList)
         ; Figure out how many virtual desktops there are
         DesktopCount := floor(DesktopListLength / IdLength)
     }
-    Else {
+    else {
         DesktopCount := 1
     }
 
@@ -19425,7 +19506,7 @@ mapDesktopsFromRegistry()
 
         ; Break out If we find a match in the list. If we didn't find anything, keep the
         ; old guess and pray we're still correct :-D.
-        If (DesktopIter = CurrentDesktopId) {
+        if (DesktopIter = CurrentDesktopId) {
             CurrentDesktop := i + 1
             _DebugTrace_AppendGeneral("Current desktop number is " . CurrentDesktop . " with an ID of " . DesktopIter . ".")
             break
@@ -19448,7 +19529,7 @@ getSessionId()
 
     SessionId := 0
     sessionIdResult := DllCall("ProcessIdToSessionId", "UInt", ProcessId, "UInt*", SessionId)
-    If (ErrorLevel || !sessionIdResult) {
+    if (ErrorLevel || !sessionIdResult) {
         _DebugTrace_AppendGeneral("Error getting session id: " . (ErrorLevel ? ErrorLevel : A_LastError))
         Return
     }
@@ -19633,7 +19714,7 @@ ActivateTopMostWindow() {
     hwndID := FindTopMostWindow()
     If hwndID
         WinActivate, ahk_id %hwndID% Off
-    Else {
+    else {
         tooltip, no topmost window!
         sleep, 2000
         tooltip,
@@ -19656,11 +19737,11 @@ FindTopMostWindow() {
             WinGet, mmState, MinMax, ahk_id %hwndID%
             ; WinGet, procName, ProcessName, ahk_id %hwndID%
             ; WinGet, ExStyle, ExStyle, ahk_id %hwndID%
-            ; If (procName == "Zoom.exe" || (ExStyle & 0x8))
+            ; if (procName == "Zoom.exe" || (ExStyle & 0x8))
                 ; continue
 
-            If (mmState > -1) {
-                If (monitorCount > 1) {
+            if (mmState > -1) {
+                if (monitorCount > 1) {
                     currentMon          := GetMouseDisplayNumber()
                     currentMonHasActWin := IsWindowOnDisplayNumber(hwndID, currentMon)
                 }
@@ -21163,7 +21244,7 @@ FitMovedWindowAgainstOthers(movedHwndID, displayNumber := 0, edgeGapTolerance :=
 
 IsEditFieldActive() {
     ControlGetFocus, FocusedControl, A
-    If (RegExMatch(FocusedControl, "^Edit\d+$"))
+    if (RegExMatch(FocusedControl, "^Edit\d+$"))
         Return True
     Else
         Return False
@@ -21244,7 +21325,7 @@ DynaRun(TempScript, pipename="")
    __PIPE_GA_ := DllCall("CreateNamedPipe","str","\\.\pipe\" name,uintType,2,uintType,0,uintType,255,uintType,0,uintType,0,ptrType,0,ptrType,0)
    __PIPE_    := DllCall("CreateNamedPipe","str","\\.\pipe\" name,uintType,2,uintType,0,uintType,255,uintType,0,uintType,0,ptrType,0,ptrType,0)
 
-   If (__PIPE_=-1 or __PIPE_GA_=-1)
+   if (__PIPE_=-1 or __PIPE_GA_=-1)
       Return 0
 
    If A_IsCompiled
@@ -22975,7 +23056,7 @@ MouseIsOverTaskbar(WindowUnderMouseID := "", CtrlUnderMouseId := "", mClass := "
     if (!WindowUnderMouseID)
         MouseGetPos, , , WindowUnderMouseID, CtrlUnderMouseId
 
-    If (mClass == "")
+    if (mClass == "")
         WinGetClass, mClass, ahk_id %WindowUnderMouseID%
 
     Return (InStr(mClass,"TrayWnd",False) && InStr(mClass,"Shell",False) && CtrlUnderMouseId != "ToolbarWindow323")
@@ -23475,7 +23556,7 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
 
     EnsureWindowTitlePopupGui()
 
-    If (StrLen(vtext) > 60) {
+    if (StrLen(vtext) > 60) {
         vtext := SubStr(vtext, 1, 60) . "..."
     }
 
@@ -23485,16 +23566,16 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
     bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
 
-    If (pathToExe) {
+    if (pathToExe) {
         If InStr(pathToExe, "ApplicationFrameHost", False) {
             ; *Icon3 *w48 *h48 C:\Windows\System32\SHELL32.dll tells the Picture control to load icon resource 3 from SHELL32.dll and display it at 48x4
             iconSpec := "*Icon3 *w48 *h48 " . A_WinDir . "\System32\SHELL32.dll"
         }
-        Else {
+        else {
             iconSpec := "*w48 *h48 " . pathToExe
         }
     }
-    Else {
+    else {
         iconSpec := ""
     }
 
@@ -23570,12 +23651,12 @@ DrawWindowTitlePopup(hwnd, vtext := "", pathToExe := "", centerOnWin := False) {
     ; Cycle()/CycleAppWindows() loop reaches its next KeyWait. Latch that press here.
     bufferedCycleAdvance := (bufferedCycleAdvance || (hitTAB && GetKeyState("Tab","P")) || (hitTilde && GetKeyState("`","P")))
 
-    If (centerOnWin) {
+    if (centerOnWin) {
         WinGetPos, targetX, targetY, targetWidth, targetHeight, ahk_id %hwnd%
         drawX := Round(targetX + (targetWidth / 2) - (popupWidth / 2))
         drawY := Round(targetY + (targetHeight / 2) - (popupHeight / 2))
     }
-    Else {
+    else {
         drawX := Round(CoordXCenterScreen() - (popupWidth / 2))
         drawY := Round(CoordYCenterScreen() - (popupHeight / 2))
     }
@@ -28053,6 +28134,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::youve::you've
 ::repetative::repetitive
 ::repetetive::repetitive
+::repetitive::repetitive
+::repetatitive::repetitive
 ::god::God
 ::ram::RAM
 ::rescheulde::reschedule
