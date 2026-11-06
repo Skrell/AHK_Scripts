@@ -24767,7 +24767,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:exilerat::exhilarat
 :*:extraterrestial::extraterrestrial
 :*:faciliat::facilitat
-:*:garantee::guaranteed
 :*:guerrila::guerrilla
 :*:guidlin::guidelin
 :*:girat::gyrat
@@ -24788,9 +24787,14 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:neigbor::neighbour
 :*:noticibl::noticeabl
 :*:ocasion::occasion
-:*:occuranc::occurrence
+; Wait for the word ending: "occuranc" must not expand before the final "e".
+::occuranc::occurrence
+::occurance::occurrence
+::occurances::occurrences
 :*:priveledg::privileg
-:*:recie::recei
+; Wait for complete words: "recie" -> "recipe", "reciept" -> "receipt".
+::reciept::receipt
+::reciepts::receipts
 :*:recived::received
 :*:reciver::receiver
 :*:recepient::recipient
@@ -24846,8 +24850,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:secifi::specifi
 :*:spcifi::specifi
 :*:speifi::specifi
-:*:specfi::specifi
-:*:specii::specifi
+; Preserve the complete missing-letter forms without using the ambiguous short prefixes.
+::specfiable::specifiable
+::speciiable::specifiable
 :*:psecifi::specifi
 :*:sepcifi::specifi
 :*:spceifi::specifi
