@@ -12361,7 +12361,8 @@ _ReadExplorerColumnWidths(manager)
 }
 
 ; Observe one already-confirmed Explorer header hold without retaining gesture state.
-ObserveExplorerColumnResize(hwnd)
+; Return the end-of-wait tick before reading widths again so click timing excludes that work.
+ObserveExplorerColumnResize(hwnd, ByRef releaseTick)
 {
     WinGetClass, windowClass, ahk_id %hwnd%
     before := ""
@@ -12370,6 +12371,7 @@ ObserveExplorerColumnResize(hwnd)
     ; A release during the initial COM read leaves no proven pre-resize baseline.
     baselineReady := IsObject(before) && GetKeyState("LButton", "P")
     KeyWait, LButton, U T5
+    releaseTick := A_TickCount
     if (!baselineReady || GetKeyState("LButton", "P") || WinExist("A") != hwnd)
         return False
     after := _CaptureExplorerColumnWidths(hwnd)
@@ -12766,8 +12768,9 @@ $~LButton::
     }
 
     ; The resize observer owns the normal mouse-up wait only for Explorer DirectUI headers.
+    rlsTime := 0
     if (_winClassD == "CabinetWClass" && isExplorerDirectUIColumnHeader) {
-        if (ObserveExplorerColumnResize(_winIdD)) {
+        if (ObserveExplorerColumnResize(_winIdD, rlsTime)) {
             _SetColumnAutoAlignBlock(_winIdD)
             GoSub, EnableTimers
             Return
@@ -12788,7 +12791,9 @@ $~LButton::
 
     MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU
 
-    rlsTime  := A_TickCount
+    ; Keep the observer's release tick; other click paths retain their existing timing.
+    if (!rlsTime)
+        rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
 
     ; Quick Access needs no UIA hit lookup. Every completed SysTreeView32 click
