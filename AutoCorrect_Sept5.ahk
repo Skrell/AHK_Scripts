@@ -464,6 +464,8 @@ Global explorerCtrlAddRequestPreviousPath                    := ""
 ; Whether this request must prove a directory change before adjusting columns.
 ; Refresh requests leave this false because Refresh keeps the same directory.
 Global explorerCtrlAddRequestRequirePathChange               := False
+; Keyboard navigation requires a reported destination path even in file dialogs.
+Global explorerCtrlAddRequestRequireStrictPathChange         := False
 ; Whether this request must observe the same nonempty directory twice before
 ; authorizing its Details/content result. Startup Explorer/file-dialog requests
 ; use this condition.
@@ -621,6 +623,8 @@ Global k_numbers                                             := "0123456789"
 ; Selects whether native SysListView32 columns fit their item content or header
 ; text while the direct-message auto-fit experiment is enabled.
 Global k_nativeSysListViewColumnAutoFitMode                  := "header_no_fill"
+; Minimum final-column width in pixels for header_no_fill. Set to 0 to disable.
+Global k_headerNoFillLastColumnMinWidth                     := 50
 ; Maximum time SendCtrlAdd() waits for MouseGetPos to identify a specific child
 ; when Explorer initially reports the generic ShellTabWindowClass1 host.
 Global k_sendCtrlAddShellTabProbeTimeoutMs                   := 50
@@ -719,6 +723,8 @@ Global WindowTitleGuiReady                                 := False
 ; sequence cannot repeat the custom action. The first eligible click after a
 ; gap longer than k_DoubleClickTime sets it True and starts a new sequence.
 Global allowDoubleClicks                                   := True
+; Let a native file manager populate the new folder before fitting its columns.
+Global k_nonExplorerCtrlAddDelayMs                         := 175
 ; True while the custom live window-drag flow is in progress.
 Global DraggingWindow                                      := False
 ; Normalized folder baseline for the blocked Explorer window; empty means retry the read.
@@ -5566,21 +5572,43 @@ Return
 
 ; =========================================================
 
+#If !disableEnter && _GetFilePaneEnterContext()
+$Enter::
+    _HandleFilePaneEnter()
+Return
+#If
+
 #If !disableEnter && (WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770"))
 $~Enter::
-    ControlGetFocus, entCtrl, A
-    WinGetClass, entCl, A
-    WinGetTitle, entTi, A
     WinGet, entID, ID, A
+    if (!entID)
+        Return
+
+    ControlGetFocus, entCtrl, ahk_id %entID%
+    WinGetClass, entCl, ahk_id %entID%
+    WinGetTitle, entTi, ahk_id %entID%
     If     (entCl == "CabinetWClass" && InStr(entCtrl, "Edit", True))
         || (entCl == "#32770" && InStr(entCtrl, "Edit", True) && (InStr(entTi, "Save", True) || InStr(entTi, "Open", True))) {
 
         Keywait, Enter, U T3
 
         WinGet, checkID, ID, A
-        if (checkID == entID)
-            SendCtrlAdd(entID, entCl)
+        if (checkID != entID)
+            Return
+
+        ControlGet, enterSysListVisible, Visible,, SysListView321, ahk_id %entID%
+        ControlGet, enterDirectUI2Visible, Visible,, DirectUIHWND2, ahk_id %entID%
+        ControlGet, enterDirectUI3Visible, Visible,, DirectUIHWND3, ahk_id %entID%
+
+        ; Enter can commit an edit while the same folder remains open.
+        if (enterSysListVisible == 1 || enterDirectUI2Visible == 1 || enterDirectUI3Visible == 1) {
+            Sleep, 50
+            if IsForegroundWindow(entID)
+                Send, ^{NumpadAdd}
         }
+        else
+            SendCtrlAdd(entID, entCl)
+    }
 Return
 
 $~F2::
@@ -5602,6 +5630,45 @@ $~F2::
     Critical, Off
 Return
 #If
+
+; Match the focused file-view control before intercepting the physical Enter.
+_GetFilePaneEnterContext(ByRef hwnd := 0, ByRef windowClass := "", ByRef ctrlNN := "") {
+    hwnd := WinExist("A")
+    if (!hwnd)
+        return False
+
+    WinGetClass, windowClass, ahk_id %hwnd%
+    if (windowClass != "CabinetWClass" && windowClass != "#32770")
+        return False
+
+    ControlGetFocus, ctrlNN, ahk_id %hwnd%
+    if !RegExMatch(ctrlNN, "^(?:SysListView32|DirectUIHWND)\d+$")
+        return False
+
+    return (windowClass == "CabinetWClass" || ClassifyDialog32770(hwnd, windowClass) == "file_dialog")
+}
+
+_HandleFilePaneEnter() {
+    if !_GetFilePaneEnterContext(hwnd, windowClass, ctrlNN)
+        return
+
+    ; A pass-through hotkey can see the destination of a fast navigation.
+    ; Capture the baseline before forwarding Enter to Explorer or the dialog.
+    initialPath := ""
+    try initialPath := GetExplorerPath(hwnd)
+    catch {
+    }
+
+    if !IsForegroundWindow(hwnd)
+        return
+    ControlGetFocus, currentCtrlNN, ahk_id %hwnd%
+    if (currentCtrlNN != ctrlNN)
+        return
+
+    Send, {Blind}{Enter}
+    if (initialPath != "" && IsForegroundWindow(hwnd))
+        _RequestExplorerCtrlAdd(hwnd, windowClass, ctrlNN, 0, initialPath, True, False, 0, True, False, False, True)
+}
 
 $~Space::
     GoSub, Marktime_Hoty_FixSlash
@@ -10830,7 +10897,7 @@ _DebugTrace_RecordDialogToolbarBaselineCrosscheck(hwndDlg, initialPath, toolbarP
 ; Event-backed CabinetWClass path changes wake from NavigateComplete2; a bounded
 ; watchdog and every #32770 request retain polling. A newer call replaces the one
 ; pending request, and its request ID prevents stale callbacks from publishing.
-_RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumContentProbeDelayMs := 0, restoreTreeFocus := True, allowBestEffortSend := False, allowPathlessContentReady := False) {
+_RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, initialPath := "", requirePathChange := False, requireStablePath := False, minimumContentProbeDelayMs := 0, restoreTreeFocus := True, allowBestEffortSend := False, allowPathlessContentReady := False, requireStrictPathChange := False) {
     global explorerCtrlAddRequestAllowBestEffortSend
     global explorerCtrlAddRequestAllowPathlessContentReady
     global explorerCtrlAddRequestClass
@@ -10855,6 +10922,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     global explorerCtrlAddRequestPreviousPath
     global explorerCtrlAddRequestRequirePathChange
     global explorerCtrlAddRequestRequireStablePath
+    global explorerCtrlAddRequestRequireStrictPathChange
     global explorerCtrlAddRequestRestoreTreeFocus
     global explorerCtrlAddRequestStartTick
     global explorerCtrlAddRequestSourceCtrlNN
@@ -10963,6 +11031,7 @@ _RequestExplorerCtrlAdd(hwnd, windowClass, sourceCtrlNN := "", delayMs := 0, ini
     explorerCtrlAddRequestPreviousPath                  := ""
     explorerCtrlAddRequestRequirePathChange             := requirePathChange
     explorerCtrlAddRequestRequireStablePath             := requireStablePath
+    explorerCtrlAddRequestRequireStrictPathChange       := requireStrictPathChange
     explorerCtrlAddRequestRestoreTreeFocus              := restoreTreeFocus
     explorerCtrlAddRequestStartTick                     := requestStartTick
     explorerCtrlAddRequestSourceCtrlNN                  := sourceCtrlNN
@@ -11138,6 +11207,7 @@ RunExplorerCtrlAddWhenReady:
     requestPreferredTarget            := explorerCtrlAddRequestPreferredTarget
     ; Copies the path-change requirement so sending remains blocked until navigation is proven when the request requires it.
     requestRequiresPathChange         := explorerCtrlAddRequestRequirePathChange
+    requestRequiresStrictPathChange   := explorerCtrlAddRequestRequireStrictPathChange
     ; Copies the stable-path requirement so sending waits for two matching startup samples when that guard is required.
     requestRequiresStablePath         := explorerCtrlAddRequestRequireStablePath
     ; Copies the tree-focus restoration policy so a tree-originated request can return focus after alignment.
@@ -11408,7 +11478,8 @@ RunExplorerCtrlAddWhenReady:
             }
         }
 
-        if (navigationPathState == "unavailable" && requestWindowClass == "#32770") {
+        if (navigationPathState == "unavailable" && requestWindowClass == "#32770"
+         && !requestRequiresStrictPathChange) {
             ; Give the dialog one short opportunity to publish a comparable path.
             ; After that, Details/content state becomes authoritative because every
             ; #32770 folder-identity backend may legitimately remain unavailable.
@@ -12627,13 +12698,20 @@ $~LButton::
         KeyWait, LButton, U T3
 
         If !GetKeyState("LButton", "P") {
-            if (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
+            if (isExplorerDirectUIClick && directUIClickKind == "item") {
+                ; Prefer the first click's path because navigation can start on the second press.
+                doubleClickStartPath := IsObject(explorerDirectUIDoubleClick)
+                    ? explorerDirectUIDoubleClick.initialPath
+                    : navigationStartPath
+                if (doubleClickStartPath != "")
+                    _RequestExplorerCtrlAdd(_winIdD, _winClassD, _winCtrlD, 0, doubleClickStartPath, True)
+            }
+            else if (_winClassD == "CabinetWClass" || _winClassD == "#32770") {
                 SendCtrlAdd(_winIdD, _winClassD, _winCtrlD)
             }
             else {
                 ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
-                If IsSysListViewReportView(controlHwnd)
-                    SendCtrlAdd(_winIdD, _winClassD, _winCtrlD)
+                _RequestNonExplorerSysListViewCtrlAdd(_winIdD, _winClassD, _winCtrlD, controlHwnd)
             }
         }
 
@@ -12695,8 +12773,7 @@ $~LButton::
         else {
             If InStr(_winCtrlD, "SysListView32", True) {
                 ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
-                If IsSysListViewReportView(controlHwnd)
-                    SendCtrlAdd(_winIdD, _winClassD)
+                _RequestNonExplorerSysListViewCtrlAdd(_winIdD, _winClassD, _winCtrlD, controlHwnd)
             }
             Else
                 SendCtrlAdd(_winIdD, _winClassD)
@@ -13047,10 +13124,8 @@ _ApplyExplorerUIABudget(uiaDeadlineTick, requestedTimeoutMs := 2000) {
 }
 
 ; BEGIN removable Explorer loading-search experiment.
-; Search immediate children (0x2 = TreeScope_Children). On a debug-only comparison,
-; a descendant hit after a shallow miss still blocks alignment. Existing deadline
-; checks prevent starting the comparison after expiry. Sequential hits can differ
-; if Explorer changes during the two searches; a difference is diagnostic evidence.
+; Search immediate children first (0x2 = TreeScope_Children). On a miss,
+; search descendants if the UI Automation budget allows. Tracing records both results.
 ; Removal: delete this helper and its switch, then restore the original FindFirstBy call.
 _FindExplorerLoadingMessageChildren(itemsEl, targetHwnd, requestId, uiaDeadlineTick, transactionTimeout) {
     global k_debugTraceExplorerCtrlAddEnabled
@@ -13066,25 +13141,26 @@ _FindExplorerLoadingMessageChildren(itemsEl, targetHwnd, requestId, uiaDeadlineT
     childElapsedMs := A_TickCount - childStartTick
     resultEl := childEl
 
-    if (k_debugTraceExplorerCtrlAddEnabled && requestId != "") {
-        descendantElapsedMs := 0
-        descendantFound := "not_checked"
-        comparisonStatus := "child_found"
-        if !IsObject(childEl) {
-            comparisonStatus := "budget_expired"
-            if (_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
-                descendantStartTick := A_TickCount
-                comparisonStatus := "ok"
-                try {
-                    resultEl := itemsEl.FindFirstBy(k_explorerItemsViewLoadingCondition)
-                    descendantFound := IsObject(resultEl) ? 1 : 0
-                } catch e {
-                    comparisonStatus := "exception"
-                    descendantFound := "unknown"
-                }
-                descendantElapsedMs := A_TickCount - descendantStartTick
+    descendantElapsedMs := 0
+    descendantFound := "not_checked"
+    comparisonStatus := "child_found"
+    if !IsObject(childEl) {
+        comparisonStatus := "budget_expired"
+        if (_ApplyExplorerUIABudget(uiaDeadlineTick, transactionTimeout)) {
+            descendantStartTick := A_TickCount
+            comparisonStatus := "ok"
+            try {
+                resultEl := itemsEl.FindFirstBy(k_explorerItemsViewLoadingCondition)
+                descendantFound := IsObject(resultEl) ? 1 : 0
+            } catch e {
+                comparisonStatus := "exception"
+                descendantFound := "unknown"
             }
+            descendantElapsedMs := A_TickCount - descendantStartTick
         }
+    }
+
+    if (k_debugTraceExplorerCtrlAddEnabled && requestId != "") {
         _DebugTrace_ExplorerCtrlAdd("loading_search_children_test"
             , "hwnd=" . targetHwnd . " childFound=" . (IsObject(childEl) ? 1 : 0)
             . " childStatus=" . childStatus . " childMs=" . childElapsedMs
@@ -13645,6 +13721,31 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
         LbuttonEnabled := True
     }
     Return
+}
+
+; Keep one pending fit for the clicked ListView after a non-Explorer double-click.
+_RequestNonExplorerSysListViewCtrlAdd(hwnd, windowClass, ctrlNN, controlHwnd) {
+    static timerCallback := ""
+
+    if (!IsForegroundWindow(hwnd) || GetKeyState("LButton", "P") || !IsSysListViewReportView(controlHwnd))
+        return
+
+    resolvedTarget := { ctrlNN: ctrlNN, hwnd: controlHwnd }
+    if IsObject(timerCallback)
+        SetTimer, % timerCallback, Delete
+
+    timerCallback := Func("_RunNonExplorerSysListViewCtrlAdd").Bind(hwnd, windowClass, resolvedTarget)
+    SetTimer, % timerCallback, % -k_nonExplorerCtrlAddDelayMs
+}
+
+_RunNonExplorerSysListViewCtrlAdd(hwnd, windowClass, resolvedTarget) {
+    if (!IsForegroundWindow(hwnd) || GetKeyState("LButton", "P") || disableSendCtrlHwnd == hwnd)
+        return
+    if !IsSysListViewReportView(resolvedTarget.hwnd)
+        return
+
+    ; SendCtrlAdd verifies that this ClassNN still names the same live child HWND.
+    SendCtrlAdd(hwnd, windowClass, "", False, "", True, resolvedTarget)
 }
 
 SendCtrlAddLabel:
@@ -14958,8 +15059,8 @@ AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 7
     static LVSCW_AUTOSIZE                   := -1
     ; Size a column to its header text; the final column may fill remaining space.
     static LVSCW_AUTOSIZE_USEHEADER         := -2
-    static k_headerNoFillLastColumnMinWidth := 50
     static SMTO_ABORTIFHUNG_AND_BLOCK       := 0x0003
+    global k_headerNoFillLastColumnMinWidth
 
     failureInfo := ""
 
@@ -15040,7 +15141,7 @@ AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 7
                 , messageResult: messageResult }
             return False
         }
-        if (isHeaderNoFillLastColumn) {
+        if (isHeaderNoFillLastColumn && k_headerNoFillLastColumnMinWidth > 0) {
             columnPixelWidth := 0
             if !DllCall("user32\SendMessageTimeoutW"
                 , "Ptr", listViewHwnd, "UInt", LVM_GETCOLUMNWIDTH
