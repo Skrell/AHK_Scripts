@@ -205,13 +205,13 @@ Global disableEnter                                          := False
 Global TimeOfLastHotkeyTyped                                 := A_TickCount
 ; +----------------------------------------------------------------------------+
 ; | Everything Edit1 Deferred Column Auto-Fit State                            |
-; | Debounces native results ListView sizing so it runs after a short pause     |
+; | Debounces Everything column-fit commands after a short typing pause        |
 ; | and only while the same Everything Edit1 still owns focus.                  |
 ; +----------------------------------------------------------------------------+
-; Results-window startup state keeps direct native sizing separate from the
+; Results-window startup state keeps command dispatch separate from the
 ; Edit1 typing path so initial alignment never needs to move keyboard focus.
 Global everythingActivationAutoFitDeadlineTick               := 0
-; Results-window handle whose native SysListView32 is awaiting readiness.
+; Results-window handle whose results control is awaiting creation.
 Global everythingActivationAutoFitHwnd                       := 0
 ; Monotonic token prevents an older startup timer from acting on a newer window.
 Global everythingActivationAutoFitId                         := 0
@@ -221,7 +221,7 @@ Global everythingActivationAutoFitStartTick                  := 0
 Global everythingActivationAutoFitTraceRequestId             := ""
 ; Small initial pause lets Everything create its results ListView before probing it.
 Global k_everythingActivationAutoFitInitialDelayMs           := 15
-; Short native-header retry interval minimizes the visible startup alignment delay.
+; Short command retry interval minimizes the visible startup alignment delay.
 Global k_everythingActivationAutoFitRetryMs                  := 25
 ; Bounded startup wait avoids retaining a request for an unresponsive Everything window.
 Global k_everythingActivationAutoFitTimeoutMs                := 750
@@ -249,10 +249,10 @@ Global tbcEverythingAdjustSourceTick                         := 0
 ; is dropped as stale rather than sent into a newer typing context.
 Global k_tbcEverythingAdjustMaxAgeMs                         := 750
 ; Short retry delay for the queued Everything Edit1 auto-fit timer while
-; waiting for Everything's native results ListView/header to settle.
+; waiting for Everything's results control or command receiver to become ready.
 Global k_tbcEverythingAdjustRetryMs                          := 40
 ; Debounce interval after an Everything Edit1 typing event before attempting
-; native results ListView column sizing.
+; Everything's own column-fit command.
 Global k_tbcEverythingAdjustTypingQuietMs                    := 240
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
@@ -464,12 +464,12 @@ Global explorerCtrlAddRequestPreviousPath                    := ""
 ; Whether this request must prove a directory change before adjusting columns.
 ; Refresh requests leave this false because Refresh keeps the same directory.
 Global explorerCtrlAddRequestRequirePathChange               := False
-; Keyboard navigation requires a reported destination path even in file dialogs.
-Global explorerCtrlAddRequestRequireStrictPathChange         := False
 ; Whether this request must observe the same nonempty directory twice before
 ; authorizing its Details/content result. Startup Explorer/file-dialog requests
 ; use this condition.
 Global explorerCtrlAddRequestRequireStablePath               := False
+; Keyboard navigation requires a reported destination path even in file dialogs.
+Global explorerCtrlAddRequestRequireStrictPathChange         := False
 ; False only for header-navigation requests, whose completed column adjustment
 ; must not restore a previously focused SysTreeView32 control.
 Global explorerCtrlAddRequestRestoreTreeFocus                := True
@@ -591,7 +591,7 @@ Global k_debugTraceGeneralEnabled                            := False
 ; Persistent general diagnostic location beside this script.
 Global k_debugTraceGeneralFile                               := A_ScriptDir . "\AutoCorrect_Debug.log"
 ; Enables buffered diagnostics for docked-window edge resize synchronization.
-Global k_debugTraceLButtonResizeSyncEnabled                  := True
+Global k_debugTraceLButtonResizeSyncEnabled                  := False
 ; Stores docked-window edge resize diagnostics beside this script for inspection.
 Global k_debugTraceLButtonResizeSyncFile                     := A_ScriptDir . "\AutoCorrect_LButtonResizeSyncTrace.log"
 ; Controls the per-frame taskbar Explorer trace; keep disabled because synchronous file writes distort frame cadence.
@@ -620,11 +620,11 @@ Global k_numbers                                             := "0123456789"
 ; | Configures the direct SysListView32 column-width path and its fallback     |
 ; | child-control probe.                                                       |
 ; +----------------------------------------------------------------------------+
+; Minimum final-column width in pixels for header_no_fill. Set to 0 to disable.
+Global k_headerNoFillLastColumnMinWidth                      := 50
 ; Selects whether native SysListView32 columns fit their item content or header
 ; text while the direct-message auto-fit experiment is enabled.
 Global k_nativeSysListViewColumnAutoFitMode                  := "header_no_fill"
-; Minimum final-column width in pixels for header_no_fill. Set to 0 to disable.
-Global k_headerNoFillLastColumnMinWidth                     := 50
 ; Maximum time SendCtrlAdd() waits for MouseGetPos to identify a specific child
 ; when Explorer initially reports the generic ShellTabWindowClass1 host.
 Global k_sendCtrlAddShellTabProbeTimeoutMs                   := 50
@@ -723,6 +723,9 @@ Global WindowTitleGuiReady                                 := False
 ; sequence cannot repeat the custom action. The first eligible click after a
 ; gap longer than k_DoubleClickTime sets it True and starts a new sequence.
 Global allowDoubleClicks                                   := True
+; Reuse event-driven snapshots to compare native and Explorer DirectUI column widths.
+; False restores the previous header paths and disables demand-driven width reads.
+Global k_useColumnWidthResizeComparison                     := True
 ; Let a native file manager populate the new folder before fitting its columns.
 Global k_nonExplorerCtrlAddDelayMs                         := 175
 ; True while the custom live window-drag flow is in progress.
@@ -2949,7 +2952,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
         else if (isFirstTrackedActivation && vWinProc == "Everything.exe") {
             ; Everything creates its results ListView asynchronously. Wait for the
-            ; native header and size it directly so Edit1 never loses keyboard focus.
+            ; results control and invoke its column-fit command without focusing it.
             everythingActivationTraceRequestId := k_debugTraceExplorerCtrlAddEnabled
                 ? "everything_activation_" . hWnd . "_" . A_TickCount
                 : ""
@@ -2978,6 +2981,9 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
     }
 
     LbuttonEnabled := True
+    ; Seed new and returning file views through the existing deferred worker.
+    ; Require two matching reads; later sizing/navigation requests retain ownership.
+    _RequestColumnWidthRefresh(hWnd, 0, "activation", True)
 }
 
 WaitForFadeInStop(hwnd) {
@@ -3091,10 +3097,22 @@ Return
 ;===============================================================
 ;    Neuter Win Key Combos!!
 ;===============================================================
-LWin & WheelUp::Send {Volume_Up}
-LWin & WheelDown::Send {Volume_Down}
-RWin & WheelUp::Send {Volume_Up}
-RWin & WheelDown::Send {Volume_Down}
+LWin & WheelUp::
+    _NoteColumnWidthMouseInput()
+    Send {Volume_Up}
+Return
+LWin & WheelDown::
+    _NoteColumnWidthMouseInput()
+    Send {Volume_Down}
+Return
+RWin & WheelUp::
+    _NoteColumnWidthMouseInput()
+    Send {Volume_Up}
+Return
+RWin & WheelDown::
+    _NoteColumnWidthMouseInput()
+    Send {Volume_Down}
+Return
 
 LWin::Return
 RWin::Return
@@ -3131,8 +3149,14 @@ RWin::Return
 #If
 ;================================================================
 #If VolumeHover()
-$WheelUp::send {Volume_Up}
-$WheelDown::send {Volume_Down}
+$WheelUp::
+    _NoteColumnWidthMouseInput()
+    send {Volume_Up}
+Return
+$WheelDown::
+    _NoteColumnWidthMouseInput()
+    send {Volume_Down}
+Return
 
 /*
 HIGH-LEVEL HOTKEY RELATIONSHIPS
@@ -3317,6 +3341,7 @@ ONE-SENTENCE MENTAL MODEL
 
 #If suspendRightButtonForMButtonDrag
 $*RButton::
+    _NoteColumnWidthMouseInput()
     ; Give MButton move/resize mode first claim on RButton everywhere, including
     ; Explorer/taskbar-adjacent surfaces where the normal RButton state machine
     ; may not be eligible. This keeps the resize chord from leaking a plain
@@ -3325,6 +3350,7 @@ $*RButton::
 return
 
 $*RButton Up::
+    _NoteColumnWidthMouseInput()
     if (swallowNextRButtonUpFromMButtonDrag)
         swallowNextRButtonUpFromMButtonDrag := false
 
@@ -3337,6 +3363,7 @@ return
 #If
 
 ~*RButton Up::
+    _NoteColumnWidthMouseInput()
     MouseGetPos, , , _winIdD
     WinGetClass, _winClassD, ahk_id %_winIdD%
     if (desktopIconsHiddenByScript && (_winClassD == "Progman" || _winClassD == "ProgMan" || _winClassD == "WorkerW")) {
@@ -3348,6 +3375,7 @@ return
 
 #If !MouseIsOverAnyTaskbarSurface() && !MouseIsOverDesktopShellSurface()
 $*RButton::
+    _NoteColumnWidthMouseInput()
     ; tooltip, % "DOWN sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
 
     ; While MButton window-drag mode is active, ignore plain RButton handling entirely.
@@ -3403,6 +3431,7 @@ $*RButton::
 return
 
 $*RButton Up::
+    _NoteColumnWidthMouseInput()
     ; tooltip, % "UP sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
 
     ; MButton resize/move mode may intentionally suppress RButton on the way down.
@@ -3446,6 +3475,7 @@ return
 
 #If MouseIsOverTitleBar()
 ~LButton & RButton::
+    _NoteColumnWidthMouseInput()
     suppressRightButtonLogic := true
     titleBarChordOwnsLButton := true
     rightButtonComboUsed     := true
@@ -3489,6 +3519,7 @@ return
 #If GetKeyState("RButton", "P")
 
 WheelUp::
+    _NoteColumnWidthMouseInput()
     ; If the pointer is currently over the taskbar or desktop shell, pass this wheel event
     ; through as ordinary scrolling instead of running the custom RButton+wheel action.
     if (MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()) {
@@ -3550,6 +3581,7 @@ WheelUp::
 return
 
 WheelDown::
+    _NoteColumnWidthMouseInput()
     ; Same bypass as WheelUp: preserve ordinary wheel behavior while the pointer
     ; is currently over the taskbar or desktop shell.
     if (MouseIsOverAnyTaskbarSurface() || MouseIsOverDesktopShellSurface()) {
@@ -3615,15 +3647,24 @@ return
 #If blockWheel
 ; Swallow plain and Ctrl-modified physical wheel events only while a synthetic
 ; Ctrl+NumpadAdd sequence and its immediate Ctrl cleanup are active.
-$WheelUp::Return
-$WheelDown::Return
-$^WheelUp::Return
-$^WheelDown::Return
+$WheelUp::
+    _NoteColumnWidthMouseInput()
+Return
+$WheelDown::
+    _NoteColumnWidthMouseInput()
+Return
+$^WheelUp::
+    _NoteColumnWidthMouseInput()
+Return
+$^WheelDown::
+    _NoteColumnWidthMouseInput()
+Return
 #If
 
 #If !GetKeyState("RButton", "P")
 
 $^WheelUp::
+    _NoteColumnWidthMouseInput()
     if (IsConsoleWindow() && !MouseIsOverTitleBar()) {
         stopRecursion := true
         SetTimer, MbuttonTimer, Off
@@ -3638,6 +3679,7 @@ $^WheelUp::
 return
 
 $^WheelDown::
+    _NoteColumnWidthMouseInput()
     if (IsConsoleWindow() && !MouseIsOverTitleBar()) {
         stopRecursion := true
         SetTimer, MbuttonTimer, Off
@@ -3652,6 +3694,7 @@ $^WheelDown::
 return
 
 $~WheelUp::
+    _NoteColumnWidthMouseInput()
     stopRecursion := true
     Critical, Off
     Sleep, -1
@@ -3695,6 +3738,7 @@ $~WheelUp::
 return
 
 $~WheelDown::
+    _NoteColumnWidthMouseInput()
     stopRecursion := true
     Critical, Off
     Sleep, -1
@@ -3966,6 +4010,7 @@ Return
 
 #If MbuttonIsEnter
 Mbutton::
+    _NoteColumnWidthMouseInput()
     Send, {Enter}
     SetTimer, MbuttonTimer, Off
     SetTimer, MbuttonTimer, -1
@@ -4015,6 +4060,7 @@ ForceRedrawWindow(hwnd) {
 
 #If !MbuttonIsEnter && !MouseIsOverTaskbar()
 $*MButton::
+    _NoteColumnWidthMouseInput()
     global DraggingWindow
 
     StopRecursion := True
@@ -5580,35 +5626,19 @@ Return
 
 #If !disableEnter && (WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770"))
 $~Enter::
+    ControlGetFocus, entCtrl, A
+    WinGetClass, entCl, A
+    WinGetTitle, entTi, A
     WinGet, entID, ID, A
-    if (!entID)
-        Return
-
-    ControlGetFocus, entCtrl, ahk_id %entID%
-    WinGetClass, entCl, ahk_id %entID%
-    WinGetTitle, entTi, ahk_id %entID%
     If     (entCl == "CabinetWClass" && InStr(entCtrl, "Edit", True))
         || (entCl == "#32770" && InStr(entCtrl, "Edit", True) && (InStr(entTi, "Save", True) || InStr(entTi, "Open", True))) {
 
         Keywait, Enter, U T3
 
         WinGet, checkID, ID, A
-        if (checkID != entID)
-            Return
-
-        ControlGet, enterSysListVisible, Visible,, SysListView321, ahk_id %entID%
-        ControlGet, enterDirectUI2Visible, Visible,, DirectUIHWND2, ahk_id %entID%
-        ControlGet, enterDirectUI3Visible, Visible,, DirectUIHWND3, ahk_id %entID%
-
-        ; Enter can commit an edit while the same folder remains open.
-        if (enterSysListVisible == 1 || enterDirectUI2Visible == 1 || enterDirectUI3Visible == 1) {
-            Sleep, 50
-            if IsForegroundWindow(entID)
-                Send, ^{NumpadAdd}
-        }
-        else
+        if (checkID == entID)
             SendCtrlAdd(entID, entCl)
-    }
+        }
 Return
 
 $~F2::
@@ -5641,6 +5671,7 @@ _GetFilePaneEnterContext(ByRef hwnd := 0, ByRef windowClass := "", ByRef ctrlNN 
     if (windowClass != "CabinetWClass" && windowClass != "#32770")
         return False
 
+    ; Edit1 and all other edit controls retain the existing pass-through Enter handler.
     ControlGetFocus, ctrlNN, ahk_id %hwnd%
     if !RegExMatch(ctrlNN, "^(?:SysListView32|DirectUIHWND)\d+$")
         return False
@@ -5648,6 +5679,7 @@ _GetFilePaneEnterContext(ByRef hwnd := 0, ByRef windowClass := "", ByRef ctrlNN 
     return (windowClass == "CabinetWClass" || ClassifyDialog32770(hwnd, windowClass) == "file_dialog")
 }
 
+; Capture the original folder before forwarding Enter, then request strict navigation readiness.
 _HandleFilePaneEnter() {
     if !_GetFilePaneEnterContext(hwnd, windowClass, ctrlNN)
         return
@@ -6378,6 +6410,7 @@ Return
 
 #If GetKeyState("LAlt", "P")
 $*LButton::
+    _NoteColumnWidthMouseInput()
     if (hitTab || hitTilde) {
         LclickSelected := True
 
@@ -7767,9 +7800,12 @@ GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
 #If MouseIsOverCaptionButtons()
 ; Ctrl+click is script-owned, so suppress its native down as well as the
 ; existing non-tilde up event before running the custom caption action.
-$^Lbutton::Return
+$^Lbutton::
+    _NoteColumnWidthMouseInput()
+Return
 
 $^Lbutton Up::
+    _NoteColumnWidthMouseInput()
     StopRecursion := True
     DetectHiddenWindows, Off
     CoordMode, Mouse, Screen
@@ -7834,10 +7870,12 @@ Return
 ; Block the original caption-button click, then send one replacement click
 ; on release unless the title-bar LButton+RButton chord consumed it.
 $Lbutton::
+    _NoteColumnWidthMouseInput()
     titleBarChordOwnsLButton := false
 Return
 
 $Lbutton Up::
+    _NoteColumnWidthMouseInput()
     ; The title-bar LButton+RButton chord already consumed this left-click, even
     ; if RButton was released first and its separate state has been reset.
     if (titleBarChordOwnsLButton) {
@@ -7859,6 +7897,7 @@ Return
 
 #If MouseIsOverTaskbarWidgets()
 $~^LButton::
+    _NoteColumnWidthMouseInput()
     Thread, NoTimers, True
     StopRecursion := True
 
@@ -7927,6 +7966,7 @@ Return
 
 #If MouseIsOverTitleBar()
 $^LButton::
+    _NoteColumnWidthMouseInput()
     Thread, NoTimers, True
     StopRecursion := True
 
@@ -7950,6 +7990,7 @@ return
 ; Hold Ctrl+Shift, then drag with LButton to measure horizontal and vertical distance
 ; from the mouse-down origin.
 $^+LButton::
+    _NoteColumnWidthMouseInput()
     Measure_Begin()
 return
 
@@ -8263,6 +8304,7 @@ _SpawnExplorerFromTaskbar(clickX, clickY) {
 
 #If MouseIsOverTaskbarBlank()
 $~Lbutton::
+    _NoteColumnWidthMouseInput()
     MouseGetPos, expX1, expY1,
     if (A_PriorHotkey == A_ThisHotkey
         && (A_TimeSincePriorHotkey < k_DoubleClickTime)
@@ -9549,11 +9591,78 @@ IsDetailsView(winHwnd := ""                                          ; Window to
 }
 
 
-ExplorerClickClassify(xPos, yPos, winCtrlNN) {
+; Capture native identity and geometry before accessibility work can outlive mouse-up.
+_CaptureExplorerHeaderRetryTarget(hwnd, ctrlNN, clickX, clickY) {
+    ControlGet, ctrlHwnd, Hwnd,, %ctrlNN%, ahk_id %hwnd%
+    if !ctrlHwnd
+        return ""
+    ControlGet, tabHwnd, Hwnd,, ShellTabWindowClass1, ahk_id %hwnd%
+    VarSetCapacity(rect, 16, 0)
+    if !DllCall("user32\GetWindowRect", "Ptr", ctrlHwnd, "Ptr", &rect)
+        return ""
+    return {hwnd: hwnd, ctrlHwnd: ctrlHwnd, ctrlNN: ctrlNN, tabHwnd: tabHwnd, x: clickX, y: clickY
+        , left: NumGet(rect, 0, "Int"), top: NumGet(rect, 4, "Int")
+        , right: NumGet(rect, 8, "Int"), bottom: NumGet(rect, 12, "Int")}
+}
+
+; Reject changed windows, tabs, controls, geometry, button state, and newly covered click points.
+_IsExplorerHeaderRetryTarget(target) {
+    if (!IsObject(target) || GetKeyState("LButton", "P") || WinExist("A") != target.hwnd)
+        return False
+    hwnd := target.hwnd
+    ctrlNN := target.ctrlNN
+    WinGetClass, windowClass, ahk_id %hwnd%
+    if (windowClass != "CabinetWClass")
+        return False
+    ControlGet, ctrlHwnd, Hwnd,, %ctrlNN%, ahk_id %hwnd%
+    ControlGet, tabHwnd, Hwnd,, ShellTabWindowClass1, ahk_id %hwnd%
+    if (ctrlHwnd != target.ctrlHwnd || tabHwnd != target.tabHwnd)
+        return False
+    VarSetCapacity(rect, 16, 0)
+    if !DllCall("user32\GetWindowRect", "Ptr", ctrlHwnd, "Ptr", &rect)
+        return False
+    if (NumGet(rect, 0, "Int") != target.left || NumGet(rect, 4, "Int") != target.top
+     || NumGet(rect, 8, "Int") != target.right || NumGet(rect, 12, "Int") != target.bottom)
+        return False
+    VarSetCapacity(point, 8, 0)
+    NumPut(target.x, point, 0, "Int")
+    NumPut(target.y, point, 4, "Int")
+    hitHwnd := DllCall("user32\WindowFromPoint", "Int64", NumGet(point, 0, "Int64"), "Ptr")
+    return (hitHwnd == ctrlHwnd || DllCall("user32\IsChild", "Ptr", ctrlHwnd, "Ptr", hitHwnd))
+}
+
+; Retry a stationary unknown or non-header click once after release; require a positive header result.
+; The deadline stops starting more parent reads; an individual provider call can outlast its budget.
+_RetryExplorerColumnHeaderClick(target, traceClickTick := 0) {
+    if !_IsExplorerHeaderRetryTarget(target) {
+        _DebugTrace_ExplorerHeader("header_click_retry_skipped", "reason=target_changed_before_retry", True, traceClickTick)
+        return False
+    }
+    retryStartTick := A_TickCount
+    retryDeadlineTick := retryStartTick + 175
+    Sleep, 20
+    if !_IsExplorerHeaderRetryTarget(target) {
+        _DebugTrace_ExplorerHeader("header_click_retry_skipped", "reason=target_changed_during_retry_delay", True, traceClickTick)
+        return False
+    }
+    readStatus := ""
+    kind := ExplorerClickClassify(target.x, target.y, target.ctrlNN, readStatus, 100, retryDeadlineTick)
+    targetValid := _IsExplorerHeaderRetryTarget(target)
+    recovered := (kind == "header" && targetValid)
+    _DebugTrace_ExplorerHeader("header_click_retry_result"
+        , "hwnd=" . target.hwnd . " ctrlNN=[" . target.ctrlNN . "] kind=[" . kind . "] readStatus=[" . readStatus . "]"
+        . " targetValid=" . targetValid . " recovered=" . recovered . " elapsedMs=" . (A_TickCount - retryStartTick)
+        , True, traceClickTick)
+    return recovered
+}
+
+; Preserve positive header/item results; report unavailable or incomplete accessibility data as unknown.
+ExplorerClickClassify(xPos, yPos, winCtrlNN, ByRef readStatus := "", probeMs := 250, deadlineTick := 0) {
     global UIA
     static headerCtlId := 0
     static headerItemCtlId := 0
 
+    readStatus := "non_header"
     if (!headerCtlId || !headerItemCtlId) {
         try {
             headerCtlId     := UIA.ControlTypeId("Header")
@@ -9564,48 +9673,63 @@ ExplorerClickClassify(xPos, yPos, winCtrlNN) {
         }
     }
 
-    ; Early gate: only handle shell view clicks
     if !InStr(winCtrlNN, "DirectUIHWND", True)
         return "other"
-
-    ; This classification supplements click gestures; path change remains the
-    ; authoritative proof of DirectUI folder navigation. Use one short lookup so
-    ; an unresponsive UIA provider cannot hold up the second physical click.
-    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "", 250, 250, False)
-    if !IsObject(hitEl)
-        return "other"
-
-    ; Use one snapshot-driven parent walk so header/item/blank classification
-    ; stays ordered while avoiding multiple UIA ancestry/property passes.
-    blankFound := False
-    itemFound  := False
-    walkEl     := hitEl
-    depth      := 0
-
-    while (IsObject(walkEl) && depth < 18)
-    {
-        info := SafeUIA_GetElementSnapshot(walkEl, "autoId|className|controlType")
-
-        if ((depth < 12 && info.className = "UIColumnHeader")
-         || (depth < 16 && (info.controlType = headerItemCtlId || info.controlType = headerCtlId)))
-            return "header"
-
-        if (!itemFound && (info.className = "UIItem" || (depth = 0 && info.autoId = "System.ItemNameDisplay")))
-            itemFound := True
-
-        if (!blankFound && info.className = "UIItemsView")
-            blankFound := True
-
-        walkEl := ExplorerClickClassify_GetParentTW(walkEl)
-        depth++
+    if (deadlineTick && A_TickCount >= deadlineTick) {
+        readStatus := "retry_budget_exhausted"
+        return "unknown"
+    }
+    if deadlineTick
+        probeMs := Min(probeMs, Max(1, deadlineTick - A_TickCount))
+    hitEl := SafeUIA_ElementFromPoint(xPos, yPos, "", probeMs, probeMs, False)
+    if !IsObject(hitEl) {
+        readStatus := "point_unavailable"
+        return "unknown"
     }
 
-    if (itemFound)
+    blankFound := False
+    itemFound  := False
+    readFailed := False
+    walkEl     := hitEl
+    depth      := 0
+    while (IsObject(walkEl) && depth < 18) {
+        if (deadlineTick && A_TickCount >= deadlineTick) {
+            readStatus := "retry_budget_exhausted"
+            return "unknown"
+        }
+        info := SafeUIA_GetElementSnapshot(walkEl, "autoId|className|controlType", propertiesRead)
+        if (!propertiesRead || (info.className == "" && info.controlType == ""))
+            readFailed := True
+        if ((depth < 12 && info.className = "UIColumnHeader")
+         || (depth < 16 && (info.controlType = headerItemCtlId || info.controlType = headerCtlId))) {
+            readStatus := "header"
+            return "header"
+        }
+        if (!itemFound && (info.className = "UIItem" || (depth = 0 && info.autoId = "System.ItemNameDisplay")))
+            itemFound := True
+        if (!blankFound && info.className = "UIItemsView")
+            blankFound := True
+        if (deadlineTick && A_TickCount >= deadlineTick) {
+            readStatus := "retry_budget_exhausted"
+            return "unknown"
+        }
+        walkEl := ExplorerClickClassify_GetParentTW(walkEl, parentRead)
+        if !parentRead
+            readFailed := True
+        depth++
+    }
+    if itemFound {
+        readStatus := "item"
         return "item"
-
-    if (blankFound)
+    }
+    if (readFailed || IsObject(walkEl)) {
+        readStatus := readFailed ? "property_or_parent_read_failed" : "ancestry_limit"
+        return "unknown"
+    }
+    if blankFound {
+        readStatus := "blank"
         return "blank"
-
+    }
     return "other"
 }
 
@@ -9678,14 +9802,18 @@ DialogClickClassify(xPos, yPos, winCtrlNN) {
     return _DialogClickClassifyWalkParents(hitEl)
 }
 
-ExplorerClickClassify_GetParentTW(el) {
+ExplorerClickClassify_GetParentTW(el, ByRef readSucceeded := False) {
     global UIA
+    readSucceeded := False
     if !IsObject(el)
         return ""
-    try
-        return UIA.TreeWalkerTrue.GetParentElement(el)
-    catch exception
+    try {
+        parent := UIA.TreeWalkerTrue.GetParentElement(el)
+        readSucceeded := True
+        return parent
+    } catch exception {
         return ""
+    }
 }
 
 ; Purpose        : support the typing/editability gate by answering whether the
@@ -9858,6 +9986,9 @@ MSAA_IsFocusedEditable() {
     currentTarget := _MSAAGetFocusedTarget()
     return _MSAAIsEditableTarget(currentTarget)
 }
+
+; Temporary read-only native column snapshot test; hover the list or its header.
+F6::_TestNativeColumnWidthSnapshot()
 
 ; Toggle the desktop icon fade for testing.
 F7::
@@ -10169,7 +10300,7 @@ _IsExplorerNavigationSurfaceCtrl(ctrlNN) {
 ; then returns without running the heavier blank-space or SendCtrlAdd
 ; classification. This helper preserves that narrow snapshot so bounded timer
 ; retries can wait for both window activation and physical mouse release.
-_RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := "", headerKind := "") {
+_RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := "", headerKind := "", columnGesture := "") {
     global k_postActivationLButtonDelayMs
     global k_postActivationLButtonTimeoutMs
     global postActivationLButtonCtrlNN
@@ -10184,15 +10315,40 @@ _RequestPostActivationLButtonCheck(hwnd, ctrlNN, clickX, clickY, initialPath := 
     ; Publish one complete snapshot of the activation click. The timer copies
     ; this into locals immediately so later clicks cannot partially mutate its
     ; decision state.
-    postActivationLButtonId          += 1
-    postActivationLButtonCtrlNN      := ctrlNN
-    postActivationLButtonDeadlineTick := A_TickCount + k_postActivationLButtonTimeoutMs
-    postActivationLButtonHeaderKind  := headerKind
-    postActivationLButtonHwnd        := hwnd
-    postActivationLButtonInitialPath := initialPath
-    postActivationLButtonX           := clickX
-    postActivationLButtonY           := clickY
+    if IsObject(columnGesture)
+        columnGesture.deferred := True
+
+    _ColumnWidthCacheState().activationGesture := columnGesture
+    postActivationLButtonId                    += 1
+    postActivationLButtonCtrlNN                := ctrlNN
+    postActivationLButtonDeadlineTick          := A_TickCount + k_postActivationLButtonTimeoutMs
+    postActivationLButtonHeaderKind            := headerKind
+    postActivationLButtonHwnd                  := hwnd
+    postActivationLButtonInitialPath           := initialPath
+    postActivationLButtonX                     := clickX
+    postActivationLButtonY                     := clickY
     SetTimer, PostActivationLButtonCheck, % -k_postActivationLButtonDelayMs
+}
+
+; Compare the existing Details check with the complete provider snapshot read.
+; detailsQueryMs times the native Report-mode helper or Explorer's mode query.
+; detailsTotalMs includes viewSetupMs; snapshotTotalMs includes both plus widths
+; and reader cleanup. These elapsed measurements overlap and must not be added.
+; Formatting/buffering and the delayed disk flush occur after the end timestamp.
+_DebugTrace_ColumnWidthTiming(kind, hwnd, traceStartMs, detailsStartMs, detailsEndMs, detailsResult, readOk, columnCount) {
+    global k_debugTraceExplorerCtrlAddEnabled
+
+    if (!k_debugTraceExplorerCtrlAddEnabled || !traceStartMs)
+        return
+    traceEndMs := _ColumnWidthTraceClock()
+    viewSetupMs := detailsStartMs ? Format("{:.3f}", detailsStartMs - traceStartMs) : "unavailable"
+    detailsQueryMs := detailsEndMs ? Format("{:.3f}", detailsEndMs - detailsStartMs) : "unavailable"
+    detailsTotalMs := detailsEndMs ? Format("{:.3f}", detailsEndMs - traceStartMs) : "unavailable"
+    _DebugTrace_ExplorerHeader("column_width_timing"
+        , "kind=" . kind . " hwnd=" . hwnd . " readOk=" . readOk . " columns=" . columnCount
+        . " details=" . detailsResult . " viewSetupMs=" . viewSetupMs . " detailsQueryMs=" . detailsQueryMs
+        . " detailsTotalMs=" . detailsTotalMs . " snapshotTotalMs=" . Format("{:.3f}", traceEndMs - traceStartMs)
+        , True)
 }
 
 ; Flush buffered Explorer CtrlAdd trace lines to the configured file. The
@@ -10219,6 +10375,20 @@ _DebugTrace_FlushExplorerCtrlAdd() {
         explorerCtrlAddTraceBuffer := traceChunk . explorerCtrlAddTraceBuffer
         Critical, Off
     }
+}
+
+; Flush header diagnostics after a short delay; defer again while LButton is held.
+; Other CtrlAdd trace paths retain their existing flush behavior.
+_DebugTrace_FlushExplorerHeader() {
+    global k_debugTraceExplorerCtrlAddEnabled
+
+    if !k_debugTraceExplorerCtrlAddEnabled
+        return
+    if GetKeyState("LButton", "P") {
+        SetTimer, _DebugTrace_FlushExplorerHeader, -100
+        return
+    }
+    _DebugTrace_FlushExplorerCtrlAdd()
 }
 
 ; Flushes buffered Explorer Shift+click events after the mouse callback has returned.
@@ -10267,7 +10437,7 @@ _DebugTrace_FlushLButtonResizeSync() {
 
 ; Add one timestamped event to the low-overhead Explorer CtrlAdd trace. Events
 ; remain in memory until a terminal outcome or the safety limit requests a flush.
-_DebugTrace_ExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := "") {
+_DebugTrace_ExplorerCtrlAdd(eventName, details := "", flushNow := False, requestId := "", deferFlush := False) {
     global explorerCtrlAddRequestId
     global debugTraceExplorerCtrlAddRequestOpen
     global explorerCtrlAddTraceBuffer
@@ -10314,7 +10484,7 @@ _DebugTrace_ExplorerCtrlAdd(eventName, details := "", flushNow := False, request
     shouldFlush := flushNow || StrLen(explorerCtrlAddTraceBuffer) >= k_explorerCtrlAddTraceBufferChars
     Critical, Off
 
-    if shouldFlush
+    if (shouldFlush && !deferFlush)
         _DebugTrace_FlushExplorerCtrlAdd()
 }
 
@@ -10377,6 +10547,19 @@ _DebugTrace_ExplorerCtrlAddSendContext(hwnd, phase, requestId) {
         . " path=[" . folderPath . "] status=" . snapshotStatus
         . " elapsedMs=" . (A_TickCount - snapshotStartTick)
         , False, requestId)
+}
+
+; Reuse the CtrlAdd log and switch without adding Explorer/UIA/COM queries.
+; clickTick identifies the captured DOWN where available; activation callbacks also log their queued ID.
+; Terminal records schedule a delayed flush instead of writing inside the send/decision path.
+_DebugTrace_ExplorerHeader(eventName, details := "", terminal := False, clickTick := 0) {
+    global k_debugTraceExplorerCtrlAddEnabled
+
+    if !k_debugTraceExplorerCtrlAddEnabled
+        return
+    _DebugTrace_ExplorerCtrlAdd(eventName, "clickTick=" . clickTick . " " . details, False, 0, True)
+    if terminal
+        SetTimer, _DebugTrace_FlushExplorerHeader, -100
 }
 
 ; Buffers one Explorer Shift+click event without performing disk I/O in the mouse callback.
@@ -10729,6 +10912,12 @@ ExplorerNavigationEvent_NavigateComplete2(pDisp, url) {
         eventHwnd := explorerCtrlAddRequestHwnd
     if (!eventHwnd)
         return
+    columnState := _ColumnWidthCacheState()
+    if ((IsObject(columnState.snapshot) && columnState.snapshot.hwnd == eventHwnd)
+        || (IsObject(columnState.target) && columnState.target.hwnd == eventHwnd)) {
+        _InvalidateColumnWidthCache()
+        _RequestColumnWidthRefresh(eventHwnd, 0, "navigation", True)
+    }
 
     candidateRequestId := explorerCtrlAddRequestId
     candidateEligible := observerMatched && observerActiveTabHwnd
@@ -11117,27 +11306,55 @@ _RequestHeaderNavigationCtrlAdd(hwnd, windowClass, initialPath := "", requirePat
 ; Ctrl+NumpadAdd path so click handlers reuse the same modifier cleanup.
 ; A nonempty traceContext identifies a column-header send that bypasses the
 ; deferred Explorer request flow.
-_SendFocusedCtrlAdd(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, syncPassCount := 6, traceContext := "") {
-    if (traceContext != "")
-        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_attempt"
-            , "source=" . traceContext . " hwnd=" . hwndTop . " ctrlNN=[" . ctrlNN . "]"
-            , False, 0)
+_SendFocusedCtrlAdd(hwndTop, ctrlNN, totalMs := 60, refocusEveryMs := 15, syncPassCount := 6, traceContext := "", traceClickTick := 0) {
+    global k_debugTraceExplorerCtrlAddEnabled
+
+    traceThisCall := (traceContext != "" && k_debugTraceExplorerCtrlAddEnabled)
+    if traceThisCall {
+        traceStartTick := A_TickCount
+        WinGetClass, traceActualClass, ahk_id %hwndTop%
+        ControlGetFocus, traceFocusedCtrl, ahk_id %hwndTop%
+        _DebugTrace_ExplorerHeader("direct_header_ctrladd_attempt"
+            , "source=" . traceContext . " hwnd=" . hwndTop . " actualClass=" . traceActualClass
+            . " ctrlNN=[" . ctrlNN . "] focusedCtrl=[" . traceFocusedCtrl . "] foreground=" . WinExist("A")
+            . " lbuttonPhysical=" . GetKeyState("LButton", "P")
+            , False, traceClickTick)
+    }
 
     focusSucceeded := EnsureFocusedCtrlNN(hwndTop, ctrlNN, totalMs, refocusEveryMs)
+    if traceThisCall {
+        traceFocusElapsedMs := A_TickCount - traceStartTick
+        ControlGetFocus, traceFocusedCtrl, ahk_id %hwndTop%
+        _DebugTrace_ExplorerHeader("header_click_focus_result"
+            , "source=" . traceContext . " hwnd=" . hwndTop . " ctrlNN=[" . ctrlNN . "]"
+            . " succeeded=" . focusSucceeded . " focusedCtrl=[" . traceFocusedCtrl . "]"
+            . " foreground=" . WinExist("A") . " elapsedMs=" . traceFocusElapsedMs
+            , False, traceClickTick)
+    }
     if !focusSucceeded {
-        if (traceContext != "")
-            _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+        if traceThisCall
+            _DebugTrace_ExplorerHeader("direct_header_ctrladd_result"
                 , "source=" . traceContext . " hwnd=" . hwndTop . " ctrlNN=[" . ctrlNN . "] result=focus_failed"
-                , True, 0)
+                , True, traceClickTick)
         return False
     }
 
+    if traceThisCall {
+        traceSendTick := A_TickCount
+        _DebugTrace_ExplorerHeader("header_click_send_begin"
+            , "source=" . traceContext . " hwnd=" . hwndTop . " foreground=" . WinExist("A")
+            . " lbuttonPhysical=" . GetKeyState("LButton", "P")
+            , False, traceClickTick)
+    }
     sendSucceeded := SendCtrlNumpadAdd(syncPassCount)
-    if (traceContext != "")
-        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+    if traceThisCall {
+        _DebugTrace_ExplorerHeader("direct_header_ctrladd_result"
             , "source=" . traceContext . " hwnd=" . hwndTop . " ctrlNN=[" . ctrlNN . "]"
             . " result=" . (sendSucceeded ? "sent" : "send_failed")
-            , True, 0)
+            . " sendElapsedMs=" . (A_TickCount - traceSendTick) . " totalElapsedMs=" . (A_TickCount - traceStartTick)
+            . " foreground=" . WinExist("A") . " confirmation=shortcut_injection_only"
+            , True, traceClickTick)
+    }
     return sendSucceeded
 }
 
@@ -11207,9 +11424,10 @@ RunExplorerCtrlAddWhenReady:
     requestPreferredTarget            := explorerCtrlAddRequestPreferredTarget
     ; Copies the path-change requirement so sending remains blocked until navigation is proven when the request requires it.
     requestRequiresPathChange         := explorerCtrlAddRequestRequirePathChange
-    requestRequiresStrictPathChange   := explorerCtrlAddRequestRequireStrictPathChange
     ; Copies the stable-path requirement so sending waits for two matching startup samples when that guard is required.
     requestRequiresStablePath         := explorerCtrlAddRequestRequireStablePath
+    ; Keep keyboard navigation gated on a reported destination path.
+    requestRequiresStrictPathChange   := explorerCtrlAddRequestRequireStrictPathChange
     ; Copies the tree-focus restoration policy so a tree-originated request can return focus after alignment.
     requestRestoreTreeFocus           := explorerCtrlAddRequestRestoreTreeFocus
     ; Copies the creation tick so elapsed-time trace values describe this request rather than this callback.
@@ -12064,6 +12282,24 @@ Return
 ; click path cheap, which reduces the chance that immediate post-activation
 ; typing inherits a long synchronous shell probe and appears delayed or garbled.
 PostActivationLButtonCheck:
+    _DispatchPostActivationLButtonCheck()
+Return
+
+; Finish the deferred record after activation handling, never in parallel with it.
+_DispatchPostActivationLButtonCheck() {
+    columnGesture := _ColumnWidthCacheState().activationGesture
+    try {
+        _RunPostActivationLButtonCheck(columnGesture)
+    } finally {
+        _FinishColumnWidthGesture(columnGesture)
+    }
+}
+
+; Preserve the deferred gesture locally across activation waits and provider calls.
+_RunPostActivationLButtonCheck(columnGesture) {
+    global
+    local queuedId, deadlineTick, targetCtrl, capturedHeaderKind, targetHwnd, initialPath, clickX, clickY
+    local clickKind, targetClass, titleBarState, postActivationBlankClick, headerKind
     ; Copy the pending snapshot first; every later guard validates that it still
     ; describes the current foreground target.
     queuedId           := postActivationLButtonId
@@ -12074,14 +12310,26 @@ PostActivationLButtonCheck:
     initialPath        := postActivationLButtonInitialPath
     clickX             := postActivationLButtonX
     clickY             := postActivationLButtonY
+    ; Reuse the captured control identity when tracing activation guard decisions.
+    headerActivationTraceCandidate := k_debugTraceExplorerCtrlAddEnabled
+        && (InStr(targetCtrl, "DirectUIHWND", True) || InStr(targetCtrl, "SysHeader32", True)
+            || _IsExplorerNavigationHeaderCtrl(targetCtrl))
 
     ; A newer inactive-window click replaced this snapshot, so let the newer
     ; timer instance make the decision.
-    if (queuedId != postActivationLButtonId)
+    if (queuedId != postActivationLButtonId) {
+        if headerActivationTraceCandidate
+            _DebugTrace_ExplorerHeader("header_activation_skipped"
+                , "hwnd=" . targetHwnd . " activationId=" . queuedId . " reason=superseded", True)
         Return
+    }
 
-    if (!targetHwnd || !WinExist("ahk_id " . targetHwnd))
+    if (!targetHwnd || !WinExist("ahk_id " . targetHwnd)) {
+        if headerActivationTraceCandidate
+            _DebugTrace_ExplorerHeader("header_activation_skipped"
+                , "hwnd=" . targetHwnd . " activationId=" . queuedId . " reason=window_missing", True)
         Return
+    }
 
     ; Activation and mouse release do not have deterministic timing. Retry this
     ; one-shot timer until both are complete, but abandon the stale snapshot at
@@ -12089,14 +12337,28 @@ PostActivationLButtonCheck:
     if (WinExist("A") != targetHwnd || GetKeyState("LButton", "P")) {
         if (A_TickCount < deadlineTick)
             SetTimer, PostActivationLButtonCheck, % -k_postActivationLButtonPollMs
+        else if headerActivationTraceCandidate
+            _DebugTrace_ExplorerHeader("header_activation_skipped"
+                , "hwnd=" . targetHwnd . " activationId=" . queuedId . " reason=activation_or_release_timeout"
+                . " foreground=" . WinExist("A") . " lbuttonPhysical=" . GetKeyState("LButton", "P"), True)
         Return
     }
+
+    if IsObject(columnGesture)
+        columnGesture.deferred := False
 
     ; Keep the delayed recovery scoped to Explorer and common file dialogs, the
     ; only windows where this first-click Ctrl+NumpadAdd behavior is intended.
     WinGetClass, targetClass, ahk_id %targetHwnd%
-    if !(targetClass == "CabinetWClass" || targetClass == "#32770")
+    if !(targetClass == "CabinetWClass" || targetClass == "#32770") {
+        if headerActivationTraceCandidate
+            _DebugTrace_ExplorerHeader("header_activation_skipped"
+                , "hwnd=" . targetHwnd . " activationId=" . queuedId . " reason=window_class class=" . targetClass, True)
         Return
+    }
+    if headerActivationTraceCandidate
+        _DebugTrace_ExplorerHeader("header_activation_ready"
+            , "hwnd=" . targetHwnd . " activationId=" . queuedId . " class=" . targetClass . " ctrlNN=[" . targetCtrl . "]")
 
     ; Ignore unrelated controls in those windows. The deferred path must stay
     ; narrower than the normal click handler because it runs after activation.
@@ -12109,13 +12371,21 @@ PostActivationLButtonCheck:
     ; Re-run title-bar filtering after activation so caption/title clicks do not
     ; get mistaken for shell-view clicks.
     titleBarState := _GetTitleBarProbeState(clickX, clickY, False, targetHwnd, targetCtrl, targetClass)
-    if (titleBarState == "caption")
+    if (titleBarState == "caption") {
+        if headerActivationTraceCandidate
+            _DebugTrace_ExplorerHeader("header_activation_skipped"
+                , "hwnd=" . targetHwnd . " activationId=" . queuedId . " reason=titlebar_caption", True)
         Return
+    }
 
     if (titleBarState == "other"
      && WindowNeedsTitleBarUIA(targetHwnd, targetClass)
-     && MouseIsOverTitleBarDeferred(clickX, clickY, False, targetHwnd, targetCtrl, targetClass))
+     && MouseIsOverTitleBarDeferred(clickX, clickY, False, targetHwnd, targetCtrl, targetClass)) {
+        if headerActivationTraceCandidate
+            _DebugTrace_ExplorerHeader("header_activation_skipped"
+                , "hwnd=" . targetHwnd . " activationId=" . queuedId . " reason=titlebar_deferred", True)
         Return
+    }
 
     ; Any completed SysTreeView32 click may select a Quick Access folder. Avoid
     ; UIA hit classification: only a changed path can authorize column alignment,
@@ -12157,10 +12427,13 @@ PostActivationLButtonCheck:
         Return
     }
 
-    ; Header clicks are the clearest safe case: once the target is active, focus
-    ; the captured header control and send the normal auto-fit command.
+    ; Header recovery shares the normal width comparison and manual-resize block.
+    ; Unsupported controls retain their existing focused-shortcut fallback.
     if (InStr(targetCtrl, "SysHeader32", True)) {
-        _SendFocusedCtrlAdd(targetHwnd, targetCtrl, 60, 15, 6, "post_activation_sysheader")
+        if (k_useColumnWidthResizeComparison && IsObject(columnGesture.target))
+            _HandleColumnHeaderWidthResult(columnGesture, targetHwnd, targetCtrl)
+        else if (disableSendCtrlHwnd != targetHwnd)
+            _SendFocusedCtrlAdd(targetHwnd, targetCtrl, 60, 15, 6, "post_activation_sysheader")
         Return
     }
 
@@ -12174,8 +12447,15 @@ PostActivationLButtonCheck:
         else
             clickKind := ExplorerClickClassify(clickX, clickY, targetCtrl)
 
+        if k_debugTraceExplorerCtrlAddEnabled
+            _DebugTrace_ExplorerHeader("header_activation_classified"
+                , "hwnd=" . targetHwnd . " activationId=" . queuedId . " ctrlNN=[" . targetCtrl . "] kind=[" . clickKind . "]"
+                , clickKind != "header")
         if (clickKind == "header") {
-            _SendFocusedCtrlAdd(targetHwnd, targetCtrl, 60, 15, 6, "post_activation_directui_header")
+            if (k_useColumnWidthResizeComparison && targetClass == "CabinetWClass")
+                _HandleColumnHeaderWidthResult(columnGesture, targetHwnd, targetCtrl)
+            else if (disableSendCtrlHwnd != targetHwnd)
+                _SendFocusedCtrlAdd(targetHwnd, targetCtrl, 60, 15, 6, "post_activation_directui_header")
             Return
         }
         else if (clickKind == "blank")
@@ -12194,6 +12474,7 @@ PostActivationLButtonCheck:
     if (postActivationBlankClick)
         SendCtrlAdd(targetHwnd, targetClass, targetCtrl, True)
 Return
+}
 
 ; Manual-column block lifecycle; only a blocked Explorer host gets a folder watcher.
 ; Clear the block, invalidate pending folder reads, and stop its timer.
@@ -12270,7 +12551,7 @@ _WatchColumnAutoAlignBlock()
             return
         }
     }
-    ; Failed reads retain the block; same-folder Refresh and sorting do too.
+    ; Failed reads and same-folder events retain the block; recognized navigation clicks clear it separately.
     SetTimer, _WatchColumnAutoAlignBlock, -250
 }
 
@@ -12280,6 +12561,14 @@ _WatchColumnAutoAlignBlock()
 ; Capture widths, folder, active tab, and a retained canonical COM view identity.
 _CaptureExplorerColumnWidths(hwnd)
 {
+    global k_debugTraceExplorerCtrlAddEnabled
+
+    ; Measure the existing calls once; no extra view or width queries are made.
+    traceStartMs := k_debugTraceExplorerCtrlAddEnabled ? _ColumnWidthTraceClock() : 0
+    detailsStartMs := 0
+    detailsEndMs := 0
+    detailsResult := "unavailable"
+    readOk := False
     browser    := 0
     folderView := 0
     identity   := 0
@@ -12294,8 +12583,15 @@ _CaptureExplorerColumnWidths(hwnd)
         folderView := ComObjQuery(view, "{CDE725B0-CCC9-4519-917E-325D72FAB4CE}")
         if (!folderView)
             return ""
+        if traceStartMs
+            detailsStartMs := _ColumnWidthTraceClock()
         mode       := 0
-        if (DllCall(NumGet(NumGet(folderView+0)+3*A_PtrSize), "Ptr", folderView, "UInt*", mode, "Int") < 0 || mode != 4)
+        modeReadResult := DllCall(NumGet(NumGet(folderView+0)+3*A_PtrSize), "Ptr", folderView, "UInt*", mode, "Int")
+        if traceStartMs {
+            detailsEndMs := _ColumnWidthTraceClock()
+            detailsResult := (modeReadResult < 0) ? "unknown" : (mode == 4)
+        }
+        if (modeReadResult < 0 || mode != 4)
             return ""
         folder     := _GetExplorerFolderIdentityFromShellBrowser(browser)
         if (folder = "")
@@ -12313,6 +12609,7 @@ _CaptureExplorerColumnWidths(hwnd)
         viewToken  := ComObject(13, identity, 1)
         identity   := 0
         WinGetPos, , , windowWidth, windowHeight, ahk_id %hwnd%
+        readOk := True
         return {folder: folder, hwnd: hwnd, tabHwnd: tabHwnd, view: viewToken
             , widths: widths, windowHeight: windowHeight, windowWidth: windowWidth}
     }
@@ -12330,6 +12627,9 @@ _CaptureExplorerColumnWidths(hwnd)
             ObjRelease(view)
         if (browser)
             ObjRelease(browser)
+        if traceStartMs
+            _DebugTrace_ColumnWidthTiming("explorer", hwnd, traceStartMs, detailsStartMs, detailsEndMs
+                , detailsResult, readOk, readOk ? widths.Count() : 0)
     }
 }
 
@@ -12432,21 +12732,56 @@ _ReadExplorerColumnWidths(manager)
 }
 
 ; Observe one already-confirmed Explorer header hold without retaining gesture state.
-; Return the end-of-wait tick before reading widths again so click timing excludes that work.
-ObserveExplorerColumnResize(hwnd, ByRef releaseTick)
+; Capture the end-of-wait tick and pointer target before reading widths again,
+; so neither click duration nor movement includes work after the release wait.
+ObserveExplorerColumnResize(hwnd, ByRef releaseTick, traceClickTick := 0, ByRef releasePoint := "")
 {
+    global k_debugTraceExplorerCtrlAddEnabled
+
+    traceThisCall := k_debugTraceExplorerCtrlAddEnabled
+    if traceThisCall
+        traceProbeTick := A_TickCount
     WinGetClass, windowClass, ahk_id %hwnd%
     before := ""
     if (windowClass == "CabinetWClass" && WinExist("A") == hwnd && GetKeyState("LButton", "P"))
         before := _CaptureExplorerColumnWidths(hwnd)
     ; A release during the initial COM read leaves no proven pre-resize baseline.
     baselineReady := IsObject(before) && GetKeyState("LButton", "P")
+    if traceThisCall {
+        _DebugTrace_ExplorerHeader("header_resize_baseline"
+            , "hwnd=" . hwnd . " available=" . IsObject(before) . " baselineReady=" . baselineReady
+            . " elapsedMs=" . (A_TickCount - traceProbeTick)
+            , False, traceClickTick)
+        traceWaitTick := A_TickCount
+    }
     KeyWait, LButton, U T5
     releaseTick := A_TickCount
-    if (!baselineReady || GetKeyState("LButton", "P") || WinExist("A") != hwnd)
+    MouseGetPos, releaseX, releaseY, releaseHwnd, releaseCtrl
+    releasePoint := {x: releaseX, y: releaseY, hwnd: releaseHwnd, ctrlNN: releaseCtrl}
+    if (!baselineReady || GetKeyState("LButton", "P") || WinExist("A") != hwnd) {
+        if traceThisCall
+            _DebugTrace_ExplorerHeader("header_resize_probe_skipped"
+                , "hwnd=" . hwnd . " baselineReady=" . baselineReady . " releaseTick=" . releaseTick
+                . " releaseX=" . releaseX . " releaseY=" . releaseY
+                . " releaseHwnd=" . releaseHwnd . " releaseCtrl=[" . releaseCtrl . "]"
+                . " lbuttonPhysical=" . GetKeyState("LButton", "P") . " foreground=" . WinExist("A")
+                . " waitElapsedMs=" . (releaseTick - traceWaitTick)
+                , False, traceClickTick)
         return False
+    }
+    if traceThisCall
+        traceProbeTick := A_TickCount
     after := _CaptureExplorerColumnWidths(hwnd)
-    return _HaveExplorerColumnWidthsChanged(before, after)
+    widthsChanged := _HaveExplorerColumnWidthsChanged(before, after)
+    if traceThisCall
+        _DebugTrace_ExplorerHeader("header_resize_comparison"
+            , "hwnd=" . hwnd . " afterAvailable=" . IsObject(after) . " widthsChanged=" . widthsChanged
+            . " releaseTick=" . releaseTick . " afterReadMs=" . (A_TickCount - traceProbeTick)
+            . " releaseX=" . releaseX . " releaseY=" . releaseY
+            . " releaseHwnd=" . releaseHwnd . " releaseCtrl=[" . releaseCtrl . "]"
+            . " waitElapsedMs=" . (releaseTick - traceWaitTick)
+            , False, traceClickTick)
+    return widthsChanged
 }
 
 ; Recognize a same-control double-click using Windows' configured time and
@@ -12499,11 +12834,31 @@ _TryClearSendCtrlBlockOnFileViewDoubleClick(windowHwnd, ctrlNN, clickX, clickY, 
     return False
 }
 
+#If _NoteColumnWidthMouseInput()
+; These conditions record otherwise unhandled button/wheel input, then return
+; False: no fallback hotkey executes, suppresses input, or changes hotkey history.
+; Existing handlers record their own events if their earlier variant wins.
+; Reuse the installed hook; mouse movement never calls this observer.
+~*LButton::Return
+~*LButton Up::Return
+~*RButton::Return
+~*RButton Up::Return
+~*MButton::Return
+~*MButton Up::Return
+~*XButton1::Return
+~*XButton1 Up::Return
+~*XButton2::Return
+~*XButton2 Up::Return
+~*WheelUp::Return
+~*WheelDown::Return
+~*WheelLeft::Return
+~*WheelRight::Return
 #If
 ; Trace a pass-through Shift+click only when its mouse-down target is an Explorer
 ; window. The trace never blocks or sends input; it only observes the state seen
 ; by AutoHotkey when the button-down and button-up events arrive.
 ~+LButton::
+    _NoteColumnWidthMouseInput()
     if !k_debugTraceExplorerShiftClickEnabled
         Return
 
@@ -12525,6 +12880,7 @@ _TryClearSendCtrlBlockOnFileViewDoubleClick(windowHwnd, ctrlNN, clickX, clickY, 
 Return
 
 ~+LButton Up::
+    _NoteColumnWidthMouseInput()
     if (!k_debugTraceExplorerShiftClickEnabled || !explorerShiftClickTraceActive)
         Return
 
@@ -12581,16 +12937,55 @@ Return
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBarFast(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
 $~LButton::
+    _NoteColumnWidthMouseInput()
+    _ProcessLButton()
+Return
+
+; Own the DOWN record until handling ends; fallback capture starts only afterward.
+_ProcessLButton() {
+    local activeBeforeLButton, columnWidthGesture, ctrlNN, hwnd, x, y
+
     _StopDesktopIconDrag()
     CoordMode, Mouse, Screen
-    MouseGetPos, lbX1, lbY1, _winIdD, _winCtrlD
+    MouseGetPos, x, y, hwnd, ctrlNN
     activeBeforeLButton := WinExist("A")
+    columnWidthGesture := _TakeColumnWidthBaseline(hwnd, ctrlNN)
+    try {
+        _RunLButtonGesture(columnWidthGesture, hwnd, ctrlNN, x, y, activeBeforeLButton)
+    } finally {
+        _FinishColumnWidthGesture(columnWidthGesture)
+    }
+}
+
+; Preserve legacy shared state while keeping this gesture's input and baseline local.
+_RunLButtonGesture(columnWidthGesture, _winIdD, _winCtrlD, lbX1, lbY1, activeBeforeLButton) {
+    global
+    local _winClassD
+    local directUIClickKind, directUIReadStatus, headerReleasePoint, headerRetryTarget
+    local headerTraceCandidate, headerTraceDownTick, headerTraceProbeTick, initTime
+    local isColumnHeader, isExplorerDirectUIClick, isExplorerDirectUIColumnHeader
+    local isExplorerNavigationHeader, isItemClick, navigationHeaderKind
+    local navigationStartPath, rlsTime, shouldCaptureNavigationPath, timeDiff
+
     ; The first blank click defers alignment for 125 ms so a second click can
     ; cancel that pending single-click action before double-click navigation.
     SetTimer, SendCtrlAddLabel, Off
     CancelTbcTypingWorkForContextChange()
 
     WinGetClass, _winClassD, ahk_id %_winIdD%
+    ; Record candidate file-view clicks too, so failed header classification is visible.
+    headerTraceCandidate := k_debugTraceExplorerCtrlAddEnabled
+        && (_winClassD == "CabinetWClass" || _winClassD == "#32770")
+        && (InStr(_winCtrlD, "DirectUIHWND", True) || InStr(_winCtrlD, "SysHeader32", True)
+            || _IsExplorerNavigationHeaderCtrl(_winCtrlD))
+    if headerTraceCandidate {
+        headerTraceDownTick := A_TickCount
+        _DebugTrace_ExplorerHeader("header_click_down"
+            , "hwnd=" . _winIdD . " class=" . _winClassD . " ctrlNN=[" . _winCtrlD . "]"
+            . " x=" . lbX1 . " y=" . lbY1 . " activeBefore=" . activeBeforeLButton
+            . " blockedHwnd=" . disableSendCtrlHwnd . " priorHotkey=[" . A_PriorHotkey . "]"
+            , False, headerTraceDownTick)
+    }
     ; A desktop click restores icons only when this script hid them.
     if (desktopIconsHiddenByScript && (_winClassD == "Progman" || _winClassD == "ProgMan" || _winClassD == "WorkerW")) {
         if (DesktopIcons(true))
@@ -12611,6 +13006,11 @@ $~LButton::
     isExplorerNavigationHeader := (_winClassD == "CabinetWClass" || _winClassD == "#32770")
                                && _IsExplorerNavigationHeaderCtrl(_winCtrlD)
 
+    ; Native handles and geometry survive a slow failed accessibility probe as a retry baseline.
+    headerRetryTarget := ""
+    if (_winClassD == "CabinetWClass" && isExplorerDirectUIClick)
+        headerRetryTarget := _CaptureExplorerHeaderRetryTarget(_winIdD, _winCtrlD, lbX1, lbY1)
+
     ; Classify a header click before any directory lookup. A recognized Refresh
     ; keeps the same directory, so it skips GetExplorerPath() entirely.
     navigationHeaderKind := ""
@@ -12623,18 +13023,37 @@ $~LButton::
          || (!isExplorerNavigationHeader && _IsExplorerNavigationSurfaceCtrl(_winCtrlD))
          || (isExplorerNavigationHeader  && navigationHeaderKind != "refresh")))
 
+    if headerTraceCandidate
+        headerTraceProbeTick := A_TickCount
     if (shouldCaptureNavigationPath)
         navigationStartPath := GetExplorerPath(_winIdD)
+    if headerTraceCandidate {
+        _DebugTrace_ExplorerHeader("header_click_path_probe"
+            , "hwnd=" . _winIdD . " lookupRequested=" . shouldCaptureNavigationPath
+            . " elapsedMs=" . (A_TickCount - headerTraceProbeTick) . " pathAvailable=" . (navigationStartPath != "")
+            , False, headerTraceDownTick)
+        headerTraceProbeTick := A_TickCount
+    }
 
     ; Keep the mouse-down folder path above UIA classification so a slow lookup
     ; cannot change the path snapshot used to prove later folder navigation.
     directUIClickKind := ""
+    directUIReadStatus := ""
     if (isExplorerDirectUIClick) {
         if (_winClassD == "#32770")
             directUIClickKind := DialogClickClassify(lbX1, lbY1, _winCtrlD)
         else
-            directUIClickKind := ExplorerClickClassify(lbX1, lbY1, _winCtrlD)
+            directUIClickKind := ExplorerClickClassify(lbX1, lbY1, _winCtrlD, directUIReadStatus)
     }
+
+    if headerTraceCandidate
+        _DebugTrace_ExplorerHeader("header_click_classified"
+            , "hwnd=" . _winIdD . " ctrlNN=[" . _winCtrlD . "] kind=[" . directUIClickKind . "]"
+            . " nativeHeader=" . InStr(_winCtrlD, "SysHeader32", True)
+            . " navigationHeaderKind=[" . navigationHeaderKind . "] readStatus=[" . directUIReadStatus . "]"
+            . " elapsedMs=" . (A_TickCount - headerTraceProbeTick)
+            . " lbuttonPhysical=" . GetKeyState("LButton", "P")
+            , False, headerTraceDownTick)
 
     ; Arm before activation returns or mouse-up waits, reusing Explorer's item result.
     ; Native list items also qualify in applications such as 7-Zip; headers and blank space do not.
@@ -12652,23 +13071,32 @@ $~LButton::
     ; folder, so exclude it from DirectUI double-click navigation detection.
     isExplorerDirectUIColumnHeader := (directUIClickKind == "header")
     explorerDirectUIDoubleClick := _CaptureExplorerDirectUIDoubleClick(_winIdD, _winClassD, _winCtrlD
-        , lbX1, lbY1, navigationStartPath, isExplorerDirectUIColumnHeader)
+        , lbX1, lbY1, navigationStartPath, isExplorerDirectUIColumnHeader || directUIClickKind == "unknown")
 
     ; If this press is aimed at a different top-level window, defer all UIA hit
     ; testing and column work until Windows completes the focus change.
     if (_winIdD && activeBeforeLButton && _winIdD != activeBeforeLButton) {
-        _RequestPostActivationLButtonCheck(_winIdD, _winCtrlD, lbX1, lbY1, navigationStartPath, navigationHeaderKind)
+        _RequestPostActivationLButtonCheck(_winIdD, _winCtrlD, lbX1, lbY1, navigationStartPath, navigationHeaderKind, columnWidthGesture)
+        if headerTraceCandidate
+            _DebugTrace_ExplorerHeader("header_click_deferred"
+                , "hwnd=" . _winIdD . " reason=window_activation activationId=" . postActivationLButtonId
+                , True, headerTraceDownTick)
         Return
     }
 
     titleBarState := _GetTitleBarProbeState(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)
 
-    if (titleBarState == "caption")
+    if (titleBarState == "caption") {
+        if headerTraceCandidate
+            _DebugTrace_ExplorerHeader("header_click_skipped", "hwnd=" . _winIdD . " reason=titlebar_caption", True, headerTraceDownTick)
         Return
+    }
 
     if (titleBarState == "other"
      && WindowNeedsTitleBarUIA(_winIdD, _winClassD)
      && MouseIsOverTitleBarDeferred(lbX1, lbY1, False, _winIdD, _winCtrlD, _winClassD)) {
+        if headerTraceCandidate
+            _DebugTrace_ExplorerHeader("header_click_skipped", "hwnd=" . _winIdD . " reason=titlebar_deferred", True, headerTraceDownTick)
         Return
     }
 
@@ -12682,8 +13110,11 @@ $~LButton::
     ; When the press starts on a plain resizable edge that is already flush to a
     ; visible adjacent window, let the native resize happen and mirror the
     ; partner window with a short timer until LButton is released.
-    if (TryStartLButtonResizeSync(lbX1, lbY1, _winIdD))
+    if (TryStartLButtonResizeSync(lbX1, lbY1, _winIdD)) {
+        if headerTraceCandidate
+            _DebugTrace_ExplorerHeader("header_click_skipped", "hwnd=" . _winIdD . " reason=docked_resize", True, headerTraceDownTick)
         return
+    }
 
     clearedSendCtrlBlock := False
     if (disableSendCtrlHwnd != "")
@@ -12695,6 +13126,9 @@ $~LButton::
     ; Wait for mouse-up because SendCtrlAdd() rejects sends while LButton is down;
     ; the native clicks still reach the target through the `~` hotkey prefix.
     If clearedSendCtrlBlock {
+        if headerTraceCandidate
+            _DebugTrace_ExplorerHeader("header_click_routed"
+                , "hwnd=" . _winIdD . " reason=resize_block_cleared_by_file_view_double_click", True, headerTraceDownTick)
         KeyWait, LButton, U T3
 
         If !GetKeyState("LButton", "P") {
@@ -12710,8 +13144,7 @@ $~LButton::
                 SendCtrlAdd(_winIdD, _winClassD, _winCtrlD)
             }
             else {
-                ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
-                _RequestNonExplorerSysListViewCtrlAdd(_winIdD, _winClassD, _winCtrlD, controlHwnd)
+                _RequestNonExplorerSysListViewCtrlAdd(_winIdD, _winClassD, _winCtrlD)
             }
         }
 
@@ -12719,7 +13152,14 @@ $~LButton::
         Return
     }
 
-    if (disableSendCtrlHwnd == _winIdD) {
+    ; Let Explorer toolbar clicks reach release-time navigation classification.
+    ; Only a recognized action in an already-active Explorer clears the lock.
+    if (disableSendCtrlHwnd == _winIdD
+        && !(_winClassD == "CabinetWClass" && isExplorerNavigationHeader)) {
+        if headerTraceCandidate
+            _DebugTrace_ExplorerHeader("header_click_skipped"
+                , "hwnd=" . _winIdD . " reason=manual_resize_block folder=[" . columnAutoAlignBlockFolder . "]"
+                , True, headerTraceDownTick)
         GoSub, EnableTimers
         Return
     }
@@ -12742,12 +13182,18 @@ $~LButton::
                         && (Abs(lbX1-lbX2) < 25 && Abs(lbY1-lbY2) < 25)
                         && (InStr(_winCtrlD, "SysListView32", True) || InStr(_winCtrlD, "DirectUIHWND", True))
     if (allowDoubleClicks && (IsObject(explorerDirectUIDoubleClick) || isLegacyDoubleClick)) {
+        if headerTraceCandidate
+            _DebugTrace_ExplorerHeader("header_click_routed"
+                , "hwnd=" . _winIdD . " reason=file_view_double_click kind=[" . directUIClickKind . "]"
+                , True, headerTraceDownTick)
 
         ; Consume this rapid click sequence before performing its custom action
         ; so a third or fourth click cannot be interpreted as another pair.
         allowDoubleClicks := False
-        ; tooltip, %isBlankSpaceExplorer% - %isBlankSpaceNonExplorer%
-        if (isBlankSpaceExplorer || isBlankSpaceNonExplorer) {
+        ; Everything opens results itself; never inject parent-folder navigation
+        ; or its tooltip. Blank-space detection still serves column alignment.
+        if (!InStr(_winClassD, "EVERYTHING", True)
+            && (isBlankSpaceExplorer || isBlankSpaceNonExplorer)) {
             if (InStr(_winCtrlD, "SysListView32", True)) {
                 Send, {Backspace}
                 SetTimer, RunDynaExprTimeout, -1
@@ -12772,8 +13218,7 @@ $~LButton::
         }
         else {
             If InStr(_winCtrlD, "SysListView32", True) {
-                ControlGet, controlHwnd, Hwnd,, %_winCtrlD%, ahk_id %_winIdD%
-                _RequestNonExplorerSysListViewCtrlAdd(_winIdD, _winClassD, _winCtrlD, controlHwnd)
+                _RequestNonExplorerSysListViewCtrlAdd(_winIdD, _winClassD, _winCtrlD)
             }
             Else
                 SendCtrlAdd(_winIdD, _winClassD)
@@ -12831,6 +13276,10 @@ $~LButton::
             If (!isColumnHeader && (isBlankSpaceExplorer || isItemClick)) {
                 Loop,20 {
                     if (WinExist("A") != _winIdD) {
+                        if headerTraceCandidate
+                            _DebugTrace_ExplorerHeader("header_click_skipped"
+                                , "hwnd=" . _winIdD . " reason=foreground_changed_during_path_probe foreground=" . WinExist("A")
+                                , True, headerTraceDownTick)
                         GoSub, EnableTimers
                         Return
                     }
@@ -12846,8 +13295,12 @@ $~LButton::
 
     ; The resize observer owns the normal mouse-up wait only for Explorer DirectUI headers.
     rlsTime := 0
-    if (_winClassD == "CabinetWClass" && isExplorerDirectUIColumnHeader) {
-        if (ObserveExplorerColumnResize(_winIdD, rlsTime)) {
+    ; Retain the pointer target from the release wait, before the observer's second width read.
+    headerReleasePoint := ""
+    if (!k_useColumnWidthResizeComparison && _winClassD == "CabinetWClass" && isExplorerDirectUIColumnHeader) {
+        if (ObserveExplorerColumnResize(_winIdD, rlsTime, headerTraceCandidate ? headerTraceDownTick : 0, headerReleasePoint)) {
+            if headerTraceCandidate
+                _DebugTrace_ExplorerHeader("header_click_skipped", "hwnd=" . _winIdD . " reason=manual_resize_detected", True, headerTraceDownTick)
             _SetColumnAutoAlignBlock(_winIdD)
             GoSub, EnableTimers
             Return
@@ -12866,12 +13319,56 @@ $~LButton::
             isBlankSpaceNonExplorer := AreaLooksUniformFast(lbX1, lbY1, 0xFFFFFF)
     }
 
-    MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU
+    if IsObject(headerReleasePoint) {
+        lbX2 := headerReleasePoint.x
+        lbY2 := headerReleasePoint.y
+        _winIdU := headerReleasePoint.hwnd
+        _winCtrlU := headerReleasePoint.ctrlNN
+    } else
+        MouseGetPos, lbX2, lbY2, _winIdU, _winCtrlU
 
     ; Keep the observer's release tick; other click paths retain their existing timing.
     if (!rlsTime)
         rlsTime := A_TickCount
     timeDiff := rlsTime - initTime
+
+    ; Unknown and other/non_header DOWN results do not establish a header resize baseline.
+    ; Retry only a stationary completed click, keeping retry time out of its duration check.
+    if (_winClassD == "CabinetWClass"
+     && (directUIClickKind == "unknown" || (directUIClickKind == "other" && directUIReadStatus == "non_header"))
+     && timeDiff < Floor(k_DoubleClickTime/2) && lbX1 == lbX2 && lbY1 == lbY2
+     && _winIdU == _winIdD && _winCtrlU == _winCtrlD
+     && _RetryExplorerColumnHeaderClick(headerRetryTarget, headerTraceCandidate ? headerTraceDownTick : 0)) {
+        directUIClickKind := "header"
+        isExplorerDirectUIColumnHeader := True
+        isColumnHeader := True
+        isItemClick := False
+        isBlankSpaceExplorer := False
+        ; Clear the uncertain click candidate now that its header identity is known.
+        _CaptureExplorerDirectUIDoubleClick(_winIdD, _winClassD, _winCtrlD, lbX1, lbY1, navigationStartPath, True)
+    }
+
+    ; Proven widths, rather than late pointer coordinates or accessibility time,
+    ; decide covered header gestures. Unknown skips only this click's alignment.
+    if (k_useColumnWidthResizeComparison && isColumnHeader
+        && ((_winClassD == "CabinetWClass" && isExplorerDirectUIColumnHeader)
+            || (IsObject(columnWidthGesture.target) && columnWidthGesture.target.kind == "native"))) {
+        _HandleColumnHeaderWidthResult(columnWidthGesture, _winIdD, _winCtrlD)
+        GoSub, EnableTimers
+        Return
+    }
+
+    if headerTraceCandidate
+        _DebugTrace_ExplorerHeader("header_click_gate"
+            , "downHwnd=" . _winIdD . " upHwnd=" . _winIdU . " downCtrl=[" . _winCtrlD . "] upCtrl=[" . _winCtrlU . "]"
+            . " isHeader=" . isColumnHeader . " isItem=" . isItemClick
+            . " elapsedMs=" . timeDiff . " cutoffMs=" . Floor(k_DoubleClickTime/2)
+            . " timePass=" . (timeDiff < Floor(k_DoubleClickTime/2))
+            . " dx=" . Abs(lbX1-lbX2) . " dy=" . Abs(lbY1-lbY2)
+            . " movementPass=" . (Abs(lbX1-lbX2) < 15 && Abs(lbY1-lbY2) < 15)
+            . " postReleaseMs=" . (A_TickCount - rlsTime) . " foreground=" . WinExist("A")
+            . " lbuttonPhysical=" . GetKeyState("LButton", "P")
+            , False, headerTraceDownTick)
 
     ; Quick Access needs no UIA hit lookup. Every completed SysTreeView32 click
     ; starts the changed-path watcher; only a current path different from the
@@ -12907,12 +13404,17 @@ $~LButton::
 
             if (_winClassD == "CabinetWClass" && k_isWin11 && k_isModernExplorerInReg) {
 
-                _SendFocusedCtrlAdd(_winIdU, _winCtrlU, 60, 15, 6, "active_modern_explorer_header")
+                _SendFocusedCtrlAdd(_winIdU, _winCtrlU, 60, 15, 6, "active_modern_explorer_header"
+                    , headerTraceCandidate ? headerTraceDownTick : 0)
             }
             else {
                 ; Get UIA element
                 pt    := SafeUIA_ElementFromPoint(lbX2, lbY2, "", 2000)
                 ctype := SafeUIA_GetControlType(pt)
+                if headerTraceCandidate
+                    _DebugTrace_ExplorerHeader("header_click_release_type"
+                        , "hwnd=" . _winIdU . " ctrlNN=[" . _winCtrlU . "] controlType=[" . ctype . "]"
+                        , False, headerTraceDownTick)
                 ; Optional if used later
                 ; cname := SafeUIA_GetName(pt, "")
                 ; Cache risky UIA properties ONCE
@@ -12922,13 +13424,13 @@ $~LButton::
                  && k_isModernExplorerInReg
                  && InStr(_winCtrlU, "DirectUIHWND", True)
                  && ctype == 50026) {
-                    _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_attempt"
+                    _DebugTrace_ExplorerHeader("direct_header_ctrladd_attempt"
                         , "source=active_header_uia_controltype_50026 hwnd=" . _winIdU . " ctrlNN=[" . _winCtrlU . "]"
                         , False, 0)
                     directHeaderFocusSucceeded := EnsureFocusedCtrlNN(_winIdU, _winCtrlU, 60, 15)
                     Sleep, 75
                     directHeaderSendSucceeded := SendCtrlNumpadAdd()
-                    _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+                    _DebugTrace_ExplorerHeader("direct_header_ctrladd_result"
                         , "source=active_header_uia_controltype_50026 hwnd=" . _winIdU . " ctrlNN=[" . _winCtrlU . "]"
                         . " focus=" . directHeaderFocusSucceeded
                         . " result=" . (directHeaderSendSucceeded ? "sent" : "send_failed")
@@ -12937,6 +13439,10 @@ $~LButton::
                 }
 
                 if (ctype == "" || ctype > 50035 || (ctype > 50008 && ctype < 50031)) {
+                    if headerTraceCandidate
+                        _DebugTrace_ExplorerHeader("header_click_skipped"
+                            , "hwnd=" . _winIdU . " reason=unsupported_release_control_type controlType=[" . ctype . "]"
+                            , True, headerTraceDownTick)
                     ; DO NOTHING
                     }
                     else {
@@ -12948,12 +13454,12 @@ $~LButton::
                         If !k_isWin11
                             Send, {F5}
 
-                        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_attempt"
+                        _DebugTrace_ExplorerHeader("direct_header_ctrladd_attempt"
                             , "source=active_header_uia_controltype_50035 hwnd=" . _winIdU
                             . " ctrlNN=[" . _winCtrlU . "]"
                             , False, 0)
                         directHeaderSendSucceeded := SendCtrlNumpadAdd()
-                        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+                        _DebugTrace_ExplorerHeader("direct_header_ctrladd_result"
                             , "source=active_header_uia_controltype_50035 hwnd=" . _winIdU
                             . " ctrlNN=[" . _winCtrlU . "]"
                             . " result=" . (directHeaderSendSucceeded ? "sent" : "send_failed")
@@ -12961,12 +13467,12 @@ $~LButton::
                     }
                     Else If ((ctype == 50033) && (InStr(_winCtrlU, "DirectUIHWND", True))) {
 
-                        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_attempt"
+                        _DebugTrace_ExplorerHeader("direct_header_ctrladd_attempt"
                             , "source=active_header_uia_controltype_50033 hwnd=" . _winIdU
                             . " ctrlNN=[" . _winCtrlU . "]"
                             , False, 0)
                         directHeaderSendSucceeded := SendCtrlNumpadAdd()
-                        _DebugTrace_ExplorerCtrlAdd("direct_header_ctrladd_result"
+                        _DebugTrace_ExplorerHeader("direct_header_ctrladd_result"
                             , "source=active_header_uia_controltype_50033 hwnd=" . _winIdU
                             . " ctrlNN=[" . _winCtrlU . "]"
                             . " result=" . (directHeaderSendSucceeded ? "sent" : "send_failed")
@@ -13005,6 +13511,12 @@ $~LButton::
                 Return
             }
 
+            ; Only navigation clicks in an already-active Explorer reset its lock.
+            if (_winClassD == "CabinetWClass" && activeBeforeLButton == _winIdD
+                && _winIdU == _winIdD && _ClearColumnAutoAlignBlock(_winIdD))
+                _DebugTrace_ExplorerHeader("column_auto_align_block_cleared"
+                    , "hwnd=" . _winIdD . " reason=header_navigation headerKind=" . headerKind, True)
+
             if (headerKind = "refresh") {
                 _RequestHeaderNavigationCtrlAdd(_winIdU, _winClassD, navigationStartPath, False, k_explorerCtrlAddRefreshMinimumWaitMs)
             }
@@ -13018,8 +13530,16 @@ $~LButton::
         _SetColumnAutoAlignBlock(_winIdU)
     }
 
+    if headerTraceCandidate
+        _DebugTrace_ExplorerHeader("header_click_complete"
+            , "hwnd=" . _winIdD . " isHeader=" . isColumnHeader
+            . " reason=" . (timeDiff >= Floor(k_DoubleClickTime/2) ? "duration_rejected"
+                : (Abs(lbX1-lbX2) >= 15 || Abs(lbY1-lbY2) >= 15) ? "movement_rejected"
+                : !isColumnHeader ? "not_classified_as_header" : "header_branch_finished")
+            , True, headerTraceDownTick)
     GoSub, EnableTimers
 Return
+}
 #If
 
 ; FocusHwndFast(hwnd)
@@ -13724,10 +14244,24 @@ WaitForExplorerLoad(targetHwndID, skipFocus := False, isCabinetWClass10 := False
 }
 
 ; Keep one pending fit for the clicked ListView after a non-Explorer double-click.
-_RequestNonExplorerSysListViewCtrlAdd(hwnd, windowClass, ctrlNN, controlHwnd) {
+; Opening a result can hide/close its source, so resolve only while it is current
+; and treat a failed native-control lookup as an ordinary canceled fit request.
+_RequestNonExplorerSysListViewCtrlAdd(hwnd, windowClass, ctrlNN) {
     static timerCallback := ""
 
-    if (!IsForegroundWindow(hwnd) || GetKeyState("LButton", "P") || !IsSysListViewReportView(controlHwnd))
+    if (!IsForegroundWindow(hwnd) || GetKeyState("LButton", "P"))
+        return
+
+    try {
+        ControlGet, controlHwnd, Hwnd,, %ctrlNN%, ahk_id %hwnd%
+        if (!controlHwnd || !DllCall("user32\IsChild", "Ptr", hwnd, "Ptr", controlHwnd, "Int")
+            || !IsSysListViewReportView(controlHwnd))
+            return
+    } catch {
+        return
+    }
+    ; A native query can yield to the folder launch; do not queue the old host.
+    if (!IsForegroundWindow(hwnd) || GetKeyState("LButton", "P"))
         return
 
     resolvedTarget := { ctrlNN: ctrlNN, hwnd: controlHwnd }
@@ -13738,6 +14272,7 @@ _RequestNonExplorerSysListViewCtrlAdd(hwnd, windowClass, ctrlNN, controlHwnd) {
     SetTimer, % timerCallback, % -k_nonExplorerCtrlAddDelayMs
 }
 
+; Revalidate the saved native view and foreground window before fitting its columns.
 _RunNonExplorerSysListViewCtrlAdd(hwnd, windowClass, resolvedTarget) {
     if (!IsForegroundWindow(hwnd) || GetKeyState("LButton", "P") || disableSendCtrlHwnd == hwnd)
         return
@@ -14306,8 +14841,8 @@ _ClearEverythingActivationAutoFitState(expectedRequestId := 0) {
     return True
 }
 
-; Start a bounded native-only auto-fit request for a new Everything window. The
-; timer waits for its results ListView header instead of moving focus from Edit1.
+; Start a bounded command-based auto-fit request for a new Everything window.
+; The timer waits for the results control without moving focus from Edit1.
 _RequestEverythingActivationAutoFit(everythingHwnd, traceRequestId := "") {
     global everythingActivationAutoFitDeadlineTick
     global everythingActivationAutoFitHwnd
@@ -14340,10 +14875,19 @@ _RequestEverythingActivationAutoFit(everythingHwnd, traceRequestId := "") {
     return True
 }
 
-; Auto-fit Everything's native results ListView without changing keyboard focus
-; or injecting Ctrl+NumpadAdd into the live search-box typing stream. Native sizing
-; itself verifies LVM_GETHEADER, a valid header HWND, and HDM_GETITEMCOUNT >= 1.
-_TryAutoFitEverythingResultsColumns(everythingHwnd, mode := "header_no_fill", ByRef failureInfo := "") {
+; Invoke Everything's own Auto-fit Columns command without moving focus or
+; requiring ListView messages, so allow_lvm=0 can remain set as a workaround.
+; True confirms command delivery only; it does not prove visible column widths.
+_TryAutoFitEverythingResultsColumns(everythingHwnd, ByRef failureInfo := "") {
+    ; Official Everything SDK command for fitting all results columns.
+    static k_autoFitColumnsCommandId := 41012
+    ; Bound each cross-process command dispatch to the existing 75 ms budget.
+    static k_commandSendTimeoutMs := 75
+    ; Block reentrant message processing and abandon an unresponsive receiver.
+    static SMTO_ABORTIFHUNG_AND_BLOCK := 0x0003
+    ; Deliver an application command to the captured Everything search window.
+    static WM_COMMAND := 0x0111
+
     failureInfo := ""
     if (!everythingHwnd) {
         failureInfo := { stage: "missing_target_window" }
@@ -14366,7 +14910,40 @@ _TryAutoFitEverythingResultsColumns(everythingHwnd, mode := "header_no_fill", By
         return False
     }
 
-    return AutoFitSysListViewColumns(listViewHwnd, mode, 75, failureInfo)
+    ; Control discovery can yield, so confirm foreground ownership again before dispatch.
+    if !IsForegroundWindow(everythingHwnd) {
+        failureInfo := { stage: "target_window_not_foreground" }
+        return False
+    }
+
+    messageResult := 0
+    ; SendMessageTimeout can fail without setting an error; clear any stale value first.
+    DllCall("kernel32\SetLastError", "UInt", 0)
+    sendSucceeded := DllCall("user32\SendMessageTimeoutW"
+        , "Ptr", everythingHwnd, "UInt", WM_COMMAND
+        , "Ptr", k_autoFitColumnsCommandId, "Ptr", 0
+        , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", k_commandSendTimeoutMs
+        , "Ptr*", messageResult, "Ptr")
+    sendWinError := A_LastError
+    traceRequestId := "everything_autofit_" . everythingHwnd
+
+    if (!sendSucceeded) {
+        failureInfo := { stage: "autofit_command_send_failed"
+            , commandId: k_autoFitColumnsCommandId, timeoutMs: k_commandSendTimeoutMs
+            , winError: sendWinError }
+        _DebugTrace_ExplorerCtrlAdd("everything_autofit_command_failed"
+            , "hwnd=" . everythingHwnd . " commandId=" . k_autoFitColumnsCommandId
+            . " timeoutMs=" . k_commandSendTimeoutMs . " winError=" . sendWinError
+            , False, traceRequestId)
+        return False
+    }
+
+    ; WM_COMMAND may return zero on success; only the dispatch result determines delivery.
+    _DebugTrace_ExplorerCtrlAdd("everything_autofit_command_dispatched"
+        , "hwnd=" . everythingHwnd . " commandId=" . k_autoFitColumnsCommandId
+        . " commandResult=" . messageResult
+        , False, traceRequestId)
+    return True
 }
 
 ; Revalidate a UIA-resolved Details target immediately before SendCtrlAdd()
@@ -14812,6 +15389,10 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         }
 
         if (InStr(TargetControl, "SysListView32", True) || InStr(TargetControl,  "DirectUIHWND", True)) {
+            ; Retain the actual recipient through tree-focus restoration. Only this
+            ; send's epoch may seed widths after the chord and cleanup finish.
+            ControlGet, columnWidthCtrlHwnd, Hwnd,, %TargetControl%, ahk_id %initTargetHwnd%
+            columnWidthSendIssued := False
             BeginBlockKeys()
             try {
                 if traceThisCall
@@ -14822,7 +15403,10 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                         , "targetCtrl=[" . TargetControl . "]"
                         . " initialFocus=[" . initFocusedCtrlNN . "]"
                         , False, traceRequestId)
+                _InvalidateColumnWidthCache()
+                columnWidthSendEpoch := _ColumnWidthCacheState().epoch
                 Send, ^{NumpadAdd}
+                columnWidthSendIssued := True
                 if traceThisCall
                     _DebugTrace_ExplorerCtrlAdd("ctrl_numpadadd_sent"
                         , "elapsedMs=" . (A_TickCount - ctrlNumpadAddStartTick)
@@ -14921,6 +15505,10 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                 modifierCleanupStartTick := A_TickCount
                 EndBlockKeys()
                 ManagedModifierCleanup("Ctrl", initTargetHwnd, 6)
+
+                if (columnWidthSendIssued && _ColumnWidthCacheState().epoch == columnWidthSendEpoch)
+                    _RequestColumnWidthRefresh(initTargetHwnd, columnWidthCtrlHwnd, "resolved_auto_align", True)
+
                 if traceThisCall {
                     _DebugTrace_ExplorerCtrlAdd("modifier_cleanup_complete"
                         , "elapsedMs=" . (A_TickCount - modifierCleanupStartTick)
@@ -14935,6 +15523,7 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                         . " totalElapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
                         , False, traceRequestId)
                 }
+
                 if traceEverythingActivation
                     _DebugTrace_ExplorerCtrlAdd("everything_activation_complete"
                         , "outcome=ctrl_numpadadd"
@@ -15041,6 +15630,677 @@ IsChromiumContentClick(windowHwnd, windowClass := "", ctrlNN := "") {
     return (   InStr(ctrlNN, "Chrome_RenderWidgetHostHWND", True) || InStr(ctrlNN, "Intermediate D3D Window", True))
 }
 
+; Event-driven column-width state belongs to this script; each gesture retains
+; its own immutable snapshot reference. No new input hook or helper process is used.
+_ColumnWidthCacheState() {
+    ; activationGesture retains the deferred activation click's fixed before record.
+    ; callback owns the bounded refresh queued after a gesture or known operation ends.
+    ; epoch rejects work superseded by input, navigation, or our own auto-fit.
+    ; mouseInputId changes on discrete mouse input, including a complete click.
+    ; refreshId distinguishes replacement refresh requests within the same epoch.
+    ; snapshot is retained until a known change; target remembers its native control.
+    static state := {activationGesture: "", callback: "", epoch: 0, mouseInputId: 0, refreshId: 0, snapshot: "", target: ""}
+    return state
+}
+
+; Return high-resolution elapsed-clock milliseconds for gated width diagnostics.
+_ColumnWidthTraceClock() {
+    static ticksPerSecond := 0
+    if (!ticksPerSecond && !DllCall("kernel32\QueryPerformanceFrequency", "Int64*", ticksPerSecond))
+        return A_TickCount
+    counter := 0
+    if !DllCall("kernel32\QueryPerformanceCounter", "Int64*", counter)
+        return A_TickCount
+    return counter * 1000.0 / ticksPerSecond
+}
+
+; Read the selected provider and retain window/control identity and geometry.
+_CaptureColumnWidthSnapshot(target) {
+    inputCritical := A_IsCritical
+    mouseInputId := _ColumnWidthCacheState().mouseInputId
+    if (!IsObject(target) || !IsForegroundWindow(target.hwnd))
+        return ""
+    data := target.kind == "native" ? _CaptureNativeColumnWidths(target.ctrlHwnd)
+        : _CaptureExplorerColumnWidths(target.hwnd)
+    if !IsObject(data)
+        return ""
+    controlRect := _GetColumnWidthRect(target.ctrlHwnd)
+    windowRect := _GetColumnWidthRect(target.hwnd)
+    if (controlRect == "" || windowRect == "" || !IsForegroundWindow(target.hwnd))
+        return ""
+    hwnd := target.hwnd
+    WinGetTitle, title, ahk_id %hwnd%
+    ; Process queued button/wheel conditions after a blocking provider read.
+    ; A critical caller cannot dispatch them, so validity then stays conservative.
+    if (!inputCritical)
+        Sleep, -1
+    return {capturedTick: A_TickCount, controlRect: controlRect, ctrlHwnd: target.ctrlHwnd
+        , data: data, hwnd: hwnd, inputCritical: inputCritical, kind: target.kind
+        , mouseInputId: mouseInputId, title: title, windowRect: windowRect}
+}
+
+; Unavailable/incompatible snapshots produce unknown, never unchanged.
+_CompareColumnWidthSnapshots(before, after, ByRef reason) {
+    reason := "baseline_or_after_unavailable"
+    if (!IsObject(before) || !IsObject(after))
+        return "unknown"
+    reason := "target_or_geometry_changed"
+    if (before.kind != after.kind || before.hwnd != after.hwnd || before.ctrlHwnd != after.ctrlHwnd
+        || before.controlRect != after.controlRect || before.windowRect != after.windowRect
+        || !(before.title == after.title))
+        return "unknown"
+    first := before.data
+    last := after.data
+    reason := "view_or_columns_changed"
+    if (before.kind == "explorer") {
+        if (first.tabHwnd != last.tabHwnd || !(first.folder == last.folder)
+            || ComObjValue(first.view) != ComObjValue(last.view))
+            return "unknown"
+    } else if (first.headerHwnd != last.headerHwnd || first.columnCount != last.columnCount)
+        return "unknown"
+    if (first.widths.Count() != last.widths.Count())
+        return "unknown"
+    changed := False
+    for key, width in first.widths {
+        if !last.widths.HasKey(key)
+            return "unknown"
+        if (width != last.widths[key])
+            changed := True
+    }
+    reason := changed ? "width_difference" : "matching_widths"
+    return changed ? "changed" : "unchanged"
+}
+
+; Produce a cheap rectangle identity without accessibility or focus changes.
+_GetColumnWidthRect(hwnd) {
+    VarSetCapacity(rect, 16, 0)
+    if !DllCall("user32\GetWindowRect", "Ptr", hwnd, "Ptr", &rect, "Int")
+        return ""
+    return NumGet(rect, 0, "Int") . "," . NumGet(rect, 4, "Int")
+        . "," . NumGet(rect, 8, "Int") . "," . NumGet(rect, 12, "Int")
+}
+
+; Validate ownership without treating later pointer movement as part of the drag.
+; Newer clicks/operations, held buttons, and lost foreground focus still reject.
+_CanCompareColumnWidthGesture(gesture, hwnd, ByRef reason) {
+    reason := "unqualified_gesture"
+    if (!IsObject(gesture) || !IsObject(gesture.target))
+        return False
+    reason := "wrong_window"
+    if (gesture.target.hwnd != hwnd)
+        return False
+    reason := "gesture_superseded"
+    if (gesture.epoch != _ColumnWidthCacheState().epoch)
+        return False
+    reason := "mouse_button_held"
+    if (GetKeyState("LButton", "P") || GetKeyState("RButton", "P") || GetKeyState("MButton", "P"))
+        return False
+    reason := "foreground_changed"
+    if !IsForegroundWindow(hwnd)
+        return False
+    reason := ""
+    return True
+}
+
+; Seed non-header gestures or retry strict cache storage after the owner exits.
+; Successful header storage is reused; deferred activation retains ownership.
+_FinishColumnWidthGesture(gesture) {
+    if (!IsObject(gesture) || !IsObject(gesture.target) || gesture.deferred || gesture.published
+        || gesture.epoch != _ColumnWidthCacheState().epoch)
+        return
+    _RequestColumnWidthRefresh(gesture.target.hwnd, gesture.target.ctrlHwnd, "click_release")
+}
+
+; Own comparison/dispatch locally so a slow read cannot adopt a newer click.
+_HandleColumnHeaderWidthResult(gesture, hwnd, ctrlNN) {
+    global disableSendCtrlHwnd, k_nativeSysListViewColumnAutoFitMode
+    global k_useNativeSysListViewColumnAutoFit
+
+    reason := ""
+    if !_CanCompareColumnWidthGesture(gesture, hwnd, reason) {
+        _DebugTrace_ExplorerHeader("header_width_comparison_skipped"
+            , "hwnd=" . hwnd . " phase=before_capture reason=" . reason, True, IsObject(gesture) ? gesture.tick : 0)
+        return
+    }
+
+    _DebugTrace_ExplorerHeader("column_width_capture_owner", "hwnd=" . hwnd . " owner=header", False, gesture.tick)
+    readStartTick := A_TickCount
+    after         := _CaptureColumnWidthSnapshot(gesture.target)
+
+    if !_CanCompareColumnWidthGesture(gesture, hwnd, reason) {
+        _DebugTrace_ExplorerHeader("header_width_comparison_skipped"
+            , "hwnd=" . hwnd . " phase=after_capture reason=" . reason, True, gesture.tick)
+        return
+    }
+
+    if !IsObject(after) {
+        _DebugTrace_ExplorerHeader("header_width_comparison_skipped"
+            , "hwnd=" . hwnd . " phase=after_capture reason=snapshot_read_failed", True, gesture.tick)
+        _InvalidateColumnWidthCache()
+        _RequestColumnWidthRefresh(hwnd, gesture.target.ctrlHwnd, "header_read_failed", True)
+        return
+    }
+
+    ; Read-input checks govern future cache storage, never this comparison.
+    gesture.published := _PublishColumnWidthSnapshot(after, gesture.epoch, readStartTick)
+    reason            := "no_completed_baseline"
+    result            := IsObject(gesture.before) ? _CompareColumnWidthSnapshots(gesture.before, after, reason) : "unknown"
+    _DebugTrace_ExplorerHeader("header_width_comparison"
+        , "hwnd=" . hwnd . " kind=" . gesture.target.kind . " result=" . result . " reason=" . reason
+        . " cachePublished=" . gesture.published, True, gesture.tick)
+    ; Recheck after trace/provider work before changing the block or sending input.
+    if !_CanCompareColumnWidthGesture(gesture, hwnd, reason)
+        return
+
+    if (result == "changed") {
+        _SetColumnAutoAlignBlock(hwnd)
+        return
+    }
+    if (result != "unchanged" || disableSendCtrlHwnd == hwnd || GetKeyState("LShift", "P"))
+        return
+
+    if (gesture.target.kind == "native" && k_useNativeSysListViewColumnAutoFit
+        && AutoFitSysListViewColumns(gesture.target.ctrlHwnd, k_nativeSysListViewColumnAutoFitMode))
+        return
+
+    state := _ColumnWidthCacheState()
+    focusEpoch := state.epoch
+    if (EnsureFocusedHwnd(gesture.target.ctrlHwnd, 60, 15) && state.epoch == focusEpoch
+        && !GetKeyState("LButton", "P") && IsForegroundWindow(hwnd) && disableSendCtrlHwnd != hwnd)
+        SendCtrlNumpadAdd()
+}
+
+; Cancel superseded work; known view/width changes also clear the retained snapshot.
+_InvalidateColumnWidthCache(clearSnapshot := True) {
+    state := _ColumnWidthCacheState()
+    priorCritical := A_IsCritical
+    Critical, On
+    previousSnapshot := state.snapshot
+    state.epoch += 1
+    state.refreshId += 1
+    if IsObject(state.callback) {
+        callback := state.callback
+        SetTimer, %callback%, Delete
+        state.callback := ""
+    }
+    if clearSnapshot
+        state.snapshot := ""
+    Critical, %priorCritical%
+}
+
+; Check the read's discrete input marker and physical keyboard time, not pointer
+; movement. Critical reads retain the old physical-input guard because their
+; queued mouse conditions cannot run until the caller permits interruption.
+_IsColumnWidthReadInputValid(snapshot, readStartTick) {
+    if (!IsObject(snapshot) || !snapshot.HasKey("mouseInputId"))
+        return False
+    elapsedMs := A_TickCount - readStartTick
+    return (_ColumnWidthCacheState().mouseInputId == snapshot.mouseInputId
+        && !GetKeyState("LButton", "P") && !GetKeyState("RButton", "P") && !GetKeyState("MButton", "P")
+        && !GetKeyState("XButton1", "P") && !GetKeyState("XButton2", "P")
+        && A_TimeIdleKeyboard > elapsedMs
+        && (!snapshot.inputCritical || A_TimeIdlePhysical > elapsedMs))
+}
+
+; Existing handlers and never-active fallback conditions share this counter.
+; False is required: a fallback observes input without becoming a hotkey event.
+_NoteColumnWidthMouseInput() {
+    global k_useColumnWidthResizeComparison
+    if k_useColumnWidthResizeComparison {
+        state := _ColumnWidthCacheState()
+        state.mouseInputId += 1
+    }
+    return False
+}
+
+; Run only bounded refresh requests created by file-view input or known changes.
+; Publication rejects discrete input during a read; pointer movement is allowed.
+_RefreshColumnWidthCache(request) {
+    global k_useColumnWidthResizeComparison
+
+    state := _ColumnWidthCacheState()
+    if (!k_useColumnWidthResizeComparison || request.epoch != state.epoch || request.id != state.refreshId)
+        return
+
+    if (A_TickCount >= request.deadline) {
+        state.callback := ""
+        _DebugTrace_ExplorerHeader("column_width_refresh_stopped", "source=" . request.source . " reason=deadline", True)
+        return
+    }
+
+    if (!IsForegroundWindow(request.hwnd) || GetKeyState("LButton", "P")
+        || GetKeyState("RButton", "P") || GetKeyState("MButton", "P")
+        || GetKeyState("XButton1", "P") || GetKeyState("XButton2", "P") || A_TimeIdleKeyboard < 75) {
+        _QueueColumnWidthRefresh(request)
+        return
+    }
+    ; Navigation can replace DirectUI children after the request was queued.
+    ; Resolve each attempt without focusing controls or probing accessibility.
+    if request.followCurrentView {
+        target := _ResolveColumnWidthRefreshTarget(request.hwnd)
+        if (request.epoch != state.epoch || request.id != state.refreshId)
+            return
+
+        if !IsObject(target) {
+            request.previous := ""
+            _QueueColumnWidthRefresh(request, 75, True)
+            return
+        }
+
+        if (!IsObject(request.target) || request.target.ctrlHwnd != target.ctrlHwnd)
+            request.previous := ""
+
+        request.target := target
+    }
+
+    readStartTick := A_TickCount
+    snapshot      := _CaptureColumnWidthSnapshot(request.target)
+    if (request.epoch != state.epoch || request.id != state.refreshId)
+        return
+
+    ; A completed read ends a failure streak, even if later input rejects it.
+    if IsObject(snapshot)
+        request.failureDelayMs := 75
+    if !_IsColumnWidthReadInputValid(snapshot, readStartTick) {
+        if !IsObject(snapshot) {
+            priorCritical := A_IsCritical
+            Critical, On
+            previousSnapshot := state.snapshot
+            if (request.epoch == state.epoch && request.id == state.refreshId)
+                state.snapshot := ""
+            Critical, %priorCritical%
+        }
+        request.previous := ""
+        _QueueColumnWidthRefresh(request, 75, !IsObject(snapshot))
+        return
+    }
+
+    if (request.stable && (!IsObject(request.previous)
+        || _CompareColumnWidthSnapshots(request.previous, snapshot, reason) != "unchanged")) {
+        request.previous := snapshot
+        ; Recheck the candidate sooner while retaining two matching samples.
+        _QueueColumnWidthRefresh(request, 25)
+        return
+    }
+
+    if _PublishColumnWidthSnapshot(snapshot, request.epoch, readStartTick, request.id) {
+        priorCritical := A_IsCritical
+        Critical, On
+        if (state.epoch == request.epoch && state.refreshId == request.id) {
+            state.target := request.target
+            state.callback := ""
+            state.refreshId += 1
+        }
+        Critical, %priorCritical%
+    } else
+        _QueueColumnWidthRefresh(request)
+}
+
+; Publish only a completed, uninterrupted read for the current view operation.
+_PublishColumnWidthSnapshot(snapshot, epoch, readStartTick, refreshId := 0) {
+    if !IsObject(snapshot)
+        return False
+    ; Drain newly queued mouse conditions before entering the storage section.
+    if (!A_IsCritical)
+        Sleep, -1
+    state := _ColumnWidthCacheState()
+    priorCritical := A_IsCritical
+    Critical, On
+    previousSnapshot := state.snapshot
+    valid := (state.epoch == epoch && (!refreshId || state.refreshId == refreshId)
+        && _IsColumnWidthReadInputValid(snapshot, readStartTick) && IsForegroundWindow(snapshot.hwnd))
+    if valid
+        state.snapshot := snapshot
+    Critical, %priorCritical%
+    if valid
+        _DebugTrace_ExplorerHeader("column_width_snapshot_ready"
+            , "hwnd=" . snapshot.hwnd . " ctrlHwnd=" . snapshot.ctrlHwnd
+            . " kind=" . snapshot.kind . " epoch=" . epoch, True)
+    return valid
+}
+
+; Arm one demand-driven retry; no recurring idle or mouse-movement timer is used.
+; Unavailable controls/failed reads back off 75, 150, 300, then 600 ms.
+; Input waits use 75 ms; successful stability samples use 25 ms.
+_QueueColumnWidthRefresh(request, delayMs := 75, failedRead := False) {
+    state := _ColumnWidthCacheState()
+    priorCritical := A_IsCritical
+    Critical, On
+    if (request.epoch == state.epoch && request.id == state.refreshId) {
+        if failedRead {
+            delayMs := request.failureDelayMs
+            request.failureDelayMs := Min(600, delayMs * 2)
+        }
+        ; Wake by the deadline so the worker can stop without another read.
+        delayMs := Min(delayMs, Max(1, request.deadline - A_TickCount))
+        if IsObject(state.callback) {
+            previousCallback := state.callback
+            SetTimer, %previousCallback%, Delete
+        }
+        callback := Func("_RefreshColumnWidthCache").Bind(request)
+        state.callback := callback
+        SetTimer, %callback%, % -delayMs
+    }
+    Critical, %priorCritical%
+}
+
+; Seed/reseed the known file view after activation, a click, navigation, or sizing.
+; Explorer shortcut sizing requests require two matching reads before publication.
+_RequestColumnWidthRefresh(hwnd, ctrlHwnd := 0, source := "operation", stable := False) {
+    global k_useColumnWidthResizeComparison
+
+    if (!k_useColumnWidthResizeComparison || !hwnd
+        || (source != "click_release" && !IsForegroundWindow(hwnd)))
+        return
+    state := _ColumnWidthCacheState()
+    epoch := state.epoch
+    ; Follow the current Explorer pane after navigation or shortcut sizing.
+    ; hwnd remains available while a replacement pane has not appeared yet.
+    followCurrentView := GetWindowClassName(hwnd) == "CabinetWClass" && (!ctrlHwnd || source == "resolved_auto_align")
+    target := _ResolveColumnWidthRefreshTarget(hwnd, ctrlHwnd)
+
+    if (!IsObject(target) && !followCurrentView && !ctrlHwnd
+        && IsObject(state.target) && state.target.hwnd == hwnd)
+        target := _ResolveColumnWidthRefreshTarget(hwnd, state.target.ctrlHwnd)
+
+    if ((!IsObject(target) && !followCurrentView) || state.epoch != epoch)
+        return
+
+    priorCritical := A_IsCritical
+    Critical, On
+
+    if (state.epoch != epoch) {
+        Critical, %priorCritical%
+        return
+    }
+
+    if IsObject(target)
+        state.target := target
+
+    state.refreshId += 1
+    ; followCurrentView re-resolves Explorer children; hwnd identifies the host
+    ; independently of a temporarily missing or replaced target control.
+    ; failureDelayMs belongs to this request and resets after a successful read.
+    request := {deadline: A_TickCount + 5000, epoch: epoch, failureDelayMs: 75
+        , followCurrentView: followCurrentView, hwnd: hwnd, id: state.refreshId
+        , previous: "", source: source, stable: stable, target: target}
+    ; Start at the next timer opportunity; readiness/input checks still apply.
+    _QueueColumnWidthRefresh(request, 1)
+    Critical, %priorCritical%
+}
+
+; Resolve a live visible file pane using the existing native-control chooser.
+; Do not trust an older Explorer HWND merely because it still exists, and do
+; not assume DirectUIHWND1 is the file pane. Explicit native recipients stay exact.
+_ResolveColumnWidthRefreshTarget(hwnd, ctrlHwnd := 0) {
+    if (!hwnd)
+        return ""
+    if (!ctrlHwnd) {
+        ControlGetFocus, focusedCtrl, ahk_id %hwnd%
+        if (GetWindowClassName(hwnd) == "CabinetWClass")
+            focusedCtrl := GetSendCtrlAddTargetCtrl(hwnd, focusedCtrl, "CabinetWClass")
+        if (focusedCtrl == "")
+            return ""
+        ControlGet, ctrlHwnd, Hwnd,, %focusedCtrl%, ahk_id %hwnd%
+    }
+    target := _ResolveColumnWidthTarget(hwnd, "", ctrlHwnd)
+    if (!IsObject(target)
+        || !DllCall("user32\IsChild", "Ptr", hwnd, "Ptr", target.ctrlHwnd, "Int")
+        || !DllCall("user32\IsWindowVisible", "Ptr", target.ctrlHwnd, "Int"))
+        return ""
+    return target
+}
+
+; Normalize a native header to its list, or select Explorer's DirectUI file view.
+; DirectUI common file dialogs are not Shell.Application Explorer windows.
+_ResolveColumnWidthTarget(hwnd, ctrlNN, ctrlHwnd := 0) {
+    if (!hwnd)
+        return ""
+    if (!ctrlHwnd)
+        ControlGet, ctrlHwnd, Hwnd,, %ctrlNN%, ahk_id %hwnd%
+    controlClass := GetWindowClassName(ctrlHwnd)
+    if (controlClass == "SysHeader32") {
+        ctrlHwnd := DllCall("user32\GetParent", "Ptr", ctrlHwnd, "Ptr")
+        controlClass := GetWindowClassName(ctrlHwnd)
+    }
+    if (controlClass == "SysListView32" && IsSysListViewReportView(ctrlHwnd))
+        return {ctrlHwnd: ctrlHwnd, hwnd: hwnd, kind: "native"}
+    if (controlClass == "DirectUIHWND" && GetWindowClassName(hwnd) == "CabinetWClass")
+        return {ctrlHwnd: ctrlHwnd, hwnd: hwnd, kind: "explorer"}
+    return ""
+}
+
+; Retain one completed pre-click snapshot and freeze a reference for this gesture.
+; Known changes invalidate it; the owner seeds the next baseline after handling.
+_TakeColumnWidthBaseline(hwnd, ctrlNN) {
+    global k_useColumnWidthResizeComparison
+
+    if !k_useColumnWidthResizeComparison
+        return ""
+    state := _ColumnWidthCacheState()
+    priorCritical := A_IsCritical
+    Critical, On
+    before := state.snapshot
+    ; Cancel superseded work while retaining the immutable completed measurement.
+    _InvalidateColumnWidthCache(False)
+    epoch := state.epoch
+    tick := A_TickCount
+    Critical, %priorCritical%
+    target := _ResolveColumnWidthTarget(hwnd, ctrlNN)
+    Critical, On
+    if (state.epoch != epoch) {
+        Critical, %priorCritical%
+        return {before: "", epoch: epoch, target: target, tick: tick}
+    }
+    if (!IsObject(before) || !IsObject(target) || !IsForegroundWindow(hwnd)
+        || before.kind != target.kind || before.hwnd != hwnd || before.ctrlHwnd != target.ctrlHwnd
+        || before.capturedTick >= tick)
+        before := ""
+    ; Retention follows view/operation identity, not the former two-second expiry.
+    if (IsObject(state.snapshot) && (state.snapshot.hwnd != hwnd
+        || (IsObject(target) && state.snapshot.ctrlHwnd != target.ctrlHwnd)
+        || (!IsObject(target) && (InStr(ctrlNN, "SysListView32", True) || InStr(ctrlNN, "SysHeader32", True)))))
+        state.snapshot := ""
+    if IsObject(target)
+        state.target := target
+    Critical, %priorCritical%
+    if IsObject(target)
+        _DebugTrace_ExplorerHeader("column_width_baseline"
+            , "hwnd=" . hwnd . " reused=" . IsObject(before) . " epoch=" . epoch, True, tick)
+    ; deferred transfers ownership to activation recovery; published avoids a duplicate seed.
+    return {before: before, deferred: False, epoch: epoch, published: False, target: target, tick: tick}
+}
+
+; Capture one native report-view width snapshot without changing focus or columns.
+; Widths use zero-based logical column numbers, independent of display order.
+; Return an object on success or an empty string plus failureInfo on failure.
+; This is a diagnostic snapshot, not an atomic read or a proven pre-resize baseline.
+_CaptureNativeColumnWidths(listViewHwnd, timeoutMs := 75, budgetMs := 250, ByRef failureInfo := "") {
+    global k_debugTraceExplorerCtrlAddEnabled
+
+    ; Keep the native timeout budget intact and log only after its read finishes.
+    traceStartMs := k_debugTraceExplorerCtrlAddEnabled ? _ColumnWidthTraceClock() : 0
+    detailsStartMs := 0
+    detailsEndMs := 0
+    detailsResult := "unavailable"
+    readOk := False
+    try {
+        ; Query the native header's column count.
+        static HDM_GETITEMCOUNT   := 0x1200
+        ; Query a logical column's width in pixels; zero is a valid width.
+        static LVM_GETCOLUMNWIDTH := 0x101D
+        ; Query the header belonging to this native list view.
+        static LVM_GETHEADER      := 0x101F
+
+        failureInfo := ""
+        readStartTick := A_TickCount
+        if (timeoutMs < 1 || budgetMs < 1) {
+            failureInfo := {stage: "invalid_read_budget"}
+            return ""
+        }
+        if (GetWindowClassName(listViewHwnd) != "SysListView32") {
+            failureInfo := {stage: "not_native_report_view", listViewHwnd: listViewHwnd}
+            return ""
+        }
+        if traceStartMs
+            detailsStartMs := _ColumnWidthTraceClock()
+        isDetails := IsSysListViewReportView(listViewHwnd)
+        if traceStartMs {
+            detailsEndMs := _ColumnWidthTraceClock()
+            detailsResult := isDetails
+        }
+        if (!isDetails) {
+            failureInfo := {stage: "not_native_report_view", listViewHwnd: listViewHwnd}
+            return ""
+        }
+
+        deadlineTick := readStartTick + budgetMs
+        headerHwnd := 0
+        if !_ReadNativeColumnMessage(listViewHwnd, LVM_GETHEADER, 0, deadlineTick, timeoutMs, headerHwnd, failureInfo)
+            return ""
+        if (GetWindowClassName(headerHwnd) != "SysHeader32"
+            || !DllCall("user32\IsChild", "Ptr", listViewHwnd, "Ptr", headerHwnd, "Int")) {
+            failureInfo := {stage: "invalid_native_header", headerHwnd: headerHwnd}
+            return ""
+        }
+
+        columnCount := 0
+        if !_ReadNativeColumnMessage(headerHwnd, HDM_GETITEMCOUNT, 0, deadlineTick, timeoutMs, columnCount, failureInfo)
+            return ""
+        if (columnCount < 1 || columnCount > 512) {
+            failureInfo := {stage: "invalid_column_count", columnCount: columnCount}
+            return ""
+        }
+
+        widths := {}
+        Loop, %columnCount% {
+            columnIdx := A_Index - 1
+            columnWidth := 0
+            if !_ReadNativeColumnMessage(listViewHwnd, LVM_GETCOLUMNWIDTH, columnIdx, deadlineTick, timeoutMs, columnWidth, failureInfo) {
+                failureInfo.columnIdx := columnIdx
+                return ""
+            }
+            widths[columnIdx] := columnWidth
+        }
+
+        ; Reject a changed header, column count, or view mode during this read.
+        finalHeaderHwnd := 0
+        if !_ReadNativeColumnMessage(listViewHwnd, LVM_GETHEADER, 0, deadlineTick, timeoutMs, finalHeaderHwnd, failureInfo)
+            return ""
+        finalColumnCount := 0
+        if !_ReadNativeColumnMessage(headerHwnd, HDM_GETITEMCOUNT, 0, deadlineTick, timeoutMs, finalColumnCount, failureInfo)
+            return ""
+        if (finalHeaderHwnd != headerHwnd || finalColumnCount != columnCount
+            || GetWindowClassName(listViewHwnd) != "SysListView32" || !IsSysListViewReportView(listViewHwnd)) {
+            failureInfo := {stage: "native_view_changed_during_read"}
+            return ""
+        }
+        readOk := True
+        return {columnCount: columnCount, elapsedMs: A_TickCount - readStartTick
+            , headerHwnd: headerHwnd, listViewHwnd: listViewHwnd, widths: widths}
+    } finally {
+        if traceStartMs
+            _DebugTrace_ColumnWidthTiming("native", listViewHwnd, traceStartMs, detailsStartMs, detailsEndMs
+                , detailsResult, readOk, readOk ? columnCount : 0)
+    }
+}
+
+; Send one scalar read query within the remaining snapshot budget.
+; Check delivery separately from the returned value because width zero is valid.
+_ReadNativeColumnMessage(controlHwnd, message, wParam, deadlineTick, timeoutMs, ByRef result, ByRef failureInfo) {
+    ; 0x0001 blocks reentrant sent messages; 0x0002 aborts a hung target.
+    static SMTO_ABORTIFHUNG_AND_BLOCK := 0x0003
+
+    result := 0
+    remainingMs := deadlineTick - A_TickCount
+    if (remainingMs <= 0) {
+        failureInfo := {stage: "read_budget_exceeded", message: message}
+        return False
+    }
+    messageTimeoutMs := Min(timeoutMs, remainingMs)
+    DllCall("kernel32\SetLastError", "UInt", 0)
+    delivered := DllCall("user32\SendMessageTimeoutW"
+        , "Ptr", controlHwnd, "UInt", message, "Ptr", wParam, "Ptr", 0
+        , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", messageTimeoutMs, "Ptr*", result, "Ptr")
+    readError := A_LastError
+    if (!delivered) {
+        failureInfo := {stage: "native_message_failed", controlHwnd: controlHwnd
+            , lastError: readError, message: message, timeoutMs: messageTimeoutMs}
+        return False
+    }
+    if (A_TickCount > deadlineTick) {
+        failureInfo := {stage: "read_budget_exceeded", message: message}
+        return False
+    }
+    return True
+}
+
+; F6 reports a fresh snapshot of the native list or header beneath the mouse.
+; The popup is test-only; reader timings use the existing CtrlAdd trace switch.
+; Tooltip 20 stays visible until the report closes, separate from normal tooltips.
+; An immediate status followed by a delayed popup places the delay after dispatch;
+; a delayed status with short lookup/setup times places it before this handler.
+_TestNativeColumnWidthSnapshot() {
+    handlerStartTick := A_TickCount
+    ToolTip, F6 started: locating the native control..., , , 20
+    try {
+        lookupStartTick := A_TickCount
+        MouseGetPos, , , targetHwnd, controlHwnd, 2
+        lookupElapsedMs := A_TickCount - lookupStartTick
+        resolveStartTick := A_TickCount
+        controlClass := GetWindowClassName(controlHwnd)
+        listViewHwnd := controlHwnd
+        if (controlClass == "SysHeader32")
+            listViewHwnd := DllCall("user32\GetParent", "Ptr", controlHwnd, "Ptr")
+        resolvedClass := GetWindowClassName(listViewHwnd)
+        resolveElapsedMs := A_TickCount - resolveStartTick
+        timingText := "`n`nMouse/control lookup: " . lookupElapsedMs . " ms"
+            . "`nTarget resolution: " . resolveElapsedMs . " ms"
+        if (resolvedClass != "SysListView32") {
+            report := "Hover a native SysListView32 file list or its SysHeader32 header, then press F6."
+                . "`n`nControl under mouse: " . controlClass . timingText
+                . "`nHandler to popup request: " . (A_TickCount - handlerStartTick) . " ms"
+            ToolTip, F6 lookup finished: opening the report..., , , 20
+            MsgBox, 48, Native column snapshot, %report%
+            return
+        }
+
+        failureInfo := ""
+        snapshot := _CaptureNativeColumnWidths(listViewHwnd, 75, 250, failureInfo)
+        if !IsObject(snapshot) {
+            report := "Read failed: " . failureInfo.stage
+            for field, value in failureInfo {
+                if (field != "stage")
+                    report .= "`n" . field . ": " . value
+            }
+            report .= timingText . "`nHandler to popup request: " . (A_TickCount - handlerStartTick) . " ms"
+            ToolTip, F6 read finished: opening the report..., , , 20
+            MsgBox, 48, Native column snapshot, %report%
+            return
+        }
+
+        report := "Read-only native column snapshot"
+            . "`nWindow HWND: " . targetHwnd
+            . "`nListView HWND: " . snapshot.listViewHwnd
+            . "`nHeader HWND: " . snapshot.headerHwnd
+            . "`nColumns: " . snapshot.columnCount
+            . "`nRead time: " . snapshot.elapsedMs . " ms" . timingText
+            . "`n`nLogical column -> width in pixels (zero-based):"
+        Loop, % snapshot.columnCount {
+            columnIdx := A_Index - 1
+            report .= "`n" . columnIdx . " -> " . snapshot.widths[columnIdx] . " px"
+        }
+        setupElapsedMs := A_TickCount - handlerStartTick
+        report .= "`n`nHandler to popup request: " . setupElapsedMs . " ms"
+        statusText := "F6 setup finished in " . setupElapsedMs . " ms; opening the report..."
+        ToolTip, %statusText%, , , 20
+        MsgBox, 64, Native column snapshot, %report%
+    }
+    finally {
+        ToolTip, , , , 20
+    }
+}
+
 ; Auto-fit every column in a native SysListView32 report view without requiring
 ; keyboard focus. Mode "content" uses LVSCW_AUTOSIZE; mode "header" uses
 ; LVSCW_AUTOSIZE_USEHEADER, including its final-column fill behavior. Mode
@@ -15059,8 +16319,8 @@ AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 7
     static LVSCW_AUTOSIZE                   := -1
     ; Size a column to its header text; the final column may fill remaining space.
     static LVSCW_AUTOSIZE_USEHEADER         := -2
-    static SMTO_ABORTIFHUNG_AND_BLOCK       := 0x0003
     global k_headerNoFillLastColumnMinWidth
+    static SMTO_ABORTIFHUNG_AND_BLOCK       := 0x0003
 
     failureInfo := ""
 
@@ -15121,60 +16381,66 @@ AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 7
         return False
     }
 
-    Loop, %columnCount% {
-        columnIndex              := A_Index - 1
-        isHeaderNoFillLastColumn := (mode = "header_no_fill" && columnIndex = columnCount - 1)
-        columnWidth              := isHeaderNoFillLastColumn ? LVSCW_AUTOSIZE : requestedWidth
-        messageResult            := 0
-        if !DllCall("user32\SendMessageTimeoutW"
-            , "Ptr", listViewHwnd, "UInt", LVM_SETCOLUMNWIDTH
-            , "Ptr", columnIndex, "Ptr", columnWidth
-            , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", messageResult, "Ptr")
-        {
-            failureInfo := { stage: "lvm_setcolumnwidth_timeout", listViewHwnd: listViewHwnd
-                , columnIndex: columnIndex, columnWidth: columnWidth, timeoutMs: timeoutMs }
-            return False
-        }
-        if (!messageResult) {
-            failureInfo := { stage: "lvm_setcolumnwidth_rejected", listViewHwnd: listViewHwnd
-                , columnIndex: columnIndex, columnWidth: columnWidth
-                , messageResult: messageResult }
-            return False
-        }
-        if (isHeaderNoFillLastColumn && k_headerNoFillLastColumnMinWidth > 0) {
-            columnPixelWidth := 0
+    _InvalidateColumnWidthCache()
+    try {
+        Loop, %columnCount% {
+            columnIndex              := A_Index - 1
+            isHeaderNoFillLastColumn := (mode = "header_no_fill" && columnIndex = columnCount - 1)
+            columnWidth              := isHeaderNoFillLastColumn ? LVSCW_AUTOSIZE : requestedWidth
+            messageResult            := 0
             if !DllCall("user32\SendMessageTimeoutW"
-                , "Ptr", listViewHwnd, "UInt", LVM_GETCOLUMNWIDTH
-                , "Ptr", columnIndex, "Ptr", 0
-                , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", columnPixelWidth, "Ptr")
+                , "Ptr", listViewHwnd, "UInt", LVM_SETCOLUMNWIDTH
+                , "Ptr", columnIndex, "Ptr", columnWidth
+                , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", messageResult, "Ptr")
             {
-                failureInfo := { stage: "lvm_getcolumnwidth_timeout", listViewHwnd: listViewHwnd
-                    , columnIndex: columnIndex, timeoutMs: timeoutMs }
+                failureInfo := { stage: "lvm_setcolumnwidth_timeout", listViewHwnd: listViewHwnd
+                    , columnIndex: columnIndex, columnWidth: columnWidth, timeoutMs: timeoutMs }
                 return False
             }
-            if (columnPixelWidth < k_headerNoFillLastColumnMinWidth) {
-                columnWidth := k_headerNoFillLastColumnMinWidth
-                messageResult := 0
+            if (!messageResult) {
+                failureInfo := { stage: "lvm_setcolumnwidth_rejected", listViewHwnd: listViewHwnd
+                    , columnIndex: columnIndex, columnWidth: columnWidth
+                    , messageResult: messageResult }
+                return False
+            }
+            if (isHeaderNoFillLastColumn && k_headerNoFillLastColumnMinWidth > 0) {
+                columnPixelWidth := 0
                 if !DllCall("user32\SendMessageTimeoutW"
-                    , "Ptr", listViewHwnd, "UInt", LVM_SETCOLUMNWIDTH
-                    , "Ptr", columnIndex, "Ptr", columnWidth
-                    , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", messageResult, "Ptr")
+                    , "Ptr", listViewHwnd, "UInt", LVM_GETCOLUMNWIDTH
+                    , "Ptr", columnIndex, "Ptr", 0
+                    , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", columnPixelWidth, "Ptr")
                 {
-                    failureInfo := { stage: "lvm_setcolumnwidth_min_timeout", listViewHwnd: listViewHwnd
-                        , columnIndex: columnIndex, columnWidth: columnWidth, timeoutMs: timeoutMs }
+                    failureInfo := { stage: "lvm_getcolumnwidth_timeout", listViewHwnd: listViewHwnd
+                        , columnIndex: columnIndex, timeoutMs: timeoutMs }
                     return False
                 }
-                if (!messageResult) {
-                    failureInfo := { stage: "lvm_setcolumnwidth_min_rejected", listViewHwnd: listViewHwnd
-                        , columnIndex: columnIndex, columnWidth: columnWidth
-                        , messageResult: messageResult }
-                    return False
+                if (columnPixelWidth < k_headerNoFillLastColumnMinWidth) {
+                    columnWidth := k_headerNoFillLastColumnMinWidth
+                    messageResult := 0
+                    if !DllCall("user32\SendMessageTimeoutW"
+                        , "Ptr", listViewHwnd, "UInt", LVM_SETCOLUMNWIDTH
+                        , "Ptr", columnIndex, "Ptr", columnWidth
+                        , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", messageResult, "Ptr")
+                    {
+                        failureInfo := { stage: "lvm_setcolumnwidth_min_timeout", listViewHwnd: listViewHwnd
+                            , columnIndex: columnIndex, columnWidth: columnWidth, timeoutMs: timeoutMs }
+                        return False
+                    }
+                    if (!messageResult) {
+                        failureInfo := { stage: "lvm_setcolumnwidth_min_rejected", listViewHwnd: listViewHwnd
+                            , columnIndex: columnIndex, columnWidth: columnWidth
+                            , messageResult: messageResult }
+                        return False
+                    }
                 }
             }
         }
-    }
 
-    return True
+        return True
+    } finally {
+        rootHwnd := DllCall("user32\GetAncestor", "Ptr", listViewHwnd, "UInt", 2, "Ptr")
+        _RequestColumnWidthRefresh(rootHwnd, listViewHwnd, "native_auto_align")
+    }
 }
 
 ; Return true when the native SysListView32 type bits select Details/Report view.
@@ -15549,6 +16815,7 @@ SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, gu
     if (!targetWindowId)
         return false
 
+    _InvalidateColumnWidthCache()
     BeginBlockWheel()
     try {
         BeginBlockKeys()
@@ -15567,6 +16834,7 @@ SendCtrlNumpadAdd(syncPassCount := 6, guardRequestId := 0, guardQuietMs := 0, gu
     }
 
     ManagedModifierCleanup("Ctrl", targetWindowId, syncPassCount)
+    _RequestColumnWidthRefresh(targetWindowId, 0, "shortcut_auto_align", True)
     return true
 }
 
@@ -15831,7 +17099,7 @@ ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6, targetWin
 }
 
 ; Clears the queued Everything Edit1 auto-fit state so context changes or a
-; completed send do not leave a stale deferred Ctrl+NumpadAdd request behind.
+; completed send do not leave a stale deferred column-fit command behind.
 _ClearTbcEverythingEditAdjustState(preserveSourceTick := False) {
     global tbcEverythingAdjustCtrlNN
     global tbcEverythingAdjustCtrlClass
@@ -15853,7 +17121,7 @@ _ClearTbcEverythingEditAdjustState(preserveSourceTick := False) {
 
 ; Queues a deferred Everything Edit1 column auto-fit request:
 ; capture or accept the current search-box focus context, stamp the latest
-; typing tick, and let a short timer coalesce rapid typing before native sizing.
+; typing tick, and let a short timer coalesce rapid typing before command dispatch.
 _RequestEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
     global k_tbcEverythingAdjustTypingQuietMs
     global tbcEverythingAdjustCtrlNN
@@ -15939,7 +17207,7 @@ _TryRequestEverythingEditAdjust(sourceTick, hotkey, activeHwnd := 0) {
 
 ; Everything Edit1 tbc-work validator:
 ; require the same active search box, the same request token, and when possible
-; the same exact control HWND/class before the deferred Ctrl+NumpadAdd send runs.
+; the same exact control HWND/class before the deferred column-fit command runs.
 _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
     global k_tbcEverythingAdjustMaxAgeMs
     global tbcEverythingAdjustCtrlNN
@@ -15997,8 +17265,8 @@ _SendCtrlNumpadAddIfStillValid(syncPassCount := 6, guardRequestId := 0, guardQui
     return SendCtrlNumpadAdd(syncPassCount, guardRequestId, guardQuietMs, guardHwnd)
 }
 
-; Retry direct native sizing until Everything has created the results ListView
-; header and columns, without moving keyboard focus away from its Edit1 search box.
+; Retry Everything's own column-fit command once its results control exists,
+; without moving keyboard focus away from its Edit1 search box.
 FlushEverythingActivationAutoFit:
     ; Copy one request atomically so a newer activation cannot leave this callback with mixed state.
     Critical, On
@@ -16022,13 +17290,13 @@ FlushEverythingActivationAutoFit:
         Return
     }
 
-    ; AutoFitSysListViewColumns performs the native readiness proof before changing widths.
+    ; Wait for the results control, then dispatch Everything's own column-fit command.
     attemptStartTick := A_TickCount
     failureInfo      := ""
-    autoFitSucceeded := _TryAutoFitEverythingResultsColumns(requestHwnd, "header_no_fill", failureInfo)
+    autoFitSucceeded := _TryAutoFitEverythingResultsColumns(requestHwnd, failureInfo)
     attemptElapsedMs := A_TickCount - attemptStartTick
 
-    ; A native message can yield while Everything is creating controls; abandon a callback
+    ; Command dispatch can yield while Everything is creating controls; abandon a callback
     ; replaced by another activation rather than clearing or rearming its newer request.
     Critical, On
     requestStillCurrent := (currentRequestId = everythingActivationAutoFitId
@@ -16038,11 +17306,12 @@ FlushEverythingActivationAutoFit:
         Return
 
     failureStage := (IsObject(failureInfo) && failureInfo.HasKey("stage")) ? failureInfo.stage : "unknown"
+    failureWinError := (IsObject(failureInfo) && failureInfo.HasKey("winError")) ? failureInfo.winError : ""
 
     if (autoFitSucceeded) {
         totalElapsedMs := A_TickCount - requestStartTick
         if (_ClearEverythingActivationAutoFitState(currentRequestId) && traceRequestId != "")
-            _DebugTrace_ExplorerCtrlAdd("everything_activation_ready"
+            _DebugTrace_ExplorerCtrlAdd("everything_activation_command_dispatched"
                 , "hwnd=" . requestHwnd . " attemptElapsedMs=" . attemptElapsedMs
                 . " totalElapsedMs=" . totalElapsedMs
                 , False, traceRequestId)
@@ -16056,6 +17325,7 @@ FlushEverythingActivationAutoFit:
         if (_ClearEverythingActivationAutoFitState(currentRequestId) && traceRequestId != "")
             _DebugTrace_ExplorerCtrlAdd("everything_activation_timeout"
                 , "hwnd=" . requestHwnd . " lastFailure=" . failureStage
+                . " winError=" . failureWinError
                 . " attemptElapsedMs=" . attemptElapsedMs . " totalElapsedMs=" . totalElapsedMs
                 , False, traceRequestId)
         Return
@@ -16069,9 +17339,9 @@ FlushEverythingActivationAutoFit:
     Critical, Off
 Return
 
-; Deferred Everything Edit1 native column auto-fit flush:
+; Deferred Everything Edit1 column-fit command flush:
 ; after a short debounce, confirm the same search field still owns focus, then
-; resize the results ListView without keyboard injection.
+; dispatch Everything's own command without keyboard injection.
 FlushTbcEverythingEditAdjust:
     currentRequestId := tbcEverythingAdjustId
     ; Stop when no deferred request or target window remains because a previously armed timer may fire after state was cleared.
@@ -16087,7 +17357,7 @@ FlushTbcEverythingEditAdjust:
         Return
     }
 
-    ; Resize the native results ListView directly so the search Edit1 never receives NumpadAdd as typed text.
+    ; Invoke Everything's own column-fit command without injecting keys into Edit1.
     if (_TryAutoFitEverythingResultsColumns(tbcEverythingAdjustHwnd))
     {
         ; Clear completed state only while this callback still owns the request slot so a newer request remains pending.
@@ -16100,20 +17370,20 @@ FlushTbcEverythingEditAdjust:
     if (currentRequestId != tbcEverythingAdjustId)
         Return
 
-    ; Revalidate after the failed direct resize because its guarded checks may have outlived the original focus or request lifetime.
+    ; Revalidate after the failed command dispatch because it may have outlived the original focus or request lifetime.
     if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
     {
         _ClearTbcEverythingEditAdjustState()
         Return
     }
 
-    ; Retry briefly while Everything's results ListView/header are still settling.
+    ; Retry briefly while Everything's results control or command receiver is not ready.
     if ((A_TickCount - tbcEverythingAdjustRequestedTick) < k_tbcEverythingAdjustMaxAgeMs) {
         SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
         Return
     }
 
-    ; A valid Everything window without a ready native results ListView should not fall back to
+    ; A valid Everything window without a ready column-fit command should not fall back to
     ; Ctrl+NumpadAdd while Edit1 is focused, because that can type a literal "+" into search.
     _ClearTbcEverythingEditAdjustState(True)
 Return
@@ -16129,7 +17399,7 @@ KeyTrack() {
         StopAutoFix := True
         ; Everything/Edit1 qualifies the key event, captures the exact
         ; current search-box identity once, and lets the debounce timer resize
-        ; the native results ListView after the search text has had a moment
+        ; results columns through its own command after the search text has had a moment
         ; to settle.
         if (!_TryRequestEverythingEditAdjust(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd))
         {
@@ -24044,7 +25314,9 @@ SafeUIA_WaitElementExistFast(rootEl, expr, default := "", fastTimeout := 200, fa
     name          = UIA Name
     nativeHwnd    = provider-reported native window handle, if any
 */
-SafeUIA_GetElementSnapshot(el, fields := "") {
+SafeUIA_GetElementSnapshot(el, fields := "", ByRef readSucceeded := False) {
+    ; Existing callers keep the same snapshot; classifiers can also detect failed property reads.
+    readSucceeded := True
     fieldList := (fields = "") ? "|autoId|className|controlType|localizedType|name|nativeHwnd|" : "|" . fields . "|"
     info := { autoId: ""
         , className: ""
@@ -24054,50 +25326,66 @@ SafeUIA_GetElementSnapshot(el, fields := "") {
         , name: ""
         , nativeHwnd: 0 }
 
-    if !IsObject(el)
+    if !IsObject(el) {
+        readSucceeded := False
         return info
+    }
 
     if InStr(fieldList, "|autoId|") {
         try
             info.autoId := el.AutomationId
-        catch e
+        catch e {
             info.autoId := ""
+            readSucceeded := False
+        }
     }
     if InStr(fieldList, "|className|") {
         try
             info.className := el.CurrentClassName
-        catch e
+        catch e {
             info.className := ""
+            readSucceeded := False
+        }
     }
     if InStr(fieldList, "|controlType|") {
         try
             info.controlType := el.CurrentControlType
-        catch e
+        catch e {
             info.controlType := ""
+            readSucceeded := False
+        }
     }
     if InStr(fieldList, "|isEnabled|") {
         try
             info.isEnabled := el.CurrentIsEnabled
-        catch e
+        catch e {
             info.isEnabled := ""
+            readSucceeded := False
+        }
     }
     if InStr(fieldList, "|localizedType|") {
         try
             info.localizedType := el.CurrentLocalizedControlType
-        catch e
+        catch e {
             info.localizedType := ""
+            readSucceeded := False
+        }
     }
     if InStr(fieldList, "|name|") {
         try
             info.name := el.CurrentName
-        catch e
+        catch e {
             info.name := ""
+            readSucceeded := False
+        }
     }
     if InStr(fieldList, "|nativeHwnd|") {
         try
             info.nativeHwnd := el.CurrentNativeWindowHandle
-        catch e
+        catch e {
             info.nativeHwnd := 0
+            readSucceeded := False
+        }
     }
 
     return info
