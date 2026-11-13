@@ -591,7 +591,7 @@ Global k_debugTraceGeneralEnabled                            := False
 ; Persistent general diagnostic location beside this script.
 Global k_debugTraceGeneralFile                               := A_ScriptDir . "\AutoCorrect_Debug.log"
 ; Enables buffered diagnostics for docked-window edge resize synchronization.
-Global k_debugTraceLButtonResizeSyncEnabled                  := False
+Global k_debugTraceLButtonResizeSyncEnabled                  := True
 ; Stores docked-window edge resize diagnostics beside this script for inspection.
 Global k_debugTraceLButtonResizeSyncFile                     := A_ScriptDir . "\AutoCorrect_LButtonResizeSyncTrace.log"
 ; Controls the per-frame taskbar Explorer trace; keep disabled because synchronous file writes distort frame cadence.
@@ -15989,8 +15989,7 @@ _QueueColumnWidthRefresh(request, delayMs := 75, failedRead := False) {
 _RequestColumnWidthRefresh(hwnd, ctrlHwnd := 0, source := "operation", stable := False) {
     global k_useColumnWidthResizeComparison
 
-    if (!k_useColumnWidthResizeComparison || !hwnd
-        || (source != "click_release" && !IsForegroundWindow(hwnd)))
+    if (!k_useColumnWidthResizeComparison || !hwnd || (source != "click_release" && !IsForegroundWindow(hwnd)))
         return
     state := _ColumnWidthCacheState()
     epoch := state.epoch
@@ -15999,8 +15998,7 @@ _RequestColumnWidthRefresh(hwnd, ctrlHwnd := 0, source := "operation", stable :=
     followCurrentView := GetWindowClassName(hwnd) == "CabinetWClass" && (!ctrlHwnd || source == "resolved_auto_align")
     target := _ResolveColumnWidthRefreshTarget(hwnd, ctrlHwnd)
 
-    if (!IsObject(target) && !followCurrentView && !ctrlHwnd
-        && IsObject(state.target) && state.target.hwnd == hwnd)
+    if (!IsObject(target) && !followCurrentView && !ctrlHwnd && IsObject(state.target) && state.target.hwnd == hwnd)
         target := _ResolveColumnWidthRefreshTarget(hwnd, state.target.ctrlHwnd)
 
     if ((!IsObject(target) && !followCurrentView) || state.epoch != epoch)
@@ -16021,9 +16019,15 @@ _RequestColumnWidthRefresh(hwnd, ctrlHwnd := 0, source := "operation", stable :=
     ; followCurrentView re-resolves Explorer children; hwnd identifies the host
     ; independently of a temporarily missing or replaced target control.
     ; failureDelayMs belongs to this request and resets after a successful read.
-    request := {deadline: A_TickCount + 5000, epoch: epoch, failureDelayMs: 75
-        , followCurrentView: followCurrentView, hwnd: hwnd, id: state.refreshId
-        , previous: "", source: source, stable: stable, target: target}
+    request := {  deadline: A_TickCount + 5000
+                , epoch: epoch
+                , failureDelayMs: 75
+                , followCurrentView: followCurrentView
+                , hwnd: hwnd, id: state.refreshId
+                , previous: ""
+                , source: source
+                , stable: stable
+                , target: target}
     ; Start at the next timer opportunity; readiness/input checks still apply.
     _QueueColumnWidthRefresh(request, 1)
     Critical, %priorCritical%
@@ -22801,12 +22805,21 @@ GetDialogBreadcrumbWindowText(hwndDlg, timeoutMs := 50) {
     }
 
     ; Try the common address-toolbar ClassNNs before enumerating other toolbars.
-    ControlGet, toolbarHwnd, Hwnd,, ToolbarWindow323, ahk_id %hwndDlg%
+    ; Optional toolbars may be absent; continue enumeration after a lookup failure.
+    try {
+        ControlGet, toolbarHwnd, Hwnd,, ToolbarWindow323, ahk_id %hwndDlg%
+    } catch {
+        toolbarHwnd := 0
+    }
     if (toolbarHwnd && !seenHwnds.HasKey(toolbarHwnd)) {
         candidateHwnds.Push(toolbarHwnd)
         seenHwnds[toolbarHwnd] := True
     }
-    ControlGet, toolbarHwnd, Hwnd,, ToolbarWindow324, ahk_id %hwndDlg%
+    try {
+        ControlGet, toolbarHwnd, Hwnd,, ToolbarWindow324, ahk_id %hwndDlg%
+    } catch {
+        toolbarHwnd := 0
+    }
     if (toolbarHwnd && !seenHwnds.HasKey(toolbarHwnd)) {
         candidateHwnds.Push(toolbarHwnd)
         seenHwnds[toolbarHwnd] := True
