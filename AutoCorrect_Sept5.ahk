@@ -2700,8 +2700,13 @@ ClassifyDialog32770(hWnd, windowClass := "") {
     if (!hWnd || !WinExist("ahk_id " . hWnd))
         return "unknown"
 
-    if (windowClass = "")
-        WinGetClass, windowClass, ahk_id %hWnd%
+    if (windowClass = "") {
+        try {
+            WinGetClass, windowClass, ahk_id %hWnd%
+        } catch {
+            return "unknown"
+        }
+    }
 
     if (windowClass = "")
         return "unknown"
@@ -2710,7 +2715,11 @@ ClassifyDialog32770(hWnd, windowClass := "") {
 
     ; A complete child-control scan distinguishes plain utility dialogs from
     ; shell-style dialogs containing a file or namespace view.
-    WinGet, ctrlList, ControlList, ahk_id %hWnd%
+    try {
+        WinGet, ctrlList, ControlList, ahk_id %hWnd%
+    } catch {
+        return "unknown"
+    }
     if (ErrorLevel || ctrlList = "")
         return "unknown"
 
