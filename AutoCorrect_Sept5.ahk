@@ -13401,8 +13401,27 @@ _RunLButtonGesture(columnWidthGesture, _winIdD, _winCtrlD, lbX1, lbY1, activeBef
                     SetTimer, SendCtrlAddLabel, -125
                 }
                 else {
-                    ControlGet, controlHwnd, Hwnd,, %_winCtrlU%, ahk_id %_winIdU%
-                    If IsSysListViewReportView(controlHwnd)
+                    ; The released list may disappear before this optional fit is queued.
+                    controlHwnd := 0
+                    releaseReportView := False
+                    try {
+                        ControlGet, controlHwnd, Hwnd,, %_winCtrlU%, ahk_id %_winIdU%
+                        if (controlHwnd && DllCall("user32\IsChild", "Ptr", _winIdU, "Ptr", controlHwnd, "Int"))
+                            releaseReportView := IsSysListViewReportView(controlHwnd)
+                        else
+                            controlHwnd := 0
+                    } catch {
+                        controlHwnd := 0
+                    }
+                    if (!controlHwnd) {
+                        isBlankSpaceNonExplorer := False
+                        _DebugTrace_ExplorerHeader("header_click_skipped"
+                            , "hwnd=" . _winIdU . " reason=release_target_unavailable ctrlNN=[" . _winCtrlU . "]"
+                            , True, headerTraceCandidate ? headerTraceDownTick : 0)
+                        GoSub, EnableTimers
+                        Return
+                    }
+                    If (releaseReportView)
                         SetTimer, SendCtrlAddLabel, -125
                 }
             }
