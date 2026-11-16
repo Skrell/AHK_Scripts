@@ -549,7 +549,7 @@ Global k_explorerCtrlAddTraceBufferChars                     := 65536
 ; Minimum delay before Refresh begins its verified Details/content probe.
 Global k_explorerCtrlAddRefreshMinimumWaitMs                 := 300
 ; BEGIN removable Explorer loading-search experiment: False restores descendant search.
-Global k_explorerItemsViewChildrenLoadingEnabled            := True
+Global k_explorerItemsViewChildrenLoadingEnabled             := True
 ; END removable Explorer loading-search experiment.
 ; Shared UIA evidence accepted as proof that an Items View exposes either an
 ; item or a recognized empty-result message.
@@ -19184,6 +19184,7 @@ TryStartBottomResizeCursorClamp(xPos := "", yPos := "", hwnd := "") {
 ; starts on a plain left/right/top/bottom resize edge and that edge is already
 ; part of a plausible peer/partner dock relationship.
 TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
+    global k_debugTraceLButtonResizeSyncEnabled
     global lButtonResizeSyncActive
     global lButtonResizeSyncDraggedHwnd
     global lButtonResizeSyncDraggedStartedAlwaysOnTop
@@ -19226,7 +19227,13 @@ TryStartLButtonResizeSync(xPos := "", yPos := "", hwnd := "") {
         . " mouse=" . xPos . "," . yPos . " edgeHit=" . edgeHit
         . " rect=" . draggedX . "," . draggedY . "," . draggedW . "," . draggedH)
 
-    displayNumber := GetWindowDisplayNumber(draggedHwndID)
+    if (k_debugTraceLButtonResizeSyncEnabled) {
+        displayNumber := GetWindowDisplayNumber(draggedHwndID, monitorLookupDetails)
+        _DebugTrace_LButtonResizeSync("monitor_lookup"
+            , "id=" . traceId . " hwnd=" . draggedHwndID . " displayNumber=" . displayNumber
+            . " " . monitorLookupDetails)
+    } else
+        displayNumber := GetWindowDisplayNumber(draggedHwndID)
     if (displayNumber < 1) {
         _DebugTrace_LButtonResizeSync("setup_rejected"
             , "id=" . traceId . " reason=display_unavailable")
@@ -26079,7 +26086,12 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:kgin::king
 :?:ferance::ference
 :?:dya::day
-:?:mhz::Mhz
+:?:hz::Hz
+:?:mhz::MHz
+:?:khz::KHz
+:?:ghz::GHz
+:?:dbfs::dBFS
+:?:dbFS::dBFS
 :?:toins::tions
 :?:ghz::Ghz
 :?:aition::ation
