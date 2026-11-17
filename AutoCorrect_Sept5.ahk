@@ -190,8 +190,8 @@ Global hotstringGenericCapsLockOn                            := False
 Global hotstringGenericMatchBlocked                          := False
 ; Held-key bits: L/R Shift = 1/2, L/R Ctrl = 4/8, L/R Alt = 16/32, L/R Win = 64/128.
 Global hotstringGenericModifiers                             := 0
-; Tracked characters since a word boundary; -1 means unknown context, which is allowed.
-Global hotstringGenericWordLength                            := -1
+; Characters typed since a delimiter or context reset; zero checks the next initial.
+Global hotstringGenericWordLength                            := 0
 ; Whether the first tracked word character was uppercase; later capitals do not count.
 Global hotstringGenericWordStartsUpper                       := False
 ; Shared sequence token for deferred typing rewrites so older timer callbacks can
@@ -1438,23 +1438,25 @@ _InitGenericHotstringModifiers() {
     }
 }
 
-; Forget uncertain word context without disabling generic replacements.
+; After a click/navigation, classify the next newly typed character as an initial.
+; Resetting to -1 would skip its case check and let a first word like Deepin change.
 _ResetGenericHotstringWordCase() {
     global hotstringGenericMatchBlocked, hotstringGenericWordLength, hotstringGenericWordStartsUpper
 
     hotstringGenericMatchBlocked    := False
-    hotstringGenericWordLength      := -1
+    hotstringGenericWordLength      := 0
     hotstringGenericWordStartsUpper := False
 }
 
-; Track only a capital at an observed word start, before AutoHotkey evaluates #If.
-; "Deepin " is protected; a capital typed later in "deEpin " does not block patterns.
+; Classify the first typed character after a delimiter or context reset, before #If.
+; "Deepin " is protected, including after a click; "deEpin " stays eligible.
+; Ordinary letter hotkeys run after native matching, so their handler is too late.
 _TrackGenericHotstringWordCase(vkCode, isBoundary) {
     global hotstringGenericCapsLockOn, hotstringGenericModifiers
     global hotstringGenericMatchBlocked, hotstringGenericWordLength, hotstringGenericWordStartsUpper
 
     ; Bits 4 through 128 mean Ctrl/Alt/Win is held. No Windows query is needed.
-    ; Shortcuts can change the caret or text. Unknown context remains allowed.
+    ; A shortcut discards the old word; classify the next typed initial after release.
     if (hotstringGenericModifiers & 0xFC)
     {
         _ResetGenericHotstringWordCase()
@@ -1484,15 +1486,14 @@ _TrackGenericHotstringWordCase(vkCode, isBoundary) {
     }
 
     if (vkCode >= 0x41 && vkCode <= 0x5A) {
-        ; Only the first character after an observed boundary decides capitalization.
+        ; Only the first typed character after a delimiter/reset decides capitalization.
         if (hotstringGenericWordLength = 0) {
             ; Shift alone or Caps Lock alone makes the first letter uppercase.
             ; Both together produce lowercase. Later letters never change this flag.
             shiftDown := (hotstringGenericModifiers & 3) != 0
             hotstringGenericWordStartsUpper := (shiftDown != hotstringGenericCapsLockOn)
         }
-        if (hotstringGenericWordLength >= 0)
-            hotstringGenericWordLength += 1
+        hotstringGenericWordLength += 1
         hotstringGenericMatchBlocked := hotstringGenericWordStartsUpper
         return
     }
@@ -1502,13 +1503,12 @@ _TrackGenericHotstringWordCase(vkCode, isBoundary) {
         return
 
     if ((vkCode >= 0x30 && vkCode <= 0x39) || (vkCode >= 0x60 && vkCode <= 0x69)) {
-        if (hotstringGenericWordLength >= 0)
-            hotstringGenericWordLength += 1
+        hotstringGenericWordLength += 1
         hotstringGenericMatchBlocked := hotstringGenericWordStartsUpper
         return
     }
 
-    ; Navigation and other untracked keys discard context without disabling patterns.
+    ; Navigation discards old text; the next typed initial decides the new block.
     _ResetGenericHotstringWordCase()
 }
 
@@ -1543,6 +1543,15 @@ LL_KeyboardHook(nCode, wParam, lParam)
 
     vkCode := NumGet(lParam + 0, 0, "UInt")
     isKeyDown := (wParam = 0x0100 || wParam = 0x0104)
+
+    ; Some events use neutral modifier codes. Normalize them before updating the bits.
+    ; Right Shift has scan code 0x36; right Ctrl/Alt carry the extended-key flag.
+    if (vkCode = 0x10)
+        vkCode := (NumGet(lParam + 0, 4, "UInt") = 0x36) ? 0xA1 : 0xA0
+    else if (vkCode = 0x11)
+        vkCode := (flags & 1) ? 0xA3 : 0xA2
+    else if (vkCode = 0x12)
+        vkCode := (flags & 1) ? 0xA5 : 0xA4
 
     ; Caps Lock is remapped to Delete, so do not assume a press toggles it.
     ; On release, sample the actual toggle after its key-down was processed.
@@ -24232,8 +24241,9 @@ GetHotstringEligibilityFastOrQueue(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     return true
 }
 
-; Generic rules skip an observed initial capital; edits and unknown word context
-; remain allowed. Whole-word rules keep using ShouldRunHotstringAutoCorrect().
+; Generic rules skip a typed initial capital until its delimiter is processed.
+; After a context reset, classify the next typed initial instead of skipping its case.
+; Whole-word rules keep using ShouldRunHotstringAutoCorrect().
 ShouldRunGenericHotstringAutoCorrect() {
     global hotstringGenericMatchBlocked
 
