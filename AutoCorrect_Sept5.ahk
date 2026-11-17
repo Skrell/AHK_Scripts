@@ -184,8 +184,12 @@ Global hotstringResetAtBoundarySeq                           := 0
 Global physicalTypingSeq                                     := 0
 ; Monotonic count of physical keys that exactly match #HotString EndChars.
 Global hotstringBoundarySeq                                  := 0
+; Actual Caps Lock toggle, seeded once and refreshed only on Caps Lock release.
+Global hotstringGenericCapsLockOn                            := False
 ; True only when an observed capital at word start blocks generic replacements.
 Global hotstringGenericMatchBlocked                          := False
+; Held-key bits: L/R Shift = 1/2, L/R Ctrl = 4/8, L/R Alt = 16/32, L/R Win = 64/128.
+Global hotstringGenericModifiers                             := 0
 ; Tracked characters since a word boundary; -1 means unknown context, which is allowed.
 Global hotstringGenericWordLength                            := -1
 ; Whether the first tracked word character was uppercase; later capitals do not count.
@@ -1164,6 +1168,9 @@ if (GetMonitorCount() > 1) {
 }
 
 
+; Seed held modifiers once; subsequent key-down/up events maintain their state.
+_InitGenericHotstringModifiers()
+
 ; Get module handle for this process (needed by SetWindowsHookEx for LL hooks)
 hMod        := DllCall("GetModuleHandle", "Ptr", 0, "Ptr")
 
@@ -1393,12 +1400,14 @@ wParam message   0x0101          WM_KEYUP
 wParam message   0x0104          WM_SYSKEYDOWN (commonly Alt or F10 processing)
 wParam message   0x0105          WM_SYSKEYUP   (commonly Alt or F10 processing)
 Hook flag mask   0x10            LLKHF_INJECTED: event was synthetically injected
-Key-state mask   0x8000          GetAsyncKeyState high bit: key is currently down
+Key-state mask   0x8000          Startup-only GetAsyncKeyState: key is down
 
 Virtual key      0x08            VK_BACK: Backspace
 Virtual key      0x09            VK_TAB: Tab; also a #HotString EndChar
 Virtual key      0x0D            VK_RETURN: Enter; also a #HotString EndChar
-Virtual key      0x10            VK_SHIFT: used only with GetAsyncKeyState here
+Virtual key      0x14            VK_CAPITAL: refresh its toggle only on release
+Virtual-key span 0xA0-0xA5       Left/right Shift, Ctrl, Alt; update held-key bits
+Virtual keys     0x5B/0x5C       Left/right Windows keys; update held-key bits
 Virtual key      0x20            VK_SPACE: Space; also a #HotString EndChar
 Virtual-key span 0x30-0x5A       0-9 and A-Z (intervening values are unused)
 Virtual-key span 0x60-0x6F       Numpad 0-9 and numpad operators
@@ -1414,6 +1423,21 @@ accepted only with Shift. In the third row, comma and period are accepted only
 without Shift, while slash is accepted only with Shift. Those choices exactly
 match the #HotString EndChars directive near the top of this file.
 */
+; Read held keys once before installing our hook; ordinary typing never polls them.
+_InitGenericHotstringModifiers() {
+    global hotstringGenericCapsLockOn, hotstringGenericModifiers
+
+    hotstringGenericCapsLockOn := (DllCall("GetKeyState", "Int", 0x14, "Short") & 1) != 0
+    hotstringGenericModifiers := 0
+    ; Each pair is a stored bit and the Windows key code that initially sets it.
+    for modifierMask, vkCode in {1: 0xA0, 2: 0xA1, 4: 0xA2, 8: 0xA3
+        , 16: 0xA4, 32: 0xA5, 64: 0x5B, 128: 0x5C}
+    {
+        if (DllCall("GetAsyncKeyState", "Int", vkCode, "Short") & 0x8000)
+            hotstringGenericModifiers |= modifierMask
+    }
+}
+
 ; Forget uncertain word context without disabling generic replacements.
 _ResetGenericHotstringWordCase() {
     global hotstringGenericMatchBlocked, hotstringGenericWordLength, hotstringGenericWordStartsUpper
@@ -1426,15 +1450,12 @@ _ResetGenericHotstringWordCase() {
 ; Track only a capital at an observed word start, before AutoHotkey evaluates #If.
 ; "Deepin " is protected; a capital typed later in "deEpin " does not block patterns.
 _TrackGenericHotstringWordCase(vkCode, isBoundary) {
+    global hotstringGenericCapsLockOn, hotstringGenericModifiers
     global hotstringGenericMatchBlocked, hotstringGenericWordLength, hotstringGenericWordStartsUpper
 
+    ; Bits 4 through 128 mean Ctrl/Alt/Win is held. No Windows query is needed.
     ; Shortcuts can change the caret or text. Unknown context remains allowed.
-    if (vkCode = 0x11 || vkCode = 0x12 || vkCode = 0x5B || vkCode = 0x5C
-        || vkCode = 0xA2 || vkCode = 0xA3 || vkCode = 0xA4 || vkCode = 0xA5
-        || (DllCall("GetAsyncKeyState", "Int", 0x11, "Short") & 0x8000)
-        || (DllCall("GetAsyncKeyState", "Int", 0x12, "Short") & 0x8000)
-        || (DllCall("GetAsyncKeyState", "Int", 0x5B, "Short") & 0x8000)
-        || (DllCall("GetAsyncKeyState", "Int", 0x5C, "Short") & 0x8000))
+    if (hotstringGenericModifiers & 0xFC)
     {
         _ResetGenericHotstringWordCase()
         return
@@ -1465,9 +1486,10 @@ _TrackGenericHotstringWordCase(vkCode, isBoundary) {
     if (vkCode >= 0x41 && vkCode <= 0x5A) {
         ; Only the first character after an observed boundary decides capitalization.
         if (hotstringGenericWordLength = 0) {
-            capsLockOn := (DllCall("GetKeyState", "Int", 0x14, "Short") & 1) != 0
-            shiftDown  := (DllCall("GetAsyncKeyState", "Int", 0x10, "Short") & 0x8000) != 0
-            hotstringGenericWordStartsUpper := (shiftDown != capsLockOn)
+            ; Shift alone or Caps Lock alone makes the first letter uppercase.
+            ; Both together produce lowercase. Later letters never change this flag.
+            shiftDown := (hotstringGenericModifiers & 3) != 0
+            hotstringGenericWordStartsUpper := (shiftDown != hotstringGenericCapsLockOn)
         }
         if (hotstringGenericWordLength >= 0)
             hotstringGenericWordLength += 1
@@ -1501,6 +1523,7 @@ LL_KeyboardHook(nCode, wParam, lParam)
     global fixSlashStringBoundarySeq
     global hotstringResetTimerPending
     global hotstringBoundarySeq, hotstringResetAtBoundarySeq
+    global hotstringGenericCapsLockOn, hotstringGenericModifiers
     global physicalTypingSeq
     static blockedPressCount = 0
 
@@ -1518,10 +1541,28 @@ LL_KeyboardHook(nCode, wParam, lParam)
     flags    := NumGet(lParam + 0, 8, "UInt")
     injected := (flags & 0x10)  ; LLKHF_INJECTED
 
+    vkCode := NumGet(lParam + 0, 0, "UInt")
+    isKeyDown := (wParam = 0x0100 || wParam = 0x0104)
+
+    ; Caps Lock is remapped to Delete, so do not assume a press toggles it.
+    ; On release, sample the actual toggle after its key-down was processed.
+    if (vkCode = 0x14 && (wParam = 0x0101 || wParam = 0x0105))
+        hotstringGenericCapsLockOn := (DllCall("GetKeyState", "Int", 0x14, "Short") & 1) != 0
+
     ; Allow script- or externally-injected events; only physical user input is
-    ; used for typing and boundary bookkeeping below.
+    ; used for typing and held-modifier bookkeeping below.
     if (injected)
         return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
+
+    ; Update only the modifier that changed, including releases while keys are blocked.
+    ; The two Shift bits stay separate: releasing one must not clear the other.
+    if ((vkCode >= 0xA0 && vkCode <= 0xA5) || vkCode = 0x5B || vkCode = 0x5C) {
+        modifierMask := (vkCode >= 0xA0) ? (1 << (vkCode - 0xA0)) : (64 << (vkCode - 0x5B))
+        if (isKeyDown)
+            hotstringGenericModifiers |= modifierMask
+        else
+            hotstringGenericModifiers &= ~modifierMask
+    }
 
     ; If not blocking, finish physical typing/boundary bookkeeping above, then
     ; pass the unchanged event through to the active application.
@@ -1530,9 +1571,8 @@ LL_KeyboardHook(nCode, wParam, lParam)
         ; Track physical text-input key-downs separately from the script's exact
         ; #HotString EndChars. An async custom-editor probe compares both counts
         ; to distinguish no typing, a partial word, and a completed word boundary.
-        if (wParam = 0x0100 || wParam = 0x0104)  ; WM_KEYDOWN / WM_SYSKEYDOWN
+        if (isKeyDown)  ; WM_KEYDOWN / WM_SYSKEYDOWN
         {
-            vkCode := NumGet(lParam + 0, 0, "UInt")
             isTextInputKey := (vkCode = 0x08 || vkCode = 0x09 || vkCode = 0x0D
                 || vkCode = 0x20 || (vkCode >= 0x30 && vkCode <= 0x5A)
                 || (vkCode >= 0x60 && vkCode <= 0x6F)
@@ -1551,7 +1591,7 @@ LL_KeyboardHook(nCode, wParam, lParam)
             if (!isBoundary && (vkCode = 0x31 || vkCode = 0x30 || vkCode = 0x39
                 || vkCode = 0xBC || vkCode = 0xBE || vkCode = 0xBF))
             {
-                shiftDown := (DllCall("GetAsyncKeyState", "Int", 0x10, "Short") & 0x8000)
+                shiftDown := (hotstringGenericModifiers & 3) != 0
                 isBoundary := ((shiftDown && (vkCode = 0x31 || vkCode = 0x30
                     || vkCode = 0x39 || vkCode = 0xBF))
                     || (!shiftDown && (vkCode = 0xBC || vkCode = 0xBE)))
