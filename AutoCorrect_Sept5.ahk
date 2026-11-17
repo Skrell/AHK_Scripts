@@ -184,6 +184,12 @@ Global hotstringResetAtBoundarySeq                           := 0
 Global physicalTypingSeq                                     := 0
 ; Monotonic count of physical keys that exactly match #HotString EndChars.
 Global hotstringBoundarySeq                                  := 0
+; True only when an observed capital at word start blocks generic replacements.
+Global hotstringGenericMatchBlocked                          := False
+; Tracked characters since a word boundary; -1 means unknown context, which is allowed.
+Global hotstringGenericWordLength                            := -1
+; Whether the first tracked word character was uppercase; later capitals do not count.
+Global hotstringGenericWordStartsUpper                       := False
 ; Shared sequence token for deferred typing rewrites so older timer callbacks can
 ; detect that a newer key event already replaced their context and should win.
 Global typingFixSeq                                          := 0
@@ -1408,6 +1414,82 @@ accepted only with Shift. In the third row, comma and period are accepted only
 without Shift, while slash is accepted only with Shift. Those choices exactly
 match the #HotString EndChars directive near the top of this file.
 */
+; Forget uncertain word context without disabling generic replacements.
+_ResetGenericHotstringWordCase() {
+    global hotstringGenericMatchBlocked, hotstringGenericWordLength, hotstringGenericWordStartsUpper
+
+    hotstringGenericMatchBlocked    := False
+    hotstringGenericWordLength      := -1
+    hotstringGenericWordStartsUpper := False
+}
+
+; Track only a capital at an observed word start, before AutoHotkey evaluates #If.
+; "Deepin " is protected; a capital typed later in "deEpin " does not block patterns.
+_TrackGenericHotstringWordCase(vkCode, isBoundary) {
+    global hotstringGenericMatchBlocked, hotstringGenericWordLength, hotstringGenericWordStartsUpper
+
+    ; Shortcuts can change the caret or text. Unknown context remains allowed.
+    if (vkCode = 0x11 || vkCode = 0x12 || vkCode = 0x5B || vkCode = 0x5C
+        || vkCode = 0xA2 || vkCode = 0xA3 || vkCode = 0xA4 || vkCode = 0xA5
+        || (DllCall("GetAsyncKeyState", "Int", 0x11, "Short") & 0x8000)
+        || (DllCall("GetAsyncKeyState", "Int", 0x12, "Short") & 0x8000)
+        || (DllCall("GetAsyncKeyState", "Int", 0x5B, "Short") & 0x8000)
+        || (DllCall("GetAsyncKeyState", "Int", 0x5C, "Short") & 0x8000))
+    {
+        _ResetGenericHotstringWordCase()
+        return
+    }
+
+    if (isBoundary) {
+        ; Ending rules still evaluate the initial capital of the word just finished.
+        hotstringGenericMatchBlocked    := hotstringGenericWordStartsUpper
+        hotstringGenericWordLength      := 0
+        hotstringGenericWordStartsUpper := False
+        return
+    }
+
+    if (vkCode = 0x08) {
+        ; Backspacing inside a tracked word keeps its initial-letter case.
+        ; Deleting that first letter clears the capital instead of blocking edits.
+        if (hotstringGenericWordLength > 0) {
+            hotstringGenericWordLength -= 1
+            if (hotstringGenericWordLength = 0)
+                hotstringGenericWordStartsUpper := False
+            hotstringGenericMatchBlocked := hotstringGenericWordStartsUpper
+        } else {
+            _ResetGenericHotstringWordCase()
+        }
+        return
+    }
+
+    if (vkCode >= 0x41 && vkCode <= 0x5A) {
+        ; Only the first character after an observed boundary decides capitalization.
+        if (hotstringGenericWordLength = 0) {
+            capsLockOn := (DllCall("GetKeyState", "Int", 0x14, "Short") & 1) != 0
+            shiftDown  := (DllCall("GetAsyncKeyState", "Int", 0x10, "Short") & 0x8000) != 0
+            hotstringGenericWordStartsUpper := (shiftDown != capsLockOn)
+        }
+        if (hotstringGenericWordLength >= 0)
+            hotstringGenericWordLength += 1
+        hotstringGenericMatchBlocked := hotstringGenericWordStartsUpper
+        return
+    }
+
+    ; Shift/Caps Lock by themselves insert no character.
+    if (vkCode = 0x10 || vkCode = 0x14 || vkCode = 0xA0 || vkCode = 0xA1)
+        return
+
+    if ((vkCode >= 0x30 && vkCode <= 0x39) || (vkCode >= 0x60 && vkCode <= 0x69)) {
+        if (hotstringGenericWordLength >= 0)
+            hotstringGenericWordLength += 1
+        hotstringGenericMatchBlocked := hotstringGenericWordStartsUpper
+        return
+    }
+
+    ; Navigation and other untracked keys discard context without disabling patterns.
+    _ResetGenericHotstringWordCase()
+}
+
 LL_KeyboardHook(nCode, wParam, lParam)
 {
     ; While blockKeys := true, swallow only physical KEYDOWN / SYSKEYDOWN events.
@@ -1474,6 +1556,9 @@ LL_KeyboardHook(nCode, wParam, lParam)
                     || vkCode = 0x39 || vkCode = 0xBF))
                     || (!shiftDown && (vkCode = 0xBC || vkCode = 0xBE)))
             }
+
+            ; Keep the capitalization decision ready before hotstring #If evaluation.
+            _TrackGenericHotstringWordCase(vkCode, isBoundary)
 
             if (isBoundary) {
                 hotstringBoundarySeq += 1
@@ -2139,6 +2224,7 @@ _ClearTypingAutoFixEligibilityCache() {
     c_typingAutoFixTick                    := 0
     hotstringResetTimerPending             := False
     hotstringResetAtBoundarySeq            := 0
+    _ResetGenericHotstringWordCase()
     SetTimer, ResetHotstringBufferAfterBoundary, Off
     Hotstring("Reset")
 }
@@ -24106,6 +24192,14 @@ GetHotstringEligibilityFastOrQueue(activeHwnd, ctrlNN, ctrlHwnd, ctrlClass
     return true
 }
 
+; Generic rules skip an observed initial capital; edits and unknown word context
+; remain allowed. Whole-word rules keep using ShouldRunHotstringAutoCorrect().
+ShouldRunGenericHotstringAutoCorrect() {
+    global hotstringGenericMatchBlocked
+
+    return (!hotstringGenericMatchBlocked && ShouldRunHotstringAutoCorrect())
+}
+
 ; Returns true only when the large hotstring autocorrect table should be active
 ; for the current focus target.
 ShouldRunHotstringAutoCorrect() {
@@ -25826,7 +25920,6 @@ SafeUIA_GetAutoId(el) {
 ::csv::
 ::cur::
 ::dat::
-::db::
 ::deb::
 ::dmg::
 ::dmp::
@@ -26016,10 +26109,12 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::ou::you
 ::u::you
 ::em::me
+::db::dB
 ;------------------------------------------------------------------------------
 ; Word endings
 ;------------------------------------------------------------------------------
-::uccessful::successful
+; ::uccessful::successful
+#If ShouldRunGenericHotstringAutoCorrect()
 :?:sccessful::successful
 :?:sucessful::successful
 :?:succssful::successful
@@ -26034,7 +26129,9 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:succesfsul::successful
 :?:successufl::successful
 :?:successflu::successful
-::uccessfully::successfully
+#If ShouldRunHotstringAutoCorrect()
+; ::uccessfully::successfully
+#If ShouldRunGenericHotstringAutoCorrect()
 :?:sccessfully::successfully
 :?:sucessfully::successfully
 :?:succssfully::successfully
@@ -26092,6 +26189,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:ghz::GHz
 :?:dbfs::dBFS
 :?:dbFS::dBFS
+:?:db::dB
 :?:toins::tions
 :?:ghz::Ghz
 :?:aition::ation
@@ -26102,28 +26200,30 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?:gbps::Gbps
 :?:gpbs::Gbps
 ; Specific line/lines misspellings; preserve valid lien/liens and alien/aliens.
-::airlien::airline
-::airliens::airlines
-::baselien::baseline
+#If ShouldRunHotstringAutoCorrect()
+; ::airlien::airline
+; ::airliens::airlines
+; ::baselien::baseline
 ::crystallien::crystalline
-::deadlien::deadline
-::declien::decline
-::decliens::declines
-::disciplien::discipline
-::discipliens::disciplines
+; ::deadlien::deadline
+; ::declien::decline
+; ::decliens::declines
+; ::disciplien::discipline
+; ::discipliens::disciplines
 ::gasolien::gasoline
 ::guideliens::guidelines
-::headlien::headline
-::headliens::headlines
-::inclien::incline
-::incliens::inclines
-::inlien::inline
-::inliens::inlines
+; ::headlien::headline
+; ::headliens::headlines
+; ::inclien::incline
+; ::incliens::inclines
+; ::inlien::inline
+; ::inliens::inlines
 ::offlien::offline
-::onlien::online
+; ::onlien::online
 ::outlien::outline
-::pipelien::pipeline
-::timelien::timeline
+; ::pipelien::pipeline
+; ::timelien::timeline
+#If ShouldRunGenericHotstringAutoCorrect()
 :?:iaion::iation
 :?:cims::cisms
 :?:lyl::lly
@@ -26235,13 +26335,17 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:noticibl::noticeabl
 :*:ocasion::occasion
 ; Wait for the word ending: "occuranc" must not expand before the final "e".
+#If ShouldRunHotstringAutoCorrect()
 ::occuranc::occurrence
 ::occurance::occurrence
 ::occurances::occurrences
+#If ShouldRunGenericHotstringAutoCorrect()
 :*:priveledg::privileg
 ; Wait for complete words: "recie" -> "recipe", "reciept" -> "receipt".
+#If ShouldRunHotstringAutoCorrect()
 ::reciept::receipt
 ::reciepts::receipts
+#If ShouldRunGenericHotstringAutoCorrect()
 :*:recived::received
 :*:reciver::receiver
 :*:recepient::recipient
@@ -26257,15 +26361,18 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:superceed::supersede
 :*:weild::wield
 ; Specific any-word misspellings; preserve valid nay and naysayer.
+#If ShouldRunHotstringAutoCorrect()
 ::naybody::anybody
 ::naymore::anymore
-::nayone::anyone
+; ::nayone::anyone
 ::naything::anything
 ::naytime::anytime
 ::nayway::anyway
 ::naywhere::anywhere
+#If ShouldRunGenericHotstringAutoCorrect()
 :*:soem::some
 :*:seom::some
+#If ShouldRunHotstringAutoCorrect()
 ::cmakel::CMakeLists.txt
 ::cmaket::CMakeLists.txt
 ::unfo::unfortunately,
@@ -26276,6 +26383,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::prive::privilege
 ::envi::environment
 ::simult::simultaneous
+#If ShouldRunGenericHotstringAutoCorrect()
 :*:follwo::follow
 :*:ncorrect::incorrect
 :*:icorrect::incorrect
@@ -26291,15 +26399,19 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:incorerct::incorrect
 :*:incorrcet::incorrect
 :*:incorretc::incorrect
+#If ShouldRunHotstringAutoCorrect()
 ::methodo::methodology
 ::orthog::orthogonal
+#If ShouldRunGenericHotstringAutoCorrect()
 :*:pecifi::specifi
 :*:secifi::specifi
 :*:spcifi::specifi
 :*:speifi::specifi
 ; Preserve the complete missing-letter forms without using the ambiguous short prefixes.
+#If ShouldRunHotstringAutoCorrect()
 ::specfiable::specifiable
 ::speciiable::specifiable
+#If ShouldRunGenericHotstringAutoCorrect()
 :*:psecifi::specifi
 :*:sepcifi::specifi
 :*:spceifi::specifi
@@ -26371,26 +26483,28 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :?*:laod::load
 ; Specific load misspellings; preserve internal olad/loda in correctly spelled words.
 ; The screened ending-only loda rule covers loda/downloda/uploda/reloda.
+#If ShouldRunHotstringAutoCorrect()
 ::downlodaable::downloadable
-::downlodaed::downloaded
-::downlodaing::downloading
-::downlodas::downloads
-::downolad::download
-::downoladable::downloadable
-::downoladed::downloaded
-::downolading::downloading
-::downolads::downloads
-::lodaed::loaded
-::lodaing::loading
-::lodas::loads
+; ::downlodaed::downloaded
+; ::downlodaing::downloading
+; ::downlodas::downloads
+; ::downolad::download
+; ::downoladable::downloadable
+; ::downoladed::downloaded
+; ::downolading::downloading
+; ::downolads::downloads
+; ::lodaed::loaded
+; ::lodaing::loading
+; ::lodas::loads
 ::olad::load
 ::oladed::loaded
 ::olading::loading
 ::olads::loads
 ::reolad::reload
-::uplodaed::uploaded
-::upolad::upload
-::upoladed::uploaded
+; ::uplodaed::uploaded
+; ::upolad::upload
+; ::upoladed::uploaded
+#If ShouldRunGenericHotstringAutoCorrect()
 :?*:isntall::install
 :?*:insatll::install
 :?*:istall::install
@@ -26403,6 +26517,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Common Misspellings - the main list
 ;------------------------------------------------------------------------------
+#If ShouldRunHotstringAutoCorrect()
 ::fullfill::fulfill
 ::requiremts::requirement
 ::requireement::requirement
@@ -28970,8 +29085,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::shreak::shriek
 ::shrinked::shrunk
 ::sideral::sidereal
-::sieze::seize
-::siezed::seized
+; ::sieze::seize
+; ::siezed::seized
 ::siezing::seizing
 ::siezure::seizure
 ::siezures::seizures
@@ -29671,7 +29786,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::defintinon::definition
 ::fof::for
 ::determininstic::deterministic
-::Hye::Hey
 ::th e::the
 ::npoe::nope
 ::speicifc::specifIc
@@ -29701,7 +29815,6 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::adivsigin::advising
 ::opporotunity::opportunity
 ::cocks::clocks
-::piont::poInt
 ::deisng::design
 ::hps::HPS
 ::cusomter::customer
@@ -29754,8 +29867,11 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ;------------------------------------------------------------------------------
 ; Generated Misspellings - the main list
 ;------------------------------------------------------------------------------
+#If ShouldRunGenericHotstringAutoCorrect()
 #include %A_ScriptDir%\GeneratedWords_ScreenedRules.ahk
+#If ShouldRunHotstringAutoCorrect()
 #include %A_ScriptDir%\GeneratedWords_filtered.ahk
+#If ShouldRunGenericHotstringAutoCorrect()
 :?:emnt::ment
 :?:ign::ing
 :?:oen::one

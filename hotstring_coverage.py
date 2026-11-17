@@ -10,14 +10,14 @@ Actual source examples:
 
 The stored containers passed between functions are:
     definitions      -> parsed dictionaries from one input file.
-    rules            -> accepted start/middle/end dictionaries, with kind and order.
+    rules            -> accepted start/middle/end dictionaries, with kind.
     whole_word_rules -> individual typo/correction dictionaries.
-    decisions        -> one result dictionary per whole-word rule, referring to a rule or None.
+    decisions        -> each whole-word rule and whether a pattern covers it.
 
 For example, omitting source metadata:
     rule  = {"trigger": "inetr", "replacement": "inter", "kind": "start", ...}
     whole_word_rule = {"trigger": "inetrnet", "replacement": "internet", ...}
-The checker takes that whole-word rule and checks every supplied rule directly.
+The checker stops when a supplied pattern reproduces the expected correction.
 The beginning helper uses startswith() and removeprefix(); the ending helper
 uses endswith() and removesuffix(). The middle helper uses replace(..., 1)
 for the first matching occurrence anywhere. The complete output must equal the whole-word rule's
@@ -27,6 +27,8 @@ main() connects the readers and checker, writes GeneratedWords_filtered.ahk,
 and prints counts. The original GeneratedWords.ahk is left unchanged.
 EXCEPTION_WORDS lists valid triggers whose entire definitions are omitted
 from the filtered output, independently of generic-rule coverage.
+Generic rules skip words starting with a capital, so their whole-word entries
+remain uncovered and are retained unless separately listed in EXCEPTION_WORDS.
 Matching is literal and case-sensitive. Inherited options, include expansion
 and backtick-escaped lines are outside the matcher; unprocessed lines are kept.
 """
@@ -137,63 +139,68 @@ EXCEPTION_WORDS = [
 ]
 
 
-def _apply_end(rule, text):
+# Main script supplying existing beginning, middle, and ending rules.
+FILENAME_AUTOCORRECT                    = "AutoCorrect_Sept5.ahk"
+# Original generated whole-word definitions to inspect and preserve.
+FILENAME_GENERATED_WORDS                = "GeneratedWords.ahk"
+# Filtered output containing retained generated definitions.
+OUTPUT_GENERATED_WORDS_FILTERED         = "GeneratedWords_filtered.ahk"
+# Screened generic rules included in the coverage comparison.
+FILENAME_GENERATED_WORDS_SCREENED_RULES = "GeneratedWords_ScreenedRules.ahk"
+
+
+def _apply_end(prule, text_trigger):
     """Return the complete word obtained from one ending-rule dictionary.
 
     Example inputs:
-        rule: {"trigger": "atde", "replacement": "ated", ...}
-        text: "simulatde"
+        prule: {"trigger": "atde", "replacement": "ated", ...}
+        text_trigger: "simulatde"
     The function returns "simul" + "ated" = "simulated". The caller stores that
     string in corrected and compares it with the current whole-word rule's replacement.
-    The rule dictionary and original whole-word rule dictionary are not changed.
+    The prule dictionary and original whole-word rule dictionary are not changed.
     """
-    # The ending example retrieves "atde" from the supplied rule dictionary.
-    trigger = rule["trigger"]
     # For text="simulatde": endswith("atde") is True.
-    if text.endswith(trigger):
+    if text_trigger.endswith(prule["trigger"]):
         # "simulatde".removesuffix("atde") returns "simul".
         # Adding "ated" returns "simulated".
-        return text.removesuffix(trigger) + rule["replacement"]
+        return text_trigger.removesuffix(prule["trigger"]) + prule["replacement"]
     # A nonmatching ending gives the caller None rather than corrected text.
     return None
 
 
-def _apply_middle(rule, text):
+def _apply_middle(prule, text_trigger):
     """Replace the first occurrence of one middle-rule trigger anywhere.
 
     Example inputs:
-        rule: {"trigger": "aiton", "replacement": "ation", ...}
-        text: "serializaiton"
+        prule: {"trigger": "aiton", "replacement": "ation", ...}
+        text_trigger: "serializaiton"
     The function returns "serialization". The ?* rule permits a match anywhere,
     including the beginning or ending; it is not restricted to the interior.
     Only the first occurrence is replaced, and the input records stay unchanged.
     """
-    trigger = rule["trigger"]
     # The complete trigger "aiton" occurs in "serializaiton".
-    if trigger in text:
+    if prule["trigger"] in text_trigger:
         # The final argument 1 limits replacement to the first occurrence.
-        return text.replace(trigger, rule["replacement"], 1)
+        return text_trigger.replace(prule["trigger"], prule["replacement"], 1)
     # No occurrence gives the caller None.
     return None
 
 
-def _apply_start(rule, text):
+def _apply_start(prule, text_trigger):
     """Return the complete word obtained from one beginning-rule dictionary.
 
     Example inputs:
-        rule: {"trigger": "inetr", "replacement": "inter", ...}
-        text: "inetrnet"
+        prule: {"trigger": "inetr", "replacement": "inter", ...}
+        text_trigger: "inetrnet"
     The function returns "inter" + "net" = "internet". The caller stores that
     string in corrected. If the trigger is not at the beginning, return None.
     The function does not change rule, whole_word_rules or any input file.
     """
-    # The beginning example retrieves "inetr" from the rule dictionary.
-    trigger = rule["trigger"]
-    # For text="inetrnet": startswith("inetr") is True.
-    if text.startswith(trigger):
+    # For text_trigger="inetrnet": startswith("inetr") is True.
+    if text_trigger.startswith(prule["trigger"]):
         # "inetrnet".removeprefix("inetr") returns "net".
         # Adding "inter" before "net" returns "internet".
-        return rule["replacement"] + text.removeprefix(trigger)
+        return prule["replacement"] + text_trigger.removeprefix(prule["trigger"])
     # A nonmatching beginning gives the caller None.
     return None
 
@@ -242,16 +249,18 @@ def _read_definitions(path):
     """
     # source identifies one supplied file, not the entire collection of files.
     source = Path(path)
-    # text holds the decoded file contents; any UTF-8 BOM is removed.
-    text = source.read_bytes().decode("utf-8-sig")
+    # Keep b"::inetrnet::internet\r\n" as bytes for later source checks/output.
+    source_lines = source.read_bytes().splitlines(keepends=True)
+    if source_lines:
+        # The BOM belongs to the file, not to the first hotstring.
+        source_lines[0] = source_lines[0].removeprefix(b"\xef\xbb\xbf")
     # The per-file parsed-record container starts as definitions = [].
     definitions = []
-    # For the generated example, raw_line includes "::inetrnet::internet"
-    # and its newline. line_idx supplies its actual source line number.
-    for line_idx, raw_line in enumerate(text.splitlines(keepends=True), start=1):
-        # " \t::fie::file\r\n" becomes "::fie::file" for parsing.
-        # raw_line retains the original indentation and newline for output.
-        line = raw_line.rstrip("\r\n").lstrip(" \t")
+    # raw_line is b"::inetrnet::internet\r\n"; line_idx is its source line.
+    for line_idx, raw_line in enumerate(source_lines, start=1):
+        # Decode only for parsing: b" \t::fie::file\r\n" becomes "::fie::file".
+        # raw_line keeps its original bytes, indentation and newline.
+        line = raw_line.decode("utf-8").rstrip("\r\n").lstrip(" \t")
         # A blank line or "; explanation" creates no dictionary.
         if not line.strip() or line.lstrip().startswith(";"):
             continue
@@ -275,7 +284,7 @@ def _read_definitions(path):
         definitions.append({
             "line"       : line_idx,
             "options"    : match.group(1),
-            "raw_line"   : raw_line.encode("utf-8"),
+            "raw_line"   : raw_line,
             "replacement": match.group(3),
             "source"     : str(source),
             # This is where the actual typo "inetrnet" enters the stored dictionary.
@@ -285,7 +294,7 @@ def _read_definitions(path):
     return definitions
 
 
-def find_covered_word_rules(whole_word_rules, rules, progress=None):
+def find_covered_word_rules(whole_word_rules, patterned_rules, progress=None):
     """Check each complete whole_word_rule directly against the supplied start/middle/end rules.
 
     Example whole-word rule:
@@ -298,65 +307,75 @@ def find_covered_word_rules(whole_word_rules, rules, progress=None):
     The middle helper similarly replaces aiton -> ation in serializaiton,
     returning serialization. No shorter pieces are generated or looked up.
 
-    Each returned decision refers to the original whole-word rule and its selected rule.
-    When several rules give the exact target, retain the lowest rule order.
+    Each returned decision records the original whole-word rule and covered=True/False.
+    Stop checking patterns as soon as one gives the exact expected correction.
+    Triggers starting with a capital remain uncovered; later capitals do not block coverage.
     This checks positional coverage only and does not modify any AHK file.
     An optional progress(completed, total) callback reports finished whole-word checks.
     """
     decisions = []
     if progress is not None:
         progress(0, len(whole_word_rules))
+
     for whole_word_rule in whole_word_rules:
         # The whole typo is "inetrnet"; its expected correction is "internet".
-        best_rule = None
-        text = whole_word_rule["trigger"]
+        covered      = False
+        text_trigger = whole_word_rule["trigger"]
+
+        # "Deepin" starts with a capital, so generic rules must not cover this entry.
+        # Keep its individual correction available in the filtered output instead.
+        if text_trigger[:1].isupper():
+            decisions.append({
+                "covered": False,
+                "whole_word_rule": whole_word_rule,
+            })
+            if progress is not None:
+                progress(len(decisions), len(whole_word_rules))
+            continue
 
         # Check the complete trigger from each real rule against the whole word.
         # For the inetr rule, test "inetrnet".startswith("inetr") directly.
-        for rule in rules:
-            if rule["kind"] == "start":
+        for pattern in patterned_rules:
+            if   pattern["kind"] == "start":
                 # The helper returns "inter" + "net" = "internet", or None
                 # when the whole rule trigger is not at the beginning.
-                corrected = _apply_start(rule, text)
-            elif rule["kind"] == "middle":
+                corrected = _apply_start(pattern, text_trigger)
+            elif pattern["kind"] == "middle":
                 # The complete trigger "aiton" appears in "serializaiton";
                 # replacing its first occurrence returns "serialization".
-                corrected = _apply_middle(rule, text)
-            elif rule["kind"] == "end":
+                corrected = _apply_middle(pattern, text_trigger)
+            elif pattern["kind"] == "end":
                 # Ending example: "simulatde".endswith("atde") is True;
                 # the helper returns "simul" + "ated" = "simulated".
-                corrected = _apply_end(rule, text)
+                corrected = _apply_end(pattern, text_trigger)
             else:
                 # A caller-supplied unknown kind cannot establish coverage.
                 continue
 
-            # A nonmatch returns None. A match must still reproduce the
-            # recorded correction exactly: "internet" == "internet".
-            if corrected != whole_word_rule["replacement"]:
-                continue
+            # A nonmatch returns None. Only the exact expected correction counts:
+            # "internet" == "internet" sets covered=True and ends this search.
+            if corrected == whole_word_rule["replacement"]:
+                covered = True
+                break
 
-            # Preserve the original selection rule if several patterns work:
-            # keep the rule with the lowest supplied order.
-            if best_rule is None or rule["order"] < best_rule["order"]:
-                best_rule = rule
-
-        # Store references to the same whole-word rule and pattern dictionaries, not copies.
-        # No exact result leaves covered=False and rule=None.
+        # No exact result leaves covered=False. Keep the original whole-word
+        # rule reference so the writer can identify its source line.
         decisions.append({
-            "covered": best_rule is not None,
+            "covered": covered,
             "whole_word_rule": whole_word_rule,
-            "rule": best_rule,
         })
+
         if progress is not None:
             progress(len(decisions), len(whole_word_rules))
+
     return decisions
 
 
 def main():
     """Read, compare, and write a filtered copy containing uncovered lines.
 
-    pattern_paths contains Paths for the main rule file and screened rule file.
-    read_current_rules(pattern_paths) returns the rules list. generated_path names
+    pattern_hotstring_paths contains Paths for the main rule file and screened rule file.
+    read_current_rules(pattern_hotstring_paths) returns the rules list. generated_input_path names
     GeneratedWords.ahk, whose individual dictionaries become the whole_word_rules list.
     find_covered_word_rules(whole_word_rules, rules) receives those existing lists and returns
     decisions, with one result dictionary per whole-word rule.
@@ -368,24 +387,24 @@ def main():
     omitted even if covered=False. Every other original line is copied.
     """
     # For this module in Programs/hotstring-rule-audit, base_dir is Programs.
-    base_dir       = Path(__file__).resolve().parent.parent
+    base_dir              = Path(__file__).resolve().parent.parent
     # The output is a separate file beside the original GeneratedWords.ahk.
-    filtered_path  = base_dir / "GeneratedWords_filtered.ahk"
+    filtered_output_path  = base_dir / OUTPUT_GENERATED_WORDS_FILTERED
     # This Path identifies the file of individual whole-word rules.
-    generated_path = base_dir / "GeneratedWords.ahk"
+    generated_input_path  = base_dir / FILENAME_GENERATED_WORDS
     # This list contains the two rule-file Paths, in the order to read them.
     # The list is explicit; read_current_rules() does not follow #include.
-    pattern_paths  = [
-        base_dir / "AutoCorrect_Sept5.ahk",
-        base_dir / "GeneratedWords_ScreenedRules.ahk",
+    pattern_hotstring_paths         = [
+        base_dir / FILENAME_AUTOCORRECT,
+        base_dir / FILENAME_GENERATED_WORDS_SCREENED_RULES,
     ]
 
     # Ask before the lengthy comparison; Enter, EOF and Ctrl+C preserve existing output.
     overwrite = False
-    if filtered_path.exists():
+    if filtered_output_path.exists():
         try:
             answer = input(
-                f"{filtered_path} already exists. Overwrite it? [y/N]: "
+                f"{filtered_output_path} already exists. Overwrite it? [y/N]: "
             ).strip().casefold()
         except (EOFError, KeyboardInterrupt):
             print("\nCancelled. Existing output was not changed.", flush=True)
@@ -398,15 +417,16 @@ def main():
     print("Reading start/middle/end rules...", flush=True)
     # rules receives start/middle/end dictionaries such as
     # {"trigger": "inetr", "replacement": "inter", "kind": "start", ...}.
-    rules            = read_current_rules(pattern_paths)
+    patterned_rules            = read_current_rules(pattern_hotstring_paths)
     print("Reading generated whole-word rules...", flush=True)
     # whole_word_rules receives individual dictionaries such as
     # {"trigger": "inetrnet", "replacement": "internet", ...}.
-    whole_word_rules = read_generated_word_rules(generated_path)
-    # The existing lists are passed without copying. The returned decisions
-    # list links each whole_word_rule dictionary to a selected rule dictionary or None.
-    progress = _make_progress_reporter("Checking coverage")
-    decisions = find_covered_word_rules(whole_word_rules, rules, progress=progress)
+    whole_word_rules = read_generated_word_rules(generated_input_path)
+    # For each typo without an initial capital, check whether a beginning, middle, or
+    # ending rule produces its exact expected correction. Record matching entries
+    # so they can be omitted from GeneratedWords_filtered.ahk.
+    progress  = _make_progress_reporter("Checking coverage")
+    decisions = find_covered_word_rules(whole_word_rules, patterned_rules, progress=progress)
 
     # Begin the summary count at zero; none of the source containers is changed.
     covered_count = 0
@@ -422,27 +442,27 @@ def main():
 
     # Covered=True or a listed exception trigger omits the complete source line.
     # Other uncovered and unprocessed lines are copied without alteration.
-    print(f"Writing filtered output: {filtered_path}", flush=True)
-    write_filtered_word_rules(decisions, generated_path, filtered_path, overwrite=overwrite)
+    print(f"Writing filtered output: {filtered_output_path}", flush=True)
+    write_filtered_word_rules(decisions, generated_input_path, filtered_output_path, overwrite=overwrite)
 
     # Print the counts and the new file path; the original file was not rewritten.
-    print(f"Start/middle/end rules read: {len(rules):,}")
+    print(f"Start/middle/end rules read: {len(patterned_rules):,}")
     print(f"Whole-word rules read: {len(whole_word_rules):,}")
     print(f"Whole-word rules with identical start/middle/end coverage: {covered_count:,}")
     print(f"Whole-word rules omitted by exception list: {exception_count:,}")
-    print(f"Filtered file: {filtered_path}")
+    print(f"Filtered file: {filtered_output_path}")
     # The direct-execution block passes this success value to SystemExit.
     return 0
 
 
-def read_current_rules(pattern_paths):
+def read_current_rules(pattern_hotstring_paths):
     """Turn parsed rule definitions into the combined start/middle/end rule list.
 
     Example definition from _read_definitions(path):
         {"options": "BCTk-1*", "trigger": "inetr", "replacement": "inter", ...}
-    The * selects kind="start". A copy gains kind and order:
+    The * selects kind="start". The dictionary gains kind:
         {"options": "BCTk-1*", "trigger": "inetr", "replacement": "inter",
-         "kind": "start", "order": the accepted-rule sequence number, ...}
+         "kind": "start", ...}
     For BCTk-1?, the kind is "end". For BCTk-1?*, the kind is "middle";
     its complete trigger can be replaced anywhere in the whole-word rule.
 
@@ -453,18 +473,18 @@ def read_current_rules(pattern_paths):
     # The combined selected-rule container starts as rules = [].
     rules = []
     # Visit each supplied file in order, using a per-file definitions list.
-    for path in pattern_paths:
+    for path in pattern_hotstring_paths:
         # Example definition: {"options": "BCTk-1*", "trigger": "inetr",
-        # "replacement": "inter", ...}. It has no kind/order fields yet.
+        # "replacement": "inter", ...}. It has no kind field yet.
         for definition in _read_definitions(path):
             # options is "BCTk-1*", distinct from the trigger text "inetr".
             options = definition["options"]
 
             # Disabled positional flags leave this definition outside the simple reader.
-            if "*0" in options or "?0" in options:
+            if  "*0" in options or "?0" in options:
                 continue
             # "BCTk-1*" selects kind="start".
-            if "*" in options and "?" not in options:
+            if  "*" in options and "?" not in options:
                 kind = "start"
             # "BCTk-1?" selects kind="end".
             elif "?" in options and "*" not in options:
@@ -476,24 +496,19 @@ def read_current_rules(pattern_paths):
             else:
                 continue
 
-            # Make a separate dictionary before adding classification fields.
-            # Adding kind/order to rule does not alter the original definition.
-            rule = definition.copy()
-            # The inetr rule gains "kind": "start"; the atde rule gains "kind": "end".
-            rule["kind"] = kind
-            # With two accepted rules already stored, the next gets order=2.
-            # This counts accepted rules across files, not file line numbers.
-            rule["order"] = len(rules)
-            # Append the extended dictionary; several rules may share a trigger.
-            rules.append(rule)
+            # Add classification fields directly to this freshly parsed dictionary.
+            # The inetr definition gains "kind": "start"; atde gains "kind": "end".
+            definition["kind"] = kind
+            # Append this same dictionary; several rules may share a trigger.
+            rules.append(definition)
     # main() passes this combined list to the direct start/middle/end checker.
     return rules
 
 
-def read_generated_word_rules(generated_path):
+def read_generated_word_rules(generated_input_path):
     """Return a list containing individual typo/correction dictionaries.
 
-    For ::inetrnet::internet, _read_definitions(generated_path) supplies:
+    For ::inetrnet::internet, _read_definitions(generated_input_path) supplies:
         {"options": "", "trigger": "inetrnet", "replacement": "internet", ...}
     The empty options string passes the filter. The SAME dictionary is appended
     to whole_word_rules, not a copy. Later, for whole_word_rule in whole_word_rules assigns that dictionary
@@ -503,7 +518,7 @@ def read_generated_word_rules(generated_path):
     whole_word_rules = []
     # The generated example supplies {"options": "", "trigger": "inetrnet",
     # "replacement": "internet", ...}.
-    for definition in _read_definitions(generated_path):
+    for definition in _read_definitions(generated_input_path):
         # The empty options string passes; definitions containing flags do not.
         if definition["options"] == "":
             # Append the SAME dictionary, with no definition.copy() or field changes.
@@ -512,7 +527,7 @@ def read_generated_word_rules(generated_path):
     # same dictionaries and reads their trigger/replacement fields.
     return whole_word_rules
 
-def write_filtered_word_rules(decisions, generated_path, output_path, overwrite=False):
+def write_filtered_word_rules(decisions, generated_input_path, output_path, overwrite=False):
     """Copy original lines except covered rules and listed exception triggers.
 
     For example, if a decision for ::inetrnet::internet has covered=True,
@@ -522,11 +537,11 @@ def write_filtered_word_rules(decisions, generated_path, output_path, overwrite=
     Comments, blank lines and skipped/unprocessed lines are also kept.
 
     Original UTF-8 bytes, BOM state and each retained line ending are preserved.
-    Retained lines are written directly, then verified one line at a time.
+    Retained raw byte lines are written directly after the source checks.
     The output must differ from the source. Existing output requires overwrite=True;
     main() only supplies that value after the user confirms the overwrite prompt.
     """
-    source = Path(generated_path)
+    source = Path(generated_input_path)
     target = Path(output_path)
     if source.resolve() == target.resolve():
         raise ValueError("The filtered output must not replace the original.")
@@ -534,7 +549,10 @@ def write_filtered_word_rules(decisions, generated_path, output_path, overwrite=
     # Read the original once. Split exactly as the reader did so stored source
     # line numbers refer to the same lines, including any blank/comment lines.
     original_bytes = source.read_bytes()
-    original_lines = original_bytes.decode("utf-8-sig").splitlines(keepends=True)
+    original_lines = original_bytes.splitlines(keepends=True)
+    if original_lines:
+        # Match the reader: raw_line excludes the file BOM, written once below.
+        original_lines[0] = original_lines[0].removeprefix(b"\xef\xbb\xbf")
     omitted_lines  = set()
     for decision in decisions:
         whole_word_rule = decision["whole_word_rule"]
@@ -543,7 +561,7 @@ def write_filtered_word_rules(decisions, generated_path, output_path, overwrite=
         if line_idx < 0 or line_idx >= len(original_lines):
             raise ValueError("The source changed after its whole-word rules were read.")
 
-        if original_lines[line_idx].encode("utf-8") != whole_word_rule["raw_line"]:
+        if original_lines[line_idx] != whole_word_rule["raw_line"]:
             raise ValueError("The source changed after its whole-word rules were read.")
 
         # "naive" is listed, so omit ::naive::native even when covered=False.
@@ -563,7 +581,7 @@ def write_filtered_word_rules(decisions, generated_path, output_path, overwrite=
         # Each raw_line still includes its original spacing and newline.
         for line_idx, raw_line in enumerate(original_lines, start=1):
             if line_idx not in omitted_lines:
-                output.write(raw_line.encode("utf-8"))
+                output.write(raw_line)
 
 
 # Direct execution calls main(); importing leaves the containers unbuilt.
