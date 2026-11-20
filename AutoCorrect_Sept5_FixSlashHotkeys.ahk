@@ -1,3 +1,421 @@
+/*
+HOTKEY TABLE OF CONTENTS
+========================
+Inventory of keyboard/mouse hotkeys declared or dynamically registered by this file.
+Spelling-expansion hotstrings are documented in the correction lists at the bottom.
+Each row describes one mapping; handler checks and more-specific variants still govern activation.
+Rows are reference documentation, not a replacement for source definition/variant precedence.
+
+Notation: ^ Ctrl; ! Alt; + Shift; # Windows; & custom combination; Up key/button release.
+Prefixes: ~ passes original input through; * also matches extra modifiers; $ forces keyboard-hook handling.
+sc029 is the physical grave/tilde key; vkXX denotes a Windows virtual-key code.
+Find a listed key followed by ::, or its named handler, to locate the implementation.
+
+GLOBAL HOTKEYS AND PASS-THROUGH TRACKERS
+Context: Global
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+~^Enter                  | Find an OK control and double-click it; try Alt+O if its window remains.
+LWin & WheelUp           | Increase volume while the left Windows key is held.
+LWin & WheelDown         | Decrease volume while the left Windows key is held.
+RWin & WheelUp           | Increase volume while the right Windows key is held.
+RWin & WheelDown         | Decrease volume while the right Windows key is held.
+LWin                     | Reset tracked word case and consume the standalone Windows-key action.
+RWin                     | Reset tracked word case and consume the standalone Windows-key action.
+~*RButton Up             | Restore script-hidden desktop icons after a right-button release over the desktop.
+^+Esc                    | Launch System Informer.
+CapsLock                 | Send Delete and record the typing time.
+!a                       | Move to Home and reset hotstring recognition.
+^!o                      | Open the selected path through _OpenSelectedPath().
+!s                       | Swap a selected boolean literal through _SwapSelectedBooleanLiteral().
+!;                       | Move to End and reset hotstring recognition.
+!+;                      | Select to End; a repeated press selects the whole line.
+!+i                      | Extend the selection upward one line.
+!+k                      | Extend the selection downward one line.
+!+'                      | Wrap selected/copied text in double quotation marks.
+!+[                      | Wrap selected/copied text in curly braces.
+!+]                      | Wrap selected/copied text in curly braces.
+!+<                      | Wrap selected/copied text in angle brackets.
+!+>                      | Wrap selected/copied text in angle brackets.
+!+(                      | Wrap selected/copied text in parentheses.
+!+)                      | Wrap selected/copied text in parentheses.
+!+sc029                  | Wrap selected/copied text in backticks (physical grave/tilde key).
+!+b                      | Wrap selected/copied text in literal backslash-b markers.
+!+5                      | Wrap selected/copied text in percent signs.
+!i                       | Move the caret up and reset word/hotstring tracking.
+!k                       | Move the caret down and reset word/hotstring tracking.
+!j                       | Move the caret left one word and reset word/hotstring tracking.
+!+j                      | Extend the selection left one word.
+!l                       | Move the caret right one word and reset word/hotstring tracking.
+!+l                      | Extend the selection right one word.
+!h                       | Move the caret left one character and reset tracked word case.
+~+Backspace              | Pass through and update capitalization tracking for Shift+Backspace.
+~*Backspace              | Pass through other Backspace combinations and reset tracked word case.
+~*Ctrl                   | Pass through this modifier/navigation key and reset tracked word case.
+~*LAlt                   | Pass through this modifier/navigation key and reset tracked word case.
+~*RAlt                   | Pass through this modifier/navigation key and reset tracked word case.
+~*Delete                 | Pass through this modifier/navigation key and reset tracked word case.
+~*Down                   | Pass through this modifier/navigation key and reset tracked word case.
+~*End                    | Pass through this modifier/navigation key and reset tracked word case.
+~*Esc                    | Pass through this modifier/navigation key and reset tracked word case.
+~*Home                   | Pass through this modifier/navigation key and reset tracked word case.
+~*Insert                 | Pass through this modifier/navigation key and reset tracked word case.
+~*Left                   | Pass through this modifier/navigation key and reset tracked word case.
+~*PgDn                   | Pass through this modifier/navigation key and reset tracked word case.
+~*PgUp                   | Pass through this modifier/navigation key and reset tracked word case.
+~*Right                  | Pass through this modifier/navigation key and reset tracked word case.
+~*Up                     | Pass through this modifier/navigation key and reset tracked word case.
+~*Enter                  | Pass through other Enter combinations and record a whitespace boundary.
+~*Space                  | Pass through other Space combinations and record a whitespace boundary.
+~*Tab                    | Pass through Tab combinations and record a whitespace boundary.
+~Space                   | Pass through Space, record a boundary, and run typing/Hoty/FixSlash checks.
+!Space                   | Send a plain Space and record a whitespace boundary.
+~+Space                  | Pass through Shift+Space, record a boundary, and run typing/Hoty/FixSlash checks.
+~^Backspace              | Pass through Ctrl+Backspace; cancel queued corrections and reset word/slash recognition.
+~Backspace               | Pass through Backspace; update word length and cancel/reset queued correction context.
+~Left                    | Pass through Left; cancel queued corrections and reset word/slash history.
+~Right                   | Pass through Right; cancel queued corrections and reset word/slash history.
+!0                       | Show virtual-desktop and current-monitor metrics in a monospace GUI.
+#1                       | Switch to virtual desktop 1.
+#2                       | Switch to virtual desktop 2.
+#3                       | Switch to virtual desktop 3.
+#4                       | Switch to virtual desktop 4.
+~LAlt                    | Pass through left Alt and send a neutral key event to prevent accidental menu activation.
+~LAlt Up                 | Pass through left Alt release and clear the Alt-click pairing time.
+!Tab                     | Cycle windows using the custom window-switching overlay.
+!+Tab                    | Invoke the custom window-cycle handler with Shift held.
+!sc029                   | Cycle windows of the foremost application's process/class using the overlay.
+~Ctrl                    | Pass through Ctrl; a rapid double tap opens the window-title search dialog.
+^+LButton                | Start the mouse measurement overlay through Measure_Begin().
+F6                       | Inspect and display native column-width snapshot diagnostics for the hovered control.
+F7                       | Toggle desktop icon visibility through DesktopIcons().
+F8                       | Show the active window's handle, class, and Details-view diagnostic.
+~+LButton                | Pass through Shift-click; optionally begin Explorer Shift-click tracing.
+~+LButton Up             | Pass through Shift-click release; optionally log/schedule Explorer trace samples.
+
+EITHER WINDOWS KEY HELD
+Context: #If GetKeyState("LWin", "P") || GetKeyState("RWin", "P")
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+*a                       | While either Windows key is held, consume this letter key.
+*b                       | While either Windows key is held, consume this letter key.
+*c                       | While either Windows key is held, consume this letter key.
+*d                       | While either Windows key is held, consume this letter key.
+*e                       | While either Windows key is held, consume this letter key.
+*f                       | While either Windows key is held, consume this letter key.
+*g                       | While either Windows key is held, consume this letter key.
+*h                       | While either Windows key is held, consume this letter key.
+*i                       | While either Windows key is held, consume this letter key.
+*j                       | While either Windows key is held, consume this letter key.
+*k                       | While either Windows key is held, consume this letter key.
+*l                       | While either Windows key is held, consume this letter key.
+*m                       | While either Windows key is held, consume this letter key.
+*n                       | While either Windows key is held, consume this letter key.
+*o                       | While either Windows key is held, consume this letter key.
+*p                       | While either Windows key is held, consume this letter key.
+*q                       | While either Windows key is held, consume this letter key.
+*r                       | While either Windows key is held, consume this letter key.
+*s                       | While either Windows key is held, consume this letter key.
+*t                       | While either Windows key is held, consume this letter key.
+*u                       | While either Windows key is held, consume this letter key.
+*v                       | While either Windows key is held, consume this letter key.
+*w                       | While either Windows key is held, consume this letter key.
+*x                       | While either Windows key is held, consume this letter key.
+*y                       | While either Windows key is held, consume this letter key.
+*z                       | While either Windows key is held, consume this letter key.
+
+POINTER IN THE CONFIGURED VOLUME-HOVER REGION
+Context: #If VolumeHover()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+WheelUp                  | Increase volume in the configured volume-hover region.
+WheelDown                | Decrease volume in the configured volume-hover region.
+
+MIDDLE-BUTTON DRAG TEMPORARILY OWNS RIGHT-BUTTON INPUT
+Context: #If suspendRightButtonForMButtonDrag
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+*RButton                 | Consume right-button press while middle-button drag owns mouse input.
+*RButton Up              | Consume right-button release and clear temporary drag ownership when appropriate.
+
+RIGHT-BUTTON HANDLING OUTSIDE TASKBAR AND DESKTOP SHELL
+Context: #If !MouseIsOverAnyTaskbarSurface() && !MouseIsOverDesktopShellSurface()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+*RButton                 | Track a custom right-button hold; allow native right-drag on shell items.
+*RButton Up              | Finish custom right-click/right-drag or consume release after a wheel/drag gesture.
+
+POINTER OVER A WINDOW TITLE BAR
+Context: #If MouseIsOverTitleBar()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+~LButton & RButton       | Toggle the hovered window always-on-top, with transparency/highlight feedback.
+^LButton                 | Bring matching application/class windows on this monitor to the front.
+
+RIGHT MOUSE BUTTON HELD
+Context: #If GetKeyState("RButton", "P")
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+WheelUp                  | Right-button hold: send Page Up/start-of-document; preserve native wheel on taskbar/desktop.
+WheelDown                | Right-button hold: send Page Down/end-of-document; preserve native wheel on taskbar/desktop.
+
+TEMPORARY WHEEL BLOCKING
+Context: #If blockWheel
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+WheelUp                  | Consume wheel input while temporary wheel blocking is active.
+WheelDown                | Consume wheel input while temporary wheel blocking is active.
+^WheelUp                 | Consume wheel input while temporary wheel blocking is active.
+^WheelDown               | Consume wheel input while temporary wheel blocking is active.
+
+RIGHT MOUSE BUTTON NOT HELD
+Context: #If !GetKeyState("RButton", "P")
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+^WheelUp                 | In console content send Up; otherwise forward the original Ctrl+WheelUp input.
+^WheelDown               | In console content send Down; otherwise forward the original Ctrl+WheelDown input.
+~WheelUp                 | Pass through scrolling; queue eligible column auto-fit or switch desktops over blank taskbar.
+~WheelDown               | Pass through scrolling; auto-fit columns, minimize over title bar, or switch desktops over blank taskbar.
+
+MIDDLE-BUTTON ENTER MODE
+Context: #If MbuttonIsEnter
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+Mbutton                  | Send Enter while middle-button Enter mode is active.
+
+MIDDLE-BUTTON MOVE/RESIZE MODE OUTSIDE TASKBAR
+Context: #If !MbuttonIsEnter && !MouseIsOverTaskbar()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+*MButton                 | Drag to move/resize windows; right-button changes mode; a quick title-bar tap opens the desktop menu.
+
+LINE EDITING OUTSIDE NOTEPAD++, EVERYTHING, VS CODE, EXCEL, AND DETECTED EDIT FIELDS
+Context: #If (!WinActive("ahk_exe notepad++.exe") && !WinActive("ahk_exe Everything.exe") && !WinActive("ahk_exe Code.exe") && !WinActive("ahk_exe EXCEL.EXE") && !IsEditFieldActive())
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+^+d                      | Delete the current line outside the excluded applications/edit fields.
+^d                       | Duplicate the current line below and return the caret to the original line.
+
+PENDING SLASH/ENTER HANDLING
+Context: #If disableEnter
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+Enter                    | Handle a pending slash+Enter correction, or send one normal Enter if correction is ineligible.
+
+NORMAL ENTER IN A RECOGNIZED FILE PANE
+Context: #If !disableEnter && _GetFilePaneEnterContext()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+Enter                    | Forward Enter in a file pane and request column auto-fit after eligible navigation.
+
+EXPLORER / STANDARD FILE DIALOG, WITH NO PENDING SLASH+ENTER
+Context: #If !disableEnter && (WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770"))
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+~Enter                   | Pass through Enter and request column auto-fit after eligible path-entry navigation.
+~F2                      | Pass through F2 and pause custom left-click processing during rename.
+
+CHROME ACTIVE
+Context: #If WinActive("ahk_exe Chrome.exe")
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+^Tab                     | Run prevChromeTab() through Chrome's tab-search popup.
+^f                       | Send Escape, then reopen Find with Ctrl+F.
+
+ESCAPE HANDLING OUTSIDE WINDOW SEARCH/SWITCHING
+Context: #If !SearchingWindows && !hitTAB
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+Esc                      | Single Esc forwards after a delay; a rapid repeat offers window close, with x to cancel.
+
+CUSTOM WINDOW/APPLICATION SWITCHER ACTIVE
+Context: #If hitTAB || hitTilde
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+!x                       | Cancel the active custom window/application switching operation.
+
+LEFT ALT HELD
+Context: #If GetKeyState("LAlt", "P")
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+*LButton                 | Select a window during switching; otherwise a paired Alt-click sends a click followed by Enter.
+
+POINTER OVER MINIMIZE/MAXIMIZE/RESTORE/CLOSE BUTTONS
+Context: #If MouseIsOverCaptionButtons()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+^Lbutton                 | Consume Ctrl-click press; the release handler handles grouped close/minimize.
+^Lbutton Up              | Ctrl-click release: close/minimize matching app windows on this monitor, according to caption button.
+Lbutton                  | Defer the native caption-button click until release so a mouse chord can consume it.
+Lbutton Up               | Send one caption-button click on release unless the title-bar chord consumed it.
+
+POINTER OVER A TASKBAR WIDGET
+Context: #If MouseIsOverTaskbarWidgets()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+~^LButton                | Restore/raise matching application windows on the mouse monitor through the taskbar widget.
+
+POINTER OVER BLANK TASKBAR
+Context: #If MouseIsOverTaskbarBlank()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+~Lbutton                 | Pass through click; a double-click on blank taskbar opens an Explorer window.
+
+PASSIVE COLUMN-CACHE INPUT OBSERVERS (PREDICATE ALWAYS RETURNS FALSE)
+Context: #If _NoteColumnWidthMouseInput()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+~*LButton                | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*LButton Up             | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*RButton                | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*RButton Up             | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*MButton                | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*MButton Up             | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*XButton1               | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*XButton1 Up            | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*XButton2               | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*XButton2 Up            | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*WheelUp                | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*WheelDown              | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*WheelLeft              | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+~*WheelRight             | Record mouse activity while evaluating this always-false predicate; do not claim the event.
+
+ELIGIBLE LEFT-CLICK CONTENT (ENABLED, OUTSIDE EXCLUDED HOVER/TITLE/CAPTION REGIONS)
+Context: #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBarFast(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+~LButton                 | Pass through click; process column alignment, eligible folder navigation, and native resize coordination.
+
+DYNAMIC STARTUP REGISTRATIONS: TYPING AND CAPITALIZATION TRACKING
+Pass-through registrations; specific static handlers may take precedence.
+Hotkey                   | Mapped function / effect
+----------------------------------------------------------------------------------------------------------------------
+~/                       | Record typing and run FixSlash through Marktime_FixSlash.
+~'                       | Record typing and run Hoty through Marktime_Hoty.
+~?                       | Record typing and run Hoty through Marktime_Hoty.
+~!                       | Record typing and run Hoty through Marktime_Hoty.
+~`,                      | Record typing and run Hoty through Marktime_Hoty (comma).
+~.                       | Record typing and run Hoty through Marktime_Hoty.
+~_                       | Record typing and run Hoty through Marktime_Hoty.
+~-                       | Record typing and run Hoty through Marktime_Hoty.
+~:                       | Record typing time/capitalization through MarkKeypressTime.
+~a                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+a                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~b                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+b                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~c                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+c                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~d                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+d                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~e                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+e                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~f                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+f                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~g                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+g                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~h                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+h                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~i                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+i                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~j                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+j                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~k                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+k                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~l                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+l                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~m                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+m                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~n                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+n                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~o                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+o                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~p                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+p                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~q                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+q                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~r                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+r                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~s                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+s                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~t                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+t                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~u                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+u                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~v                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+v                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~w                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+w                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~x                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+x                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~y                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+y                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~z                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+z                      | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~0                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~1                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~2                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~3                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~4                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~5                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~6                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~7                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~8                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~9                       | Record typing/capitalization and run Hoty/FixSlash checks through Marktime_Hoty_FixSlash.
+~+0                      | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+2                      | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+3                      | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+4                      | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+5                      | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+6                      | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+7                      | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+8                      | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+9                      | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~vkBA                    | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~vkBB                    | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+vkBB                   | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~vkC0                    | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+vkC0                   | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~vkDB                    | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+vkDB                   | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~vkDC                    | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+vkDC                   | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~vkDD                    | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+vkDD                   | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+vkDE                   | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+vkBC                   | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~+vkBE                   | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad0                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad1                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad2                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad3                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad4                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad5                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad6                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad7                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad8                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~Numpad9                 | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~NumpadAdd               | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~NumpadSub               | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~NumpadMult              | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~NumpadDiv               | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~NumpadDot               | Track punctuation/numpad word case through PatternHotstringCharacter; preserve native input.
+~NumpadEnter             | Record a whitespace/capitalization boundary through PatternHotstringCharacter; preserve native input.
+
+TEMPORARY DYNAMIC CLOSE-CANCELLATION KEY
+----------------------------------------------------------------------------------------------------------------------
+x                        | Temporarily consume x while the repeated-Esc close prompt is active; x cancels that close.
+
+EMBEDDED POPUP-MENU HELPER (WinFindExpr; ONLY WHILE THAT HELPER SCRIPT RUNS)
+These four declarations belong to the embedded helper, not the main script hotkey table.
+----------------------------------------------------------------------------------------------------------------------
+~ENTER                   | Exit the temporary popup-menu helper while passing the input through.
+~ESC                     | Exit the temporary popup-menu helper while passing the input through.
+~*LBUTTON                | Exit the temporary popup-menu helper while passing the input through.
+$SPACE                   | Send Down to advance the popup-menu selection.
+
+END HOTKEY TABLE OF CONTENTS
+*/
+
 ; Experimental copy: FixSlash and capitalized-word accounting use hotkey handlers.
 ; LL_KeyboardHook handles temporary key blocking; word tracking uses hotkeys.
 ; Tracking ignores this script's synthetic Send output; no script is reloaded here.
@@ -11,10 +429,10 @@
 ; the auto-exec section ends at the first hotkey/hotstring or return or exit or at the script end - whatever comes first; function definitions get ignored by the execution flow.
 
 #NoEnv
-#SingleInstance Force
+#SingleInstance Force ; Replace a previous instance of this script while allowing other scripts to coexist.
 #InstallMouseHook
 #InstallKeybdHook
-#UseHook
+#UseHook ; All main-script keyboard hotkeys use the hook without individual dollar prefixes.
 #Warn UseUnsetLocal
 #include %A_ScriptDir%\DetermineCaptionButtonLib.ahk
 ; #include %A_ScriptDir%\Acc.ahk
@@ -129,7 +547,7 @@ Global clipPreferExplicitCtrlV                               := False
 ; Restricts temporary paste-result logging to Ctrl+D's fallback Ctrl+V attempt.
 Global clipTraceCtrlDPasteActive                             := False
 ; Temporary slash-fix Enter interception flag. After a qualifying letter + "/",
-; this diverts the next Enter into the custom $Enter handler so slash+Enter can
+; this diverts the next Enter into the custom Enter handler so slash+Enter can
 ; either commit "{BS}{?}{ENTER}" inline or fall back to one normal Enter, but
 ; never let both the raw key and the rewrite path fire.
 Global disableEnter                                          := False
@@ -650,7 +1068,7 @@ Global WindowTitleGuiReady                                 := False
 ; | live window-drag flow.                                                     |
 ; +----------------------------------------------------------------------------+
 ; Arms only this script's custom double-click navigation/alignment action;
-; `$~LButton` continues passing every physical click through to Windows.
+; `~LButton` continues passing every physical click through to Windows.
 ; Handling one matched pair sets this False so further clicks in the same rapid
 ; sequence cannot repeat the custom action. The first eligible click after a
 ; gap longer than k_DoubleClickTime sets it True and starts a new sequence.
@@ -1003,19 +1421,19 @@ WinFindExpr =
     ; Input, SingleKey, L1, {Lbutton}{ESC}{ENTER}, *
     Return
 
-    $~ENTER::
+    ~ENTER::
         ExitApp
     Return
 
-    $~ESC::
+    ~ESC::
         ExitApp
     Return
 
-    $~*LBUTTON::
+    ~*LBUTTON::
         ExitApp
     Return
 
-    $SPACE::
+    $SPACE:: ; This separate helper does not inherit the main script's #UseHook.
         SendInput, {DOWN}
     Return
 )
@@ -1128,10 +1546,8 @@ vdaInitd := InitVDA()
 comInitd := InitCOM_STA()
 accInitd := Acc_Init()
 
-10_Minutes := 60000*10
 SetTimer MouseTrack, 20
 SetTimer KeyTrack, 25
-SetTimer MasterTimer, %10_Minutes%
 SetTimer, PrewarmDesktopIconFadeOverlay, -1
 SetTimer, WarmDesktopIconFadeAtStartup, -1000
 
@@ -1192,10 +1608,6 @@ Return
 ; ==========================================================================================================================================
 ; -----------------------------------------------          START OF APPLICATION           --------------------------------------------------
 ; ==========================================================================================================================================
-MasterTimer:
-    KillOtherAutoHotkeyU64_NotThisScript(true)
-Return
-
 HandleTrayIconMessage(wParam, lParam, msg, hwnd) {
     static WM_RBUTTONDOWN := 0x204
     static WM_RBUTTONUP   := 0x205
@@ -1323,7 +1735,7 @@ _RegisterPatternHotstringTrackingHotkeys() {
         . "|Numpad0|Numpad1|Numpad2|Numpad3|Numpad4|Numpad5|Numpad6"
         . "|Numpad7|Numpad8|Numpad9|NumpadAdd|NumpadSub|NumpadMult"
         . "|NumpadDiv|NumpadDot|NumpadEnter"
-        
+
     for _, keyName in StrSplit(keys, "|")
         Hotkey, % "~" . keyName, PatternHotstringCharacter, On
 }
@@ -1392,7 +1804,7 @@ Time                         t0                         t1                      
 
 Event                        Shift+D: hotkey            e ... n: hotkeys           Space: eligibility         Space: hotkey              a: hotkey
 
-Accounting owner             ~+d handler                ~e ... ~n handlers         AutoHotkey                 $~Space handler            ~a handler
+Accounting owner             ~+d handler                ~e ... ~n handlers         AutoHotkey                  ~Space handler            ~a handler
 
 hs_PatternWordLength         1                          6                          6                          0                          1
 
@@ -1417,7 +1829,7 @@ At t2, AutoHotkey checks the candidate rule's eligibility; the capitalization ga
 
 At t3, AFTER the eligibility check rejects this candidate, the Space hotkey runs:
 
-    $~Space
+     ~Space
         |
         +-- _MarkFixSlashWhitespaceBoundary()
                 |
@@ -1509,6 +1921,10 @@ LL_KeyboardHook(nCode, wParam, lParam)
 {
     global blockKeys, hHookKbd
     static blockedPressCount = 0
+    static WM_KEYDOWN    := 0x0100  ; A regular key is pressed.
+    static WM_KEYUP      := 0x0101  ; A regular key is released.
+    static WM_SYSKEYDOWN := 0x0104  ; A system key is pressed, commonly involving Alt.
+    static WM_SYSKEYUP   := 0x0105  ; A system key is released, commonly involving Alt.
 
     ; A negative hook code must pass through without inspection or modification.
     if (nCode < 0)
@@ -1526,13 +1942,13 @@ LL_KeyboardHook(nCode, wParam, lParam)
         return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
     }
 
-    ; 0x0101 = WM_KEYUP; 0x0105 = WM_SYSKEYUP. Pass releases to finish real key cycles.
-    if (wParam = 0x0101 || wParam = 0x0105)
+    ; Pass physical key releases to finish real key cycles.
+    if (wParam = WM_KEYUP || wParam = WM_SYSKEYUP)
         return DllCall("CallNextHookEx", "Ptr", hHookKbd, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
-    ; 0x0100 = WM_KEYDOWN; 0x0104 = WM_SYSKEYDOWN. Count physical presses only.
+    ; Count physical key presses only.
     ; If cleanup fails, the twentieth press ends blocking and is allowed through.
-    if (wParam = 0x0100 || wParam = 0x0104)
+    if (wParam = WM_KEYDOWN || wParam = WM_SYSKEYDOWN)
     {
         blockedPressCount += 1
         if (blockedPressCount >= 20)
@@ -1553,6 +1969,8 @@ LL_KeyboardHook(nCode, wParam, lParam)
 LL_MouseHook(nCode, wParam, lParam)
 {
     global blockWheel, hHookMouse
+    static WM_MOUSEHWHEEL := 0x020E  ; The horizontal mouse wheel is scrolled.
+    static WM_MOUSEWHEEL  := 0x020A  ; The vertical mouse wheel is scrolled.
 
     if (nCode < 0)
         return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
@@ -1586,7 +2004,7 @@ LL_MouseHook(nCode, wParam, lParam)
             return DllCall("CallNextHookEx", "Ptr", hHookMouse, "Int", nCode, "UInt", wParam, "Ptr", lParam)
 
         ; Suppress wheel input if this dormant hook is explicitly re-enabled.
-        if (wParam = 0x020A || wParam = 0x020E)  ; WM_MOUSEWHEEL / WM_MOUSEHWHEEL
+        if (wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL)
             return 1
 
         ; Otherwise pass through mouse movement and button presses.
@@ -1822,7 +2240,7 @@ Time                         t0                         t1                      
 
 Typed checkpoint             a/                         a/b/                       a/b/[space]                a/b/[space]c/              a/b/[space]c/[space]        No further typing
 
-Handler/task                 ~/                         ~/                         $~Space                    ~/                         $~Space                    FlushTbcFixSlash
+Handler/task                 ~/                         ~/                          ~Space                    ~/                          ~Space                    FlushTbcFixSlash
 
 Counter                      0                          0                          1                          1                          2                          2
 
@@ -1845,7 +2263,7 @@ At each slash:
 
 At each Space in this example, after FixSlash's letter/slash/Space, application, and timing conditions pass:
 
-    $~Space
+     ~Space
         |
         +-- _MarkFixSlashWhitespaceBoundary()
         |       |
@@ -1979,7 +2397,7 @@ _ShouldHandleFixSlashEnter() {
          && !fixSlashCandidateHasPriorSlash
          && InStr(k_keys, X_PriorPriorHotKey, False)
          && A_PriorHotKey == "~/"
-         && A_ThisHotkey == "$Enter"
+         && A_ThisHotkey == "Enter"
          && A_TimeSincePriorHotkey < 999)
 }
 
@@ -1992,7 +2410,7 @@ FixSlash:
     Else If !IsGoogleDocWindow() && (!StopAutoFix && IsThisHotKeyLetterKey())
         disableEnter := False
     ; tooltip, %disableEnter% - %X_PriorPriorHotKey% - %A_PriorHotKey% - %A_ThisHotkey%
-    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && (A_ThisHotkey == "$~Space" || A_ThisHotkey == "$~+Space") && A_TimeSincePriorHotkey<999)) {
+    If      (disableEnter && !IsGoogleDocWindow() && (!StopAutoFix && InStr(k_keys, X_PriorPriorHotKey, False) && A_PriorHotKey == "~/" && (A_ThisHotkey == "~Space" || A_ThisHotkey == "~+Space") && A_TimeSincePriorHotkey<999)) {
         _RequestFixSlash("space")
         disableEnter              := False
     }
@@ -2069,7 +2487,7 @@ typingFixSeq         41        41         41         42         42         42
     Because its preceding tracked key is a letter, it sets disableEnter := true.
 
 Space DOWN / UP
-    $~Space lets the physical Space reach the editor normally.
+     ~Space lets the physical Space reach the editor normally.
     FixSlash confirms the slash was the prior hotkey, the prior tracked key was a
     letter, the slash → Space interval is under 999 ms, and this is not a second
     slash in the current whitespace-delimited string.
@@ -2595,6 +3013,14 @@ _TryApplyTbcHotyClassicRewrite() {
     return true
 }
 
+; Excludes Alt-letter commands whose former dollar prefix kept them out of typing heuristics.
+; Limit this list to renamed handlers so other existing key classifications stay unchanged.
+_IsUntrackedAltLetterHotkey(hotkey) {
+    return (StrLen(hotkey) == 2
+         && SubStr(hotkey, 1, 1) == "!"
+         && InStr("hijklx", SubStr(hotkey, 2, 1), True))
+}
+
 IsPriorHotKeyLetterKey() {
     Return (IsPriorHotKeyCapital() || IsPriorHotKeyLowerCase())
 }
@@ -2607,7 +3033,7 @@ IsPriorHotKeyCapital() {
 }
 IsPriorHotKeyLowerCase() {
     global k_keys
-    Return (StrLen(A_PriorHotkey) == 2 && InStr(k_keys, Substr(A_PriorHotkey,2,1), False))
+    Return (StrLen(A_PriorHotkey) == 2 && InStr(k_keys, Substr(A_PriorHotkey,2,1), False) && !_IsUntrackedAltLetterHotkey(A_PriorHotkey))
 }
 IsThisHotKeyCapital() {
     global k_keys
@@ -2615,7 +3041,7 @@ IsThisHotKeyCapital() {
 }
 IsThisHotKeyLowerCase() {
     global k_keys
-    Return (StrLen(A_ThisHotKey) == 2 && InStr(k_keys, Substr(A_ThisHotKey,2,1), False))
+    Return (StrLen(A_ThisHotKey) == 2 && InStr(k_keys, Substr(A_ThisHotKey,2,1), False) && !_IsUntrackedAltLetterHotkey(A_ThisHotKey))
 }
 
 DoNothing:
@@ -2710,56 +3136,6 @@ DetectWin11() {
         Return True
     Else
         Return False
-}
-
-KillOtherAutoHotkeyU64_NotThisScript(terminateUnknownTitle := false) {
-    ; Each running AHK script has a hidden main window of class "AutoHotkey".
-    ; We enumerate those windows, filter to AutoHotkeyU64.exe, then compare the title to our script path.
-
-    DetectHiddenWindows, On
-
-    ; Read this script's process ID without relying on the unavailable A_Pid built-in.
-    currentPid := DllCall("GetCurrentProcessId", "UInt")
-    currentScript := A_ScriptFullPath
-    killed := 0
-
-    WinGet, hwndList, List, ahk_class AutoHotkey
-
-    Loop, %hwndList%
-    {
-        hwnd := hwndList%A_Index%
-
-        WinGet, pid, PID, ahk_id %hwnd%
-        if (pid = currentPid) {
-            continue
-        }
-
-        WinGet, procName, ProcessName, ahk_id %hwnd%
-        if (procName != "AutoHotkeyU64.exe") {
-            continue
-        }
-
-        WinGetTitle, title, ahk_id %hwnd%
-
-        ; Most AHK instances include the script full path in the hidden window title.
-        ; If we can't read a title, only terminate if terminateUnknownTitle := true.
-        if (title != "") {
-            if (InStr(title, currentScript)) {
-                continue
-            }
-        }
-        else {
-            if (!terminateUnknownTitle) {
-                continue
-            }
-        }
-        Process, Close, %pid%
-        if (!ErrorLevel) {
-            killed++
-        }
-    }
-
-    return killed
 }
 
 ;------------------------------------------------------------------------------
@@ -3153,11 +3529,7 @@ return
 ; fallback queries instead of scattering raw UIA taskbar probing inline.
 ; Scope          : feature-specific helper.
 
-; Hotkeys for demo
-F9::Overlay_ShowHole(500, 300, 400, 300, k_Opacity)  ; show again
-F10::Overlay_Hide()                             ; hide
-
-$~^Enter::
+~^Enter::
     _MarkFixSlashWhitespaceBoundary()
     DetectHiddenWindows, Off
     WinGet, myWindow, List
@@ -3232,11 +3604,11 @@ Return
 #If
 ;================================================================
 #If VolumeHover()
-$WheelUp::
+WheelUp::
     _NoteColumnWidthMouseInput()
     send {Volume_Up}
 Return
-$WheelDown::
+WheelDown::
     _NoteColumnWidthMouseInput()
     send {Volume_Down}
 Return
@@ -3259,7 +3631,7 @@ HIGH-LEVEL HOTKEY RELATIONSHIPS
 A) Special LButton+RButton         B) MButton move/resize               C) RButton system
 ---------------------------        ----------------------               ------------------
 
-only title-bar chord exists        $*MButton:: begins                  press handling depends on
+only title-bar chord exists         *MButton:: begins                  press handling depends on
 in current code                           |                            active hotkey context
          |                                  |                                  |
          +--> over title bar?               +--> sets temporary                +--> MButton-mode dedicated
@@ -3267,10 +3639,10 @@ in current code                           |                            active ho
          |        +--> YES                         during drag/resize               |
          |        |      set                                                    +--> YES
          |        |      suppressRightButtonLogic                                 |    #If suspendRightButton...
-         |        |      rightButtonComboUsed                                     |    dedicated $*RButton:: / Up::
+         |        |      rightButtonComboUsed                                     |    dedicated  *RButton:: / Up::
          |        |      title-bar action                                         |    consume this hold/release
          |        |
-         |        +--> if standalone $*RButton:: also runs                     +--> NO
+         |        +--> if standalone  *RButton:: also runs                     +--> NO
          |               it sees suppressRightButtonLogic                            |
          |               and exits early as consumed                                 v
          |
@@ -3278,19 +3650,19 @@ in current code                           |                            active ho
                   |                                                                  |
                   +--> no special LButton+RButton action                             +--> YES
                                                                                      |    no press tracker installed
-                                                                                     |    normal $*RButton:: inactive
+                                                                                     |    normal  *RButton:: inactive
                                                                                      |    native Windows RButton path
                                                                                      |    wheel native while pointer here
                                                                                      |
                                                                                      +--> NO
                                                                                           |
                                                                                           v
-                                                                                     normal scoped $*RButton:: decides
+                                                                                     normal scoped  *RButton:: decides
 
 
 MButton move/resize details
 ===========================
-$*MButton::
+ *MButton::
         |
         +--> sets:
         |     suspendRightButtonForMButtonDrag
@@ -3299,7 +3671,7 @@ $*MButton::
         |
         +--> while active:
         |     dedicated #If suspendRightButtonForMButtonDrag
-        |     $*RButton:: / $*RButton Up:: get first claim
+        |      *RButton:: /  *RButton Up:: get first claim
         |
         +--> if RButton participates in resize gesture
         |     mark next RButton Up to swallow
@@ -3327,7 +3699,7 @@ $*MButton::
 
 Normal RButton system
 =====================
-scoped $*RButton::  (#If !MouseIsOverAnyTaskbarSurface() && !MouseIsOverDesktopShellSurface())
+scoped  *RButton::  (#If !MouseIsOverAnyTaskbarSurface() && !MouseIsOverDesktopShellSurface())
         |
         +--> special LButton+RButton chord already claimed this press?
         |        |
@@ -3374,7 +3746,7 @@ WheelUp:: / WheelDown:: while RButton is physically down
 
 Release ownership
 =================
-$*RButton Up::
+ *RButton Up::
         |
         +--> MButton-mode dedicated capture owns this release?
         |        |
@@ -3423,7 +3795,7 @@ ONE-SENTENCE MENTAL MODEL
 */
 
 #If suspendRightButtonForMButtonDrag
-$*RButton::
+*RButton::
     _NoteColumnWidthMouseInput()
     ; Give MButton move/resize mode first claim on RButton everywhere, including
     ; Explorer/taskbar-adjacent surfaces where the normal RButton state machine
@@ -3432,7 +3804,7 @@ $*RButton::
     swallowNextRButtonUpFromMButtonDrag := true
 return
 
-$*RButton Up::
+*RButton Up::
     _NoteColumnWidthMouseInput()
     if (swallowNextRButtonUpFromMButtonDrag)
         swallowNextRButtonUpFromMButtonDrag := false
@@ -3457,7 +3829,7 @@ return
 return
 
 #If !MouseIsOverAnyTaskbarSurface() && !MouseIsOverDesktopShellSurface()
-$*RButton::
+*RButton::
     _NoteColumnWidthMouseInput()
     ; tooltip, % "DOWN sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
 
@@ -3513,7 +3885,7 @@ $*RButton::
     ; a plain Click, Right.
 return
 
-$*RButton Up::
+*RButton Up::
     _NoteColumnWidthMouseInput()
     ; tooltip, % "UP sr=" suppressRightButtonLogic " held=" rightButtonHeld " native=" rightButtonNativeDown
 
@@ -3730,23 +4102,23 @@ return
 #If blockWheel
 ; Swallow plain and Ctrl-modified physical wheel events only while a synthetic
 ; Ctrl+NumpadAdd sequence and its immediate Ctrl cleanup are active.
-$WheelUp::
+WheelUp::
     _NoteColumnWidthMouseInput()
 Return
-$WheelDown::
+WheelDown::
     _NoteColumnWidthMouseInput()
 Return
-$^WheelUp::
+^WheelUp::
     _NoteColumnWidthMouseInput()
 Return
-$^WheelDown::
+^WheelDown::
     _NoteColumnWidthMouseInput()
 Return
 #If
 
 #If !GetKeyState("RButton", "P")
 
-$^WheelUp::
+^WheelUp::
     _NoteColumnWidthMouseInput()
     if (IsConsoleWindow() && !MouseIsOverTitleBar()) {
         stopRecursion := true
@@ -3761,7 +4133,7 @@ $^WheelUp::
     }
 return
 
-$^WheelDown::
+^WheelDown::
     _NoteColumnWidthMouseInput()
     if (IsConsoleWindow() && !MouseIsOverTitleBar()) {
         stopRecursion := true
@@ -3776,7 +4148,7 @@ $^WheelDown::
     }
 return
 
-$~WheelUp::
+~WheelUp::
     _NoteColumnWidthMouseInput()
     stopRecursion := true
     Critical, Off
@@ -3820,7 +4192,7 @@ $~WheelUp::
     stopRecursion := false
 return
 
-$~WheelDown::
+~WheelDown::
     _NoteColumnWidthMouseInput()
     stopRecursion := true
     Critical, Off
@@ -4142,7 +4514,7 @@ ForceRedrawWindow(hwnd) {
 }
 
 #If !MbuttonIsEnter && !MouseIsOverTaskbar()
-$*MButton::
+*MButton::
     _NoteColumnWidthMouseInput()
     global DraggingWindow
 
@@ -4900,11 +5272,11 @@ UnclipCursor() {
     return DllCall("user32\ClipCursor", "ptr", 0) ? 1 : 0
 }
 
-$^+Esc::
+^+Esc::
     Run, C:\Program Files\SystemInformer\SystemInformer.exe
 Return
 
-$CapsLock::
+CapsLock::
     TimeOfLastHotkeyTyped := A_TickCount
     Send {Delete}
 Return
@@ -5516,7 +5888,7 @@ _OpenSelectedPath() {
 }
 
 ; Ctrl+Alt+O opens the highlighted file or folder with Windows.
-$^!o::
+^!o::
     KeyWait, o, T0.25
     _OpenSelectedPath()
 Return
@@ -5617,7 +5989,7 @@ Return
     _RunWrapClipboardText("%", "%")
 Return
 
-$!i::
+!i::
     _ResetPatternHotstringWordCase()
     StopAutoFix := True
     Send, {UP}
@@ -5625,17 +5997,15 @@ $!i::
     StopAutoFix := False
 Return
 
-$!k::
+!k::
     _ResetPatternHotstringWordCase()
     StopAutoFix := True
-    SendLevel, 1
     SendEvent, {Down}
-    SendLevel, 0
     Hotstring("Reset")
     StopAutoFix := False
 Return
 
-$!j::
+!j::
     _ResetPatternHotstringWordCase()
     StopAutoFix := True
     Send, ^{Left}
@@ -5643,7 +6013,7 @@ $!j::
     StopAutoFix := False
 Return
 
-$!+j::
+!+j::
     _ResetPatternHotstringWordCase()
     StopAutoFix := True
     Send, ^+{Left}
@@ -5651,7 +6021,7 @@ $!+j::
     StopAutoFix := False
 Return
 
-$!l::
+!l::
     _ResetPatternHotstringWordCase()
     StopAutoFix := True
     Send, ^{Right}
@@ -5659,7 +6029,7 @@ $!l::
     StopAutoFix := False
 Return
 
-$!+l::
+!+l::
     _ResetPatternHotstringWordCase()
     StopAutoFix := True
     Send ^+{Right}
@@ -5667,13 +6037,13 @@ $!+l::
     StopAutoFix := False
 Return
 
-$!h::
+!h::
     _ResetPatternHotstringWordCase()
     Send, {Left}
 Return
 
 #If disableEnter
-$Enter::
+Enter::
     _MarkFixSlashWhitespaceBoundary()
     if (_ShouldHandleFixSlashEnter()) {
         currentFixSlashEnterHwnd      := WinExist("A")
@@ -5710,14 +6080,14 @@ Return
 ; =========================================================
 
 #If !disableEnter && _GetFilePaneEnterContext()
-$Enter::
+Enter::
     _MarkFixSlashWhitespaceBoundary()
     _HandleFilePaneEnter()
 Return
 #If
 
 #If !disableEnter && (WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770"))
-$~Enter::
+~Enter::
     _MarkFixSlashWhitespaceBoundary()
     ControlGetFocus, entCtrl, A
     WinGetClass, entCl, A
@@ -5734,7 +6104,7 @@ $~Enter::
         }
 Return
 
-$~F2::
+~F2::
     Critical, On
     LbuttonEnabled := False
     StopRecursion  := True
@@ -5804,29 +6174,29 @@ Return
 ; Ctrl/Alt/Win shortcuts and caret movement invalidate the previous word context.
 ; Shift+Backspace still deletes one character; other modified Backspace
 ; combinations can delete a whole word, so discard their old word context.
-$~+Backspace::
+~+Backspace::
     _TrackPatternHotstringHotkey()
 Return
 
-$~*Backspace::
+~*Backspace::
     if (!blockKeys)
         _ResetPatternHotstringWordCase()
 Return
 
-$~*Ctrl::
-$~*LAlt::
-$~*RAlt::
-$~*Delete::
-$~*Down::
-$~*End::
-$~*Esc::
-$~*Home::
-$~*Insert::
-$~*Left::
-$~*PgDn::
-$~*PgUp::
-$~*Right::
-$~*Up::
+~*Ctrl::
+~*LAlt::
+~*RAlt::
+~*Delete::
+~*Down::
+~*End::
+~*Esc::
+~*Home::
+~*Insert::
+~*Left::
+~*PgDn::
+~*PgUp::
+~*Right::
+~*Up::
     if (!blockKeys)
         _ResetPatternHotstringWordCase()
 Return
@@ -5835,29 +6205,29 @@ Return
 ; more specific handler. Existing specific handlers below/elsewhere count
 ; their own press instead; each physical key selects only one hotkey handler.
 ; These pass-through hook hotkeys ignore this script's synthetic Send output.
-$~*Enter::
-$~*Space::
-$~*Tab::
+~*Enter::
+~*Space::
+~*Tab::
     _MarkFixSlashWhitespaceBoundary()
 Return
 
-$~Space::
+~Space::
     _MarkFixSlashWhitespaceBoundary()
     GoSub, Marktime_Hoty_FixSlash
 Return
 
-$!Space::
+!Space::
     _MarkFixSlashWhitespaceBoundary()
     Send, {Space}
 Return
 
 ; duplicate hotkey in case shift is accidentally  held as a result of attempting to type a '?'
-$~+Space::
+~+Space::
     _MarkFixSlashWhitespaceBoundary()
     GoSub, Marktime_Hoty_FixSlash
 Return
 
-$~^Backspace::
+~^Backspace::
     _ResetPatternHotstringWordCase()
     CancelTbcTypingFixes(True, True)
     _ResetFixSlashStringTracking()
@@ -5867,7 +6237,7 @@ Return
 ; Editing or moving the caret invalidates the remembered prior-letter context used
 ; by FixSlash, so clear it here rather than letting a later "/" rewrite qualify
 ; against text the user has already changed or navigated away from.
-$~Backspace::
+~Backspace::
     _TrackPatternHotstringHotkey()
     CancelTbcTypingFixes(True, True)
     _ResetFixSlashStringTracking()
@@ -5875,14 +6245,14 @@ $~Backspace::
     X_PriorPriorHotKey :=
 Return
 
-$~Left::
+~Left::
     _ResetPatternHotstringWordCase()
     CancelTbcTypingFixes(True, True)
     _ResetFixSlashStringTracking()
     X_PriorPriorHotKey :=
 Return
 
-$~Right::
+~Right::
     _ResetPatternHotstringWordCase()
     CancelTbcTypingFixes(True, True)
     _ResetFixSlashStringTracking()
@@ -5970,7 +6340,7 @@ GetVisibleHwndByPartialClass(classPart) {
 #If !SearchingWindows && !hitTAB
 ; A second Esc press on the same foremost window opens close confirmation.
 ; Pressing x while that second Esc remains held cancels the close.
-$Esc::
+Esc::
     _ResetPatternHotstringWordCase()
     _StopDesktopIconDrag()
     StopRecursion := True
@@ -6092,13 +6462,102 @@ Return
 ;https://superuser.com/questions/950452/how-to-quickly-move-current-window-to-another-task-view-desktop-in-windows-10
 
 !0::
-    DetectHiddenWindows, On
-    wndIdOnDesk := getForemostWindowIdOnDesktop(2)
-    WinGetClass, cl, ahk_id %wndIdOnDesk%
-    total := GetDesktopCount()
-    tooltip, class is %cl% of %total% desktops
-    DetectHiddenWindows, Off
+    _ShowDesktopDiagnostics()
 Return
+
+; Close the metrics window without exiting the script.
+DesktopDiagGuiClose:
+DesktopDiagGuiEscape:
+    Gui, DesktopDiag:Destroy
+Return
+
+; Align rectangle dimensions and screen-coordinate bounds in fixed-width columns.
+_DesktopDiagArea(left, top, right, bottom) {
+    return Format("{:5} x {:5} px [{:6},{:6} to {:6},{:6}]", right - left, bottom - top, left, top, right, bottom)
+}
+
+; Pad a metric label so every value begins in the same monospace column.
+_DesktopDiagRow(label, value) {
+    return Format("{:-25}: {}", label, value)
+}
+
+; Read one already-loaded desktop-count/current-desktop export without initializing the DLL.
+_DesktopDiagVdaCall(procAddr) {
+    if (!procAddr)
+        return ""
+    try {
+        value := DllCall(procAddr, "Int")
+        return ErrorLevel ? "" : value
+    } catch queryError {
+        return ""
+    }
+}
+
+; Show only virtual-desktop numbers and current-monitor geometry in an aligned monospace GUI.
+_ShowDesktopDiagnostics() {
+    global CurrentDesktop, DesktopCount, g_MonitorCount, GetCurrentDesktopNumberProc, GetDesktopCountProc
+
+    priorCoordMode := A_CoordModeMouse
+    try {
+        CoordMode, Mouse, Screen
+        MouseGetPos, mouseX, mouseY
+    } finally {
+        CoordMode, Mouse, %priorCoordMode%
+    }
+    desktopCountLive := _DesktopDiagVdaCall(GetDesktopCountProc)
+    desktopIdxLive := _DesktopDiagVdaCall(GetCurrentDesktopNumberProc)
+    desktopLiveText := "unavailable"
+    if (StrLen(desktopIdxLive) && desktopCountLive > 0 && desktopIdxLive >= 0 && desktopIdxLive < desktopCountLive)
+        desktopLiveText := (desktopIdxLive + 1) " of " desktopCountLive
+    report := _DesktopDiagRow("Virtual desktop (live)", desktopLiveText)
+        . "`n" _DesktopDiagRow("Virtual desktop (cached)", CurrentDesktop " of " DesktopCount)
+
+    work := ""
+    monitorRecord := GetMonitorRecordForPoint(mouseX, mouseY)
+    if IsObject(monitorRecord) {
+        full := monitorRecord.fullArea
+        work := monitorRecord.workArea
+        report .= "`n" _DesktopDiagRow("Monitor under mouse", monitorRecord.displayNumber " of " g_MonitorCount (monitorRecord.isPrimary ? " (primary)" : ""))
+            . "`n" _DesktopDiagRow("Full (cached)", _DesktopDiagArea(full.left, full.top, full.right, full.bottom))
+            . "`n" _DesktopDiagRow("Work (cached)", _DesktopDiagArea(work.left, work.top, work.right, work.bottom))
+    } else
+        report .= "`n" _DesktopDiagRow("Monitor under mouse", "unavailable (cached)")
+
+    pointValue := (mouseX & 0xFFFFFFFF) | ((mouseY & 0xFFFFFFFF) << 32)
+    monitorHandle := DllCall("MonitorFromPoint", "Int64", pointValue, "UInt", 0, "Ptr")
+    VarSetCapacity(monitorInfo, 40, 0)
+    ; MONITORINFO.cbSize precedes the full/work RECTs; no device or window details are collected.
+    NumPut(40, monitorInfo, 0, "UInt")
+    if (monitorHandle && DllCall("GetMonitorInfoW", "Ptr", monitorHandle, "Ptr", &monitorInfo)) {
+        work := {bottom: NumGet(monitorInfo, 32, "Int"), left: NumGet(monitorInfo, 20, "Int"), right: NumGet(monitorInfo, 28, "Int"), top: NumGet(monitorInfo, 24, "Int")}
+        report .= "`n" _DesktopDiagRow("Full (live)", _DesktopDiagArea(NumGet(monitorInfo, 4, "Int"), NumGet(monitorInfo, 8, "Int"), NumGet(monitorInfo, 12, "Int"), NumGet(monitorInfo, 16, "Int")))
+            . "`n" _DesktopDiagRow("Work (live)", _DesktopDiagArea(NumGet(monitorInfo, 20, "Int"), NumGet(monitorInfo, 24, "Int"), NumGet(monitorInfo, 28, "Int"), NumGet(monitorInfo, 32, "Int")))
+    } else
+        report .= "`n" _DesktopDiagRow("Monitor geometry (live)", "unavailable")
+    if (!IsObject(work)) {
+        SysGet, primaryMonitor, MonitorPrimary
+        SysGet, fallbackWork, MonitorWorkArea, %primaryMonitor%
+        work := {bottom: fallbackWorkBottom, left: fallbackWorkLeft, right: fallbackWorkRight, top: fallbackWorkTop}
+    }
+    Gui, DesktopDiag:Destroy
+    Gui, DesktopDiag:New, +AlwaysOnTop +ToolWindow +HwndguiHwnd, Desktop / monitor metrics
+    Gui, DesktopDiag:Font, s10, Consolas
+    Gui, DesktopDiag:Add, Text,, %report%
+    ; Controls retain their font/layout; use screen pixels for the final GUI coordinates.
+    Gui, DesktopDiag:-DPIScale
+    Gui, DesktopDiag:Show, Hide AutoSize
+    VarSetCapacity(guiRect, 16, 0)
+    if DllCall("GetWindowRect", "Ptr", guiHwnd, "Ptr", &guiRect) {
+        guiHeight := NumGet(guiRect, 12, "Int") - NumGet(guiRect, 4, "Int")
+        guiWidth := NumGet(guiRect, 8, "Int") - NumGet(guiRect, 0, "Int")
+        guiX := Max(work.left, work.left + Floor((work.right - work.left - guiWidth) / 2))
+        guiY := Max(work.top, work.top + Floor((work.bottom - work.top - guiHeight) / 2))
+    } else {
+        guiX := work.left
+        guiY := work.top
+    }
+    Gui, DesktopDiag:Show, % "x" guiX " y" guiY " NA"
+}
 
 #1::
     Critical, On
@@ -6408,8 +6867,8 @@ Return
     priorAltClickTick := 0
 Return
 
-$!Tab::
-$!+Tab::
+!Tab::
+!+Tab::
     _MarkFixSlashWhitespaceBoundary()
     If !hitTAB {
         Thread, NoTimers, True
@@ -6516,7 +6975,7 @@ Return
 Return
 
 #If hitTAB || hitTilde
-$!x::
+!x::
     tooltip, Canceled Operation!
     CanceledWinSwap := True
     Gui, GUIHighlighter: Hide
@@ -6535,12 +6994,12 @@ $!x::
 Return
 #If
 
-; Example timing when k_DoubleClickTime = 500 ms. $*LButton:: runs on each physical DOWN event.
+; Example timing when k_DoubleClickTime = 500 ms. *LButton:: runs on each physical DOWN event.
 ;
 ; Time (ms)                 1000      1045      1120      1160      1400      1440
 ; Physical LButton          DOWN      UP        DOWN      UP        DOWN      UP
 ; ------------------------------------------------------------------------------------------------
-; $*LButton:: runs?         yes       no        yes       waiting   yes       no
+; *LButton:: runs?          yes       no        yes       waiting   yes       no
 ; clickTick                 := 1000             := 1120              := 1400
 ; priorAltClickTick before  0                   1000                 0
 ; priorAltClickTick set     := 1000             := 0                 := 1400
@@ -6551,7 +7010,7 @@ Return
 ; Time (ms)                 1510      1550      1800      1840      1910      1950
 ; Physical LButton          DOWN      UP        DOWN      UP        DOWN      UP
 ; ------------------------------------------------------------------------------------------------
-; $*LButton:: runs?         yes       waiting   yes       no        yes       waiting
+; *LButton:: runs?          yes       waiting   yes       no        yes       waiting
 ; clickTick                 := 1510             := 1800              := 1910
 ; priorAltClickTick before  1400                0                    1800
 ; priorAltClickTick set     := 0                 := 1800              := 0
@@ -6561,7 +7020,7 @@ Return
 ;                                                                  waits for the 1950 UP, then sends Click + Enter
 
 #If GetKeyState("LAlt", "P")
-$*LButton::
+*LButton::
     _NoteColumnWidthMouseInput()
     if (hitTab || hitTilde) {
         LclickSelected := True
@@ -7120,7 +7579,7 @@ CycleAppWindows(activeProcessName, activeClass) {
 }
 
 ; https://superuser.com/questions/1603554/autohotkey-find-and-focus-windows-by-name-accross-virtual-desktops
-$~Ctrl::
+~Ctrl::
     _ResetPatternHotstringWordCase()
     GoSub, LaunchWinFind
 Return
@@ -7130,7 +7589,7 @@ RegExEscape(s) {
 }
 
 LaunchWinFind:
-    if (A_PriorHotkey = "$~Ctrl" && A_TimeSincePriorHotkey < (0.75*(k_DoubleClickTime/2))) {
+    if (A_PriorHotkey = "~Ctrl" && A_TimeSincePriorHotkey < (0.75*(k_DoubleClickTime/2))) {
         StopRecursion   := True
         SetTimer, KeyTrack,   Off
         ; SetTimer, MouseTrack, Off
@@ -7953,11 +8412,11 @@ GetMonitorRectsForWindow(hWnd, ByRef monX, ByRef monY, ByRef monW, ByRef monH
 #If MouseIsOverCaptionButtons()
 ; Ctrl+click is script-owned, so suppress its native down as well as the
 ; existing non-tilde up event before running the custom caption action.
-$^Lbutton::
+^Lbutton::
     _NoteColumnWidthMouseInput()
 Return
 
-$^Lbutton Up::
+^Lbutton Up::
     _NoteColumnWidthMouseInput()
     StopRecursion := True
     DetectHiddenWindows, Off
@@ -8022,12 +8481,12 @@ Return
 
 ; Block the original caption-button click, then send one replacement click
 ; on release unless the title-bar LButton+RButton chord consumed it.
-$Lbutton::
+Lbutton::
     _NoteColumnWidthMouseInput()
     titleBarChordOwnsLButton := false
 Return
 
-$Lbutton Up::
+Lbutton Up::
     _NoteColumnWidthMouseInput()
     ; The title-bar LButton+RButton chord already consumed this left-click, even
     ; if RButton was released first and its separate state has been reset.
@@ -8049,7 +8508,7 @@ Return
 #If
 
 #If MouseIsOverTaskbarWidgets()
-$~^LButton::
+~^LButton::
     _NoteColumnWidthMouseInput()
     Thread, NoTimers, True
     StopRecursion := True
@@ -8118,7 +8577,7 @@ Return
 #If
 
 #If MouseIsOverTitleBar()
-$^LButton::
+^LButton::
     _NoteColumnWidthMouseInput()
     Thread, NoTimers, True
     StopRecursion := True
@@ -8142,7 +8601,7 @@ return
 
 ; Hold Ctrl+Shift, then drag with LButton to measure horizontal and vertical distance
 ; from the mouse-down origin.
-$^+LButton::
+^+LButton::
     _NoteColumnWidthMouseInput()
     Measure_Begin()
 return
@@ -8456,7 +8915,7 @@ _SpawnExplorerFromTaskbar(clickX, clickY) {
 }
 
 #If MouseIsOverTaskbarBlank()
-$~Lbutton::
+~Lbutton::
     _NoteColumnWidthMouseInput()
     MouseGetPos, expX1, expY1,
     if (A_PriorHotkey == A_ThisHotkey
@@ -10277,7 +10736,7 @@ _IsExplorerNavigationSurfaceCtrl(ctrlNN) {
 #MaxThreadsPerHotkey 2
 #If
 ; Schedule a conservative post-activation recovery for the first click into an
-; inactive Explorer/file-dialog window. The live $~LButton path captures the
+; inactive Explorer/file-dialog window. The live ~LButton path captures the
 ; directory baseline and header action when the ClassNN is a tree/header surface,
 ; then returns without running the heavier blank-space or SendCtrlAdd
 ; classification. This helper preserves that narrow snapshot so bounded timer
@@ -12257,7 +12716,7 @@ RunExplorerCtrlAddWhenReady:
 Return
 
 ; Deferred recovery for a first click into an inactive Explorer/file-dialog
-; window. This intentionally does not replay the full $~LButton handler: by the
+; window. This intentionally does not replay the full ~LButton handler: by the
 ; time this timer runs, the original physical click already went to Windows, so
 ; the only safe follow-up is the narrow shell case where Ctrl+NumpadAdd was the
 ; already-expected result. Deferring that shell-only work keeps the activation
@@ -12918,7 +13377,7 @@ Return
 
 #MaxThreadsPerHotkey 2
 #If !VolumeHover() && !IsOverException() && LbuttonEnabled && !hitTAB && !MouseIsOverTitleBarFast(,,False) && !MouseIsOverTaskbarWidgets() && !MouseIsOverCaptionButtons()
-$~LButton::
+~LButton::
     _NoteColumnWidthMouseInput()
     _ProcessLButton()
 Return
@@ -17171,7 +17630,7 @@ _IsEverythingEditAdjustTrigger(hotkey) {
     global k_keys
     global k_numbers
 
-    if (hotkey = "" || hotkey = "Enter" || hotkey = "LButton")
+    if (hotkey = "" || hotkey = "Enter" || hotkey = "LButton" || _IsUntrackedAltLetterHotkey(hotkey))
         return false
 
     hotkeyKey := SubStr(hotkey, 2)
@@ -17179,9 +17638,9 @@ _IsEverythingEditAdjustTrigger(hotkey) {
             || InStr(k_numbers, hotkeyKey, False)
             || hotkey == "~:"
             || hotkey == "~/"
-            || hotkey == "$~Space"
-            || hotkey == "$CapsLock"
-            || hotkey == "$~Backspace")
+            || hotkey == "~Space"
+            || hotkey == "CapsLock"
+            || hotkey == "~Backspace")
 }
 
 ; KeyTrack() queue helper for Everything Edit1:
@@ -27099,6 +27558,7 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 ::its okay::it's okay
 ::its old::it's old
 ::its on::it's on
+::its optional::it's optional
 ::its our::it's our
 ::its over::it's over
 ::its possible::it's possible
