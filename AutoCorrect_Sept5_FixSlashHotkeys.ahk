@@ -555,10 +555,10 @@ Global disableEnter                                          := False
 Global TimeOfLastHotkeyTyped                                 := A_TickCount
 ; +----------------------------------------------------------------------------+
 ; | Everything Edit1 Deferred Column Auto-Fit State                            |
-; | Debounces Everything column-fit commands after a short typing pause        |
+; | Debounces native results column sizing after a short typing pause           |
 ; | and only while the same Everything Edit1 still owns focus.                  |
 ; +----------------------------------------------------------------------------+
-; Results-window startup state keeps command dispatch separate from the
+; Results-window startup state keeps native sizing separate from the
 ; Edit1 typing path so initial alignment never needs to move keyboard focus.
 Global everythingActivationAutoFitDeadlineTick               := 0
 ; Results-window handle whose results control is awaiting creation.
@@ -571,7 +571,7 @@ Global everythingActivationAutoFitStartTick                  := 0
 Global everythingActivationAutoFitTraceRequestId             := ""
 ; Small initial pause lets Everything create its results ListView before probing it.
 Global k_everythingActivationAutoFitInitialDelayMs           := 15
-; Short command retry interval minimizes the visible startup alignment delay.
+; Short native-sizing retry interval minimizes the startup alignment delay.
 Global k_everythingActivationAutoFitRetryMs                  := 25
 ; Bounded startup wait avoids retaining a request for an unresponsive Everything window.
 Global k_everythingActivationAutoFitTimeoutMs                := 750
@@ -599,10 +599,10 @@ Global tbcEverythingAdjustSourceTick                         := 0
 ; is dropped as stale rather than sent into a newer typing context.
 Global k_tbcEverythingAdjustMaxAgeMs                         := 750
 ; Short retry delay for the queued Everything Edit1 auto-fit timer while
-; waiting for Everything's results control or command receiver to become ready.
+; waiting for Everything's native results control to become ready.
 Global k_tbcEverythingAdjustRetryMs                          := 40
 ; Debounce interval after an Everything Edit1 typing event before attempting
-; Everything's own column-fit command.
+; native results sizing that preserves zero-width columns.
 Global k_tbcEverythingAdjustTypingQuietMs                    := 240
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
@@ -3408,7 +3408,7 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
         }
         else if (isFirstTrackedActivation && vWinProc == "Everything.exe") {
             ; Everything creates its results ListView asynchronously. Wait for the
-            ; results control and invoke its column-fit command without focusing it.
+            ; results control and size its nonzero-width columns without focusing it.
             everythingActivationTraceRequestId := k_debugTraceExplorerCtrlAddEnabled
                 ? "everything_activation_" . hWnd . "_" . A_TickCount
                 : ""
@@ -4423,8 +4423,9 @@ WheelSendCtrlAdd:
             if (k_useNativeSysListViewColumnAutoFit
              && InStr(TargetControl, "SysListView32", True)
              && DllCall("user32\IsChild", "Ptr", tbcAdjustColumnsHwnd, "Ptr", TargetControlHwnd, "Int")) {
-                if AutoFitSysListViewColumns(TargetControlHwnd, k_nativeSysListViewColumnAutoFitMode)
-                    return
+                AutoFitSysListViewColumns(TargetControlHwnd, k_nativeSysListViewColumnAutoFitMode)
+                ; Do not let native failures resize hidden columns through Ctrl+NumpadAdd.
+                return
             }
 
             ; Use the same explicit ClassNN focus step as the known-good SendCtrlAdd()
@@ -15245,8 +15246,8 @@ _ResolveCtrlAddTargetForSend(hwndTop, windowClass, sourceCtrlNN := ""
 }
 
 ; Resolve a native SysListView32 ClassNN and try the isolated direct-message
-; column auto-fit path. False means the caller must retain its existing focus
-; preparation and synthetic Ctrl+NumpadAdd fallback. When supplied, failureInfo
+; column auto-fit path. False stops the native attempt without a keyboard
+; fallback that could resize hidden columns. When supplied, failureInfo
 ; records the exact rejected target or native ListView operation for trace output.
 _TryAutoFitResolvedSysListView(hwndTop, targetCtrlNN, mode := "header_no_fill", ByRef failureInfo := "") {
     failureInfo := ""
@@ -15301,7 +15302,7 @@ _ClearEverythingActivationAutoFitState(expectedRequestId := 0) {
     return True
 }
 
-; Start a bounded command-based auto-fit request for a new Everything window.
+; Start a bounded native auto-fit request for a new Everything window.
 ; The timer waits for the results control without moving focus from Edit1.
 _RequestEverythingActivationAutoFit(everythingHwnd, traceRequestId := "") {
     global everythingActivationAutoFitDeadlineTick
@@ -15335,18 +15336,11 @@ _RequestEverythingActivationAutoFit(everythingHwnd, traceRequestId := "") {
     return True
 }
 
-; Invoke Everything's own Auto-fit Columns command without moving focus or
-; requiring ListView messages, so allow_lvm=0 can remain set as a workaround.
-; True confirms command delivery only; it does not prove visible column widths.
+; Auto-fit Everything's nonzero-width results columns without moving focus.
+; Native ListView messages must be enabled in Everything. Existing bounded timers
+; retry native failures without falling back to a command or keyboard sizing.
 _TryAutoFitEverythingResultsColumns(everythingHwnd, ByRef failureInfo := "") {
-    ; Official Everything SDK command for fitting all results columns.
-    static k_autoFitColumnsCommandId := 41012
-    ; Bound each cross-process command dispatch to the existing 75 ms budget.
-    static k_commandSendTimeoutMs := 75
-    ; Block reentrant message processing and abandon an unresponsive receiver.
-    static SMTO_ABORTIFHUNG_AND_BLOCK := 0x0003
-    ; Deliver an application command to the captured Everything search window.
-    static WM_COMMAND := 0x0111
+    global k_nativeSysListViewColumnAutoFitMode
 
     failureInfo := ""
     if (!everythingHwnd) {
@@ -15370,40 +15364,25 @@ _TryAutoFitEverythingResultsColumns(everythingHwnd, ByRef failureInfo := "") {
         return False
     }
 
-    ; Control discovery can yield, so confirm foreground ownership again before dispatch.
+    ; Control discovery can yield, so recheck foreground ownership before sizing.
     if !IsForegroundWindow(everythingHwnd) {
         failureInfo := { stage: "target_window_not_foreground" }
         return False
     }
 
-    messageResult := 0
-    ; SendMessageTimeout can fail without setting an error; clear any stale value first.
-    DllCall("kernel32\SetLastError", "UInt", 0)
-    sendSucceeded := DllCall("user32\SendMessageTimeoutW"
-        , "Ptr", everythingHwnd, "UInt", WM_COMMAND
-        , "Ptr", k_autoFitColumnsCommandId, "Ptr", 0
-        , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", k_commandSendTimeoutMs
-        , "Ptr*", messageResult, "Ptr")
-    sendWinError := A_LastError
-    traceRequestId := "everything_autofit_" . everythingHwnd
-
-    if (!sendSucceeded) {
-        failureInfo := { stage: "autofit_command_send_failed"
-            , commandId: k_autoFitColumnsCommandId, timeoutMs: k_commandSendTimeoutMs
-            , winError: sendWinError }
-        _DebugTrace_ExplorerCtrlAdd("everything_autofit_command_failed"
-            , "hwnd=" . everythingHwnd . " commandId=" . k_autoFitColumnsCommandId
-            . " timeoutMs=" . k_commandSendTimeoutMs . " winError=" . sendWinError
-            , False, traceRequestId)
-        return False
+    autoFitSucceeded := AutoFitSysListViewColumns(listViewHwnd
+        , k_nativeSysListViewColumnAutoFitMode, 75, failureInfo)
+    failureTrace := ""
+    if IsObject(failureInfo) {
+        for failureKey, failureValue in failureInfo
+            failureTrace .= " " . failureKey . "=" . failureValue
     }
-
-    ; WM_COMMAND may return zero on success; only the dispatch result determines delivery.
-    _DebugTrace_ExplorerCtrlAdd("everything_autofit_command_dispatched"
-        , "hwnd=" . everythingHwnd . " commandId=" . k_autoFitColumnsCommandId
-        . " commandResult=" . messageResult
+    traceRequestId := "everything_autofit_" . everythingHwnd
+    _DebugTrace_ExplorerCtrlAdd("everything_autofit_native_result"
+        , "hwnd=" . everythingHwnd . " succeeded=" . autoFitSucceeded
+        . " mode=" . k_nativeSysListViewColumnAutoFitMode . failureTrace
         , False, traceRequestId)
-    return True
+    return autoFitSucceeded
 }
 
 ; Revalidate a UIA-resolved Details target immediately before SendCtrlAdd()
@@ -15629,8 +15608,8 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         ; Native report-view ListViews accept column-width messages directly,
         ; so their columns can be adjusted without changing keyboard focus or
         ; injecting Ctrl. Navigation still uses the existing shell-readiness
-        ; wait. Disabling the feature flag, or any direct-message failure,
-        ; falls through to the original focus-and-chord path below.
+        ; wait. Native failures stop here to preserve zero-width columns.
+        ; Disabling the feature flag retains the original focus-and-chord path.
         if (k_useNativeSysListViewColumnAutoFit && InStr(TargetControl, "SysListView32", True)) {
             if (waitForExplorerLoad && (lClassCheck == "CabinetWClass" || lClassCheck == "#32770")) {
                 explorerLoadStartTick := A_TickCount
@@ -15689,6 +15668,8 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                         , True, traceRequestId)
                 Return
             }
+            ; Native failures must not reach a shortcut that can resize hidden columns.
+            Return
         }
 
         if traceEverythingActivation {
@@ -16259,9 +16240,11 @@ _HandleColumnHeaderWidthResult(gesture, hwnd, ctrlNN) {
     if (result != "unchanged" || disableSendCtrlHwnd == hwnd || GetKeyState("LShift", "P"))
         return
 
-    if (gesture.target.kind == "native" && k_useNativeSysListViewColumnAutoFit
-        && AutoFitSysListViewColumns(gesture.target.ctrlHwnd, k_nativeSysListViewColumnAutoFitMode))
+    if (gesture.target.kind == "native" && k_useNativeSysListViewColumnAutoFit) {
+        AutoFitSysListViewColumns(gesture.target.ctrlHwnd, k_nativeSysListViewColumnAutoFitMode)
+        ; A failed native attempt must not fall through to keyboard sizing.
         return
+    }
 
     state := _ColumnWidthCacheState()
     focusEpoch := state.epoch
@@ -16765,15 +16748,15 @@ _TestNativeColumnWidthSnapshot() {
     }
 }
 
-; Auto-fit every column in a native SysListView32 report view without requiring
+; Auto-fit nonzero-width columns in a native SysListView32 report view without requiring
 ; keyboard focus. Mode "content" uses LVSCW_AUTOSIZE; mode "header" uses
 ; LVSCW_AUTOSIZE_USEHEADER, including its final-column fill behavior. Mode
 ; "header_no_fill" uses header sizing except for the final column, where content
 ; sizing prevents Windows from stretching that column across the remaining width.
 ; Every cross-process message has a short timeout so an unresponsive target cannot
-; hang this script. True means all columns accepted the requested width; False lets
-; callers use their existing keyboard fallback. When supplied, failureInfo identifies
-; the rejected native operation and, for LVM_SETCOLUMNWIDTH, the affected column.
+; hang this script. True means every nonzero-width column accepted its width,
+; including success when all columns were skipped. False stops native callers
+; without a keyboard fallback. failureInfo identifies the failed operation/column.
 AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 75, ByRef failureInfo := "") {
     static HDM_GETITEMCOUNT                 := 0x1200
     static LVM_GETHEADER                    := 0x101F
@@ -16849,6 +16832,21 @@ AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 7
     try {
         Loop, %columnCount% {
             columnIndex              := A_Index - 1
+            ; Read live width before any write, including the final-column minimum.
+            currentWidth := 0
+            if !DllCall("user32\SendMessageTimeoutW"
+                , "Ptr", listViewHwnd, "UInt", LVM_GETCOLUMNWIDTH
+                , "Ptr", columnIndex, "Ptr", 0
+                , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", currentWidth, "Ptr")
+            {
+                failureInfo := { stage: "lvm_getcolumnwidth_before_resize_timeout", listViewHwnd: listViewHwnd
+                    , columnIndex: columnIndex, timeoutMs: timeoutMs }
+                return False
+            }
+            ; Width zero is a successful read of a hidden column, not a failure.
+            if (currentWidth = 0)
+                continue
+
             isHeaderNoFillLastColumn := (mode = "header_no_fill" && columnIndex = columnCount - 1)
             columnWidth              := isHeaderNoFillLastColumn ? LVSCW_AUTOSIZE : requestedWidth
             messageResult            := 0
@@ -17563,7 +17561,7 @@ ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6, targetWin
 }
 
 ; Clears the queued Everything Edit1 auto-fit state so context changes or a
-; completed send do not leave a stale deferred column-fit command behind.
+; completed fit do not leave a stale deferred column-fit request behind.
 _ClearTbcEverythingEditAdjustState(preserveSourceTick := False) {
     global tbcEverythingAdjustCtrlNN
     global tbcEverythingAdjustCtrlClass
@@ -17585,7 +17583,7 @@ _ClearTbcEverythingEditAdjustState(preserveSourceTick := False) {
 
 ; Queues a deferred Everything Edit1 column auto-fit request:
 ; capture or accept the current search-box focus context, stamp the latest
-; typing tick, and let a short timer coalesce rapid typing before command dispatch.
+; typing tick, and let a short timer coalesce rapid typing before native sizing.
 _RequestEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
     global k_tbcEverythingAdjustTypingQuietMs
     global tbcEverythingAdjustCtrlNN
@@ -17671,7 +17669,7 @@ _TryRequestEverythingEditAdjust(sourceTick, hotkey, activeHwnd := 0) {
 
 ; Everything Edit1 tbc-work validator:
 ; require the same active search box, the same request token, and when possible
-; the same exact control HWND/class before the deferred column-fit command runs.
+; the same exact control HWND/class before deferred native column sizing runs.
 _IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
     global k_tbcEverythingAdjustMaxAgeMs
     global tbcEverythingAdjustCtrlNN
@@ -17729,7 +17727,7 @@ _SendCtrlNumpadAddIfStillValid(syncPassCount := 6, guardRequestId := 0, guardQui
     return SendCtrlNumpadAdd(syncPassCount, guardRequestId, guardQuietMs, guardHwnd)
 }
 
-; Retry Everything's own column-fit command once its results control exists,
+; Retry native sizing of Everything's nonzero-width results columns,
 ; without moving keyboard focus away from its Edit1 search box.
 FlushEverythingActivationAutoFit:
     ; Copy one request atomically so a newer activation cannot leave this callback with mixed state.
@@ -17754,13 +17752,13 @@ FlushEverythingActivationAutoFit:
         Return
     }
 
-    ; Wait for the results control, then dispatch Everything's own column-fit command.
+    ; Wait for the results control, then size only its nonzero-width columns.
     attemptStartTick := A_TickCount
     failureInfo      := ""
     autoFitSucceeded := _TryAutoFitEverythingResultsColumns(requestHwnd, failureInfo)
     attemptElapsedMs := A_TickCount - attemptStartTick
 
-    ; Command dispatch can yield while Everything is creating controls; abandon a callback
+    ; Native sizing can yield while Everything is creating controls; abandon a callback
     ; replaced by another activation rather than clearing or rearming its newer request.
     Critical, On
     requestStillCurrent := (currentRequestId = everythingActivationAutoFitId
@@ -17775,14 +17773,14 @@ FlushEverythingActivationAutoFit:
     if (autoFitSucceeded) {
         totalElapsedMs := A_TickCount - requestStartTick
         if (_ClearEverythingActivationAutoFitState(currentRequestId) && traceRequestId != "")
-            _DebugTrace_ExplorerCtrlAdd("everything_activation_command_dispatched"
+            _DebugTrace_ExplorerCtrlAdd("everything_activation_native_completed"
                 , "hwnd=" . requestHwnd . " attemptElapsedMs=" . attemptElapsedMs
                 . " totalElapsedMs=" . totalElapsedMs
                 , False, traceRequestId)
         Return
     }
 
-    ; Stop after the bounded startup wait; unlike general SendCtrlAdd, this path
+    ; Stop after the bounded startup wait; this native results path
     ; never falls back to focus-changing Ctrl+NumpadAdd while Edit1 may be active.
     if (A_TickCount >= requestDeadlineTick) {
         totalElapsedMs := A_TickCount - requestStartTick
@@ -17803,9 +17801,9 @@ FlushEverythingActivationAutoFit:
     Critical, Off
 Return
 
-; Deferred Everything Edit1 column-fit command flush:
+; Deferred Everything Edit1 native column-fit flush:
 ; after a short debounce, confirm the same search field still owns focus, then
-; dispatch Everything's own command without keyboard injection.
+; size nonzero-width results columns without keyboard injection.
 FlushTbcEverythingEditAdjust:
     currentRequestId := tbcEverythingAdjustId
     ; Stop when no deferred request or target window remains because a previously armed timer may fire after state was cleared.
@@ -17821,7 +17819,7 @@ FlushTbcEverythingEditAdjust:
         Return
     }
 
-    ; Invoke Everything's own column-fit command without injecting keys into Edit1.
+    ; Size nonzero-width results columns without injecting keys into Edit1.
     if (_TryAutoFitEverythingResultsColumns(tbcEverythingAdjustHwnd))
     {
         ; Clear completed state only while this callback still owns the request slot so a newer request remains pending.
@@ -17834,20 +17832,20 @@ FlushTbcEverythingEditAdjust:
     if (currentRequestId != tbcEverythingAdjustId)
         Return
 
-    ; Revalidate after the failed command dispatch because it may have outlived the original focus or request lifetime.
+    ; Revalidate after failed native sizing; it may have outlived the original focus or request lifetime.
     if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
     {
         _ClearTbcEverythingEditAdjustState()
         Return
     }
 
-    ; Retry briefly while Everything's results control or command receiver is not ready.
+    ; Retry briefly while Everything's native results control is not ready.
     if ((A_TickCount - tbcEverythingAdjustRequestedTick) < k_tbcEverythingAdjustMaxAgeMs) {
         SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
         Return
     }
 
-    ; A valid Everything window without a ready column-fit command should not fall back to
+    ; A valid Everything window whose native sizing fails should not fall back to
     ; Ctrl+NumpadAdd while Edit1 is focused, because that can type a literal "+" into search.
     _ClearTbcEverythingEditAdjustState(True)
 Return
@@ -17863,7 +17861,7 @@ KeyTrack() {
         StopAutoFix := True
         ; Everything/Edit1 qualifies the key event, captures the exact
         ; current search-box identity once, and lets the debounce timer resize
-        ; results columns through its own command after the search text has had a moment
+        ; nonzero-width results columns after the search text has had a moment
         ; to settle.
         if (!_TryRequestEverythingEditAdjust(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd))
         {
@@ -29549,6 +29547,8 @@ Return  ; This makes the above hotstrings do nothing so that they override the i
 :*:omcm::comm
 ; tanrsfer -> transfer
 :*:tanrs::trans
+; fucniton -> function
+:*:fucnit::functi
 ;------------------------------------------------------------------------------
 ; Word middles
 ;------------------------------------------------------------------------------
