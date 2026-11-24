@@ -146,38 +146,12 @@ Global lastHotkeyTyped                                     := ""
 ; Tick count of the most recent hotkey-triggered send used by typing heuristics.
 Global TimeOfLastHotkeyTyped                               := A_TickCount
 ; +----------------------------------------------------------------------------+
-; | Everything Edit1 Deferred Column Auto-Fit State                            |
-; | Debounces native results ListView sizing so it runs after a short pause     |
-; | and only while the same Everything Edit1 still owns focus.                  |
+; | Everything Direct Column Auto-Fit State                                    |
+; | Tracks the last typing event sized through native ListView messages so    |
+; | the polling timer does not keep resizing an idle result list.              |
 ; +----------------------------------------------------------------------------+
-; Focused control name captured when Everything Edit1 auto-fit is queued so
-; the deferred resize can require the same search field before firing.
-Global tbcEverythingAdjustCtrlNN                           := ""
-; Focused control class captured with the queued Everything auto-fit so the
-; flush step can require the same concrete control identity when available.
-Global tbcEverythingAdjustCtrlClass                        := ""
-; Focused control HWND captured when Everything auto-fit is queued so the flush
-; step can reject a later Edit1 from a different control instance.
-Global tbcEverythingAdjustCtrlHwnd                         := 0
-; Active Everything window captured for the deferred search-box auto-fit resize.
-Global tbcEverythingAdjustHwnd                             := 0
-; Monotonic token incremented for each newer Everything Edit1 auto-fit request
-; so older timer callbacks can detect that typing already superseded them.
-Global tbcEverythingAdjustId                               := 0
-; Tick count recorded when the Everything Edit1 auto-fit request was queued.
-Global tbcEverythingAdjustRequestedTick                    := 0
-; Source typing tick associated with the current Everything auto-fit request so
-; KeyTrack queues at most one deferred resize request per physical keypress burst update.
+; Latest typing tick already handled by Everything's direct column auto-fit.
 Global tbcEverythingAdjustSourceTick                       := 0
-; Maximum lifetime for a deferred Everything Edit1 auto-fit request before it
-; is dropped as stale rather than sent into a newer typing context.
-Global k_tbcEverythingAdjustMaxAgeMs                       := 750
-; Short retry delay for the queued Everything Edit1 auto-fit timer while
-; waiting for Everything's native results ListView/header to settle.
-Global k_tbcEverythingAdjustRetryMs                        := 40
-; Debounce interval after an Everything Edit1 typing event before attempting
-; native results ListView column sizing.
-Global k_tbcEverythingAdjustTypingQuietMs                  := 100
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -1206,8 +1180,6 @@ _ClearTypingAutoFixEligibilityCache() {
 CancelTbcTypingWorkForContextChange() {
     ; Cancel deferred slash/Hoty rewrites and release Enter so old-context work cannot affect the new caret.
     CancelTbcTypingFixes(True, True)
-    ; Clear any pending Everything Edit1 auto-fit so it cannot send to a control that is no longer current.
-    _ClearTbcEverythingEditAdjustState()
     ; Invalidate cached editability and reset the Hotstring buffer because the active field may have changed.
     _ClearTypingAutoFixEligibilityCache()
     ; Discard the queued eligibility refresh so an old control's result cannot overwrite the new context.
@@ -2292,8 +2264,8 @@ _TryAutoFitEverythingResultsColumns(everythingHwnd, mode := "header_no_fill") {
 ; "header_no_fill" uses header sizing except for the final column, where content
 ; sizing prevents Windows from stretching that column across the remaining width.
 ; Every cross-process message has a short timeout so an unresponsive target cannot
-; hang this script. True means all columns accepted the requested width; False lets
-; callers use their existing keyboard fallback.
+; hang this script. True means every nonzero-width column was fitted; False
+; cancels this native sizing attempt without a keyboard fallback.
 AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 75) {
     static HDM_GETITEMCOUNT           := 0x1200
     static LVM_GETHEADER              := 0x101F
@@ -3524,70 +3496,9 @@ ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6, targetWin
     return true
 }
 
-; Clears the queued Everything Edit1 auto-fit state so context changes or a
-; completed send do not leave a stale deferred Ctrl+NumpadAdd request behind.
-_ClearTbcEverythingEditAdjustState(preserveSourceTick := False) {
-    global tbcEverythingAdjustCtrlNN
-    global tbcEverythingAdjustCtrlClass
-    global tbcEverythingAdjustCtrlHwnd
-    global tbcEverythingAdjustHwnd
-    global tbcEverythingAdjustId
-    global tbcEverythingAdjustRequestedTick
-    global tbcEverythingAdjustSourceTick
-
-    tbcEverythingAdjustCtrlNN        := ""
-    tbcEverythingAdjustCtrlClass     := ""
-    tbcEverythingAdjustCtrlHwnd      := 0
-    tbcEverythingAdjustHwnd          := 0
-    tbcEverythingAdjustId            := 0
-    tbcEverythingAdjustRequestedTick := 0
-    if (!preserveSourceTick)
-        tbcEverythingAdjustSourceTick := 0
-}
-
-; Queues a deferred Everything Edit1 column auto-fit request:
-; capture or accept the current search-box focus context, stamp the latest
-; typing tick, and let a short timer coalesce rapid typing before native sizing.
-_RequestEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
-    global k_tbcEverythingAdjustTypingQuietMs
-    global tbcEverythingAdjustCtrlNN
-    global tbcEverythingAdjustCtrlClass
-    global tbcEverythingAdjustCtrlHwnd
-    global tbcEverythingAdjustHwnd
-    global tbcEverythingAdjustId
-    global tbcEverythingAdjustRequestedTick
-    global tbcEverythingAdjustSourceTick
-
-    if (!sourceTick)
-        return false
-
-    targetHwnd      := capturedHwnd
-    targetCtrlNN    := capturedCtrlNN
-    targetCtrlHwnd  := capturedCtrlHwnd
-    targetCtrlClass := capturedCtrlClass
-
-    if (!targetHwnd) {
-        if !CaptureActiveFocusSnapshot(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
-            return false
-    }
-
-    if (!targetHwnd || targetCtrlNN != "Edit1")
-        return false
-
-    tbcEverythingAdjustHwnd       := targetHwnd
-    tbcEverythingAdjustCtrlNN     := targetCtrlNN
-    tbcEverythingAdjustCtrlHwnd   := targetCtrlHwnd
-    tbcEverythingAdjustCtrlClass  := targetCtrlClass
-    tbcEverythingAdjustId += 1
-    tbcEverythingAdjustRequestedTick := A_TickCount
-    tbcEverythingAdjustSourceTick := sourceTick
-    SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustTypingQuietMs
-    return true
-}
-
-; Returns true only for key events that should arm Everything's deferred
-; search-box auto-fit path. Keep this trigger list separate from KeyTrack() so
-; the queueing decision is documented once and can be tuned in one place.
+; Returns true only for key events that should trigger Everything's direct
+; native column auto-fit. Keep this trigger list separate from KeyTrack() so
+; the sizing decision is documented once and can be tuned in one place.
 _IsEverythingEditAdjustTrigger(hotkey) {
     global k_keys
     global k_numbers
@@ -3605,123 +3516,23 @@ _IsEverythingEditAdjustTrigger(hotkey) {
             || hotkey == "$~Backspace")
 }
 
-; KeyTrack() queue helper for Everything Edit1:
-; allow one deferred auto-fit request per typing tick, require a qualifying
-; trigger hotkey, capture the exact current Edit1 identity once, and then hand
-; that context to the shared deferred-send queue.
+; Attempt native sizing once per qualifying typing tick. No deferred work is
+; retained, so the original search Edit1 identity does not need revalidation.
 _TryRequestEverythingEditAdjust(sourceTick, hotkey, activeHwnd := 0) {
     global tbcEverythingAdjustSourceTick
 
-    ; Reject a missing or already-handled typing tick so one physical event cannot schedule duplicate adjustment requests.
     if (!sourceTick || tbcEverythingAdjustSourceTick = sourceTick)
         return false
-
-    ; Ignore hotkeys that do not edit Everything's search text because they do not require a deferred column adjustment.
     if (!_IsEverythingEditAdjustTrigger(hotkey))
         return false
+    if (!activeHwnd)
+        activeHwnd := WinExist("A")
 
-    ; Require an exact active-window and focused-control snapshot so deferred work is never armed for an ambiguous target.
-    if !CaptureActiveFocusSnapshot(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass, activeHwnd)
-        return false
-
-    ; Restrict this typing-driven adjustment to Everything's Edit1 search field so other focused controls remain unaffected.
-    if (targetCtrlNN != "Edit1")
-        return false
-
-    return _RequestEverythingEditAdjust(sourceTick, targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
+    ; Consume the event before sizing so a failed attempt or reentrant poll
+    ; cannot keep resubmitting the same typing event.
+    tbcEverythingAdjustSourceTick := sourceTick
+    return _TryAutoFitEverythingResultsColumns(activeHwnd)
 }
-
-; Everything Edit1 tbc-work validator:
-; require the same active search box, the same request token, and when possible
-; the same exact control HWND/class before the deferred Ctrl+NumpadAdd send runs.
-_IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
-    global k_tbcEverythingAdjustMaxAgeMs
-    global tbcEverythingAdjustCtrlNN
-    global tbcEverythingAdjustCtrlClass
-    global tbcEverythingAdjustCtrlHwnd
-    global tbcEverythingAdjustHwnd
-    global tbcEverythingAdjustId
-    global tbcEverythingAdjustRequestedTick
-
-    currentId := tbcEverythingAdjustId
-    if (!expectedId)
-        expectedId := currentId
-
-    ; Reject replaced, expired, or retargeted work so a stale deferred callback cannot adjust the wrong window or control.
-    if !_IsDeferredWorkStillValid(tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrlNN, expectedId, currentId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs)
-        return false
-
-    ; Accept the basic window/ClassNN validation when no exact control HWND or class metadata was captured for comparison.
-    if (!tbcEverythingAdjustCtrlHwnd && tbcEverythingAdjustCtrlClass = "")
-        return true
-
-    ; Capture the current active-window and focused-control identity so the saved exact target metadata can be revalidated.
-    if !TryCaptureActiveFocusSnapshotFull(tbcEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
-        return false
-
-    ; Reject a different focused ClassNN so the deferred adjustment remains tied to the originally focused control slot.
-    if (tbcEverythingAdjustCtrlNN != "" && currentCtrlNN != tbcEverythingAdjustCtrlNN)
-        return false
-
-    ; Reject a different focused HWND so a replacement control with the same ClassNN cannot inherit the pending adjustment.
-    if (tbcEverythingAdjustCtrlHwnd && currentCtrlHwnd != tbcEverythingAdjustCtrlHwnd)
-        return false
-
-    ; Reject a changed control class so the pending adjustment cannot run against a different kind of focused control.
-    if (tbcEverythingAdjustCtrlClass != "" && currentCtrlClass != tbcEverythingAdjustCtrlClass)
-        return false
-
-    return true
-}
-
-; Deferred Everything Edit1 native column auto-fit flush:
-; after a short debounce, confirm the same search field still owns focus, then
-; resize the results ListView without keyboard injection.
-FlushTbcEverythingEditAdjust:
-    currentRequestId := tbcEverythingAdjustId
-    ; Stop when no deferred request or target window remains because a previously armed timer may fire after state was cleared.
-    if (!currentRequestId || !tbcEverythingAdjustHwnd)
-        Return
-
-    ; Reject an invalid target, token, or request age before waiting or sending so stale work cannot reach the wrong context.
-    if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
-    {
-        ; Clear invalid state only while this callback still owns the request slot so a newer replacement request is preserved.
-        if (currentRequestId = tbcEverythingAdjustId)
-            _ClearTbcEverythingEditAdjustState()
-        Return
-    }
-
-    ; Resize the native results ListView directly so the search Edit1 never receives NumpadAdd as typed text.
-    if (_TryAutoFitEverythingResultsColumns(tbcEverythingAdjustHwnd))
-    {
-        ; Clear completed state only while this callback still owns the request slot so a newer request remains pending.
-        if (currentRequestId = tbcEverythingAdjustId)
-            _ClearTbcEverythingEditAdjustState(True)
-        Return
-    }
-
-    ; Stop if a newer request replaced this one during the send attempt so this stale callback cannot alter its state or timer.
-    if (currentRequestId != tbcEverythingAdjustId)
-        Return
-
-    ; Revalidate after the failed direct resize because its guarded checks may have outlived the original focus or request lifetime.
-    if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
-    {
-        _ClearTbcEverythingEditAdjustState()
-        Return
-    }
-
-    ; Retry briefly while Everything's results ListView/header are still settling.
-    if ((A_TickCount - tbcEverythingAdjustRequestedTick) < k_tbcEverythingAdjustMaxAgeMs) {
-        SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
-        Return
-    }
-
-    ; A valid Everything window without a ready native results ListView should not fall back to
-    ; Ctrl+NumpadAdd while Edit1 is focused, because that can type a literal "+" into search.
-    _ClearTbcEverythingEditAdjustState(True)
-Return
 
 KeyTrack() {
     global StopAutoFix, TimeOfLastHotkeyTyped
@@ -3732,23 +3543,15 @@ KeyTrack() {
     WinGetClass, currClass, ahk_id %activeHwnd%
     If (InStr(currClass, "EVERYTHING", True)) {
         StopAutoFix := True
-        ; Everything/Edit1 qualifies the key event, captures the exact
-        ; current search-box identity once, and lets the debounce timer resize
-        ; the native results ListView after the search text has had a moment
-        ; to settle.
-        if (!_TryRequestEverythingEditAdjust(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd))
-        {
-            if (!_IsDeferredWorkStillValid(activeHwnd, "Edit1"))
-                _ClearTbcEverythingEditAdjustState()
-        }
+        ; Fit once per qualifying typing tick without a deferred queue or
+        ; a search-field focus requirement. Native sizing preserves focus.
+        _TryRequestEverythingEditAdjust(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd)
         StopAutoFix := False
     }
     Else If (currClass == "XLMAIN") {
-        _ClearTbcEverythingEditAdjustState()
         StopAutoFix := True
     }
     Else {
-        _ClearTbcEverythingEditAdjustState()
         StopAutoFix := False
     }
 
