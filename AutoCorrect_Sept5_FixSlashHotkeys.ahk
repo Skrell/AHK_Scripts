@@ -26,7 +26,7 @@ RWin                     | Reset tracked word case and consume the standalone Wi
 ^+Esc                    | Launch System Informer.
 CapsLock                 | Send Delete and record the typing time.
 !a                       | Move to Home and reset hotstring recognition.
-^!o                      | Open the selected path through _OpenSelectedPath().
+^!o                      | Open a selected folder or select a file in Explorer.
 !s                       | Swap a selected boolean literal through _SwapSelectedBooleanLiteral().
 !;                       | Move to End and reset hotstring recognition.
 !+;                      | Select to End; a repeated press selects the whole line.
@@ -554,56 +554,12 @@ Global disableEnter                                          := False
 ; Tick count of the most recent hotkey-triggered send used by typing heuristics.
 Global TimeOfLastHotkeyTyped                                 := A_TickCount
 ; +----------------------------------------------------------------------------+
-; | Everything Edit1 Deferred Column Auto-Fit State                            |
-; | Debounces native results column sizing after a short typing pause           |
-; | and only while the same Everything Edit1 still owns focus.                  |
+; | Everything Native Column Auto-Fit State                                    |
+; | Result-refresh notifications trigger sizing after Everything updates.      |
+; | First activation retains immediate sizing and one failure-only retry.      |
 ; +----------------------------------------------------------------------------+
-; Results-window startup state keeps native sizing separate from the
-; Edit1 typing path so initial alignment never needs to move keyboard focus.
-Global everythingActivationAutoFitDeadlineTick               := 0
-; Results-window handle whose results control is awaiting creation.
-Global everythingActivationAutoFitHwnd                       := 0
-; Monotonic token prevents an older startup timer from acting on a newer window.
-Global everythingActivationAutoFitId                         := 0
-; Tick count records when this startup wait began for its bounded lifetime.
-Global everythingActivationAutoFitStartTick                  := 0
-; Optional trace identity keeps startup diagnostics separate from Explorer requests.
-Global everythingActivationAutoFitTraceRequestId             := ""
-; Small initial pause lets Everything create its results ListView before probing it.
-Global k_everythingActivationAutoFitInitialDelayMs           := 15
-; Short native-sizing retry interval minimizes the startup alignment delay.
-Global k_everythingActivationAutoFitRetryMs                  := 25
-; Bounded startup wait avoids retaining a request for an unresponsive Everything window.
-Global k_everythingActivationAutoFitTimeoutMs                := 750
-
-; Focused control name captured when Everything Edit1 auto-fit is queued so
-; the deferred send can require the same search field before firing.
-Global tbcEverythingAdjustCtrlNN                             := ""
-; Focused control class captured with the queued Everything auto-fit so the
-; flush step can require the same concrete control identity when available.
-Global tbcEverythingAdjustCtrlClass                          := ""
-; Focused control HWND captured when Everything auto-fit is queued so the flush
-; step can reject a later Edit1 from a different control instance.
-Global tbcEverythingAdjustCtrlHwnd                           := 0
-; Active Everything window captured for the deferred search-box auto-fit send.
-Global tbcEverythingAdjustHwnd                               := 0
-; Monotonic token incremented for each newer Everything Edit1 auto-fit request
-; so older timer callbacks can detect that typing already superseded them.
-Global tbcEverythingAdjustId                                 := 0
-; Tick count recorded when the Everything Edit1 auto-fit request was queued.
-Global tbcEverythingAdjustRequestedTick                      := 0
-; Source typing tick associated with the current Everything auto-fit request so
-; KeyTrack queues at most one deferred send per physical keypress burst update.
-Global tbcEverythingAdjustSourceTick                         := 0
-; Maximum lifetime for a deferred Everything Edit1 auto-fit request before it
-; is dropped as stale rather than sent into a newer typing context.
-Global k_tbcEverythingAdjustMaxAgeMs                         := 750
-; Short retry delay for the queued Everything Edit1 auto-fit timer while
-; waiting for Everything's native results control to become ready.
-Global k_tbcEverythingAdjustRetryMs                          := 40
-; Debounce interval after an Everything Edit1 typing event before attempting
-; native results sizing that preserves zero-width columns.
-Global k_tbcEverythingAdjustTypingQuietMs                    := 240
+; Results-refresh notification hook; installed after startup initialization.
+Global hEverythingResultsHook                               := 0
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -1545,6 +1501,14 @@ OnExit, UnhookHooks
 vdaInitd := InitVDA()
 comInitd := InitCOM_STA()
 accInitd := Acc_Init()
+
+; Observe EVENT_OBJECT_CREATE; the callback accepts only Everything ListView client refreshes.
+hEverythingResultsHook := DllCall("user32\SetWinEventHook", "UInt", 0x8000, "UInt", 0x8000
+    , "Ptr", 0, "Ptr", RegisterCallback("_OnEverythingResultsCreated")
+    , "UInt", 0, "UInt", 0, "UInt", 0, "Ptr")
+if (!hEverythingResultsHook) {
+    _DebugTrace_ExplorerCtrlAdd("everything_results_hook_failed", "winError=" . A_LastError, True)
+}
 
 SetTimer MouseTrack, 20
 SetTimer KeyTrack, 25
@@ -2662,8 +2626,6 @@ CancelTbcTypingFixes(invalidateSeq := False, resetDisableEnter := False) {
 CancelTbcTypingWorkForContextChange() {
     ; Cancel pending slash/Hoty rewrites and release Enter before using the new caret.
     CancelTbcTypingFixes(True, True)
-    ; Discard pending Everything Edit1 auto-fit work for the previous control.
-    _ClearTbcEverythingEditAdjustState()
     ; The next typed initial starts fresh; old text must not complete a new hotstring.
     _ResetPatternHotstringWordCase()
     Hotstring("Reset")
@@ -3377,8 +3339,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             sendCtrlAddTargetScan := GetSendCtrlAddTargetScan(hWnd, vWinClass)
 
         initFocusedCtrl := initFocusedCtrlForWait
-        ; Everything startup waits for its results ListView header instead of requiring
-        ; a focused control, which keeps its Edit1 search field untouched.
+        ; Everything's direct native activation attempt needs no focused control.
+        ; Skip focus polling so its search field remains untouched.
         if (!taskbarExplorerMoveMade && !(isFirstTrackedActivation && vWinProc == "Everything.exe")
          && initFocusedCtrl == "") {
             Loop, 99 {
@@ -3407,12 +3369,8 @@ OnWinActiveChange(hWinEventHook, vEvent, hWnd)
             _RequestExplorerCtrlAdd(hWnd, vWinClass, initFocusedCtrl, 0, "", False, True)
         }
         else if (isFirstTrackedActivation && vWinProc == "Everything.exe") {
-            ; Everything creates its results ListView asynchronously. Wait for the
-            ; results control and size its nonzero-width columns without focusing it.
-            everythingActivationTraceRequestId := k_debugTraceExplorerCtrlAddEnabled
-                ? "everything_activation_" . hWnd . "_" . A_TickCount
-                : ""
-            _RequestEverythingActivationAutoFit(hWnd, everythingActivationTraceRequestId)
+            ; Allow more startup time; newer results-update requests can replace this retry.
+            _TryAutoFitEverythingResultsColumnsWithRetry(hWnd, 100)
         } else if (!taskbarExplorerMoveMade) {
             ; tooltip, sent to %initFocusedCtrl%
             SendCtrlAdd(hWnd, vWinClass, initFocusedCtrl
@@ -3479,7 +3437,7 @@ WaitForFadeInStop(hwnd) {
 UnhookHooks:
     global gExiting
     global StopRecursion
-    global hActWin, hHookKbd, hHookMouse
+    global hActWin, hEverythingResultsHook, hHookKbd, hHookMouse
 
     if (gExiting) {
         return
@@ -3495,6 +3453,11 @@ UnhookHooks:
     if (hActWin) {
         DllCall("user32\UnhookWinEvent", "Ptr", hActWin)
         hActWin := 0
+    }
+
+    if (hEverythingResultsHook) {
+        DllCall("user32\UnhookWinEvent", "Ptr", hEverythingResultsHook)
+        hEverythingResultsHook := 0
     }
 
     if (hHookKbd) {
@@ -3596,7 +3559,7 @@ Return
 *s::Return
 *t::Return
 *u::Return
-*v::Return
+; *v::Return
 *w::Return
 *x::Return
 *y::Return
@@ -5809,8 +5772,8 @@ _SwapSelectedBooleanLiteral() {
     StopAutoFix := False
 Return
 
-; Open one highlighted Windows path without changing the selected text.
-; Preserve UNC prefixes while accepting forward or repeated slash separators.
+; Open a highlighted folder or select a highlighted file in Explorer.
+; Preserve the selected text and UNC prefixes; accept forward/repeated slashes.
 _OpenSelectedPath() {
     global StopAutoFix
 
@@ -5878,17 +5841,17 @@ _OpenSelectedPath() {
     }
 
     ; Pass the path separately to the Windows shell so spaces stay part of it.
-    ; Folders explicitly use Explorer; files use their registered open action.
+    ; Folders open directly; files open their parent folder with the file selected.
     if (InStr(pathAttrs, "D"))
         openResult := DllCall("shell32\ShellExecuteW", "Ptr", 0, "WStr", "open", "WStr", A_WinDir . "\explorer.exe", "WStr", """" . selectedPath . """", "Ptr", 0, "Int", 1, "Ptr")
     else
-        openResult := DllCall("shell32\ShellExecuteW", "Ptr", 0, "WStr", "open", "WStr", selectedPath, "Ptr", 0, "Ptr", 0, "Int", 1, "Ptr")
+        openResult := DllCall("shell32\ShellExecuteW", "Ptr", 0, "WStr", "open", "WStr", A_WinDir . "\explorer.exe", "WStr", "/select,""" . selectedPath . """", "Ptr", 0, "Int", 1, "Ptr")
 
     if (openResult <= 32)
         MsgBox, 48, Open selected path, % "Windows could not open:`n" . selectedPath . "`nShell error: " . openResult
 }
 
-; Ctrl+Alt+O opens the highlighted file or folder with Windows.
+; Ctrl+Alt+O opens a highlighted folder or selects a highlighted file in Explorer.
 ^!o::
     KeyWait, o, T0.25
     _OpenSelectedPath()
@@ -15278,67 +15241,63 @@ _TryAutoFitResolvedSysListView(hwndTop, targetCtrlNN, mode := "header_no_fill", 
     return AutoFitSysListViewColumns(listViewHwnd, mode, 75, failureInfo)
 }
 
-; Clear one pending Everything startup auto-fit request. expectedRequestId keeps a
-; stale timer callback from clearing a newer Everything window's request.
-_ClearEverythingActivationAutoFitState(expectedRequestId := 0) {
-    global everythingActivationAutoFitDeadlineTick
-    global everythingActivationAutoFitHwnd
-    global everythingActivationAutoFitId
-    global everythingActivationAutoFitStartTick
-    global everythingActivationAutoFitTraceRequestId
+; Queue sizing after the observed ListView client-created refresh signal, not on keypress.
+_OnEverythingResultsCreated(hookHwnd, eventId, listViewHwnd, objectId, childId, eventThread, eventTick) {
+    global gExiting
+    ; Coalesce notifications before the next timer pass without retaining a typing queue.
+    static queuedFit := ""
 
-    Critical, On
-    if (expectedRequestId && expectedRequestId != everythingActivationAutoFitId) {
-        Critical, Off
-        return False
+    ; WinEvent uses 32-bit fields; discard padding and restore signed object IDs.
+    eventId &= 0xFFFFFFFF
+    objectId := objectId << 32 >> 32
+    childId := childId << 32 >> 32
+    eventTick &= 0xFFFFFFFF
+    if (gExiting || eventId != 0x8000 || objectId != -4 || childId != 0 || !listViewHwnd) {
+        return
     }
-
-    SetTimer, FlushEverythingActivationAutoFit, Off
-    everythingActivationAutoFitDeadlineTick   := 0
-    everythingActivationAutoFitHwnd           := 0
-    everythingActivationAutoFitStartTick      := 0
-    everythingActivationAutoFitTraceRequestId := ""
-    Critical, Off
-    return True
+    if (GetWindowClassName(listViewHwnd) != "SysListView32") {
+        return
+    }
+    everythingHwnd := DllCall("user32\GetAncestor", "Ptr", listViewHwnd, "UInt", 2, "Ptr")
+    if (!IsForegroundWindow(everythingHwnd)
+        || !InStr(GetWindowClassName(everythingHwnd), "EVERYTHING", True)) {
+        return
+    }
+    WinGet, windowProc, ProcessName, ahk_id %everythingHwnd%
+    if (windowProc != "Everything.exe") {
+        return
+    }
+    if (IsObject(queuedFit)) {
+        SetTimer, % queuedFit, Delete
+    }
+    queuedFit := Func("_RunEverythingResultsAutoFit").Bind(everythingHwnd, listViewHwnd, eventTick)
+    SetTimer, % queuedFit, -1
 }
 
-; Start a bounded native auto-fit request for a new Everything window.
-; The timer waits for the results control without moving focus from Edit1.
-_RequestEverythingActivationAutoFit(everythingHwnd, traceRequestId := "") {
-    global everythingActivationAutoFitDeadlineTick
-    global everythingActivationAutoFitHwnd
-    global everythingActivationAutoFitId
-    global everythingActivationAutoFitStartTick
-    global everythingActivationAutoFitTraceRequestId
-    global k_everythingActivationAutoFitInitialDelayMs
-    global k_everythingActivationAutoFitTimeoutMs
+; Leave the event callback before sizing; reject replaced controls or a different active window.
+_RunEverythingResultsAutoFit(everythingHwnd, expectedListViewHwnd, eventTick) {
+    global gExiting
 
-    if (!everythingHwnd || !WinExist("ahk_id " . everythingHwnd))
-        return False
-
-    requestStartTick    := A_TickCount
-    requestDeadlineTick := requestStartTick + k_everythingActivationAutoFitTimeoutMs
-
-    Critical, On
-    SetTimer, FlushEverythingActivationAutoFit, Off
-    everythingActivationAutoFitId += 1
-    everythingActivationAutoFitDeadlineTick   := requestDeadlineTick
-    everythingActivationAutoFitHwnd           := everythingHwnd
-    everythingActivationAutoFitStartTick      := requestStartTick
-    everythingActivationAutoFitTraceRequestId := traceRequestId
-    SetTimer, FlushEverythingActivationAutoFit, % -k_everythingActivationAutoFitInitialDelayMs
-    Critical, Off
-
-    if (traceRequestId != "")
-        _DebugTrace_ExplorerCtrlAdd("everything_activation_started"
-            , "hwnd=" . everythingHwnd . " timeoutMs=" . k_everythingActivationAutoFitTimeoutMs
-            , False, traceRequestId)
-    return True
+    if (gExiting || !IsForegroundWindow(everythingHwnd)) {
+        return
+    }
+    try {
+        ControlGet, listViewHwnd, Hwnd,, SysListView321, ahk_id %everythingHwnd%
+    } catch {
+        return
+    }
+    if (!listViewHwnd || listViewHwnd != expectedListViewHwnd) {
+        return
+    }
+    _DebugTrace_ExplorerCtrlAdd("everything_results_update_ready"
+        , "hwnd=" . everythingHwnd . " listViewHwnd=" . listViewHwnd . " eventTick=" . eventTick
+        , False, "everything_autofit_" . everythingHwnd)
+    _TryAutoFitEverythingResultsColumnsWithRetry(everythingHwnd)
 }
 
 ; Auto-fit Everything's nonzero-width results columns without moving focus.
-; Native ListView messages must be enabled in Everything. Existing bounded timers
-; retry native failures without falling back to a command or keyboard sizing.
+; Native ListView messages must be enabled in Everything. Each call attempts
+; sizing once without command or keyboard fallbacks.
 _TryAutoFitEverythingResultsColumns(everythingHwnd, ByRef failureInfo := "") {
     global k_nativeSysListViewColumnAutoFitMode
 
@@ -15382,6 +15341,30 @@ _TryAutoFitEverythingResultsColumns(everythingHwnd, ByRef failureInfo := "") {
         , "hwnd=" . everythingHwnd . " succeeded=" . autoFitSucceeded
         . " mode=" . k_nativeSysListViewColumnAutoFitMode . failureTrace
         , False, traceRequestId)
+    return autoFitSucceeded
+}
+
+; Size immediately; newer requests replace the single failure-only retry.
+; Activation may wait longer before retrying; results updates keep the 25 ms default.
+_TryAutoFitEverythingResultsColumnsWithRetry(everythingHwnd, retryDelayMs := 25) {
+    ; Keep one pending timer and reject older calls that resume after a newer request.
+    static requestId := 0, retryCallback := ""
+
+    requestId += 1
+    currentRequestId := requestId
+    if (IsObject(retryCallback)) {
+        SetTimer, % retryCallback, Delete
+        retryCallback := ""
+    }
+    autoFitSucceeded := _TryAutoFitEverythingResultsColumns(everythingHwnd)
+    ; Native sizing can yield, so a superseded call must not rearm an older retry.
+    if (!autoFitSucceeded && currentRequestId = requestId) {
+        retryCallback := Func("_TryAutoFitEverythingResultsColumns").Bind(everythingHwnd)
+        SetTimer, % retryCallback, % -retryDelayMs
+        _DebugTrace_ExplorerCtrlAdd("everything_autofit_retry_queued"
+            , "hwnd=" . everythingHwnd . " delayMs=" . retryDelayMs
+            , False, "everything_autofit_" . everythingHwnd)
+    }
     return autoFitSucceeded
 }
 
@@ -15452,7 +15435,6 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
         traceRequestId        := resolvedTarget.requestId
 
     traceThisCall             := k_debugTraceExplorerCtrlAddEnabled && traceRequestId != ""
-    traceEverythingActivation := traceThisCall && (SubStr(traceRequestId, 1, 22) == "everything_activation_")
     resolvedCtrl              := hasResolvedTarget ? resolvedTarget.ctrlNN : ""
     resolvedHwnd              := hasResolvedTarget ? resolvedTarget.hwnd : 0
 
@@ -15594,16 +15576,6 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
             Return
         }
 
-        targetCtrlHwnd := 0
-        if traceEverythingActivation {
-            ControlGet, targetCtrlHwnd, Hwnd,, %TargetControl%, ahk_id %initTargetHwnd%
-            _DebugTrace_ExplorerCtrlAdd("everything_activation_target_resolved"
-                                , "targetCtrlNN=[" . TargetControl . "]"
-                                . " targetCtrlHwnd=" . targetCtrlHwnd
-                                . " targetResolutionElapsedMs=" . (A_TickCount - targetResolutionStartTick)
-                                . " totalElapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
-                                , False, traceRequestId)
-        }
 
         ; Native report-view ListViews accept column-width messages directly,
         ; so their columns can be adjusted without changing keyboard focus or
@@ -15645,46 +15617,17 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                                         . " targetCtrl=[" . TargetControl . "]"
                                         . nativeAutoFitFailureTrace
                                         , False, traceRequestId)
-                if traceEverythingActivation
-                    _DebugTrace_ExplorerCtrlAdd("everything_activation_native_autofit"
-                                        , "succeeded=" . nativeAutoFitSucceeded
-                                        . " elapsedMs=" . (A_TickCount - nativeAutoFitStartTick)
-                                        . " mode=" . k_nativeSysListViewColumnAutoFitMode
-                                        . " targetCtrlNN=[" . TargetControl . "]"
-                                        . " targetCtrlHwnd=" . targetCtrlHwnd
-                                        . nativeAutoFitFailureTrace
-                                        , False, traceRequestId)
             if nativeAutoFitSucceeded {
                 if traceThisCall
                     _DebugTrace_ExplorerCtrlAdd("sendctrladd_complete"
                                         , "outcome=native_autofit totalElapsedMs="
                                         . (A_TickCount - sendCtrlAddStartTick), False, traceRequestId)
-                if traceEverythingActivation
-                    _DebugTrace_ExplorerCtrlAdd("everything_activation_complete"
-                                        , "outcome=native_autofit"
-                                        . " targetCtrlNN=[" . TargetControl . "]"
-                                        . " targetCtrlHwnd=" . targetCtrlHwnd
-                                        . " totalElapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
-                                        , True, traceRequestId)
                 Return
             }
             ; Native failures must not reach a shortcut that can resize hidden columns.
             Return
         }
 
-        if traceEverythingActivation {
-            nativeFallbackReason := !k_useNativeSysListViewColumnAutoFit
-                ? "native_autofit_disabled"
-                : (InStr(TargetControl, "SysListView32", True)
-                    ? "native_autofit_failed"
-                    : "target_not_syslistview32")
-            _DebugTrace_ExplorerCtrlAdd("everything_activation_focus_fallback"
-                                , "reason=" . nativeFallbackReason
-                                . " targetCtrlNN=[" . TargetControl . "]"
-                                . " targetCtrlHwnd=" . targetCtrlHwnd
-                                . " totalElapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
-                                , False, traceRequestId)
-        }
 
         if (TargetControl == "DirectUIHWND3" && (lClassCheck == "#32770" || lClassCheck == "CabinetWClass")) {
             if (waitForExplorerLoad) {
@@ -15965,13 +15908,6 @@ SendCtrlAdd(initTargetHwnd := "", initTargetClass := "", initFocusedCtrlNN := ""
                         , False, traceRequestId)
                 }
 
-                if traceEverythingActivation
-                    _DebugTrace_ExplorerCtrlAdd("everything_activation_complete"
-                        , "outcome=ctrl_numpadadd"
-                        . " targetCtrlNN=[" . TargetControl . "]"
-                        . " targetCtrlHwnd=" . targetCtrlHwnd
-                        . " totalElapsedMs=" . (A_TickCount - sendCtrlAddStartTick)
-                        , True, traceRequestId)
             }
         }
         else if traceThisCall
@@ -17560,156 +17496,6 @@ ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6, targetWin
     return true
 }
 
-; Clears the queued Everything Edit1 auto-fit state so context changes or a
-; completed fit do not leave a stale deferred column-fit request behind.
-_ClearTbcEverythingEditAdjustState(preserveSourceTick := False) {
-    global tbcEverythingAdjustCtrlNN
-    global tbcEverythingAdjustCtrlClass
-    global tbcEverythingAdjustCtrlHwnd
-    global tbcEverythingAdjustHwnd
-    global tbcEverythingAdjustId
-    global tbcEverythingAdjustRequestedTick
-    global tbcEverythingAdjustSourceTick
-
-    tbcEverythingAdjustCtrlNN     := ""
-    tbcEverythingAdjustCtrlClass  := ""
-    tbcEverythingAdjustCtrlHwnd   := 0
-    tbcEverythingAdjustHwnd       := 0
-    tbcEverythingAdjustId         := 0
-    tbcEverythingAdjustRequestedTick := 0
-    if (!preserveSourceTick)
-        tbcEverythingAdjustSourceTick := 0
-}
-
-; Queues a deferred Everything Edit1 column auto-fit request:
-; capture or accept the current search-box focus context, stamp the latest
-; typing tick, and let a short timer coalesce rapid typing before native sizing.
-_RequestEverythingEditAdjust(sourceTick, capturedHwnd := 0, capturedCtrlNN := "", capturedCtrlHwnd := 0, capturedCtrlClass := "") {
-    global k_tbcEverythingAdjustTypingQuietMs
-    global tbcEverythingAdjustCtrlNN
-    global tbcEverythingAdjustCtrlClass
-    global tbcEverythingAdjustCtrlHwnd
-    global tbcEverythingAdjustHwnd
-    global tbcEverythingAdjustId
-    global tbcEverythingAdjustRequestedTick
-    global tbcEverythingAdjustSourceTick
-
-    if (!sourceTick)
-        return false
-
-    targetHwnd      := capturedHwnd
-    targetCtrlNN    := capturedCtrlNN
-    targetCtrlHwnd  := capturedCtrlHwnd
-    targetCtrlClass := capturedCtrlClass
-
-    if (!targetHwnd) {
-        if !CaptureActiveFocusSnapshot(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
-            return false
-    }
-
-    if (!targetHwnd || targetCtrlNN != "Edit1")
-        return false
-
-    tbcEverythingAdjustHwnd       := targetHwnd
-    tbcEverythingAdjustCtrlNN     := targetCtrlNN
-    tbcEverythingAdjustCtrlHwnd   := targetCtrlHwnd
-    tbcEverythingAdjustCtrlClass  := targetCtrlClass
-    tbcEverythingAdjustId += 1
-    tbcEverythingAdjustRequestedTick := A_TickCount
-    tbcEverythingAdjustSourceTick := sourceTick
-    SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustTypingQuietMs
-    return true
-}
-
-; Returns true only for key events that should arm Everything's deferred
-; search-box auto-fit path. Keep this trigger list separate from KeyTrack() so
-; the queueing decision is documented once and can be tuned in one place.
-_IsEverythingEditAdjustTrigger(hotkey) {
-    global k_keys
-    global k_numbers
-
-    if (hotkey = "" || hotkey = "Enter" || hotkey = "LButton" || _IsUntrackedAltLetterHotkey(hotkey))
-        return false
-
-    hotkeyKey := SubStr(hotkey, 2)
-    return (   InStr(k_keys, hotkeyKey, False)
-            || InStr(k_numbers, hotkeyKey, False)
-            || hotkey == "~:"
-            || hotkey == "~/"
-            || hotkey == "~Space"
-            || hotkey == "CapsLock"
-            || hotkey == "~Backspace")
-}
-
-; KeyTrack() queue helper for Everything Edit1:
-; allow one deferred auto-fit request per typing tick, require a qualifying
-; trigger hotkey, capture the exact current Edit1 identity once, and then hand
-; that context to the shared deferred-send queue.
-_TryRequestEverythingEditAdjust(sourceTick, hotkey, activeHwnd := 0) {
-    global tbcEverythingAdjustSourceTick
-
-    ; Reject a missing or already-handled typing tick so one physical event cannot schedule duplicate adjustment requests.
-    if (!sourceTick || tbcEverythingAdjustSourceTick = sourceTick)
-        return false
-
-    ; Ignore hotkeys that do not edit Everything's search text because they do not require a deferred column adjustment.
-    if (!_IsEverythingEditAdjustTrigger(hotkey))
-        return false
-
-    ; Require an exact active-window and focused-control snapshot so deferred work is never armed for an ambiguous target.
-    if !CaptureActiveFocusSnapshot(targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass, activeHwnd)
-        return false
-
-    ; Restrict this typing-driven adjustment to Everything's Edit1 search field so other focused controls remain unaffected.
-    if (targetCtrlNN != "Edit1")
-        return false
-
-    return _RequestEverythingEditAdjust(sourceTick, targetHwnd, targetCtrlNN, targetCtrlHwnd, targetCtrlClass)
-}
-
-; Everything Edit1 tbc-work validator:
-; require the same active search box, the same request token, and when possible
-; the same exact control HWND/class before deferred native column sizing runs.
-_IsTbcEverythingEditAdjustStillValid(expectedId := 0) {
-    global k_tbcEverythingAdjustMaxAgeMs
-    global tbcEverythingAdjustCtrlNN
-    global tbcEverythingAdjustCtrlClass
-    global tbcEverythingAdjustCtrlHwnd
-    global tbcEverythingAdjustHwnd
-    global tbcEverythingAdjustId
-    global tbcEverythingAdjustRequestedTick
-
-    currentId := tbcEverythingAdjustId
-    if (!expectedId)
-        expectedId := currentId
-
-    ; Reject replaced, expired, or retargeted work so a stale deferred callback cannot adjust the wrong window or control.
-    if !_IsDeferredWorkStillValid(tbcEverythingAdjustHwnd, tbcEverythingAdjustCtrlNN, expectedId, currentId, tbcEverythingAdjustRequestedTick, k_tbcEverythingAdjustMaxAgeMs)
-        return false
-
-    ; Accept the basic window/ClassNN validation when no exact control HWND or class metadata was captured for comparison.
-    if (!tbcEverythingAdjustCtrlHwnd && tbcEverythingAdjustCtrlClass = "")
-        return true
-
-    ; Capture the current active-window and focused-control identity so the saved exact target metadata can be revalidated.
-    if !TryCaptureActiveFocusSnapshotFull(tbcEverythingAdjustHwnd, currentCtrlNN, currentCtrlHwnd, currentCtrlClass)
-        return false
-
-    ; Reject a different focused ClassNN so the deferred adjustment remains tied to the originally focused control slot.
-    if (tbcEverythingAdjustCtrlNN != "" && currentCtrlNN != tbcEverythingAdjustCtrlNN)
-        return false
-
-    ; Reject a different focused HWND so a replacement control with the same ClassNN cannot inherit the pending adjustment.
-    if (tbcEverythingAdjustCtrlHwnd && currentCtrlHwnd != tbcEverythingAdjustCtrlHwnd)
-        return false
-
-    ; Reject a changed control class so the pending adjustment cannot run against a different kind of focused control.
-    if (tbcEverythingAdjustCtrlClass != "" && currentCtrlClass != tbcEverythingAdjustCtrlClass)
-        return false
-
-    return true
-}
-
 ; Shared guarded Ctrl+NumpadAdd wrapper:
 ; re-check any queued work token, optional focused control, optional typing-quiet
 ; gate, and then delegate to the low-level send helper only if the action is
@@ -17727,155 +17513,21 @@ _SendCtrlNumpadAddIfStillValid(syncPassCount := 6, guardRequestId := 0, guardQui
     return SendCtrlNumpadAdd(syncPassCount, guardRequestId, guardQuietMs, guardHwnd)
 }
 
-; Retry native sizing of Everything's nonzero-width results columns,
-; without moving keyboard focus away from its Edit1 search box.
-FlushEverythingActivationAutoFit:
-    ; Copy one request atomically so a newer activation cannot leave this callback with mixed state.
-    Critical, On
-    currentRequestId    := everythingActivationAutoFitId
-    requestDeadlineTick := everythingActivationAutoFitDeadlineTick
-    requestHwnd         := everythingActivationAutoFitHwnd
-    requestStartTick    := everythingActivationAutoFitStartTick
-    traceRequestId      := everythingActivationAutoFitTraceRequestId
-    Critical, Off
-
-    ; A previously armed timer can fire after its request was cleared.
-    if (!currentRequestId || !requestHwnd)
-        Return
-
-    ; Do not resize a window after the user has changed to another application.
-    if !IsForegroundWindow(requestHwnd) {
-        if (_ClearEverythingActivationAutoFitState(currentRequestId) && traceRequestId != "")
-            _DebugTrace_ExplorerCtrlAdd("everything_activation_cancelled"
-                , "reason=window_not_foreground hwnd=" . requestHwnd
-                , False, traceRequestId)
-        Return
-    }
-
-    ; Wait for the results control, then size only its nonzero-width columns.
-    attemptStartTick := A_TickCount
-    failureInfo      := ""
-    autoFitSucceeded := _TryAutoFitEverythingResultsColumns(requestHwnd, failureInfo)
-    attemptElapsedMs := A_TickCount - attemptStartTick
-
-    ; Native sizing can yield while Everything is creating controls; abandon a callback
-    ; replaced by another activation rather than clearing or rearming its newer request.
-    Critical, On
-    requestStillCurrent := (currentRequestId = everythingActivationAutoFitId
-                         && requestHwnd = everythingActivationAutoFitHwnd)
-    Critical, Off
-    if (!requestStillCurrent)
-        Return
-
-    failureStage := (IsObject(failureInfo) && failureInfo.HasKey("stage")) ? failureInfo.stage : "unknown"
-    failureWinError := (IsObject(failureInfo) && failureInfo.HasKey("winError")) ? failureInfo.winError : ""
-
-    if (autoFitSucceeded) {
-        totalElapsedMs := A_TickCount - requestStartTick
-        if (_ClearEverythingActivationAutoFitState(currentRequestId) && traceRequestId != "")
-            _DebugTrace_ExplorerCtrlAdd("everything_activation_native_completed"
-                , "hwnd=" . requestHwnd . " attemptElapsedMs=" . attemptElapsedMs
-                . " totalElapsedMs=" . totalElapsedMs
-                , False, traceRequestId)
-        Return
-    }
-
-    ; Stop after the bounded startup wait; this native results path
-    ; never falls back to focus-changing Ctrl+NumpadAdd while Edit1 may be active.
-    if (A_TickCount >= requestDeadlineTick) {
-        totalElapsedMs := A_TickCount - requestStartTick
-        if (_ClearEverythingActivationAutoFitState(currentRequestId) && traceRequestId != "")
-            _DebugTrace_ExplorerCtrlAdd("everything_activation_timeout"
-                , "hwnd=" . requestHwnd . " lastFailure=" . failureStage
-                . " winError=" . failureWinError
-                . " attemptElapsedMs=" . attemptElapsedMs . " totalElapsedMs=" . totalElapsedMs
-                , False, traceRequestId)
-        Return
-    }
-
-    ; Recheck promptly while the control is being created, without scheduling beyond the deadline.
-    retryDelayMs := Min(k_everythingActivationAutoFitRetryMs , Max(1, requestDeadlineTick - A_TickCount))
-    Critical, On
-    if (currentRequestId = everythingActivationAutoFitId && requestHwnd = everythingActivationAutoFitHwnd)
-        SetTimer, FlushEverythingActivationAutoFit, % -retryDelayMs
-    Critical, Off
-Return
-
-; Deferred Everything Edit1 native column-fit flush:
-; after a short debounce, confirm the same search field still owns focus, then
-; size nonzero-width results columns without keyboard injection.
-FlushTbcEverythingEditAdjust:
-    currentRequestId := tbcEverythingAdjustId
-    ; Stop when no deferred request or target window remains because a previously armed timer may fire after state was cleared.
-    if (!currentRequestId || !tbcEverythingAdjustHwnd)
-        Return
-
-    ; Reject an invalid target, token, or request age before waiting or sending so stale work cannot reach the wrong context.
-    if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
-    {
-        ; Clear invalid state only while this callback still owns the request slot so a newer replacement request is preserved.
-        if (currentRequestId = tbcEverythingAdjustId)
-            _ClearTbcEverythingEditAdjustState()
-        Return
-    }
-
-    ; Size nonzero-width results columns without injecting keys into Edit1.
-    if (_TryAutoFitEverythingResultsColumns(tbcEverythingAdjustHwnd))
-    {
-        ; Clear completed state only while this callback still owns the request slot so a newer request remains pending.
-        if (currentRequestId = tbcEverythingAdjustId)
-            _ClearTbcEverythingEditAdjustState(True)
-        Return
-    }
-
-    ; Stop if a newer request replaced this one during the send attempt so this stale callback cannot alter its state or timer.
-    if (currentRequestId != tbcEverythingAdjustId)
-        Return
-
-    ; Revalidate after failed native sizing; it may have outlived the original focus or request lifetime.
-    if (!_IsTbcEverythingEditAdjustStillValid(currentRequestId))
-    {
-        _ClearTbcEverythingEditAdjustState()
-        Return
-    }
-
-    ; Retry briefly while Everything's native results control is not ready.
-    if ((A_TickCount - tbcEverythingAdjustRequestedTick) < k_tbcEverythingAdjustMaxAgeMs) {
-        SetTimer, FlushTbcEverythingEditAdjust, % -k_tbcEverythingAdjustRetryMs
-        Return
-    }
-
-    ; A valid Everything window whose native sizing fails should not fall back to
-    ; Ctrl+NumpadAdd while Edit1 is focused, because that can type a literal "+" into search.
-    _ClearTbcEverythingEditAdjustState(True)
-Return
-
 KeyTrack() {
-    global StopAutoFix, TimeOfLastHotkeyTyped
+    global StopAutoFix
 
     ListLines, Off
 
     activeHwnd := WinExist("A")
     WinGetClass, currClass, ahk_id %activeHwnd%
     if (InStr(currClass, "EVERYTHING", True)) {
-        StopAutoFix := True
-        ; Everything/Edit1 qualifies the key event, captures the exact
-        ; current search-box identity once, and lets the debounce timer resize
-        ; nonzero-width results columns after the search text has had a moment
-        ; to settle.
-        if (!_TryRequestEverythingEditAdjust(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd))
-        {
-            if (!_IsDeferredWorkStillValid(activeHwnd, "Edit1"))
-                _ClearTbcEverythingEditAdjustState()
-        }
+        ; Native column sizing follows results-created notifications instead of keypresses.
         StopAutoFix := False
     }
     else if (currClass == "XLMAIN") {
-        _ClearTbcEverythingEditAdjustState()
         StopAutoFix := True
     }
     else {
-        _ClearTbcEverythingEditAdjustState()
         StopAutoFix := False
     }
 
