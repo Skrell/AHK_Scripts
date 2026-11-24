@@ -146,12 +146,15 @@ Global lastHotkeyTyped                                     := ""
 ; Tick count of the most recent hotkey-triggered send used by typing heuristics.
 Global TimeOfLastHotkeyTyped                               := A_TickCount
 ; +----------------------------------------------------------------------------+
-; | Everything Direct Column Auto-Fit State                                    |
-; | Tracks the last typing event sized through native ListView messages so    |
-; | the polling timer does not keep resizing an idle result list.              |
+; | Everything Native Column Auto-Fit State                                    |
+; | Result-refresh notifications trigger sizing after Everything updates.      |
+; | First activation retains immediate sizing and one failure-only retry.      |
 ; +----------------------------------------------------------------------------+
-; Latest typing tick already handled by Everything's direct column auto-fit.
-Global tbcEverythingAdjustSourceTick                       := 0
+; Enable buffered native-sizing diagnostics; disable to skip trace collection.
+Global k_debugTraceEverythingAutoFitEnabled                 := True
+
+; Results-refresh notification hook; installed after startup initialization.
+Global hEverythingResultsHook                              := 0
 ; +----------------------------------------------------------------------------+
 ; | Explorer Column Auto-Fit Deferred Wheel State                              |
 ; | Tracks quiet-time gating, supersession tokens, and short-lived target      |
@@ -241,7 +244,8 @@ Global k_keys                                              := "abcdefghijklmnopq
 Global k_numbers                                           := "0123456789"
 Global k_DoubleClickTime                                   := DllCall("GetDoubleClickTime")
 Global k_SingleClickTime                                   := floor(DllCall("GetDoubleClickTime") * 0.5)
-; Global hActWin                                           := DllCall("user32\SetWinEventHook", UInt,0x3, UInt,0x3, Ptr,0, Ptr,RegisterCallback("OnWinActiveChange"), UInt,0, UInt,0, UInt,0, Ptr)
+; Foreground-event hook is installed after initialization for Everything sizing only.
+Global hActWin                                             := 0
 Global UIA                                                 := UIA_Interface() ; Initialize UIA interface
 ; Turn key blocking ON/OFF
 Global StopRecursion                                       := False
@@ -375,6 +379,23 @@ if (!hHookKbd)
 }
 
 OnExit, UnhookHooks
+
+; Watch foreground changes; the callback ignores applications other than Everything.
+hActWin := DllCall("user32\SetWinEventHook", "UInt", 0x3, "UInt", 0x3, "Ptr", 0
+    , "Ptr", RegisterCallback("_OnEverythingActiveChange"), "UInt", 0, "UInt", 0, "UInt", 0, "Ptr")
+if (!hActWin) {
+    _DebugTrace_EverythingAutoFit("everything_activation_hook_failed", "winError=" . A_LastError)
+}
+; Observe EVENT_OBJECT_CREATE; accept only Everything ListView client refreshes.
+hEverythingResultsHook := DllCall("user32\SetWinEventHook", "UInt", 0x8000, "UInt", 0x8000
+    , "Ptr", 0, "Ptr", RegisterCallback("_OnEverythingResultsCreated")
+    , "UInt", 0, "UInt", 0, "UInt", 0, "Ptr")
+if (!hEverythingResultsHook) {
+    _DebugTrace_EverythingAutoFit("everything_results_hook_failed", "winError=" . A_LastError)
+}
+
+; Include an Everything window that was already active when this script started.
+_OnEverythingActiveChange(0, 0x3, WinExist("A"), 0, 0, 0, 0)
 
 SetTimer KeyTrack, 25
 
@@ -1583,7 +1604,7 @@ DoNothing() {
 UnhookHooks:
     global gExiting
     global StopRecursion
-    global hActWin, hHookKbd, hHookMouse
+    global hActWin, hEverythingResultsHook, hHookKbd, hHookMouse
 
     if (gExiting) {
         return
@@ -1592,10 +1613,16 @@ UnhookHooks:
     gExiting      := True
     StopRecursion := True
     Thread, NoTimers, True
+    _DebugTrace_EverythingAutoFit()
 
     if (hActWin) {
         DllCall("user32\UnhookWinEvent", "Ptr", hActWin)
         hActWin := 0
+    }
+
+    if (hEverythingResultsHook) {
+        DllCall("user32\UnhookWinEvent", "Ptr", hEverythingResultsHook)
+        hEverythingResultsHook := 0
     }
 
     if (hHookKbd) {
@@ -2241,24 +2268,214 @@ _IsUIASelectedTextTarget(windowId) {
     return (IsWindowClassName(windowId, "MozillaWindowClass")
         || IsWindowProcessName(windowId, "notepad.exe"))
 }
-; Auto-fit Everything's native results ListView without changing keyboard focus
-; or injecting Ctrl+NumpadAdd into the live search-box typing stream.
-_TryAutoFitEverythingResultsColumns(everythingHwnd, mode := "header_no_fill") {
-    if (!everythingHwnd || !IsForegroundWindow(everythingHwnd))
-        return False
+; Buffer native-sizing trace records; a no-argument call flushes the buffer.
+; Logging failures never change the sizing result or interrupt script cleanup.
+_DebugTrace_EverythingAutoFit(eventName := "", details := "") {
+    global k_debugTraceEverythingAutoFitEnabled
+    static buffer := "", flushPending := False
+    static flushDelayMs := 100, maxBufferChars := 32768
 
+    if (eventName != "") {
+        if (!k_debugTraceEverythingAutoFitEnabled) {
+            return
+        }
+        details := StrReplace(StrReplace(details, "`r", "<CR>"), "`n", "<LF>")
+        traceLine := A_Now . "." . A_MSec . " tick=" . A_TickCount
+            . " event=" . eventName . " " . details . "`r`n"
+        priorCritical := A_IsCritical
+        Critical, On
+        buffer .= traceLine
+        if (StrLen(buffer) > maxBufferChars) {
+            buffer := SubStr(buffer, 1 - maxBufferChars)
+        }
+        if (!flushPending) {
+            flushPending := True
+            SetTimer, _DebugTrace_EverythingAutoFit, % -flushDelayMs
+        }
+        Critical, %priorCritical%
+        return
+    }
+
+    priorCritical := A_IsCritical
+    Critical, On
+    traceChunk := buffer
+    buffer := ""
+    flushPending := False
+    Critical, %priorCritical%
+    if (traceChunk = "") {
+        return
+    }
+    tracePath := A_ScriptDir . "\AutoCorrect_EverythingNativeListViewTrace.log"
+    try {
+        FileAppend, %traceChunk%, %tracePath%, UTF-8
+    } catch {
+        priorCritical := A_IsCritical
+        Critical, On
+        buffer := SubStr(traceChunk . buffer, 1 - maxBufferChars)
+        Critical, %priorCritical%
+    }
+}
+
+; Size each newly encountered Everything window; discard destroyed tracked handles.
+_OnEverythingActiveChange(hookHwnd, eventId, windowHwnd, objectId, childId, eventThreadId, eventTime) {
+    global gExiting, StopRecursion
+    ; Retain only live Everything windows so later activations do not repeatedly resize them.
+    static trackedHwnds := []
+
+    ; RegisterCallback may pad WinEvent's 32-bit event value on a 64-bit interpreter.
+    eventId &= 0xFFFFFFFF
+    if (gExiting || StopRecursion || eventId != 0x3 || !windowHwnd) {
+        return
+    }
+    alreadyTracked := False
+    trackedIdx := 1
+    while (trackedIdx <= trackedHwnds.Length()) {
+        trackedHwnd := trackedHwnds[trackedIdx]
+        if (!DllCall("user32\IsWindow", "Ptr", trackedHwnd, "Int")) {
+            trackedHwnds.RemoveAt(trackedIdx)
+            continue
+        }
+        if (trackedHwnd = windowHwnd) {
+            alreadyTracked := True
+        }
+        trackedIdx += 1
+    }
+    if (alreadyTracked || !IsForegroundWindow(windowHwnd)) {
+        return
+    }
+    WinGet, windowProc, ProcessName, ahk_id %windowHwnd%
+    if (windowProc != "Everything.exe") {
+        return
+    }
+    trackedHwnds.Push(windowHwnd)
+    _DebugTrace_EverythingAutoFit("everything_activation_first", "hwnd=" . windowHwnd)
+    _TryAutoFitEverythingResultsColumnsWithRetry(windowHwnd, "header_no_fill", 100)
+}
+
+; Queue sizing after the observed ListView client-created refresh signal, not on keypress.
+_OnEverythingResultsCreated(hookHwnd, eventId, listViewHwnd, objectId, childId, eventThread, eventTick) {
+    global gExiting
+    ; Coalesce notifications before the next timer pass without retaining a typing queue.
+    static queuedFit := ""
+
+    ; WinEvent uses 32-bit fields; discard padding and restore signed object IDs.
+    eventId &= 0xFFFFFFFF
+    objectId := objectId << 32 >> 32
+    childId := childId << 32 >> 32
+    eventTick &= 0xFFFFFFFF
+    if (gExiting || eventId != 0x8000 || objectId != -4 || childId != 0 || !listViewHwnd) {
+        return
+    }
+    if (GetWindowClassName(listViewHwnd) != "SysListView32") {
+        return
+    }
+    everythingHwnd := DllCall("user32\GetAncestor", "Ptr", listViewHwnd, "UInt", 2, "Ptr")
+    if (!IsForegroundWindow(everythingHwnd)
+        || !InStr(GetWindowClassName(everythingHwnd), "EVERYTHING", True)) {
+        return
+    }
+    WinGet, windowProc, ProcessName, ahk_id %everythingHwnd%
+    if (windowProc != "Everything.exe") {
+        return
+    }
+    if (IsObject(queuedFit)) {
+        SetTimer, % queuedFit, Delete
+    }
+    queuedFit := Func("_RunEverythingResultsAutoFit").Bind(everythingHwnd, listViewHwnd, eventTick)
+    SetTimer, % queuedFit, -1
+}
+
+; Leave the event callback before sizing; reject replaced controls or a different active window.
+_RunEverythingResultsAutoFit(everythingHwnd, expectedListViewHwnd, eventTick) {
+    global gExiting
+
+    if (gExiting || !IsForegroundWindow(everythingHwnd)) {
+        return
+    }
     try {
         ControlGet, listViewHwnd, Hwnd,, SysListView321, ahk_id %everythingHwnd%
     } catch {
-        return False
+        return
     }
-    if (!listViewHwnd || !DllCall("user32\IsChild", "Ptr", everythingHwnd, "Ptr", listViewHwnd, "Int"))
-        return False
-
-    return AutoFitSysListViewColumns(listViewHwnd, mode)
+    if (!listViewHwnd || listViewHwnd != expectedListViewHwnd) {
+        return
+    }
+    _DebugTrace_EverythingAutoFit("everything_results_update_ready"
+        , "hwnd=" . everythingHwnd . " listViewHwnd=" . listViewHwnd . " eventTick=" . eventTick)
+    _TryAutoFitEverythingResultsColumnsWithRetry(everythingHwnd)
 }
 
-; Auto-fit every column in a native SysListView32 report view without requiring
+; Auto-fit Everything's native results ListView without changing keyboard focus
+; or injecting Ctrl+NumpadAdd into the live search-box typing stream.
+; Preserve the optional mode argument; failureInfo exposes precise failure details.
+_TryAutoFitEverythingResultsColumns(everythingHwnd, mode := "header_no_fill", ByRef failureInfo := "") {
+    global k_debugTraceEverythingAutoFitEnabled
+    failureInfo := ""
+    autoFitSucceeded := False
+    traceStartTick := k_debugTraceEverythingAutoFitEnabled ? A_TickCount : 0
+    try {
+        if (!everythingHwnd) {
+            failureInfo := {stage: "missing_target_window"}
+            return False
+        }
+        if (!IsForegroundWindow(everythingHwnd)) {
+            failureInfo := {stage: "target_window_not_foreground"}
+            return False
+        }
+        try {
+            ControlGet, listViewHwnd, Hwnd,, SysListView321, ahk_id %everythingHwnd%
+        } catch error {
+            failureInfo := {stage: "results_listview_lookup_exception", errorMessage: error.Message}
+            return False
+        }
+        if (!listViewHwnd) {
+            failureInfo := {stage: "results_listview_not_found"}
+            return False
+        }
+        if (!DllCall("user32\IsChild", "Ptr", everythingHwnd, "Ptr", listViewHwnd, "Int")) {
+            failureInfo := {stage: "results_listview_not_owned", listViewHwnd: listViewHwnd}
+            return False
+        }
+        autoFitSucceeded := AutoFitSysListViewColumns(listViewHwnd, mode, 75, failureInfo)
+        return autoFitSucceeded
+    } finally {
+        if (k_debugTraceEverythingAutoFitEnabled) {
+            details := "hwnd=" . everythingHwnd . " succeeded=" . autoFitSucceeded
+                . " mode=" . mode . " elapsedMs=" . (A_TickCount - traceStartTick)
+            if (IsObject(failureInfo)) {
+                for failureKey, failureValue in failureInfo {
+                    details .= " " . failureKey . "=" . failureValue
+                }
+            }
+            _DebugTrace_EverythingAutoFit("everything_autofit_native_result", details)
+        }
+    }
+}
+
+; Size immediately; newer requests replace the single failure-only retry.
+; Preserve mode as the second argument; activation may use a longer third-argument delay.
+_TryAutoFitEverythingResultsColumnsWithRetry(everythingHwnd, mode := "header_no_fill", retryDelayMs := 25) {
+    ; Reject older calls that resume after a newer request has replaced their pending work.
+    static requestId := 0, retryCallback := ""
+
+    requestId += 1
+    currentRequestId := requestId
+    if (IsObject(retryCallback)) {
+        SetTimer, % retryCallback, Delete
+        retryCallback := ""
+    }
+    autoFitSucceeded := _TryAutoFitEverythingResultsColumns(everythingHwnd, mode)
+    ; Native sizing can yield, so a superseded call must not rearm an older retry.
+    if (!autoFitSucceeded && currentRequestId = requestId) {
+        retryCallback := Func("_TryAutoFitEverythingResultsColumns").Bind(everythingHwnd, mode)
+        SetTimer, % retryCallback, % -retryDelayMs
+        _DebugTrace_EverythingAutoFit("everything_autofit_retry_queued"
+            , "hwnd=" . everythingHwnd . " delayMs=" . retryDelayMs)
+    }
+    return autoFitSucceeded
+}
+
+; Auto-fit every nonzero-width column in a native SysListView32 report view without requiring
 ; keyboard focus. Mode "content" uses LVSCW_AUTOSIZE; mode "header" uses
 ; LVSCW_AUTOSIZE_USEHEADER, including its final-column fill behavior. Mode
 ; "header_no_fill" uses header sizing except for the final column, where content
@@ -2266,7 +2483,9 @@ _TryAutoFitEverythingResultsColumns(everythingHwnd, mode := "header_no_fill") {
 ; Every cross-process message has a short timeout so an unresponsive target cannot
 ; hang this script. True means every nonzero-width column was fitted; False
 ; cancels this native sizing attempt without a keyboard fallback.
-AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 75) {
+; failureInfo records the failed operation, column, and Windows delivery error.
+; Failed delivery is not assumed to be a timeout.
+AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 75, ByRef failureInfo := "") {
     static HDM_GETITEMCOUNT           := 0x1200
     static LVM_GETHEADER              := 0x101F
     static LVM_GETCOLUMNWIDTH         := 0x101D
@@ -2277,66 +2496,97 @@ AutoFitSysListViewColumns(listViewHwnd, mode := "header_no_fill", timeoutMs := 7
     static LVSCW_AUTOSIZE_USEHEADER   := -2
     static SMTO_ABORTIFHUNG_AND_BLOCK := 0x0003
 
-    if (!listViewHwnd || !DllCall("user32\IsWindow", "Ptr", listViewHwnd, "Int"))
+    failureInfo := ""
+    if (!listViewHwnd || !DllCall("user32\IsWindow", "Ptr", listViewHwnd, "Int")) {
+        failureInfo := {stage: "invalid_listview_hwnd", listViewHwnd: listViewHwnd}
         return False
-    if (GetWindowClassName(listViewHwnd) != "SysListView32")
+    }
+    listViewClass := GetWindowClassName(listViewHwnd)
+    if (listViewClass != "SysListView32") {
+        failureInfo := {stage: "unexpected_listview_class", actualClass: listViewClass}
         return False
+    }
     try {
-        if !IsSysListViewReportView(listViewHwnd)
+        if (!IsSysListViewReportView(listViewHwnd)) {
+            failureInfo := {stage: "not_report_view", listViewHwnd: listViewHwnd}
             return False
-    } catch {
+        }
+    } catch error {
+        failureInfo := {stage: "report_view_exception", errorMessage: error.Message}
+        return False
+    }
+    if (mode = "content") {
+        requestedWidth := LVSCW_AUTOSIZE
+    } else if (mode = "header" || mode = "header_no_fill") {
+        requestedWidth := LVSCW_AUTOSIZE_USEHEADER
+    } else {
+        failureInfo := {stage: "unsupported_autofit_mode", mode: mode}
         return False
     }
 
-    if (mode = "content")
-        requestedWidth := LVSCW_AUTOSIZE
-    else if (mode = "header")
-        requestedWidth := LVSCW_AUTOSIZE_USEHEADER
-    else if (mode = "header_no_fill")
-        requestedWidth := LVSCW_AUTOSIZE_USEHEADER
-    else
-        return False
-
     headerHwnd := 0
+    DllCall("kernel32\SetLastError", "UInt", 0)
     if !DllCall("user32\SendMessageTimeoutW"
         , "Ptr", listViewHwnd, "UInt", LVM_GETHEADER, "Ptr", 0, "Ptr", 0
         , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", headerHwnd, "Ptr")
+    {
+        failureInfo := {stage: "lvm_getheader_send_failed", winError: A_LastError, timeoutMs: timeoutMs}
         return False
-    if (!headerHwnd || !DllCall("user32\IsWindow", "Ptr", headerHwnd, "Int"))
+    }
+    if (!headerHwnd || !DllCall("user32\IsWindow", "Ptr", headerHwnd, "Int")) {
+        failureInfo := {stage: "lvm_getheader_invalid", headerHwnd: headerHwnd}
         return False
-
+    }
     columnCount := 0
+    DllCall("kernel32\SetLastError", "UInt", 0)
     if !DllCall("user32\SendMessageTimeoutW"
         , "Ptr", headerHwnd, "UInt", HDM_GETITEMCOUNT, "Ptr", 0, "Ptr", 0
         , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", columnCount, "Ptr")
+    {
+        failureInfo := {stage: "hdm_getitemcount_send_failed", winError: A_LastError, timeoutMs: timeoutMs}
         return False
-    if (columnCount < 1)
+    }
+    if (columnCount < 1) {
+        failureInfo := {stage: "no_columns", columnCount: columnCount}
         return False
-
-    Loop, %columnCount% {
-        columnIndex := A_Index - 1
-        ; Preserve zero-width columns, including the final column, without any resize write.
-        currentWidth := 0
-        if !DllCall("user32\SendMessageTimeoutW"
-            , "Ptr", listViewHwnd, "UInt", LVM_GETCOLUMNWIDTH
-            , "Ptr", columnIndex, "Ptr", 0
-            , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", currentWidth, "Ptr")
-            return False
-        if (currentWidth = 0)
-            continue
-
-        columnWidth := (mode = "header_no_fill" && columnIndex = columnCount - 1)
-            ? LVSCW_AUTOSIZE : requestedWidth
-        messageResult := 0
-        if !DllCall("user32\SendMessageTimeoutW"
-            , "Ptr", listViewHwnd, "UInt", LVM_SETCOLUMNWIDTH
-            , "Ptr", columnIndex, "Ptr", columnWidth
-            , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", messageResult, "Ptr")
-            return False
-        if (!messageResult)
-            return False
     }
 
+    Loop, %columnCount% {
+        columnIdx := A_Index - 1
+        ; Preserve zero-width columns, including the final column, without any resize write.
+        currentWidth := 0
+        DllCall("kernel32\SetLastError", "UInt", 0)
+        if !DllCall("user32\SendMessageTimeoutW"
+            , "Ptr", listViewHwnd, "UInt", LVM_GETCOLUMNWIDTH
+            , "Ptr", columnIdx, "Ptr", 0
+            , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", currentWidth, "Ptr")
+        {
+            failureInfo := {stage: "lvm_getcolumnwidth_send_failed", columnIdx: columnIdx
+                , winError: A_LastError, timeoutMs: timeoutMs}
+            return False
+        }
+        if (currentWidth = 0) {
+            continue
+        }
+        columnWidth := (mode = "header_no_fill" && columnIdx = columnCount - 1)
+            ? LVSCW_AUTOSIZE : requestedWidth
+        messageResult := 0
+        DllCall("kernel32\SetLastError", "UInt", 0)
+        if !DllCall("user32\SendMessageTimeoutW"
+            , "Ptr", listViewHwnd, "UInt", LVM_SETCOLUMNWIDTH
+            , "Ptr", columnIdx, "Ptr", columnWidth
+            , "UInt", SMTO_ABORTIFHUNG_AND_BLOCK, "UInt", timeoutMs, "Ptr*", messageResult, "Ptr")
+        {
+            failureInfo := {stage: "lvm_setcolumnwidth_send_failed", columnIdx: columnIdx
+                , columnWidth: columnWidth, winError: A_LastError, timeoutMs: timeoutMs}
+            return False
+        }
+        if (!messageResult) {
+            failureInfo := {stage: "lvm_setcolumnwidth_rejected", columnIdx: columnIdx
+                , columnWidth: columnWidth, messageResult: messageResult}
+            return False
+        }
+    }
     return True
 }
 
@@ -3496,56 +3746,15 @@ ScheduleModifierSync(modifiers := "Shift Alt Ctrl", deferredRuns := 6, targetWin
     return true
 }
 
-; Returns true only for key events that should trigger Everything's direct
-; native column auto-fit. Keep this trigger list separate from KeyTrack() so
-; the sizing decision is documented once and can be tuned in one place.
-_IsEverythingEditAdjustTrigger(hotkey) {
-    global k_keys
-    global k_numbers
-
-    if (hotkey = "" || hotkey = "Enter" || hotkey = "LButton")
-        return false
-
-    hotkeyKey := SubStr(hotkey, 2)
-    return (   InStr(k_keys, hotkeyKey, False)
-            || InStr(k_numbers, hotkeyKey, False)
-            || hotkey == "~:"
-            || hotkey == "~/"
-            || hotkey == "$~Space"
-            || hotkey == "$CapsLock"
-            || hotkey == "$~Backspace")
-}
-
-; Attempt native sizing once per qualifying typing tick. No deferred work is
-; retained, so the original search Edit1 identity does not need revalidation.
-_TryRequestEverythingEditAdjust(sourceTick, hotkey, activeHwnd := 0) {
-    global tbcEverythingAdjustSourceTick
-
-    if (!sourceTick || tbcEverythingAdjustSourceTick = sourceTick)
-        return false
-    if (!_IsEverythingEditAdjustTrigger(hotkey))
-        return false
-    if (!activeHwnd)
-        activeHwnd := WinExist("A")
-
-    ; Consume the event before sizing so a failed attempt or reentrant poll
-    ; cannot keep resubmitting the same typing event.
-    tbcEverythingAdjustSourceTick := sourceTick
-    return _TryAutoFitEverythingResultsColumns(activeHwnd)
-}
-
 KeyTrack() {
-    global StopAutoFix, TimeOfLastHotkeyTyped
+    global StopAutoFix
 
     ListLines, Off
 
     activeHwnd := WinExist("A")
     WinGetClass, currClass, ahk_id %activeHwnd%
     If (InStr(currClass, "EVERYTHING", True)) {
-        StopAutoFix := True
-        ; Fit once per qualifying typing tick without a deferred queue or
-        ; a search-field focus requirement. Native sizing preserves focus.
-        _TryRequestEverythingEditAdjust(TimeOfLastHotkeyTyped, A_ThisHotkey, activeHwnd)
+        ; Native column sizing follows results-created notifications instead of keypresses.
         StopAutoFix := False
     }
     Else If (currClass == "XLMAIN") {
