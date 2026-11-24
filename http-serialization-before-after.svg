@@ -1,0 +1,262 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="2792" viewBox="0 0 1920 2792" role="img" aria-labelledby="title desc">
+<title id="title">HTTP/1.1 and HTTP/2: serializing the same server-to-client response</title>
+<desc id="desc">Educational technical infographic comparing only server-to-client response serialization. The GET /health request is explicitly labeled context only and its serialization is not shown. The HTTP/1.1 response uses textual status and header lines; the HTTP/2 response uses binary frames and HPACK fields, with short bit splits beside their actual use. Both deliver identical application JSON body bytes, using health rather than status as the JSON key. HTTP status 200 reports protocol success; the separate health field is application data and is not defined or reused by HPACK. A response-table continuation shows examples from the 61 predefined entries with separate header-name and stored-value columns, the first learned full header at number 62, and its later one-byte reference. Request and response compression tables are separate. A prominent top legend separately explains text and value colors, every box fill and border style, notation, decoded-response arrows, header-reuse arrows, and the dashed optional-field outline.</desc>
+<defs><marker id="arrow-green" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#137553"/></marker><marker id="arrow-orange" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#a45410"/></marker></defs>
+<style>text{font-family:Segoe UI,Arial,sans-serif;fill:#17233b} .mono{font-family:Consolas,Courier New,monospace} .bold{font-weight:650}</style>
+<rect x="0" y="0" width="1920" height="2792" rx="0" fill="#f6f8fc" stroke="#f6f8fc" stroke-width="1.5"/>
+<text x="64" y="50" font-size="16" class="" style="fill:#334155" font-weight="650">EDUCATIONAL TECHNICAL INFOGRAPHIC</text>
+<text x="64" y="106" font-size="47" class="" style="fill:#17233b" font-weight="700">HTTP/1.1 vs HTTP/2: one server response</text>
+<text x="64" y="146" font-size="27" class="" style="fill:#334155">Two HTTP versions carry the same response status, media type and JSON body.</text>
+<g id="legend" aria-labelledby="legend-title">
+<rect x="64" y="174" width="1792" height="364" rx="16" fill="white" stroke="#d6deeb" stroke-width="1.5"/>
+<text id="legend-title" x="88" y="205" font-size="21" style="fill:#17233b" font-weight="700">LEGEND</text>
+<text x="88" y="233" font-size="16" style="fill:#334155" font-weight="650">TEXT AND VALUE COLORS</text>
+<circle cx="96" cy="262" r="7" fill="#2260bd"/>
+<text x="112" y="268" font-size="19" style="fill:#2260bd">HTTP status code</text>
+<circle cx="536" cy="262" r="7" fill="#a45410"/>
+<text x="552" y="268" font-size="19" style="fill:#a45410">HTTP header names and values</text>
+<circle cx="96" cy="304" r="7" fill="#7049ae"/>
+<text x="112" y="310" font-size="19" style="fill:#7049ae">Protocol structure and instruction bits</text>
+<circle cx="536" cy="304" r="7" fill="#137553"/>
+<text x="552" y="310" font-size="19" style="fill:#137553">JSON body and body byte counts</text>
+<line x1="1128" y1="220" x2="1128" y2="340" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="1152" y="233" font-size="16" style="fill:#334155" font-weight="650">NOTATION AND CONNECTORS</text>
+<text x="1152" y="260" font-size="18" class="mono" style="fill:#17233b">0x5F / 5F</text>
+<text x="1285" y="260" font-size="18" style="fill:#334155">Hex bytes; byte counts are decimal</text>
+<text x="1152" y="288" font-size="20" class="mono" style="fill:#17233b">&quot;&quot;</text>
+<text x="1206" y="288" font-size="18" style="fill:#334155">Empty stored value</text>
+<rect x="1152" y="302" width="40" height="18" rx="4" fill="white" stroke="#7049ae" stroke-width="1.5" stroke-dasharray="8 6"/>
+<text x="1206" y="316" font-size="18" style="fill:#334155">Optional field</text>
+<line x1="1460" y1="310" x2="1500" y2="310" stroke="#137553" stroke-width="3" marker-end="url(#arrow-green)"/>
+<text x="1516" y="316" font-size="18" style="fill:#334155">Decoded response</text>
+<line x1="1152" y1="338" x2="1192" y2="338" stroke="#a45410" stroke-width="3" marker-end="url(#arrow-orange)"/>
+<text x="1206" y="344" font-size="18" style="fill:#334155">Header learning / reuse</text>
+<line x1="88" y1="365" x2="1832" y2="365" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="88" y="389" font-size="16" style="fill:#334155" font-weight="650">BOX FILLS AND BORDERS</text>
+<rect x="88" y="407" width="56" height="26" rx="6" fill="#edf4ff" stroke="#2260bd" stroke-width="1.5"/>
+<text x="160" y="426" font-size="18" style="fill:#334155">Blue box: HTTP status lookup</text>
+<rect x="958" y="407" width="56" height="26" rx="6" fill="#fff7ec" stroke="#a45410" stroke-width="1.5"/>
+<text x="1030" y="426" font-size="18" style="fill:#334155">Orange box: HPACK fields and header learning / reuse</text>
+<rect x="88" y="447" width="56" height="26" rx="6" fill="#f4effb" stroke="#7049ae" stroke-width="1.5"/>
+<text x="160" y="466" font-size="18" style="fill:#334155">Purple box: frame headers and HTTP separators</text>
+<rect x="958" y="447" width="56" height="26" rx="6" fill="#edf9f2" stroke="#137553" stroke-width="1.5"/>
+<text x="1030" y="466" font-size="18" style="fill:#334155">Green box: JSON body or decoded application response</text>
+<rect x="88" y="487" width="16" height="26" rx="3" fill="white" stroke="#d6deeb" stroke-width="1.5"/>
+<rect x="108" y="487" width="16" height="26" rx="3" fill="#fbfcff" stroke="#d6deeb" stroke-width="1.5"/>
+<rect x="128" y="487" width="16" height="26" rx="3" fill="#f7f9fd" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="160" y="506" font-size="18" style="fill:#334155">White / pale gray: context, raw text and byte totals</text>
+<rect x="958" y="487" width="56" height="26" rx="6" fill="white" stroke="#a45410" stroke-width="1.5"/>
+<text x="1030" y="506" font-size="18" style="fill:#334155">White + orange border: header bytes, table or grouping</text>
+</g>
+<rect x="64" y="570" width="1792" height="224" rx="16" fill="white" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="88" y="602" font-size="18" style="fill:#334155" font-weight="650">REQUEST CONTEXT ONLY · Client → Server: GET /health (no request body)</text>
+<text x="1190" y="602" font-size="18" style="fill:#334155">Request serialization is not shown.</text>
+<text x="88" y="634" font-size="18" style="fill:#17233b" font-weight="650">RESPONSE COMPARED BELOW · Server → Client</text>
+<text x="88" y="680" font-size="27" class="" font-weight="650" xml:space="preserve">
+<tspan fill="#334155">HTTP status: </tspan>
+<tspan fill="#2260bd">200</tspan>
+</text>
+<text x="380" y="680" font-size="27" class="" xml:space="preserve">
+<tspan fill="#334155">Media type: </tspan>
+<tspan fill="#a45410">application/json</tspan>
+</text>
+<text x="1020" y="680" font-size="27" class="mono" xml:space="preserve">
+<tspan fill="#334155">JSON body: </tspan>
+<tspan fill="#137553">{&quot;health&quot;:&quot;ok&quot;}</tspan>
+<tspan fill="#137553">   15 UTF-8 bytes</tspan>
+</text>
+<text x="88" y="721" font-size="21" style="fill:#2260bd">HTTP status 200: the HTTP request succeeded; this code does not describe the JSON body.</text>
+<text x="88" y="751" font-size="21" style="fill:#137553">JSON body {&quot;health&quot;:&quot;ok&quot;}: application data reporting health; HTTP does not define the health field.</text>
+<text x="88" y="780" font-size="19" style="fill:#334155">HPACK compresses headers only; body bytes are sent separately in both HTTP versions.</text>
+<rect x="64" y="826" width="864" height="876" rx="16" fill="white" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="88" y="873" font-size="16" class="" style="fill:#334155" font-weight="650">HTTP/1.1 RESPONSE · SERVER → CLIENT</text>
+<text x="88" y="916" font-size="35" class="" style="fill:#17233b" font-weight="700">HTTP/1.1</text>
+<text x="314" y="913" font-size="21" class="" style="fill:#334155">Text status line + text fields + delimited body</text>
+<rect x="992" y="826" width="864" height="876" rx="16" fill="white" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="1016" y="873" font-size="16" class="" style="fill:#334155" font-weight="650">HTTP/2 RESPONSE · SERVER → CLIENT</text>
+<text x="1016" y="916" font-size="35" class="" style="fill:#17233b" font-weight="700">HTTP/2</text>
+<text x="1242" y="913" font-size="21" class="" style="fill:#334155">Binary frame envelopes + HPACK field blocks</text>
+<rect x="88" y="952" width="816" height="222" rx="12" fill="#fbfcff" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="112" y="984" font-size="16" class="" style="fill:#334155" font-weight="650">STATUS LINE + FIELDS + DELIMITERS · 71 BYTES</text>
+<text x="112" y="1026" font-size="25" class="mono" xml:space="preserve">
+<tspan fill="#7049ae">HTTP/1.1 </tspan>
+<tspan fill="#2260bd">200 OK</tspan>
+</text>
+<text x="112" y="1076" font-size="25" class="mono" xml:space="preserve">
+<tspan fill="#a45410">Content-Type: </tspan>
+<tspan fill="#a45410">application/json</tspan>
+</text>
+<text x="112" y="1126" font-size="25" class="mono" xml:space="preserve">
+<tspan fill="#a45410">Content-Length: </tspan>
+<tspan fill="#137553">15</tspan>
+</text>
+<text x="794" y="1026" font-size="24" class="mono" style="fill:#7049ae">\r\n</text>
+<text x="794" y="1076" font-size="24" class="mono" style="fill:#7049ae">\r\n</text>
+<text x="794" y="1126" font-size="24" class="mono" style="fill:#7049ae">\r\n</text>
+<rect x="88" y="1190" width="816" height="48" rx="10" fill="#f4effb" stroke="#7049ae" stroke-width="1.5"/>
+<text x="112" y="1222" font-size="23" class="mono" xml:space="preserve">
+<tspan fill="#7049ae">\r\n</tspan>
+<tspan fill="#7049ae">   Empty line ends the header section</tspan>
+</text>
+<rect x="88" y="1254" width="816" height="120" rx="12" fill="#edf9f2" stroke="#137553" stroke-width="1.5"/>
+<text x="112" y="1288" font-size="16" class="" style="fill:#137553" font-weight="650">APPLICATION JSON BODY · 15 BYTES · NO TRAILING NEWLINE</text>
+<text x="112" y="1328" font-size="31" class="mono" style="fill:#137553" font-weight="650">{&quot;health&quot;:&quot;ok&quot;}</text>
+<text x="112" y="1357" font-size="18" class="mono" style="fill:#137553">7B 22 68 65 61 6C 74 68 22 3A 22 6F 6B 22 7D</text>
+<text x="112" y="1411" font-size="21" class="" style="fill:#7049ae">CRLF is two bytes: 0D 0A.</text>
+<text x="112" y="1449" font-size="21" class="" style="fill:#17233b">1  Client parses the response status line and fields.</text>
+<text x="112" y="1484" font-size="21" class="" xml:space="preserve">
+<tspan fill="#17233b">2  Read </tspan>
+<tspan fill="#137553">Content-Length: 15</tspan>
+<tspan fill="#17233b"> to delimit the body.</tspan>
+</text>
+<text x="112" y="1519" font-size="21" class="" style="fill:#17233b">3  Client delivers the 15 body bytes to its application.</text>
+<rect x="88" y="1554" width="816" height="84" rx="12" fill="#f7f9fd" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="112" y="1582" font-size="15" class="" style="fill:#334155" font-weight="650">DERIVED SIZE OF THE ILLUSTRATED MESSAGE</text>
+<text x="112" y="1619" font-size="30" class="mono" font-weight="650" xml:space="preserve">
+<tspan fill="#334155">71</tspan>
+<tspan fill="#17233b"> + </tspan>
+<tspan fill="#137553">15</tspan>
+<tspan fill="#17233b"> = 86 bytes</tspan>
+</text>
+<text x="112" y="1674" font-size="21" class="" style="fill:#334155">HTTP/1.1 bodies can also carry binary files.</text>
+<rect x="1016" y="952" width="816" height="306" rx="12" fill="#fff7ec" stroke="#a45410" stroke-width="1.5"/>
+<rect x="1016" y="952" width="816" height="114" rx="12" fill="#f4effb" stroke="#7049ae" stroke-width="1.5"/>
+<text x="1040" y="984" font-size="17" class="" style="fill:#7049ae" font-weight="650">RESPONSE HEADERS FRAME · STREAM 1</text>
+<text x="1610" y="984" font-size="18" class="" style="fill:#7049ae">9-byte envelope</text>
+<text x="1040" y="1022" font-size="25" class="mono" xml:space="preserve">
+<tspan fill="#a45410">00 00 13</tspan>
+<tspan fill="#7049ae"> 01 04 00 00 00 01</tspan>
+</text>
+<text x="1040" y="1051" font-size="18" style="fill:#7049ae">Length=<tspan fill="#a45410">19</tspan>  ·  Type=1  ·  Flags=0x04 (END_HEADERS)  ·  Stream=1</text>
+<text x="1040" y="1094" font-size="17" class="" style="fill:#a45410" font-weight="650">HPACK: TWO RESPONSE FIELDS IN 19 BYTES</text>
+<rect x="1040" y="1109" width="768" height="56" rx="10" fill="#edf4ff" stroke="#2260bd" stroke-width="1.5"/>
+<text x="1056" y="1140" font-size="21" class="mono" style="fill:#2260bd" font-weight="650">0x88 = 1 | 0001000</text>
+<text x="1400" y="1139" font-size="21" style="fill:#2260bd">#8 → :status: 200 · 1 byte</text>
+<text x="1056" y="1160" font-size="15" style="fill:#2260bd">Leading 1 = whole-header lookup; remaining 0001000 (binary) = entry 8.</text>
+<text x="1040" y="1180" font-size="16" style="fill:#a45410">Name #31 = content-type; supply the value application/json</text>
+<rect x="1040" y="1187" width="232" height="59" rx="10" fill="white" stroke="#a45410" stroke-width="1.5"/>
+<rect x="1284" y="1187" width="164" height="59" rx="10" fill="white" stroke="#a45410" stroke-width="1.5"/>
+<rect x="1460" y="1187" width="348" height="59" rx="10" fill="white" stroke="#a45410" stroke-width="1.5"/>
+<text x="1052" y="1213" font-size="22" class="mono" style="fill:#a45410" font-weight="650">0x5F · 1 B</text>
+<text x="1052" y="1236" font-size="14" class="mono" xml:space="preserve"><tspan fill="#7049ae">01: store</tspan><tspan fill="#334155"> | </tspan><tspan fill="#a45410">011111₂ = #31</tspan></text>
+<text x="1296" y="1213" font-size="20" class="mono" style="fill:#a45410" font-weight="650">0x10 · 1 B</text>
+<text x="1296" y="1236" font-size="16" class="" style="fill:#a45410">Value length = 16</text>
+<text x="1472" y="1213" font-size="22" class="mono" style="fill:#a45410" font-weight="650">application/json</text>
+<text x="1472" y="1236" font-size="17" class="" style="fill:#a45410">16 bytes · actual value (a literal)</text>
+<rect x="1016" y="1278" width="816" height="204" rx="12" fill="#edf9f2" stroke="#137553" stroke-width="1.5"/>
+<rect x="1016" y="1278" width="816" height="111" rx="12" fill="#f4effb" stroke="#7049ae" stroke-width="1.5"/>
+<text x="1040" y="1310" font-size="17" class="" style="fill:#7049ae" font-weight="650">APPLICATION JSON BODY: DATA FRAME · STREAM 1</text>
+<text x="1610" y="1310" font-size="18" class="" style="fill:#7049ae">9-byte envelope</text>
+<text x="1040" y="1346" font-size="25" class="mono" xml:space="preserve">
+<tspan fill="#137553">00 00 0F</tspan>
+<tspan fill="#7049ae"> 00 01 00 00 00 01</tspan>
+</text>
+<text x="1046" y="1376" font-size="18" style="fill:#7049ae">Length=<tspan fill="#137553">15</tspan>  ·  Type=0  ·  Flags=0x01 (END_STREAM)  ·  Stream=1</text>
+<text x="1040" y="1433" font-size="31" class="mono" style="fill:#137553" font-weight="650">{&quot;health&quot;:&quot;ok&quot;}</text>
+<text x="1040" y="1468" font-size="18" class="mono" style="fill:#137553">7B 22 68 65 61 6C 74 68 22 3A 22 6F 6B 22 7D</text>
+<rect x="1016" y="1500" width="816" height="40" rx="8" fill="#ffffff" stroke="#7049ae" stroke-width="1.5" stroke-dasharray="8 6"/>
+<text x="1040" y="1527" font-size="19" class="" style="fill:#7049ae">Optional content-length is omitted; END_STREAM ends the message.</text>
+<rect x="1016" y="1554" width="816" height="84" rx="12" fill="#f7f9fd" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="1040" y="1582" font-size="15" class="" style="fill:#334155" font-weight="650">DERIVED SIZE OF THE ILLUSTRATED MESSAGE</text>
+<text x="1040" y="1619" font-size="30" class="mono" font-weight="650" xml:space="preserve">
+<tspan fill="#7049ae">9</tspan>
+<tspan fill="#17233b"> + </tspan>
+<tspan fill="#a45410">19</tspan>
+<tspan fill="#17233b"> + </tspan>
+<tspan fill="#7049ae">9</tspan>
+<tspan fill="#17233b"> + </tspan>
+<tspan fill="#137553">15</tspan>
+<tspan fill="#17233b"> = 52 bytes</tspan>
+</text>
+<text x="1040" y="1674" font-size="20" class="" style="fill:#334155">This value is 16 bytes; other content-type values can be longer or shorter.</text>
+<line x1="496" y1="1702" x2="496" y2="1738" stroke="#137553" stroke-width="3" marker-end="url(#arrow-green)"/>
+<line x1="1424" y1="1702" x2="1424" y2="1738" stroke="#137553" stroke-width="3" marker-end="url(#arrow-green)"/>
+<rect x="64" y="1738" width="1792" height="134" rx="16" fill="#edf9f2" stroke="#137553" stroke-width="1.5"/>
+<text x="88" y="1776" font-size="19" class="" style="fill:#137553" font-weight="650">CLIENT DECODES THE SAME SERVER RESPONSE</text>
+<text x="88" y="1803" font-size="16" style="fill:#2260bd" font-weight="650">HTTP status</text>
+<text x="278" y="1803" font-size="16" style="fill:#a45410" font-weight="650">Media type</text>
+<text x="680" y="1803" font-size="16" style="fill:#137553" font-weight="650">Application JSON body</text>
+<text x="88" y="1838" font-size="31" class="mono" style="fill:#2260bd" font-weight="650">200</text>
+<text x="278" y="1838" font-size="31" class="mono" style="fill:#a45410" font-weight="650">application/json</text>
+<text x="680" y="1838" font-size="31" class="mono" style="fill:#137553" font-weight="650">{&quot;health&quot;:&quot;ok&quot;}</text>
+<text x="1170" y="1798" font-size="19" class="" style="fill:#137553" font-weight="650">Body comparison</text>
+<text x="1170" y="1834" font-size="23" class="mono" style="fill:#137553">15 identical bytes  =  15 identical bytes</text>
+<rect x="64" y="1902" width="1792" height="606" rx="16" fill="white" stroke="#a45410" stroke-width="1.5"/>
+<text x="88" y="1941" font-size="29" style="fill:#17233b" font-weight="650">How this response teaches a header that a later response can reuse</text>
+<text x="88" y="1975" font-size="21" style="fill:#334155">Server response encoder ↔ client response decoder: matching tables on one connection. Request tables are separate.</text>
+<rect x="88" y="2072" width="524" height="278" rx="12" fill="#fff7ec" stroke="#a45410" stroke-width="1.5"/>
+<rect x="698" y="2004" width="524" height="414" rx="12" fill="#fff7ec" stroke="#a45410" stroke-width="1.5"/>
+<rect x="1308" y="2072" width="524" height="278" rx="12" fill="#fff7ec" stroke="#a45410" stroke-width="1.5"/>
+<text x="108" y="2103" font-size="17" style="fill:#a45410" font-weight="650">1  FIRST RESPONSE: SEND THE HEADER</text>
+<text x="108" y="2140" font-size="23" class="mono" style="fill:#a45410" font-weight="650">5F 10 application/json</text>
+<text x="108" y="2175" font-size="18" style="fill:#a45410">18 bytes: name/store + length + literal value.</text>
+<text x="108" y="2208" font-size="22" class="mono" style="fill:#a45410">content-type: application/json</text>
+<text x="108" y="2243" font-size="18" style="fill:#334155">The store instruction is already in 0x5F.</text>
+<text x="108" y="2272" font-size="18" style="fill:#334155">Server stores the full header while encoding;</text>
+<text x="108" y="2299" font-size="18" style="fill:#334155">client stores it while decoding.</text>
+<text x="108" y="2329" font-size="18" style="fill:#a45410">No learned-entry number is sent here.</text>
+<text x="718" y="2035" font-size="17" style="fill:#a45410" font-weight="650">2  TABLE UPDATE AT BOTH ENDS</text>
+<text x="718" y="2069" font-size="18" style="fill:#334155">HPACK reserves #1–#61 for its predefined table.</text>
+<rect x="718" y="2088" width="484" height="220" rx="8" fill="white" stroke="#a45410" stroke-width="1.5"/>
+<line x1="780" y1="2088" x2="780" y2="2308" stroke="#d6deeb" stroke-width="1"/>
+<line x1="1006" y1="2088" x2="1006" y2="2308" stroke="#d6deeb" stroke-width="1"/>
+<text x="730" y="2108" font-size="15" style="fill:#334155" font-weight="650">Entry</text>
+<text x="794" y="2108" font-size="15" style="fill:#334155" font-weight="650">Header name</text>
+<text x="1020" y="2108" font-size="15" style="fill:#334155" font-weight="650">Stored value</text>
+<line x1="718" y1="2116" x2="1202" y2="2116" stroke="#a45410" stroke-width="1"/>
+<text x="730" y="2138" font-size="18" class="mono" style="fill:#2260bd">#8</text>
+<text x="794" y="2138" font-size="18" class="mono" style="fill:#2260bd">:status</text>
+<text x="1020" y="2138" font-size="18" class="mono" style="fill:#2260bd">200</text>
+<line x1="718" y1="2148" x2="1202" y2="2148" stroke="#d6deeb" stroke-width="1"/>
+<text x="730" y="2170" font-size="18" class="mono" style="fill:#334155">#13</text>
+<text x="794" y="2170" font-size="18" class="mono" style="fill:#334155">:status</text>
+<text x="1020" y="2170" font-size="18" class="mono" style="fill:#334155">404</text>
+<line x1="718" y1="2180" x2="1202" y2="2180" stroke="#d6deeb" stroke-width="1"/>
+<text x="730" y="2202" font-size="18" class="mono" style="fill:#334155">#28</text>
+<text x="794" y="2202" font-size="18" class="mono" style="fill:#334155">content-length</text>
+<text x="1020" y="2202" font-size="18" class="mono" style="fill:#334155">&quot;&quot;</text>
+<line x1="718" y1="2212" x2="1202" y2="2212" stroke="#d6deeb" stroke-width="1"/>
+<text x="730" y="2234" font-size="18" class="mono" style="fill:#a45410">#31</text>
+<text x="794" y="2234" font-size="18" class="mono" style="fill:#a45410">content-type</text>
+<text x="1020" y="2234" font-size="18" class="mono" style="fill:#a45410">&quot;&quot;</text>
+<line x1="718" y1="2244" x2="1202" y2="2244" stroke="#d6deeb" stroke-width="1"/>
+<text x="730" y="2266" font-size="18" class="mono" style="fill:#334155">#61</text>
+<text x="794" y="2266" font-size="18" class="mono" style="fill:#334155">www-authenticate</text>
+<text x="1020" y="2266" font-size="18" class="mono" style="fill:#334155">&quot;&quot;</text>
+<line x1="718" y1="2276" x2="1202" y2="2276" stroke="#a45410" stroke-width="2"/>
+<text x="730" y="2299" font-size="22" class="mono" style="fill:#a45410" font-weight="650">#62</text>
+<text x="794" y="2298" font-size="18" class="mono" style="fill:#a45410" font-weight="650">content-type</text>
+<text x="1020" y="2298" font-size="18" class="mono" style="fill:#a45410" font-weight="650">application/json</text>
+<text x="718" y="2337" font-size="18" style="fill:#334155">&quot;&quot; = empty predefined value, not application/json.</text>
+<text x="718" y="2367" font-size="18" style="fill:#334155">Only selected predefined entries are shown.</text>
+<text x="718" y="2395" font-size="18" style="fill:#334155">The learned table was empty; both ends add #62.</text>
+<text x="1328" y="2103" font-size="17" style="fill:#a45410" font-weight="650">3  LATER RESPONSE: REUSE THE FULL HEADER</text>
+<text x="1328" y="2143" font-size="26" class="mono" style="fill:#a45410" font-weight="650">0xBE = 1 | 0111110</text>
+<text x="1328" y="2177" font-size="20" style="fill:#a45410">1 = look up a complete header</text>
+<text x="1328" y="2208" font-size="20" style="fill:#a45410">0111110 (binary) = 62 decimal</text>
+<text x="1328" y="2245" font-size="22" class="mono" style="fill:#a45410">content-type: application/json</text>
+<text x="1328" y="2279" font-size="19" style="fill:#334155">Client restores the name AND value.</text>
+<text x="1328" y="2308" font-size="18" style="fill:#334155">No application/json value bytes are resent.</text>
+<text x="1328" y="2335" font-size="18" style="fill:#a45410">With status 200: 88 BE (2 bytes total).</text>
+<path d="M618 2292 H687" fill="none" stroke="#a45410" stroke-width="3" marker-end="url(#arrow-orange)"/>
+<path d="M1228 2292 H1297" fill="none" stroke="#a45410" stroke-width="3" marker-end="url(#arrow-orange)"/>
+<text x="88" y="2450" font-size="22" style="fill:#17233b">Literal = actual value bytes. Table reference = the number identifying a known header.</text>
+<text x="88" y="2478" font-size="18" style="fill:#334155">Assume an empty response table at the start, enough capacity, no other insertions or evictions, and Huffman encoding off.</text>
+<rect x="64" y="2540" width="1792" height="128" rx="16" fill="white" stroke="#d6deeb" stroke-width="1.5"/>
+<text x="88" y="2576" font-size="18" class="" style="fill:#7049ae" font-weight="650">BINARY FRAMING</text>
+<text x="88" y="2611" font-size="23" class="" style="fill:#17233b">Length, type, flags and stream ID</text>
+<text x="88" y="2643" font-size="20" class="" style="fill:#334155">make boundaries explicit and allow interleaving.</text>
+<line x1="662" y1="2562" x2="662" y2="2650" stroke="#d6deeb" stroke-width="2"/>
+<text x="692" y="2576" font-size="18" class="" style="fill:#a45410" font-weight="650">HEADER COMPRESSION</text>
+<text x="692" y="2611" font-size="23" class="" style="fill:#17233b">HPACK replaces known headers with lookups.</text>
+<text x="692" y="2643" font-size="20" class="" style="fill:#334155">New values are sent once, then can be reused.</text>
+<line x1="1284" y1="2562" x2="1284" y2="2650" stroke="#d6deeb" stroke-width="2"/>
+<text x="1314" y="2576" font-size="18" class="" style="fill:#137553" font-weight="650">APPLICATION DATA</text>
+<text x="1314" y="2611" font-size="23" class="" style="fill:#17233b">UTF-8 stays UTF-8. Binary stays binary.</text>
+<text x="1314" y="2643" font-size="20" class="" style="fill:#334155">Framing does not reserialize the body.</text>
+<text x="64" y="2704" font-size="18" class="" style="fill:#334155">Scope: both columns show server → client response bytes only. Other fields, request bytes, connection setup, TCP and TLS are omitted.</text>
+<text x="64" y="2731" font-size="18" class="" style="fill:#334155">Sizes are derived for the shown encoding only, not a performance benchmark. Codes are hexadecimal; byte counts are decimal. Dashed outline denotes optional metadata.</text>
+<a href="https://httpwg.org/specs/rfc9112.html"><text x="64" y="2765" font-size="17" style="fill:#334155">HTTP/1.1: RFC 9112</text></a>
+<a href="https://httpwg.org/specs/rfc9113.html"><text x="370" y="2765" font-size="17" style="fill:#334155">HTTP/2 framing: RFC 9113 §§4.1, 8.1</text></a>
+<a href="https://httpwg.org/specs/rfc7541.html"><text x="810" y="2765" font-size="17" style="fill:#334155">HPACK: RFC 7541 §§6.1, 6.2.1 and Appendix A</text></a>
+</svg>
